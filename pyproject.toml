@@ -1,0 +1,89 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cyberwave"
+version = "0.1.1"
+description = "A powerful Python client for controlling various types of robots through simple, AI-driven APIs"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = ["robotics", "ai", "drones", "robotic-arms", "automation"]
+authors = [
+    { name = "CyberWave Team", email = "team@cyberwave.ai" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy>=1.21.0",
+    "opencv-python>=4.5.0",
+    "asyncio>=3.4.3",
+    "aiohttp>=3.8.0",
+    "pydantic>=1.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.18.0",
+    "pytest-cov>=3.0.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "mypy>=0.950",
+    "flake8>=4.0.0",
+]
+publish = [
+    "twine>=4.0.0",
+    "build>=0.10.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/cyberwave/cyberwave"
+Documentation = "https://github.com/cyberwave/cyberwave/docs"
+Repository = "https://github.com/cyberwave/cyberwave"
+Issues = "https://github.com/cyberwave/cyberwave/issues"
+Changelog = "https://github.com/cyberwave/cyberwave/blob/main/CHANGELOG.md"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=cyberwave --cov-report=term-missing" 
