@@ -1,0 +1,2 @@
+[console_scripts]
+rerun=rerun_cli.__main__:main

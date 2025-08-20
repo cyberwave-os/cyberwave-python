@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "cyberwave"
+version = "0.1.4"
+description = "Python SDK for the CyberWave Platform"
+authors = ["Your Name <you@example.com>"] # Change as needed
+readme = "README.md"
+packages = [{ include = "cyberwave" }] # Add back for this structure
+
+[tool.poetry.dependencies]
+python = "^3.9" # Matches original python version, adjust if needed
+httpx = "^0.27.0" # For making API calls
+requests = "^2.20.0" # For HTTP requests compatibility
+aiofiles = "^23.2.1" # For async file operations
+numpy = "^1.26.4"   # For numerical operations (transforms)
+rerun-sdk = "^0.16.0" # For Rerun visualization logging
+pydantic = "^2.7.0"  # For data validation and schema
+pyyaml = "^6.0.1"    # For YAML parsing
+jsonschema = "^4.21.1"  # For JSON schema validation
+keyring = "^25.0.0"  # Added for secure token storage
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+pytest-asyncio = "^0.23.6"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api" 

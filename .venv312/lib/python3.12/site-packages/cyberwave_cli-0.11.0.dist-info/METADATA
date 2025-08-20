@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: cyberwave-cli
+Version: 0.11.0
+Summary: Cyberwave command-line interface (plugins, asset pipeline, telemetry)
+Requires-Dist: typer[all]>=0.12
+Requires-Dist: rich>=13
+Requires-Dist: importlib_metadata>=6.0; python_version < "3.10"
+Requires-Dist: setuptools>=61.0
+Requires-Dist: httpx>=0.24.0
+Requires-Dist: tomli>=2.0.0; python_version < "3.11"
+Requires-Dist: tomli-w>=1.0.0
+Provides-Extra: sdk
+Requires-Dist: cyberwave<0.12,>=0.11; extra == "sdk"
+Provides-Extra: test
+Requires-Dist: pytest>=7.0; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: pytest-mock; extra == "test"
