@@ -1,0 +1,30 @@
+from enum import Enum
+from typing import Sequence
+from entity import Entity
+
+
+
+class JointStatePayload(Entity):
+
+    class JointState(Entity):
+
+        def __init__(
+                self,
+                position: float,
+                velocity: float,
+                effort: float):
+            self.position = position
+            self.velocity = velocity
+            self.effort = effort
+
+
+    def __init__(
+            self,
+            jointName: str,
+            jointState: JointState,
+            timestamp: float):
+        self.jointName = jointName
+        self.jointState = jointState
+        self.timestamp = timestamp
+
+
