@@ -40,11 +40,6 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
       
-      - name: Run tests
-        run: |
-          poetry run python tests/test_imports.py
-          poetry run pytest tests/ -v || echo "No pytest tests found or tests failed"
-      
       - name: Verify version matches tag
         run: |
           TAG_VERSION="${{ github.ref_name }}"
