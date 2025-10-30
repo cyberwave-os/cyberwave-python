@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Sequence
-from entity import Entity
+from cyberwave.mqtt.entity import Entity
 
 
 
