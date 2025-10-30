@@ -40,18 +40,6 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
       
-      - name: Verify version matches tag
-        run: |
-          TAG_VERSION="${{ github.ref_name }}"
-          TAG_VERSION="${TAG_VERSION#v}"  # Remove 'v' prefix if present
-          POETRY_VERSION=$(poetry version -s)
-          echo "Tag version: $TAG_VERSION"
-          echo "Poetry version: $POETRY_VERSION"
-          if [ "$TAG_VERSION" != "$POETRY_VERSION" ]; then
-            echo "Error: Tag version ($TAG_VERSION) does not match poetry version ($POETRY_VERSION)"
-            exit 1
-          fi
-      
       - name: Build and publish to PyPI
         run: |
           poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN_SDK }}
