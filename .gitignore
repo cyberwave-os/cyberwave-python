@@ -93,6 +93,8 @@ ipython_config.py
 # pyenv
 .python-version
 
+# poetry
+.poetry/
 # pipenv
 Pipfile.lock
 
