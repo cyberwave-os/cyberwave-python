@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.organization_schema import OrganizationSchema
 from cyberwave.rest.models.plan_schema import PlanSchema
@@ -30,10 +30,12 @@ class WorkspaceResponseSchema(BaseModel):
     WorkspaceResponseSchema
     """ # noqa: E501
     team: WorkspaceSchema
+    description: StrictStr
+    slug: StrictStr
     owner: Optional[StrictBool] = False
     organization: OrganizationSchema
     plan: PlanSchema
-    __properties: ClassVar[List[str]] = ["team", "owner", "organization", "plan"]
+    __properties: ClassVar[List[str]] = ["team", "description", "slug", "owner", "organization", "plan"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -96,6 +98,8 @@ class WorkspaceResponseSchema(BaseModel):
 
         _obj = cls.model_validate({
             "team": WorkspaceSchema.from_dict(obj["team"]) if obj.get("team") is not None else None,
+            "description": obj.get("description"),
+            "slug": obj.get("slug"),
             "owner": obj.get("owner") if obj.get("owner") is not None else False,
             "organization": OrganizationSchema.from_dict(obj["organization"]) if obj.get("organization") is not None else None,
             "plan": PlanSchema.from_dict(obj["plan"]) if obj.get("plan") is not None else None

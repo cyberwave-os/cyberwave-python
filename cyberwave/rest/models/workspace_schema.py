@@ -29,13 +29,16 @@ class WorkspaceSchema(BaseModel):
     """ # noqa: E501
     uuid: StrictStr
     name: StrictStr
+    description: StrictStr
     organization: StrictStr
+    slug: StrictStr
     users: List[WorkspaceUserSchema]
     owner: Optional[StrictStr]
+    thumbnail: Optional[StrictStr] = None
     created_at: StrictStr
     updated_at: StrictStr
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "name", "organization", "users", "owner", "created_at", "updated_at", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "organization", "slug", "users", "owner", "thumbnail", "created_at", "updated_at", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -88,6 +91,11 @@ class WorkspaceSchema(BaseModel):
         if self.owner is None and "owner" in self.model_fields_set:
             _dict['owner'] = None
 
+        # set to None if thumbnail (nullable) is None
+        # and model_fields_set contains the field
+        if self.thumbnail is None and "thumbnail" in self.model_fields_set:
+            _dict['thumbnail'] = None
+
         return _dict
 
     @classmethod
@@ -102,9 +110,12 @@ class WorkspaceSchema(BaseModel):
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "organization": obj.get("organization"),
+            "slug": obj.get("slug"),
             "users": [WorkspaceUserSchema.from_dict(_item) for _item in obj["users"]] if obj.get("users") is not None else None,
             "owner": obj.get("owner"),
+            "thumbnail": obj.get("thumbnail"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "metadata": obj.get("metadata")

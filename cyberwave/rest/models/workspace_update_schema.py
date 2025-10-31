@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -27,7 +27,9 @@ class WorkspaceUpdateSchema(BaseModel):
     WorkspaceUpdateSchema
     """ # noqa: E501
     name: StrictStr
-    __properties: ClassVar[List[str]] = ["name"]
+    description: Optional[StrictStr] = None
+    slug: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "slug"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -68,6 +70,16 @@ class WorkspaceUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if description (nullable) is None
+        # and model_fields_set contains the field
+        if self.description is None and "description" in self.model_fields_set:
+            _dict['description'] = None
+
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         return _dict
 
     @classmethod
@@ -80,7 +92,9 @@ class WorkspaceUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name")
+            "name": obj.get("name"),
+            "description": obj.get("description"),
+            "slug": obj.get("slug")
         })
         return _obj
 

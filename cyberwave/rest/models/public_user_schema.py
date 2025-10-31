@@ -28,8 +28,8 @@ class PublicUserSchema(BaseModel):
     """ # noqa: E501
     first_name: StrictStr
     last_name: StrictStr
-    full_name: StrictStr
-    profile_picture: Optional[StrictStr]
+    full_name: Optional[StrictStr] = ''
+    profile_picture: Optional[StrictStr] = None
     __properties: ClassVar[List[str]] = ["first_name", "last_name", "full_name", "profile_picture"]
 
     model_config = ConfigDict(
@@ -90,7 +90,7 @@ class PublicUserSchema(BaseModel):
         _obj = cls.model_validate({
             "first_name": obj.get("first_name"),
             "last_name": obj.get("last_name"),
-            "full_name": obj.get("full_name"),
+            "full_name": obj.get("full_name") if obj.get("full_name") is not None else '',
             "profile_picture": obj.get("profile_picture")
         })
         return _obj

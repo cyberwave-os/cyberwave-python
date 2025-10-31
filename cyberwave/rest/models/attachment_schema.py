@@ -36,7 +36,8 @@ class AttachmentSchema(BaseModel):
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "asset_uuid", "twin_uuid", "organization_uuid", "created_at", "updated_at", "created_by", "updated_by", "metadata"]
+    file_url: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "asset_uuid", "twin_uuid", "organization_uuid", "created_at", "updated_at", "created_by", "updated_by", "metadata", "file_url"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -107,6 +108,11 @@ class AttachmentSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if file_url (nullable) is None
+        # and model_fields_set contains the field
+        if self.file_url is None and "file_url" in self.model_fields_set:
+            _dict['file_url'] = None
+
         return _dict
 
     @classmethod
@@ -127,7 +133,8 @@ class AttachmentSchema(BaseModel):
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),
             "updated_by": obj.get("updated_by"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "file_url": obj.get("file_url")
         })
         return _obj
 

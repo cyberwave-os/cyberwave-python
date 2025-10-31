@@ -8,7 +8,7 @@ Quick Start:
     >>> from cyberwave import Cyberwave
     >>> client = Cyberwave(base_url="http://localhost:8000", api_key="your_key")
     >>> workspaces = client.workspaces.list()
-    
+
     Or use the compact API:
     >>> import cyberwave as cw
     >>> cw.configure(api_key="your_key", base_url="http://localhost:8000")
@@ -51,6 +51,9 @@ from .resources import (
     TwinManager,
 )
 
+# MQTT client (optional, for direct MQTT access)
+from .mqtt import CyberwaveMQTTClient
+
 # Version information
 __version__ = "0.1.0"
 
@@ -58,36 +61,32 @@ __version__ = "0.1.0"
 __all__ = [
     # Core client
     "Cyberwave",
-    
     # Configuration
     "CyberwaveConfig",
     "get_config",
     "set_config",
-    
     # High-level abstractions
     "Twin",
     "JointController",
-    
     # Exceptions
     "CyberwaveError",
     "CyberwaveAPIError",
     "CyberwaveConnectionError",
     "CyberwaveTimeoutError",
     "CyberwaveValidationError",
-    
     # Compact API
     "configure",
     "twin",
     "simulation",
     "get_client",
-    
     # Resource managers
     "WorkspaceManager",
     "ProjectManager",
     "EnvironmentManager",
     "AssetManager",
     "TwinManager",
-    
+    # MQTT client
+    "CyberwaveMQTTClient",
     # Version
     "__version__",
 ]

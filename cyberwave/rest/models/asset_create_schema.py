@@ -30,10 +30,10 @@ class AssetCreateSchema(BaseModel):
     description: StrictStr
     public: Optional[StrictBool] = False
     visibility: Optional[StrictStr] = 'private'
-    organization_uuid: Optional[StrictStr] = None
+    workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     registry_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "public", "visibility", "organization_uuid", "metadata", "registry_id"]
+    __properties: ClassVar[List[str]] = ["name", "description", "public", "visibility", "workspace_uuid", "metadata", "registry_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -74,10 +74,10 @@ class AssetCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if organization_uuid (nullable) is None
+        # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
 
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
@@ -105,7 +105,7 @@ class AssetCreateSchema(BaseModel):
             "description": obj.get("description"),
             "public": obj.get("public") if obj.get("public") is not None else False,
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
-            "organization_uuid": obj.get("organization_uuid"),
+            "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
             "registry_id": obj.get("registry_id")
         })

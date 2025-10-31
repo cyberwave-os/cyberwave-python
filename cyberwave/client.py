@@ -17,7 +17,11 @@ from cyberwave.resources import (
     TwinManager,
 )
 from cyberwave.twin import Twin
-from cyberwave.exceptions import CyberwaveError
+from cyberwave.exceptions import (
+    CyberwaveError,
+    CyberwaveAPIError,
+    UnauthorizedException,
+)
 
 
 class Cyberwave:
@@ -48,10 +52,8 @@ class Cyberwave:
         base_url: str | None = None,
         token: Optional[str] = None,
         api_key: Optional[str] = None,
-        mqtt_host: Optional[str] = None,
+        mqtt_host: Optional[str] = "mqtt.cyberwave.com",
         mqtt_port: int = 1883,
-        environment_id: Optional[str] = None,
-        workspace_id: Optional[str] = None,
         **config_kwargs,
     ):
         # Grab an env var for the base URL if unspecified
@@ -71,8 +73,8 @@ class Cyberwave:
             api_key=api_key,
             mqtt_host=mqtt_host,
             mqtt_port=mqtt_port,
-            environment_id=environment_id,
-            workspace_id=workspace_id,
+            # environment_id=os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
+            workspace_id=os.getenv("CYBERWAVE_WORKSPACE_ID", None),
             **config_kwargs,
         )
 
@@ -147,6 +149,69 @@ class Cyberwave:
         self.api = DefaultApi(api_client)
         self._api_client = api_client
 
+        # Wrap the API client to intercept authentication errors
+        self._wrap_api_methods()
+
+    def _wrap_api_methods(self):
+        """Wrap API methods to provide better error messages for authentication failures"""
+        # Get all methods from the DefaultApi class
+        for attr_name in dir(self.api):
+            if attr_name.startswith("_"):
+                continue
+
+            attr = getattr(self.api, attr_name)
+            if callable(attr):
+                # Wrap the method
+                wrapped = self._create_wrapped_method(attr)
+                setattr(self.api, attr_name, wrapped)
+
+    def _create_wrapped_method(self, method):
+        """Create a wrapped version of an API method that handles auth errors"""
+
+        def wrapped(*args, **kwargs):
+            try:
+                return method(*args, **kwargs)
+            except UnauthorizedException as e:
+                # Provide a helpful error message for authentication failures
+                error_msg = "Authentication failed: Invalid or missing credentials.\n\n"
+
+                if self.config.token:
+                    error_msg += "Your token appears to be invalid or expired.\n"
+                elif self.config.api_key:
+                    error_msg += "Your API key appears to be invalid or expired.\n"
+                else:
+                    error_msg += "No authentication credentials were provided.\n"
+
+                error_msg += "\To start using the SDK:\n"
+                error_msg += "  1. Add a token at https://cyberwave.com/profile\n"
+                error_msg += "  2. Copy it to your clipboard\n"
+                error_msg += "  3. Set the environment variable:\n\nexport CYBERWAVE_TOKEN=your_token\n"
+                error_msg += "  4. Run your script again!\n"
+
+                # Show what was sent (without revealing the full token)
+                if hasattr(e, "request_headers") and e.request_headers:
+                    auth_header = e.request_headers.get("Authorization", "Not present")
+                    if auth_header and auth_header != "Not present":
+                        # Mask the token for security
+                        parts = auth_header.split(" ")
+                        if len(parts) == 2:
+                            token_preview = (
+                                parts[1][:8] + "..." if len(parts[1]) > 8 else parts[1]
+                            )
+                            error_msg += (
+                                f"Authorization header: {parts[0]} {token_preview}\n"
+                            )
+                    else:
+                        error_msg += "Authorization header: Not present\n"
+
+                raise CyberwaveAPIError(
+                    error_msg,
+                    status_code=401,
+                    response_data=e.body if hasattr(e, "body") else None,
+                ) from e
+
+        return wrapped
+
     @property
     def mqtt(self) -> CyberwaveMQTTClient:
         """
@@ -181,9 +246,21 @@ class Cyberwave:
         """
         env_id = environment_id or self.config.environment_id
         if not env_id:
-            raise CyberwaveError(
-                "environment_id is required. Provide it as argument or set in configuration."
-            )
+            # check if the user has a project. If not, create a new project and environment.
+            projects = self.projects.list()
+            if not projects:
+                project_id = self.projects.create(
+                    name="Quickstart Project",
+                ).uuid
+                self.config.project_id = project_id
+            else:
+                project_id = projects[0].uuid
+            # create a new environment
+            env_id = self.environments.create(
+                name="Quickstart Environment",
+                project_id=project_id,
+            ).uuid
+            self.config.environment_id = env_id
 
         # Search for asset by key or name
         assets = self.assets.search(asset_key)
