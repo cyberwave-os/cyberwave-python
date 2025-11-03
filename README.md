@@ -123,7 +123,23 @@ client.mqtt.subscribe_joint_states("twin_uuid", on_joint_update)
 
 ### Video Streaming (WebRTC)
 
-Stream camera feeds to your digital twins using WebRTC:
+Stream camera feeds to your digital twins using WebRTC.
+
+To stream you will need to install FFMPEG if you don't have it.
+
+On Mac with brew:
+
+```bash
+brew install ffmpeg pkg-config
+```
+
+On Ubuntu:
+
+```bash
+sudo apt-get install ffmpeg
+```
+
+Then install the additional deps for camera streaming:
 
 ```bash
 # Install with camera support

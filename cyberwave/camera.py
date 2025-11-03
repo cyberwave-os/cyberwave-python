@@ -225,7 +225,7 @@ class CameraStreamer:
 
         # Send offer via MQTT using SDK
         # Match the working code's topic format: {twin_uuid}/webrtc-offer
-        offer_topic = f"cyberwave/twin/{twin_uuid}/webrtc-offer"
+        offer_topic = f"cyberwave/twin/{self.twin_uuid}/webrtc-offer"
         offer_payload = {
             "target": "backend",
             "sender": "edge",
@@ -322,12 +322,14 @@ class CameraStreamer:
                 if payload.get("type") == "offer":
                     logger.debug("Skipping offer message")
                     return
-                elif (
-                    payload.get("type") == "answer" and payload.get("target") == "edge"
-                ):
-                    logger.info("Processing answer targeted at edge")
-                    self._answer_data = payload
-                    self._answer_received = True
+                elif payload.get("type") == "answer":
+                    if payload.get("target") == "edge":
+                        logger.info("Processing answer targeted at edge")
+                        self._answer_data = payload
+                        self._answer_received = True
+                    else:
+                        logger.debug("Skipping answer message not targeted at edge")
+                        return
                 else:
                     raise ValueError(f"Unknown message type: {payload.get('type')}")
             except Exception as e:
