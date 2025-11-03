@@ -23,6 +23,15 @@ from cyberwave.exceptions import (
     UnauthorizedException,
 )
 
+# Import CameraStreamer with optional dependency handling
+try:
+    from cyberwave.camera import CameraStreamer
+
+    _has_camera = True
+except ImportError:
+    _has_camera = False
+    CameraStreamer = None
+
 
 class Cyberwave:
     """
@@ -34,7 +43,7 @@ class Cyberwave:
     Example:
         >>> client = Cyberwave(base_url="http://localhost:8000", token="your_token")
         >>> workspaces = client.workspaces.list()
-        >>> twin = client.twin("cyberwave/so101")
+        >>> twin = client.twin("the-robot-studio/so101")
 
     Args:
         base_url: Base URL of the Cyberwave backend
@@ -65,6 +74,11 @@ class Cyberwave:
 
         if api_key is None:
             api_key = os.getenv("CYBERWAVE_API_KEY", None)
+
+        if api_key is None and token is None:
+            raise ValueError(
+                "No CYBERWAVE_API_KEY found! Get yours at https://cyberwave.com/profile"
+            )
 
         # Create configuration
         self.config = CyberwaveConfig(
@@ -233,7 +247,7 @@ class Cyberwave:
         This is a convenience method for quickly creating twins.
 
         Args:
-            asset_key: Asset identifier (e.g., "cyberwave/so101")
+            asset_key: Asset identifier (e.g., "the-robot-studio/so101")
             environment_id: Environment ID (uses default if not provided)
             **kwargs: Additional twin creation parameters
 
@@ -241,7 +255,7 @@ class Cyberwave:
             Twin instance
 
         Example:
-            >>> robot = client.twin("cyberwave/so101")
+            >>> robot = client.twin("the-robot-studio/so101")
             >>> robot.move(x=1, y=0, z=0.5)
         """
         env_id = environment_id or self.config.environment_id
@@ -329,6 +343,56 @@ class Cyberwave:
         if self._mqtt_client:
             self._mqtt_client.disconnect()
             self._mqtt_client = None
+
+    def video_stream(
+        self,
+        twin_uuid: str,
+        camera_id: int = 0,
+        fps: int = 10,
+        turn_servers: Optional[list] = None,
+    ) -> "CameraStreamer":
+        """
+        Create a camera streamer for the specified twin.
+
+        This method creates a CameraStreamer instance that's pre-configured with
+        the client's MQTT connection, providing a seamless experience for streaming
+        video to digital twins.
+
+        Args:
+            twin_uuid: UUID of the digital twin to stream to
+            camera_id: Camera device ID (default: 0)
+            fps: Frames per second (default: 10)
+            turn_servers: Optional list of TURN server configurations
+
+        Returns:
+            CameraStreamer instance ready to start streaming
+
+        Example:
+            >>> client = Cyberwave(token="your_token")
+            >>> streamer = client.video_stream(twin_uuid="your_twin_uuid")
+            >>> await streamer.start()
+
+        Raises:
+            ImportError: If camera dependencies are not installed (install with: pip install cyberwave[camera])
+        """
+        if not _has_camera:
+            raise ImportError(
+                "Camera streaming requires additional dependencies. "
+                "Install them with: pip install cyberwave[camera]"
+            )
+
+        # Ensure MQTT client is connected
+        if self._mqtt_client is None:
+            self.mqtt.connect()
+
+        # Create and return camera streamer with twin_uuid pre-configured
+        return CameraStreamer(
+            client=self.mqtt,
+            camera_id=camera_id,
+            fps=fps,
+            turn_servers=turn_servers,
+            twin_uuid=twin_uuid,
+        )
 
     def disconnect(self):
         """Disconnect all connections (REST and MQTT)"""

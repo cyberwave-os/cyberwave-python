@@ -246,3 +246,26 @@ class CyberwaveMQTTClient:
     def subscribe_pong(self, resource_uuid: str, on_pong: Optional[Callable] = None):
         """Subscribe to pong responses."""
         return self._client.subscribe_pong(resource_uuid, on_pong)
+
+    # Low-level MQTT methods for advanced use cases
+    def subscribe(self, topic: str, handler: Optional[Callable] = None, qos: int = 0):
+        """
+        Subscribe to any MQTT topic.
+
+        Args:
+            topic: MQTT topic pattern
+            handler: Callback function for messages
+            qos: Quality of service level (0, 1, or 2)
+        """
+        return self._client.subscribe(topic, handler, qos)
+
+    def publish(self, topic: str, message: Dict[str, Any], qos: int = 0):
+        """
+        Publish a message to any MQTT topic.
+
+        Args:
+            topic: MQTT topic
+            message: Message payload as dictionary
+            qos: Quality of service level (0, 1, or 2)
+        """
+        return self._client.publish(topic, message, qos)

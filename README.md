@@ -29,7 +29,7 @@ cw.configure(
 )
 
 # Create a digital twin from an asset
-robot = cw.twin("cyberwave/so101")
+robot = cw.twin("the-robot-studio/so101")
 
 # Control position and rotation
 robot.move(x=1.0, y=0.0, z=0.5)
@@ -121,6 +121,48 @@ def on_joint_update(data):
 client.mqtt.subscribe_joint_states("twin_uuid", on_joint_update)
 ```
 
+### Video Streaming (WebRTC)
+
+Stream camera feeds to your digital twins using WebRTC:
+
+```bash
+# Install with camera support
+pip install cyberwave[camera]
+```
+
+```python
+import asyncio
+from cyberwave import Cyberwave
+
+# Initialize client
+client = Cyberwave(token="your_token_here")
+
+# Create camera streamer - integrated into the Cyberwave client!
+streamer = client.video_stream(
+    twin_uuid="your_twin_uuid",
+    camera_id=0,  # Default camera
+    fps=10        # Frames per second
+)
+
+# Start streaming
+async def stream_camera():
+    await streamer.start()
+    # Stream runs until stopped
+    await asyncio.sleep(60)  # Stream for 60 seconds
+    await streamer.stop()
+
+# Run the async function
+asyncio.run(stream_camera())
+```
+
+The `video_stream()` method:
+
+- Automatically uses the client's MQTT connection
+- Pre-configures the streamer with the twin UUID
+- Handles WebRTC peer connection setup
+- Manages ICE candidate gathering with STUN/TURN servers
+- Handles video encoding and streaming
+
 ## Configuration Options
 
 You can also set your token as environment variable:
@@ -133,7 +175,7 @@ export CYBERWAVE_TOKEN="your_token_here"
 import cyberwave as cw
 
 # SDK will automatically load from environment variables
-robot = cw.twin("cyberwave/so101")
+robot = cw.twin("the-robot-studio/so101")
 ```
 
 ### Programmatic Configuration
@@ -167,7 +209,7 @@ with Cyberwave(token="YOURTOKEN") as client:
 You can change a specific joint actuation. You can use degrees or radiants:
 
 ```python
-robot = cw.twin("cyberwave/so101")
+robot = cw.twin("the-robot-studio/so101")
 
 # Set individual joints (degrees by default)
 robot.joints.set("shoulder_joint", 45, degrees=True)

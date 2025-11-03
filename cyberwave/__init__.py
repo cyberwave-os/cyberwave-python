@@ -12,8 +12,13 @@ Quick Start:
     Or use the compact API:
     >>> import cyberwave as cw
     >>> cw.configure(api_key="your_key", base_url="http://localhost:8000")
-    >>> robot = cw.twin("cyberwave/so101")
+    >>> robot = cw.twin("the-robot-studio/so101")
     >>> robot.move(x=1, y=0, z=0.5)
+
+    Video Streaming (requires: pip install cyberwave[camera]):
+    >>> client = Cyberwave(token="your_token")
+    >>> streamer = client.video_stream(twin_uuid="your_twin_uuid")
+    >>> await streamer.start()
 """
 
 # Core client
@@ -38,7 +43,6 @@ from .exceptions import (
 from .compact import (
     configure,
     twin,
-    simulation,
     get_client,
 )
 
@@ -53,6 +57,16 @@ from .resources import (
 
 # MQTT client (optional, for direct MQTT access)
 from .mqtt import CyberwaveMQTTClient
+
+# Camera streaming (optional, requires additional dependencies)
+try:
+    from .camera import CameraStreamer, CV2VideoStreamTrack
+
+    _has_camera = True
+except ImportError:
+    _has_camera = False
+    CameraStreamer = None  # type: ignore
+    CV2VideoStreamTrack = None  # type: ignore
 
 # Version information
 __version__ = "0.1.0"
@@ -87,6 +101,9 @@ __all__ = [
     "TwinManager",
     # MQTT client
     "CyberwaveMQTTClient",
+    # Camera streaming (optional)
+    "CameraStreamer",
+    "CV2VideoStreamTrack",
     # Version
     "__version__",
 ]

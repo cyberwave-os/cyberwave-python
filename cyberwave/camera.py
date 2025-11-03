@@ -78,13 +78,24 @@ class CameraStreamer:
     """
     Manages WebRTC camera streaming to Cyberwave platform.
 
-    Example:
+    Note: It's recommended to use the Cyberwave.video_stream() method instead
+    of instantiating this class directly for a better developer experience.
+
+    Example (Recommended):
+        >>> from cyberwave import Cyberwave
+        >>> import asyncio
+        >>>
+        >>> client = Cyberwave(token="your_token")
+        >>> streamer = client.video_stream(twin_uuid="your_twin_uuid", camera_id=0)
+        >>> asyncio.run(streamer.start())
+
+    Example (Direct instantiation):
         >>> from cyberwave import Cyberwave, CameraStreamer
         >>> import asyncio
         >>>
         >>> client = Cyberwave(token="your_token")
-        >>> streamer = CameraStreamer(client.mqtt, camera_id=0)
-        >>> asyncio.run(streamer.start(twin_uuid="your_twin_uuid"))
+        >>> streamer = CameraStreamer(client.mqtt, camera_id=0, twin_uuid="your_twin_uuid")
+        >>> asyncio.run(streamer.start())
     """
 
     def __init__(
@@ -93,6 +104,7 @@ class CameraStreamer:
         camera_id: int = 0,
         fps: int = 10,
         turn_servers: Optional[list] = None,
+        twin_uuid: Optional[str] = None,
     ):
         """
         Initialize the camera streamer.
@@ -102,6 +114,7 @@ class CameraStreamer:
             camera_id: Camera device ID (default: 0)
             fps: Frames per second (default: 10)
             turn_servers: Optional list of TURN server configurations
+            twin_uuid: Optional UUID of the digital twin (can be provided here or in start())
         """
         self.client = client
         self.camera_id = camera_id
@@ -109,7 +122,7 @@ class CameraStreamer:
         self.pc: Optional[RTCPeerConnection] = None
         self.streamer: Optional[CV2VideoStreamTrack] = None
         self.channel: Optional[RTCDataChannel] = None
-        self.twin_uuid: Optional[str] = None
+        self.twin_uuid: Optional[str] = twin_uuid
         self._answer_received = False
         self._answer_data: Optional[Dict[str, Any]] = None
         self._answer_messenger = (
@@ -132,15 +145,22 @@ class CameraStreamer:
             },
         ]
 
-    async def start(self, twin_uuid: str):
+    async def start(self, twin_uuid: Optional[str] = None):
         """
         Start streaming camera to Cyberwave.
 
         Args:
-            twin_uuid: UUID of the digital twin
+            twin_uuid: UUID of the digital twin (uses instance twin_uuid if not provided)
         """
-        logger.info(f"Starting camera stream for twin {twin_uuid}")
-        self.twin_uuid = twin_uuid
+        # Use provided twin_uuid or fall back to instance twin_uuid
+        if twin_uuid is not None:
+            self.twin_uuid = twin_uuid
+        elif self.twin_uuid is None:
+            raise ValueError(
+                "twin_uuid must be provided either during initialization or when calling start()"
+            )
+
+        logger.info(f"Starting camera stream for twin {self.twin_uuid}")
 
         # Assume the MQTT client is already connected
         # if self.client:

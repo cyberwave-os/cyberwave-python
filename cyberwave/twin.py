@@ -108,7 +108,7 @@ class Twin:
     and joint states of a digital twin.
 
     Example:
-        >>> twin = client.twin("cyberwave/so101")
+        >>> twin = client.twin("the-robot-studio/so101")
         >>> twin.move(x=1, y=0, z=0.5)
         >>> twin.rotate(yaw=90)
         >>> twin.joints.arm_joint = 45
