@@ -43,10 +43,10 @@ class CyberwaveMQTTClient:
 
         # Determine topic prefix from ENVIRONMENT variable
         env_value = os.getenv("ENVIRONMENT", "").strip()
-        if env_value:
-            topic_prefix = env_value
-        else:
+        if not env_value or env_value.lower() == "production":
             topic_prefix = ""
+        else:
+            topic_prefix = env_value
         
         self._topic_prefix = topic_prefix
         
