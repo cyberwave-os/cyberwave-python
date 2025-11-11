@@ -9,6 +9,7 @@ import json
 import logging
 import time
 import uuid
+import re
 from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
@@ -128,14 +129,51 @@ class CyberwaveMQTTClient:
             self._handlers[topic] = []
         self._handlers[topic].append(handler)
 
+    def _match_mqtt_pattern(self, pattern: str, topic: str) -> bool:
+        """Match MQTT topic against MQTT pattern (supports + and # wildcards)."""
+        # Convert MQTT pattern to regex
+        # + matches a single level (any characters except /)
+        # # matches zero or more levels (must be at end)
+        
+        # Escape special regex characters except + and #
+        pattern_escaped = re.escape(pattern)
+        # Replace escaped \+ with regex for single level
+        pattern_escaped = pattern_escaped.replace(r'\+', r'[^/]+')
+        # Replace escaped \# with regex for multi-level (only at end)
+        if pattern_escaped.endswith(r'\#'):
+            pattern_escaped = pattern_escaped[:-2] + r'.*'
+        elif r'\#' in pattern_escaped:
+            # # can only be at the end in MQTT
+            return False
+        
+        # Match the pattern
+        return bool(re.match(f'^{pattern_escaped}$', topic))
+
     def _trigger_handlers(self, topic: str, data: Any):
         """Trigger all handlers for a specific topic."""
+        # First, try exact match
         if topic in self._handlers:
             for handler in self._handlers[topic]:
                 try:
                     handler(data)
                 except Exception as e:
                     logger.error(f"Error in handler for {topic}: {e}")
+        
+        # Then, try pattern matches (for wildcard subscriptions)
+        for pattern, handlers in self._handlers.items():
+            if pattern != topic and ('+' in pattern or '#' in pattern):
+                if self._match_mqtt_pattern(pattern, topic):
+                    for handler in handlers:
+                        try:
+                            # Pass both topic and data to handler if it accepts 2 args
+                            import inspect
+                            sig = inspect.signature(handler)
+                            if len(sig.parameters) >= 2:
+                                handler(topic, data)
+                            else:
+                                handler(data)
+                        except Exception as e:
+                            logger.error(f"Error in handler for pattern {pattern}: {e}")
 
     def _on_connect(self, client, userdata, flags, rc, *args, **kwargs):
         """Callback when connected to MQTT broker."""
@@ -394,6 +432,7 @@ class CyberwaveMQTTClient:
         logger.info(
             f"Publishing joint state for {twin_uuid} {joint_name}: {joint_state}"
         )
+
         self.publish(topic, message)
 
     # Sensor stream MQTT methods
@@ -439,6 +478,21 @@ class CyberwaveMQTTClient:
         """Subscribe to WebRTC signaling messages via MQTT."""
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc"
         self.subscribe(topic, on_message)
+
+    def publish_command_message(self, twin_uuid: str, status: str):
+        """Publish command response message via MQTT."""
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/command"
+        message = {
+            "status": status
+        }
+        self.publish(topic, message)
+
+    def subscribe_command_message(
+        self, twin_uuid: str, on_command: Optional[Callable] = None
+    ):
+        """Subscribe to Egde command messages via MQTT."""
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/command"
+        self.subscribe(topic, on_command)
 
     # Utility methods
     def ping(self, resource_uuid: str):

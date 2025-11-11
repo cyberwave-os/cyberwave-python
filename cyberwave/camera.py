@@ -184,7 +184,6 @@ class CameraStreamer:
 
         # Create data channel for metadata
         self.channel = self.pc.createDataChannel("track_info")
-
         # Add video track
         color_track = self.streamer
         self.pc.addTrack(color_track)
@@ -224,8 +223,9 @@ class CameraStreamer:
         modified_sdp = self._filter_sdp(self.pc.localDescription.sdp)
 
         # Send offer via MQTT using SDK
-        # Match the working code's topic format: {twin_uuid}/webrtc-offer
-        offer_topic = f"cyberwave/twin/{self.twin_uuid}/webrtc-offer"
+        prefix = self.client.topic_prefix
+        offer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-offer"
+        logger.info(f"Publishing WebRTC offer to topic: {offer_topic} (prefix: '{prefix}')")
         offer_payload = {
             "target": "backend",
             "sender": "edge",
@@ -236,7 +236,7 @@ class CameraStreamer:
         }
 
         self._publish_message(offer_topic, offer_payload)
-        logger.info("WebRTC offer sent")
+        logger.info(f"WebRTC offer sent to {offer_topic}")
 
         # Wait for answer
         timeout = 60  # 60 second timeout
@@ -307,13 +307,13 @@ class CameraStreamer:
         if not self.twin_uuid:
             raise ValueError("twin_uuid must be set before subscribing")
 
-        # Match the working code's topic format: {twin_uuid}/webrtc-answer
-        answer_topic = f"cyberwave/twin/{self.twin_uuid}/webrtc-answer"
+        prefix = self.client.topic_prefix
+        answer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-answer"
+        logger.info(f"Subscribing to WebRTC answer topic: {answer_topic} (prefix: '{prefix}')")
 
         def on_answer(data):
             """Callback for WebRTC answer messages."""
             try:
-                # Data is already parsed by the MQTT client
                 payload = data if isinstance(data, dict) else json.loads(data)
                 logger.info(f"Received message: type={payload.get('type')}")
                 logger.debug(f"Full payload: {payload}")
@@ -339,7 +339,6 @@ class CameraStreamer:
         # Use SDK's MQTT client to subscribe
         # The SDK creates separate Messaging instances for each subscription
         self.client.subscribe(answer_topic, on_answer)
-        logger.info(f"Subscribed to {answer_topic}")
 
     def _publish_message(self, topic: str, payload: Dict[str, Any]):
         """

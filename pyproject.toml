@@ -9,7 +9,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"  # Matches rest module requirement (>=3.9)
+python = "^3.10"  # Required by av package (>=3.10)
 # Core dependencies for REST API client
 urllib3 = "^2.1.0"
 python-dateutil = "^2.8.2"

@@ -6,6 +6,7 @@ from the mqtt module to work with the CyberwaveConfig object used by the main cl
 """
 
 import logging
+import os
 from typing import Callable, Optional, Dict, Any
 
 from .config import CyberwaveConfig
@@ -34,18 +35,39 @@ class CyberwaveMQTTClient:
         """
         self.config = config
 
-        # Determine the password/token to use for MQTT authentication
+        # Determine the broker, port, username, and password from config
+        mqtt_broker = config.mqtt_host or "mqtt.cyberwave.com"
+        mqtt_port = config.mqtt_port or 1883
+        mqtt_username = config.mqtt_username or "mqttcyb"
         mqtt_password = config.mqtt_password or "mqttcyb231"
 
-        # Initialize the base MQTT client with extracted config values
+        # Determine topic prefix from ENVIRONMENT variable
+        env_value = os.getenv("ENVIRONMENT", "").strip()
+        if env_value:
+            topic_prefix = env_value
+        else:
+            topic_prefix = ""
+        
+        self._topic_prefix = topic_prefix
+        
+        # Initialize the base MQTT client
         self._client = BaseMQTTClient(
+            mqtt_broker=mqtt_broker,
+            mqtt_port=mqtt_port,
+            mqtt_username=mqtt_username,
             mqtt_password=mqtt_password,
+            topic_prefix=topic_prefix,
         )
 
     @property
     def connected(self) -> bool:
         """Check if the client is connected to the MQTT broker."""
         return self._client.connected
+    
+    @property
+    def topic_prefix(self) -> str:
+        """Get the topic prefix used by this MQTT client."""
+        return self._topic_prefix
 
     def connect(self):
         """Connect to the MQTT broker."""
@@ -77,8 +99,10 @@ class CyberwaveMQTTClient:
             twin_uuid: UUID of the twin to monitor
             callback: Function to call when position updates are received
         """
-        # The base client expects a handler that receives the full message data
-        return self._client.subscribe(f"cyberwave/twin/{twin_uuid}/position", callback)
+        # Include topic prefix to match backend pattern
+        prefix = self.topic_prefix
+        topic = f"{prefix}cyberwave/twin/{twin_uuid}/position"
+        return self._client.subscribe(topic, callback)
 
     def subscribe_twin_rotation(
         self, twin_uuid: str, callback: Callable[[Dict[str, Any]], None]
@@ -90,7 +114,10 @@ class CyberwaveMQTTClient:
             twin_uuid: UUID of the twin to monitor
             callback: Function to call when rotation updates are received
         """
-        return self._client.subscribe(f"cyberwave/twin/{twin_uuid}/rotation", callback)
+        # Include topic prefix to match backend pattern
+        prefix = self.topic_prefix
+        topic = f"{prefix}cyberwave/twin/{twin_uuid}/rotation"
+        return self._client.subscribe(topic, callback)
 
     def subscribe_joint_states(
         self, twin_uuid: str, callback: Callable[[Dict[str, Any]], None]
@@ -102,7 +129,10 @@ class CyberwaveMQTTClient:
             twin_uuid: UUID of the twin to monitor
             callback: Function to call when joint state updates are received
         """
-        return self._client.subscribe(f"cyberwave/joint/{twin_uuid}/+", callback)
+        # Include topic prefix to match backend pattern
+        prefix = self.topic_prefix
+        topic = f"{prefix}cyberwave/joint/{twin_uuid}/+"
+        return self._client.subscribe(topic, callback)
 
     def update_twin_position(self, twin_uuid: str, position: Dict[str, float]):
         """
@@ -238,6 +268,17 @@ class CyberwaveMQTTClient:
     ):
         """Subscribe to WebRTC signaling messages via MQTT."""
         return self._client.subscribe_webrtc_messages(twin_uuid, on_message)
+
+    def publish_command_message(self, twin_uuid: str, status: str):
+        """Publish Edge command response message via MQTT."""
+        return self._client.publish_command_message(twin_uuid, status)
+
+    def subscribe_command_message(
+        self, twin_uuid: str, on_command: Optional[Callable] = None
+    ):
+        """Subscribe to Edge command message via MQTT."""
+        return self._client.subscribe_command_message(twin_uuid, on_command)
+
 
     def ping(self, resource_uuid: str):
         """Send ping message to test connectivity."""

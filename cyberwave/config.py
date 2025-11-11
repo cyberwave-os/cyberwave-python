@@ -7,6 +7,14 @@ from typing import Optional
 from dataclasses import dataclass
 
 
+# Production defaults values
+DEFAULT_BASE_URL = "https://api.cyberwave.com"
+DEFAULT_MQTT_HOST = "mqtt.cyberwave.com"
+DEFAULT_MQTT_PORT = 1883
+DEFAULT_MQTT_USERNAME = "mqttcyb"
+DEFAULT_MQTT_PASSWORD = "mqttcyb231"
+DEFAULT_TIMEOUT = 30
+
 @dataclass
 class CyberwaveConfig:
     """
@@ -26,16 +34,16 @@ class CyberwaveConfig:
         verify_ssl: Whether to verify SSL certificates
     """
 
-    base_url: str = "https://api.cyberwave.com"
+    base_url: str = DEFAULT_BASE_URL
     api_key: Optional[str] = None
     token: Optional[str] = None
     mqtt_host: Optional[str] = None
-    mqtt_port: int = 1883
+    mqtt_port: int = DEFAULT_MQTT_PORT
     mqtt_username: Optional[str] = None
     mqtt_password: Optional[str] = None
     environment_id: Optional[str] = None
     workspace_id: Optional[str] = None
-    timeout: int = 30
+    timeout: int = DEFAULT_TIMEOUT
     verify_ssl: bool = True
 
     def __post_init__(self):
@@ -44,24 +52,22 @@ class CyberwaveConfig:
             self.api_key = os.getenv("CYBERWAVE_API_KEY")
             self.token = os.getenv("CYBERWAVE_TOKEN")
 
-        if not self.base_url:
-            self.base_url = os.getenv("CYBERWAVE_BASE_URL", "https://api.cyberwave.com")
+        if self.base_url == DEFAULT_BASE_URL:
+            self.base_url = os.getenv("CYBERWAVE_BASE_URL", DEFAULT_BASE_URL)
 
         if not self.mqtt_host:
-            # Extract host from base_url if not provided
-            self.mqtt_host = os.getenv("CYBERWAVE_MQTT_HOST")
-            if not self.mqtt_host and self.base_url:
-                # Parse host from base_url
-                from urllib.parse import urlparse
+            self.mqtt_host = os.getenv("CYBERWAVE_MQTT_HOST", DEFAULT_MQTT_HOST)
 
-                parsed = urlparse(self.base_url)
-                self.mqtt_host = parsed.hostname or "localhost"
+        if self.mqtt_port == DEFAULT_MQTT_PORT:
+            port_str = os.getenv("CYBERWAVE_MQTT_PORT")
+            if port_str:
+                self.mqtt_port = int(port_str)
 
         if not self.mqtt_username:
-            self.mqtt_username = os.getenv("CYBERWAVE_MQTT_USERNAME")
+            self.mqtt_username = os.getenv("CYBERWAVE_MQTT_USERNAME", DEFAULT_MQTT_USERNAME)
 
         if not self.mqtt_password:
-            self.mqtt_password = os.getenv("CYBERWAVE_MQTT_PASSWORD")
+            self.mqtt_password = os.getenv("CYBERWAVE_MQTT_PASSWORD", DEFAULT_MQTT_PASSWORD)
 
         if not self.environment_id:
             self.environment_id = os.getenv("CYBERWAVE_ENVIRONMENT_ID")

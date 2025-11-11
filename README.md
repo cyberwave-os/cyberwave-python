@@ -35,9 +35,8 @@ robot = cw.twin("the-robot-studio/so101")
 robot.move(x=1.0, y=0.0, z=0.5)
 robot.rotate(yaw=90)  # degrees
 
-# Control robot joints (for URDF assets)
-robot.joints.shoulder_joint = 45  # degrees
-robot.joints.elbow_joint = -30
+# Move the robot arm to 30 degrees
+robot.joints.set("1", 30)
 
 # Get current joint positions
 print(robot.joints.get_all())
@@ -119,6 +118,27 @@ def on_joint_update(data):
     print(f"Joint states: {data}")
 
 client.mqtt.subscribe_joint_states("twin_uuid", on_joint_update)
+```
+
+### Command Messages with MQTT
+
+Receive and respond to commands for digital twins:
+
+```python
+# Define command handler
+def command_handler(data):
+    command_type = data.get("command")
+    if command_type == "greetings":
+        print("Hello World!")
+        client.mqtt.publish_command_message(twin_uuid, "ok")
+    else:
+        client.mqtt.publish_command_message(twin_uuid, "error")
+
+# Subscribe to commands
+client.mqtt.subscribe_command_message("twin_uuid", command_handler)
+
+# Publish command response
+client.mqtt.publish_command_message("twin_uuid", "ok")  # or "error"
 ```
 
 ### Video Streaming (WebRTC)
@@ -291,7 +311,3 @@ poetry run python tests/test_imports.py
 - **Documentation**: [cyberwave.com/docs](https://docs.cyberwave.com)
 - **Issues**: [GitHub Issues](https://github.com/cyberwave/cyberwave-python/issues)
 <!-- - **Community**: [Discord](https://discord.gg/cyberwave) -->
-
-```
-
-```

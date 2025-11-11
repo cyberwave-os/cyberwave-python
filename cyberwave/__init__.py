@@ -68,6 +68,9 @@ except ImportError:
     CameraStreamer = None  # type: ignore
     CV2VideoStreamTrack = None  # type: ignore
 
+# Edge controller
+from .controller import EdgeController
+
 # Version information
 __version__ = "0.1.0"
 
@@ -104,6 +107,8 @@ __all__ = [
     # Camera streaming (optional)
     "CameraStreamer",
     "CV2VideoStreamTrack",
+    # Edge controller
+    "EdgeController",
     # Version
     "__version__",
 ]
