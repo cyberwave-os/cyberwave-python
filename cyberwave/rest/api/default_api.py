@@ -59,6 +59,7 @@ from cyberwave.rest.models.project_share_response_schema import ProjectShareResp
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema
 from cyberwave.rest.models.share_schema import ShareSchema
 from cyberwave.rest.models.shares_response_schema import SharesResponseSchema
+from cyberwave.rest.models.simulation_start_schema import SimulationStartSchema
 from cyberwave.rest.models.team_member_response import TeamMemberResponse
 from cyberwave.rest.models.twin_create_schema import TwinCreateSchema
 from cyberwave.rest.models.twin_relationship_schema import TwinRelationshipSchema
@@ -8746,7 +8747,7 @@ class DefaultApi:
     def src_app_api_environments_create_environment_simulation(
         self,
         uuid: StrictStr,
-        payload: Optional[Dict[str, Any]] = None,
+        simulation_start_schema: Optional[SimulationStartSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -8765,8 +8766,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
-        :param payload:
-        :type payload: Dict[str, object]
+        :param simulation_start_schema:
+        :type simulation_start_schema: SimulationStartSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -8791,7 +8792,7 @@ class DefaultApi:
 
         _param = self._src_app_api_environments_create_environment_simulation_serialize(
             uuid=uuid,
-            payload=payload,
+            simulation_start_schema=simulation_start_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -8816,7 +8817,7 @@ class DefaultApi:
     def src_app_api_environments_create_environment_simulation_with_http_info(
         self,
         uuid: StrictStr,
-        payload: Optional[Dict[str, Any]] = None,
+        simulation_start_schema: Optional[SimulationStartSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -8835,8 +8836,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
-        :param payload:
-        :type payload: Dict[str, object]
+        :param simulation_start_schema:
+        :type simulation_start_schema: SimulationStartSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -8861,7 +8862,7 @@ class DefaultApi:
 
         _param = self._src_app_api_environments_create_environment_simulation_serialize(
             uuid=uuid,
-            payload=payload,
+            simulation_start_schema=simulation_start_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -8886,7 +8887,7 @@ class DefaultApi:
     def src_app_api_environments_create_environment_simulation_without_preload_content(
         self,
         uuid: StrictStr,
-        payload: Optional[Dict[str, Any]] = None,
+        simulation_start_schema: Optional[SimulationStartSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -8905,8 +8906,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
-        :param payload:
-        :type payload: Dict[str, object]
+        :param simulation_start_schema:
+        :type simulation_start_schema: SimulationStartSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -8931,7 +8932,7 @@ class DefaultApi:
 
         _param = self._src_app_api_environments_create_environment_simulation_serialize(
             uuid=uuid,
-            payload=payload,
+            simulation_start_schema=simulation_start_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -8951,7 +8952,7 @@ class DefaultApi:
     def _src_app_api_environments_create_environment_simulation_serialize(
         self,
         uuid,
-        payload,
+        simulation_start_schema,
         _request_auth,
         _content_type,
         _headers,
@@ -8976,13 +8977,11 @@ class DefaultApi:
         if uuid is not None:
             _path_params['uuid'] = uuid
         # process the query parameters
-        if payload is not None:
-            
-            _query_params.append(('payload', payload))
-            
         # process the header parameters
         # process the form parameters
         # process the body parameter
+        if simulation_start_schema is not None:
+            _body_params = simulation_start_schema
 
 
         # set the HTTP header `Accept`
@@ -8993,6 +8992,19 @@ class DefaultApi:
                 ]
             )
 
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [

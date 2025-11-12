@@ -308,6 +308,6 @@ poetry run python tests/test_imports.py
 
 ## Support
 
-- **Documentation**: [cyberwave.com/docs](https://docs.cyberwave.com)
+- **Documentation**: [docs.cyberwave.com](https://docs.cyberwave.com)
 - **Issues**: [GitHub Issues](https://github.com/cyberwave/cyberwave-python/issues)
 <!-- - **Community**: [Discord](https://discord.gg/cyberwave) -->

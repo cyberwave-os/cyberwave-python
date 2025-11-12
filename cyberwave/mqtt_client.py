@@ -41,8 +41,8 @@ class CyberwaveMQTTClient:
         mqtt_username = config.mqtt_username or "mqttcyb"
         mqtt_password = config.mqtt_password or "mqttcyb231"
 
-        # Determine topic prefix from ENVIRONMENT variable
-        env_value = os.getenv("ENVIRONMENT", "").strip()
+        # Determine topic prefix from CYBERWAVE_ENVIRONMENT variable
+        env_value = os.getenv("CYBERWAVE_ENVIRONMENT", "").strip()
         if not env_value or env_value.lower() == "production":
             topic_prefix = ""
         else:
