@@ -24,6 +24,8 @@ class CyberwaveMQTTClient:
 
     Provides high-level methods for publishing and subscribing to twin updates,
     joint states, and other real-time events.
+
+    TODO: We should just use the BaseMQTTClient and call that CyberwaveMQTTClient
     """
 
     def __init__(self, config: CyberwaveConfig):
@@ -47,9 +49,9 @@ class CyberwaveMQTTClient:
             topic_prefix = ""
         else:
             topic_prefix = env_value
-        
+
         self._topic_prefix = topic_prefix
-        
+
         # Initialize the base MQTT client
         self._client = BaseMQTTClient(
             mqtt_broker=mqtt_broker,
@@ -63,7 +65,7 @@ class CyberwaveMQTTClient:
     def connected(self) -> bool:
         """Check if the client is connected to the MQTT broker."""
         return self._client.connected
-    
+
     @property
     def topic_prefix(self) -> str:
         """Get the topic prefix used by this MQTT client."""
@@ -188,6 +190,20 @@ class CyberwaveMQTTClient:
         """
         return self._client.update_twin_scale(twin_uuid, scale)
 
+    def publish_initial_observation(
+        self, 
+        twin_uuid: str,
+        observations: Dict[str, Any]
+    ):
+        """
+        Send initial observations to the leader twin.
+
+        Args:
+            twin_uuid: UUID of the twin
+            observations: Dictionary of observations
+        """
+        return self._client.publish_initial_observation(twin_uuid, observations)
+
     def update_joint_state(
         self,
         twin_uuid: str,
@@ -278,7 +294,6 @@ class CyberwaveMQTTClient:
     ):
         """Subscribe to Edge command message via MQTT."""
         return self._client.subscribe_command_message(twin_uuid, on_command)
-
 
     def ping(self, resource_uuid: str):
         """Send ping message to test connectivity."""

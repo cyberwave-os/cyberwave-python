@@ -55,9 +55,12 @@ class JointController:
             position = math.radians(position)
 
         try:
-            # Type ignore for auto-generated client
-            self.twin.client.twins.update_joint_state(  # type: ignore
-                self.twin.uuid, joint_name, position
+            # Connect to MQTT if not already connected
+            self.twin._connect_to_mqtt_if_not_connected()
+
+            # Update joint state via MQTT
+            self.twin.client.mqtt.update_joint_state(
+                self.twin.uuid, joint_name, position=position
             )
 
             # Update cached state
@@ -153,18 +156,18 @@ class Twin:
     def asset_id(self) -> str:
         """Get asset ID"""
         return (
-            self._data.asset
-            if hasattr(self._data, "asset")
-            else str(self._data.get("asset", ""))
+            self._data.asset_uuid
+            if hasattr(self._data, "asset_uuid")
+            else str(self._data.get("asset_uuid", ""))
         )
 
     @property
     def environment_id(self) -> str:
         """Get environment ID"""
         return (
-            self._data.environment
-            if hasattr(self._data, "environment")
-            else str(self._data.get("environment", ""))
+            self._data.environment_uuid
+            if hasattr(self._data, "environment_uuid")
+            else str(self._data.get("environment_uuid", ""))
         )
 
     def refresh(self):

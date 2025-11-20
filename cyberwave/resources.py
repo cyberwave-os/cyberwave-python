@@ -227,24 +227,23 @@ class AssetManager(BaseResourceManager):
     def search(self, query: str) -> List[AssetSchema]:
         """Search for assets by name or tags"""
         try:
-            # Assuming there's a search endpoint - adjust if needed
-            all_assets = self.list()
-            # search by exact match with registry_id first
-            candidates = [a for a in all_assets if a.registry_id == query]
-            if candidates:
-                return candidates
-            else:
-                # search by name or description
-                candidates = [
-                    a
-                    for a in all_assets
-                    if query.lower() in a.name.lower()
-                    or query.lower() in a.description.lower()
-                ]
-                if candidates:
-                    return candidates
-                else:
-                    return []
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/assets",
+                query_params=[("search", query)],
+            )
+
+            _response_types_map = {
+                "200": "List[AssetSchema]",
+            }
+
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map=_response_types_map,
+            ).data
         except Exception as e:
             self._handle_error(e, "search assets")
             raise  # For type checker

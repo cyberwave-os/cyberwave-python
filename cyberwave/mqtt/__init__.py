@@ -47,6 +47,7 @@ class CyberwaveMQTTClient:
         client_id: Optional[str] = None,
         topic_prefix: str = "",
         auto_connect: bool = False,
+        twin_uuids: [List[str]] = [],
     ):
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
@@ -100,6 +101,9 @@ class CyberwaveMQTTClient:
         if auto_connect:
             self.connect()
 
+        self.twin_uuids = twin_uuids
+        self.twin_uuids_with_telemetry_start = []
+
     def _positions_equal(
         self, pos1: Dict[str, float], pos2: Dict[str, float], tolerance: float = 1e-6
     ) -> bool:
@@ -134,20 +138,20 @@ class CyberwaveMQTTClient:
         # Convert MQTT pattern to regex
         # + matches a single level (any characters except /)
         # # matches zero or more levels (must be at end)
-        
+
         # Escape special regex characters except + and #
         pattern_escaped = re.escape(pattern)
         # Replace escaped \+ with regex for single level
-        pattern_escaped = pattern_escaped.replace(r'\+', r'[^/]+')
+        pattern_escaped = pattern_escaped.replace(r"\+", r"[^/]+")
         # Replace escaped \# with regex for multi-level (only at end)
-        if pattern_escaped.endswith(r'\#'):
-            pattern_escaped = pattern_escaped[:-2] + r'.*'
-        elif r'\#' in pattern_escaped:
+        if pattern_escaped.endswith(r"\#"):
+            pattern_escaped = pattern_escaped[:-2] + r".*"
+        elif r"\#" in pattern_escaped:
             # # can only be at the end in MQTT
             return False
-        
+
         # Match the pattern
-        return bool(re.match(f'^{pattern_escaped}$', topic))
+        return bool(re.match(f"^{pattern_escaped}$", topic))
 
     def _trigger_handlers(self, topic: str, data: Any):
         """Trigger all handlers for a specific topic."""
@@ -158,15 +162,16 @@ class CyberwaveMQTTClient:
                     handler(data)
                 except Exception as e:
                     logger.error(f"Error in handler for {topic}: {e}")
-        
+
         # Then, try pattern matches (for wildcard subscriptions)
         for pattern, handlers in self._handlers.items():
-            if pattern != topic and ('+' in pattern or '#' in pattern):
+            if pattern != topic and ("+" in pattern or "#" in pattern):
                 if self._match_mqtt_pattern(pattern, topic):
                     for handler in handlers:
                         try:
                             # Pass both topic and data to handler if it accepts 2 args
                             import inspect
+
                             sig = inspect.signature(handler)
                             if len(sig.parameters) >= 2:
                                 handler(topic, data)
@@ -247,6 +252,14 @@ class CyberwaveMQTTClient:
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
 
+    def _handle_twin_update_with_telemetry(self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None):
+        if twin_uuid not in self.twin_uuids:
+            self.twin_uuids.append(twin_uuid)
+
+        if twin_uuid not in self.twin_uuids_with_telemetry_start:
+            self.twin_uuids_with_telemetry_start.append(twin_uuid)
+            self.publish_telemetry_start(twin_uuid, metadata)
+
     def connect(self):
         """Connect to MQTT broker."""
         try:
@@ -260,15 +273,30 @@ class CyberwaveMQTTClient:
             timeout = 10
             start_time = time.time()
             while not self.connected and (time.time() - start_time) < timeout:
-                time.sleep(0.1)
+                time.sleep(0.5)
 
             if not self.connected:
                 raise Exception("Failed to connect to MQTT broker within timeout")
 
             logger.debug("Successfully connected to MQTT broker")
+
+            # send the telemetry start message
+            for twin_uuid in self.twin_uuids:
+                self.publish_telemetry_start(twin_uuid)
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
             raise
+
+    def disconnect(self):
+        """Disconnect from MQTT broker."""
+
+        for twin_uuid in self.twin_uuids:
+            self.publish_telemetry_end(twin_uuid)
+        if self.connected:
+            logger.info("Disconnecting from MQTT broker")
+            self.client.loop_stop()
+            self.client.disconnect()
+            self.connected = False
 
     def publish(self, topic: str, message: Dict[str, Any], qos: int = 0):
         """Publish message to MQTT topic."""
@@ -301,6 +329,39 @@ class CyberwaveMQTTClient:
         else:
             logger.warning(f"Cannot subscribe to {topic}: not connected to MQTT broker")
 
+    # Telemetry MQTT methods
+    def publish_telemetry_start(
+        self, twin_uuid: str, observation: Optional[Dict[str, float]] = None
+    ):
+        """
+        Publish telemetry start message via MQTT.
+
+        Args:
+            twin_uuid: UUID of the twin
+            observation: Optional dictionary of initial joint states (e.g., {"joint1": 0.5, "joint2": 1.0})
+                        This is used to initialize the recording with the current joint positions.
+        """
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+        message = {
+            "type": "telemetry_start",
+            "timestamp": time.time(),
+        }
+        if observation is not None:
+            message["observation"] = observation
+        logger.info(
+            f"Publishing telemetry start message for twin {twin_uuid}: {message}"
+        )
+        self.publish(topic, message)
+
+    def publish_telemetry_end(self, twin_uuid: str):
+        """Publish telemetry end message via MQTT."""
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+        message = {
+            "type": "telemetry_end",
+            "timestamp": time.time(),
+        }
+        self.publish(topic, message)
+
     # Environment MQTT methods
     def subscribe_environment(
         self, environment_uuid: str, on_update: Optional[Callable] = None
@@ -328,6 +389,8 @@ class CyberwaveMQTTClient:
     def update_twin_position(self, twin_uuid: str, position: Dict[str, float]):
         """Update twin position via MQTT."""
         # Check if this position is the same as the last one sent
+        self._handle_twin_update_with_telemetry(twin_uuid)
+
         if twin_uuid in self._last_positions:
             if self._positions_equal(self._last_positions[twin_uuid], position):
                 # Position hasn't changed, skip the update
@@ -354,6 +417,8 @@ class CyberwaveMQTTClient:
     def update_twin_rotation(self, twin_uuid: str, rotation: Dict[str, float]):
         """Update twin rotation via MQTT."""
         # Check if this rotation is the same as the last one sent
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
         if twin_uuid in self._last_rotations:
             if self._positions_equal(self._last_rotations[twin_uuid], rotation):
                 # Rotation hasn't changed, skip the update
@@ -379,6 +444,8 @@ class CyberwaveMQTTClient:
 
     def update_twin_scale(self, twin_uuid: str, scale: Dict[str, float]):
         """Update twin scale via MQTT."""
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
         # Check rate limiting
         rate_key = f"twin:{twin_uuid}:scale"
         if self._is_rate_limited(rate_key):
@@ -409,6 +476,8 @@ class CyberwaveMQTTClient:
         effort: Optional[float] = None,
     ):
         """Update joint state via MQTT."""
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
         # Check rate limiting
         rate_key = f"joint:{twin_uuid}:{joint_name}"
         if self._is_rate_limited(rate_key):
@@ -435,11 +504,26 @@ class CyberwaveMQTTClient:
 
         self.publish(topic, message)
 
+    def publish_initial_observation(
+        self, twin_uuid: str, observations: Dict[str, Any]
+    ):
+        """Send initial observation to the leader twin."""
+        if twin_uuid not in self.twin_uuids_with_telemetry_start:
+            self._handle_twin_update_with_telemetry(twin_uuid, observations)
+        else:
+            topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+            message = {
+                "type": "initial_observation",
+                "observations": observations,
+                "timestamp": time.time(),
+            }
+            self.publish(topic, message)
     # Sensor stream MQTT methods
     def subscribe_video_stream(
         self, twin_uuid: str, on_frame: Optional[Callable] = None
     ):
         """Subscribe to video stream via MQTT."""
+        self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/video"
         self.subscribe(topic, on_frame)
 
@@ -447,6 +531,7 @@ class CyberwaveMQTTClient:
         self, twin_uuid: str, on_frame: Optional[Callable] = None
     ):
         """Subscribe to depth stream via MQTT."""
+        self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/depth"
         self.subscribe(topic, on_frame)
 
@@ -454,11 +539,13 @@ class CyberwaveMQTTClient:
         self, twin_uuid: str, on_pointcloud: Optional[Callable] = None
     ):
         """Subscribe to colored point cloud via MQTT."""
+        self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/pointcloud"
         self.subscribe(topic, on_pointcloud)
 
     def publish_depth_frame(self, twin_uuid: str, depth_data: Dict[str, Any]):
         """Publish depth frame data via MQTT."""
+        self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/depth"
         message = {
             "type": "depth_data",
@@ -469,6 +556,7 @@ class CyberwaveMQTTClient:
 
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):
         """Publish WebRTC signaling message via MQTT."""
+        self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc"
         self.publish(topic, webrtc_data)
 
@@ -477,14 +565,13 @@ class CyberwaveMQTTClient:
     ):
         """Subscribe to WebRTC signaling messages via MQTT."""
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc"
+        self._handle_twin_update_with_telemetry(twin_uuid)
         self.subscribe(topic, on_message)
 
     def publish_command_message(self, twin_uuid: str, status: str):
         """Publish command response message via MQTT."""
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/command"
-        message = {
-            "status": status
-        }
+        message = {"status": status}
         self.publish(topic, message)
 
     def subscribe_command_message(
@@ -505,14 +592,6 @@ class CyberwaveMQTTClient:
         """Subscribe to pong responses."""
         topic = f"{self.topic_prefix}cyberwave/pong/{resource_uuid}/response"
         self.subscribe(topic, on_pong)
-
-    def disconnect(self):
-        """Disconnect from MQTT broker."""
-        if self.connected:
-            logger.info("Disconnecting from MQTT broker")
-            self.client.loop_stop()
-            self.client.disconnect()
-            self.connected = False
 
 
 # Export the main client class

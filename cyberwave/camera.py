@@ -22,7 +22,6 @@ from .mqtt_client import CyberwaveMQTTClient
 
 logger = logging.getLogger(__name__)
 
-
 class CV2VideoStreamTrack(VideoStreamTrack):
     """Video stream track using OpenCV for camera capture."""
 
@@ -225,7 +224,9 @@ class CameraStreamer:
         # Send offer via MQTT using SDK
         prefix = self.client.topic_prefix
         offer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-offer"
-        logger.info(f"Publishing WebRTC offer to topic: {offer_topic} (prefix: '{prefix}')")
+        logger.debug(
+            f"Publishing WebRTC offer to topic: {offer_topic} (prefix: '{prefix}')"
+        )
         offer_payload = {
             "target": "backend",
             "sender": "edge",
@@ -236,7 +237,7 @@ class CameraStreamer:
         }
 
         self._publish_message(offer_topic, offer_payload)
-        logger.info(f"WebRTC offer sent to {offer_topic}")
+        logger.debug(f"WebRTC offer sent to {offer_topic}")
 
         # Wait for answer
         timeout = 60  # 60 second timeout
@@ -246,7 +247,7 @@ class CameraStreamer:
                 raise TimeoutError("Timeout waiting for WebRTC answer")
             await asyncio.sleep(0.1)
 
-        logger.info("WebRTC answer received")
+        logger.debug("WebRTC answer received")
 
         if self._answer_data is None:
             raise RuntimeError("Answer received flag set but answer data is None")
@@ -260,7 +261,7 @@ class CameraStreamer:
             RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
         )
 
-        logger.info("WebRTC connection established")
+        logger.debug("WebRTC connection established")
 
     def _filter_sdp(self, sdp: str) -> str:
         """
@@ -309,7 +310,9 @@ class CameraStreamer:
 
         prefix = self.client.topic_prefix
         answer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-answer"
-        logger.info(f"Subscribing to WebRTC answer topic: {answer_topic} (prefix: '{prefix}')")
+        logger.info(
+            f"Subscribing to WebRTC answer topic: {answer_topic} (prefix: '{prefix}')"
+        )
 
         def on_answer(data):
             """Callback for WebRTC answer messages."""
@@ -360,3 +363,5 @@ class CameraStreamer:
         if self.pc:
             await self.pc.close()
         logger.info("Camera streaming stopped")
+
+

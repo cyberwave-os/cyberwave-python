@@ -6,7 +6,12 @@ import os
 from typing import Optional
 
 from cyberwave.rest import DefaultApi, ApiClient, Configuration
-from cyberwave.config import CyberwaveConfig, DEFAULT_BASE_URL, DEFAULT_MQTT_HOST, DEFAULT_MQTT_PORT
+from cyberwave.config import (
+    CyberwaveConfig,
+    DEFAULT_BASE_URL,
+    DEFAULT_MQTT_HOST,
+    DEFAULT_MQTT_PORT,
+)
 from cyberwave.controller import EdgeController
 from cyberwave.mqtt_client import CyberwaveMQTTClient
 from cyberwave.resources import (
@@ -167,6 +172,7 @@ class Cyberwave:
 
     def _create_wrapped_method(self, method):
         """Create a wrapped version of an API method that handles auth errors"""
+
         def wrapped(*args, **kwargs):
             try:
                 return method(*args, **kwargs)
@@ -250,19 +256,24 @@ class Cyberwave:
             ).uuid
             self.config.environment_id = env_id
 
+        try:
+            existing_twins = self.twins.list(environment_id=env_id)
+            for twin_data in existing_twins:
+                if (
+                    hasattr(twin_data, "registry_id")
+                    and twin_data.registry_id == asset_key
+                ):
+                    return Twin(self, twin_data)
+        except Exception:
+            pass
+
         assets = self.assets.search(asset_key)
         if not assets:
             raise CyberwaveError(f"Asset '{asset_key}' not found")
 
         asset = assets[0]
 
-        try:
-            existing_twins = self.twins.list(environment_id=env_id)
-            for twin_data in existing_twins:
-                if hasattr(twin_data, "asset") and twin_data.asset == asset.uuid:
-                    return Twin(self, twin_data)
-        except Exception:
-            pass
+        print("ASSETS: ", assets)
 
         twin_data = self.twins.create(
             asset_id=asset.uuid, environment_id=env_id, **kwargs
@@ -352,6 +363,7 @@ class Cyberwave:
             self.mqtt.connect()
 
         self.mqtt.connect()
+        self.mqtt._client._handle_twin_update_with_telemetry(twin_uuid)
         return CameraStreamer(
             client=self.mqtt,
             camera_id=camera_id,
