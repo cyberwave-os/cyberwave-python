@@ -36,16 +36,22 @@ __all__ = [
     "AttachmentCreateSchema",
     "AttachmentSchema",
     "BulkJointStatesUpdateSchema",
-    "CombinedDatasetGenerationRequestSchema",
+    "CombinedRecordingGenerationRequestSchema",
     "CompleteLargeUploadSchema",
     "ContactFormSchema",
-    "DatasetGenerationRequestSchema",
-    "DatasetGenerationRequestSchemaByDate",
-    "DatasetGenerationResponseSchema",
+    "ControllerPolicyCreateSchema",
+    "ControllerPolicySchema",
+    "ControllerPolicyUpdateSchema",
+    "DatasetCreateSchema",
+    "DatasetSchema",
+    "DatasetUpdateSchema",
     "EdgeCreateSchema",
     "EdgeSchema",
     "EnvironmentCreateSchema",
     "EnvironmentSchema",
+    "EpisodeCreateSchema",
+    "EpisodeSchema",
+    "EpisodeUpdateSchema",
     "InitiateLargeUploadResponse",
     "InitiateLargeUploadSchema",
     "JointSchema",
@@ -71,6 +77,9 @@ __all__ = [
     "ProjectSchema",
     "ProjectShareResponseSchema",
     "PublicUserSchema",
+    "RecordingGenerationRequestSchema",
+    "RecordingGenerationRequestSchemaByDate",
+    "RecordingGenerationResponseSchema",
     "RobotDescriptionSchema",
     "ShareSchema",
     "SharesResponseSchema",
@@ -84,7 +93,7 @@ __all__ = [
     "TwinTelemetryMetadataSchema",
     "URDFProjectCreateSchema",
     "URDFProjectSchema",
-    "UpdateDatasetMetadataSchema",
+    "UpdateRecordingMetadataSchema",
     "UserSchema",
     "UserShareSchema",
     "VLMGenerationSchema",
@@ -130,16 +139,22 @@ from cyberwave.rest.models.asset_update_schema import AssetUpdateSchema as Asset
 from cyberwave.rest.models.attachment_create_schema import AttachmentCreateSchema as AttachmentCreateSchema
 from cyberwave.rest.models.attachment_schema import AttachmentSchema as AttachmentSchema
 from cyberwave.rest.models.bulk_joint_states_update_schema import BulkJointStatesUpdateSchema as BulkJointStatesUpdateSchema
-from cyberwave.rest.models.combined_dataset_generation_request_schema import CombinedDatasetGenerationRequestSchema as CombinedDatasetGenerationRequestSchema
+from cyberwave.rest.models.combined_recording_generation_request_schema import CombinedRecordingGenerationRequestSchema as CombinedRecordingGenerationRequestSchema
 from cyberwave.rest.models.complete_large_upload_schema import CompleteLargeUploadSchema as CompleteLargeUploadSchema
 from cyberwave.rest.models.contact_form_schema import ContactFormSchema as ContactFormSchema
-from cyberwave.rest.models.dataset_generation_request_schema import DatasetGenerationRequestSchema as DatasetGenerationRequestSchema
-from cyberwave.rest.models.dataset_generation_request_schema_by_date import DatasetGenerationRequestSchemaByDate as DatasetGenerationRequestSchemaByDate
-from cyberwave.rest.models.dataset_generation_response_schema import DatasetGenerationResponseSchema as DatasetGenerationResponseSchema
+from cyberwave.rest.models.controller_policy_create_schema import ControllerPolicyCreateSchema as ControllerPolicyCreateSchema
+from cyberwave.rest.models.controller_policy_schema import ControllerPolicySchema as ControllerPolicySchema
+from cyberwave.rest.models.controller_policy_update_schema import ControllerPolicyUpdateSchema as ControllerPolicyUpdateSchema
+from cyberwave.rest.models.dataset_create_schema import DatasetCreateSchema as DatasetCreateSchema
+from cyberwave.rest.models.dataset_schema import DatasetSchema as DatasetSchema
+from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema as DatasetUpdateSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema as EdgeCreateSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema as EdgeSchema
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema as EnvironmentCreateSchema
 from cyberwave.rest.models.environment_schema import EnvironmentSchema as EnvironmentSchema
+from cyberwave.rest.models.episode_create_schema import EpisodeCreateSchema as EpisodeCreateSchema
+from cyberwave.rest.models.episode_schema import EpisodeSchema as EpisodeSchema
+from cyberwave.rest.models.episode_update_schema import EpisodeUpdateSchema as EpisodeUpdateSchema
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse as InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema as InitiateLargeUploadSchema
 from cyberwave.rest.models.joint_schema import JointSchema as JointSchema
@@ -165,6 +180,9 @@ from cyberwave.rest.models.project_create_schema import ProjectCreateSchema as P
 from cyberwave.rest.models.project_schema import ProjectSchema as ProjectSchema
 from cyberwave.rest.models.project_share_response_schema import ProjectShareResponseSchema as ProjectShareResponseSchema
 from cyberwave.rest.models.public_user_schema import PublicUserSchema as PublicUserSchema
+from cyberwave.rest.models.recording_generation_request_schema import RecordingGenerationRequestSchema as RecordingGenerationRequestSchema
+from cyberwave.rest.models.recording_generation_request_schema_by_date import RecordingGenerationRequestSchemaByDate as RecordingGenerationRequestSchemaByDate
+from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema as RecordingGenerationResponseSchema
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema as RobotDescriptionSchema
 from cyberwave.rest.models.share_schema import ShareSchema as ShareSchema
 from cyberwave.rest.models.shares_response_schema import SharesResponseSchema as SharesResponseSchema
@@ -178,7 +196,7 @@ from cyberwave.rest.models.twin_state_update_schema import TwinStateUpdateSchema
 from cyberwave.rest.models.twin_telemetry_metadata_schema import TwinTelemetryMetadataSchema as TwinTelemetryMetadataSchema
 from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSchema as URDFProjectCreateSchema
 from cyberwave.rest.models.urdf_project_schema import URDFProjectSchema as URDFProjectSchema
-from cyberwave.rest.models.update_dataset_metadata_schema import UpdateDatasetMetadataSchema as UpdateDatasetMetadataSchema
+from cyberwave.rest.models.update_recording_metadata_schema import UpdateRecordingMetadataSchema as UpdateRecordingMetadataSchema
 from cyberwave.rest.models.user_schema import UserSchema as UserSchema
 from cyberwave.rest.models.user_share_schema import UserShareSchema as UserShareSchema
 from cyberwave.rest.models.vlm_generation_schema import VLMGenerationSchema as VLMGenerationSchema

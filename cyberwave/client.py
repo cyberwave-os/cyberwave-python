@@ -272,9 +272,6 @@ class Cyberwave:
             raise CyberwaveError(f"Asset '{asset_key}' not found")
 
         asset = assets[0]
-
-        print("ASSETS: ", assets)
-
         twin_data = self.twins.create(
             asset_id=asset.uuid, environment_id=env_id, **kwargs
         )

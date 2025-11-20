@@ -474,6 +474,7 @@ class CyberwaveMQTTClient:
         position: Optional[float] = None,
         velocity: Optional[float] = None,
         effort: Optional[float] = None,
+        timestamp: Optional[float] = None,
     ):
         """Update joint state via MQTT."""
 
@@ -496,7 +497,7 @@ class CyberwaveMQTTClient:
             "type": "joint_state",
             "joint_name": joint_name,
             "joint_state": joint_state,
-            "timestamp": time.time(),
+            "timestamp": timestamp or time.time(),
         }
         logger.info(
             f"Publishing joint state for {twin_uuid} {joint_name}: {joint_state}"

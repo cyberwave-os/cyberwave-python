@@ -211,6 +211,7 @@ class CyberwaveMQTTClient:
         position: Optional[float] = None,
         velocity: Optional[float] = None,
         effort: Optional[float] = None,
+        timestamp: Optional[float] = None,
     ):
         """
         Update joint state via MQTT.
@@ -223,7 +224,7 @@ class CyberwaveMQTTClient:
             effort: Joint effort/torque
         """
         return self._client.update_joint_state(
-            twin_uuid, joint_name, position, velocity, effort
+            twin_uuid, joint_name, position, velocity, effort, timestamp
         )
 
     def subscribe_environment(

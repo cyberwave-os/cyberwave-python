@@ -2,6 +2,7 @@
 High-level Twin abstraction for intuitive digital twin control
 """
 
+import time
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable
 import math
 
@@ -42,7 +43,7 @@ class JointController:
 
         return self._joint_states[joint_name]
 
-    def set(self, joint_name: str, position: float, degrees: bool = True):
+    def set(self, joint_name: str, position: float, degrees: bool = True, timestamp: Optional[float] = None):
         """
         Set position of a joint
 
@@ -60,7 +61,7 @@ class JointController:
 
             # Update joint state via MQTT
             self.twin.client.mqtt.update_joint_state(
-                self.twin.uuid, joint_name, position=position
+                self.twin.uuid, joint_name, position=position, timestamp=timestamp
             )
 
             # Update cached state
