@@ -15,16 +15,16 @@ pip install cyberwave
 Get your API token from the Cyberwave platform:
 
 - Log in to your Cyberwave instance
-- Navigate to Settings → API Tokens
-- Copy your token
+- Navigate to [Profile](https://cyberwave.com/profile) → API Tokens
+- Create a token and copy it
 
 ### 2. Create Your First Digital Twin
 
 ```python
-import cyberwave as cw
+from cyberwave import Cyberwave
 
 # Configure with your token
-cw.configure(
+cw = Cyberwave(
     token="your_token_here",
 )
 
@@ -49,22 +49,26 @@ print(robot.joints.get_all())
 ```python
 from cyberwave import Cyberwave
 
-client = Cyberwave(
+cw = Cyberwave(
     token="your_token_here"
 )
 
+# You can also set your token as an environment variable: export CYBERWAVE_TOKEN=your_token_here
+# in that case, you can simply do:
+cw = Cyberwave()
+
 # List workspaces
-workspaces = client.workspaces.list()
+workspaces = cw.workspaces.list()
 print(f"Found {len(workspaces)} workspaces")
 
 # Create a project
-project = client.projects.create(
+project = cw.projects.create(
     name="My Robotics Project",
     workspace_id=workspaces[0].uuid
 )
 
 # Create an environment
-environment = client.environments.create(
+environment = cw.environments.create(
     name="Development",
     project_id=project.uuid
 )
@@ -73,19 +77,10 @@ environment = client.environments.create(
 ### Managing Assets and Twins
 
 ```python
-# Search for assets
-assets = client.assets.search("robot")
-
-# Create a twin from an asset
-twin_data = client.twins.create(
-    asset_id=assets[0].uuid,
-    environment_id=environment.uuid,
-    name="Robot-01"
-)
-
-# Use the high-level Twin API
-from cyberwave import Twin
-robot = Twin(client, twin_data)
+# To instantiate a twin, you can query the available assets from the catalog.
+# This query will return both the public assets availaable at cyberwave.com/catalog and the private assets available to your organization.
+assets = cw.assets.search("so101")
+robot = cw.twin(assets[0].registry_id) # the registry_id is the unique identifier for the asset in the catalog. in this case it's the-robot-studio/so101
 
 # Move to a specific position
 robot.move_to([1.0, 0.5, 0.0])
@@ -93,53 +88,36 @@ robot.move_to([1.0, 0.5, 0.0])
 # Update scale
 robot.scale(x=1.5, y=1.5, z=1.5)
 
-# Delete when done
-robot.delete()
+# Move a joint to a specific position using radians
+robot.joints.set("shoulder_joint", math.pi/4)
+
+# You can also use degrees:
+robot.joints.set("shoulder_joint", 45, degrees=True)
+
+# You can also go a get_or_create for a specific twin an environment you created:
+ robot = cw.twin("the-robot-studio/so101", environment_id="YOUR_ENVIRONMENT_ID")
 ```
 
-### Real-time Updates with MQTT
+### Environment Variables
+
+If you are always using the same environment, you can set it as a default with the CYBERWAVE_ENVIRONMENT_ID environment variable:
+
+```bash
+export CYBERWAVE_ENVIRONMENT_ID="YOUR_ENVIRONMENT_ID"
+export CYBERWAVE_TOKEN="YOUR_TOKEN"
+python your_script.py
+```
+
+And then you can simply do:
 
 ```python
-# Define callback for position updates
-def on_position_change(data):
-    print(f"Twin moved to: {data}")
+from cyberwave import Cyberwave
 
-# Subscribe to real-time updates
-client.mqtt.subscribe_twin_position("twin_uuid", on_position_change)
-
-# Publish position updates
-client.mqtt.publish_twin_position(
-    twin_id="twin_uuid",
-    x=1.0, y=0.0, z=0.5
-)
-
-# Subscribe to joint states
-def on_joint_update(data):
-    print(f"Joint states: {data}")
-
-client.mqtt.subscribe_joint_states("twin_uuid", on_joint_update)
+cw = Cyberwave()
+robot = cw.twin("the-robot-studio/so101")
 ```
 
-### Command Messages with MQTT
-
-Receive and respond to commands for digital twins:
-
-```python
-# Define command handler
-def command_handler(data):
-    command_type = data.get("command")
-    if command_type == "greetings":
-        print("Hello World!")
-        client.mqtt.publish_command_message(twin_uuid, "ok")
-    else:
-        client.mqtt.publish_command_message(twin_uuid, "error")
-
-# Subscribe to commands
-client.mqtt.subscribe_command_message("twin_uuid", command_handler)
-
-# Publish command response
-client.mqtt.publish_command_message("twin_uuid", "ok")  # or "error"
-```
+This code will return you the first SO101 twin in your environment, or create it if it doesn't exist.
 
 ### Video Streaming (WebRTC)
 
@@ -171,10 +149,10 @@ import asyncio
 from cyberwave import Cyberwave
 
 # Initialize client
-client = Cyberwave(token="your_token_here")
+cw = Cyberwave()
 
 # Create camera streamer - integrated into the Cyberwave client!
-streamer = client.video_stream(
+streamer = cw.video_stream(
     twin_uuid="your_twin_uuid",
     camera_id=0,  # Default camera
     fps=10        # Frames per second
@@ -199,46 +177,7 @@ The `video_stream()` method:
 - Manages ICE candidate gathering with STUN/TURN servers
 - Handles video encoding and streaming
 
-## Configuration Options
-
-You can also set your token as environment variable:
-
-```bash
-export CYBERWAVE_TOKEN="your_token_here"
-```
-
-```python
-import cyberwave as cw
-
-# SDK will automatically load from environment variables
-robot = cw.twin("the-robot-studio/so101")
-```
-
-### Programmatic Configuration
-
-```python
-import cyberwave as cw
-
-cw.configure(
-    token="your_token_here",              # Bearer token
-    environment="env_uuid",                # Default environment
-    workspace="workspace_uuid",            # Default workspace
-)
-```
-
 ## Advanced Usage
-
-### Context Manager for Cleanup
-
-```python
-from cyberwave import Cyberwave
-
-with Cyberwave(token="YOURTOKEN") as client:
-    twins = client.twins.list()
-    for twin in twins:
-        print(twin.name)
-# Automatically disconnects MQTT and cleans up resources
-```
 
 ### Joint Control
 
@@ -266,29 +205,21 @@ all_joints = robot.joints.get_all()
 
 ## API Reference
 
-### Cyberwave Client
+You can use the lower level API by using the `client` attribute:
 
-- `client.workspaces` - Workspace management
-- `client.projects` - Project management
-- `client.environments` - Environment management
-- `client.assets` - Asset catalog operations
-- `client.twins` - Digital twin CRUD operations
-- `client.mqtt` - Real-time MQTT client
+```python
+from cyberwave import Cyberwave
 
-### Twin Class
+cw = Cyberwave()
+client = cw.client.rest # for the rest API
+client = cw.client.mqtt # for the MQTT API
+```
 
-- `twin.move(x, y, z)` - Move twin to position
-- `twin.move_to([x, y, z])` - Move to position array
-- `twin.rotate(yaw, pitch, roll)` - Rotate using euler angles
-- `twin.rotate(quaternion=[x,y,z,w])` - Rotate using quaternion
-- `twin.scale(x, y, z)` - Scale the twin
-- `twin.joints` - Joint controller for robot manipulation
-- `twin.delete()` - Delete the twin
-- `twin.refresh()` - Reload twin data from server
+To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
 
 ## Examples
 
-Check the SDK repository for complete examples:
+Check the [examples](examples) directory for complete examples:
 
 - Basic twin control
 - Multi-robot coordination
