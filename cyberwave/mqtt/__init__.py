@@ -331,23 +331,26 @@ class CyberwaveMQTTClient:
 
     # Telemetry MQTT methods
     def publish_telemetry_start(
-        self, twin_uuid: str, observation: Optional[Dict[str, float]] = None
+        self, twin_uuid: str, metadata: Optional[Dict[str, float]] = None
     ):
         """
         Publish telemetry start message via MQTT.
 
         Args:
             twin_uuid: UUID of the twin
-            observation: Optional dictionary of initial joint states (e.g., {"joint1": 0.5, "joint2": 1.0})
-                        This is used to initialize the recording with the current joint positions.
+            metadata: Optional dictionary of metadata (e.g., {"fps": 30.0, "observations": {"joint1": 0.5, "joint2": 1.0}})
+                        This is used to initialize the recording with the current joint positions and desired frequency.
         """
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
         message = {
             "type": "telemetry_start",
             "timestamp": time.time(),
         }
-        if observation is not None:
-            message["observation"] = observation
+        if metadata is not None:
+            if "fps" in metadata:
+                message["fps"] = metadata["fps"]
+            if "observations" in metadata:
+                message["observations"] = metadata["observations"]
         logger.info(
             f"Publishing telemetry start message for twin {twin_uuid}: {message}"
         )
@@ -499,23 +502,28 @@ class CyberwaveMQTTClient:
             "joint_state": joint_state,
             "timestamp": timestamp or time.time(),
         }
-        logger.info(
+        logger.debug(
             f"Publishing joint state for {twin_uuid} {joint_name}: {joint_state}"
         )
 
         self.publish(topic, message)
 
     def publish_initial_observation(
-        self, twin_uuid: str, observations: Dict[str, Any]
+        self, twin_uuid: str, observations: Dict[str, Any], fps: float = 30.0
     ):
         """Send initial observation to the leader twin."""
         if twin_uuid not in self.twin_uuids_with_telemetry_start:
-            self._handle_twin_update_with_telemetry(twin_uuid, observations)
+            metadata = {
+                "fps": fps,
+                "observations": observations,
+            }
+            self._handle_twin_update_with_telemetry(twin_uuid, metadata)
         else:
             topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
             message = {
                 "type": "initial_observation",
                 "observations": observations,
+                "fps": fps,
                 "timestamp": time.time(),
             }
             self.publish(topic, message)

@@ -31,6 +31,7 @@ __all__ = [
     "AssetCreateSchema",
     "AssetCreateWithURDFSchema",
     "AssetGLBFromAttachmentSchema",
+    "AssetListSchema",
     "AssetSchema",
     "AssetUpdateSchema",
     "AttachmentCreateSchema",
@@ -134,6 +135,7 @@ from cyberwave.rest.exceptions import ApiException as ApiException
 from cyberwave.rest.models.asset_create_schema import AssetCreateSchema as AssetCreateSchema
 from cyberwave.rest.models.asset_create_with_urdf_schema import AssetCreateWithURDFSchema as AssetCreateWithURDFSchema
 from cyberwave.rest.models.asset_glb_from_attachment_schema import AssetGLBFromAttachmentSchema as AssetGLBFromAttachmentSchema
+from cyberwave.rest.models.asset_list_schema import AssetListSchema as AssetListSchema
 from cyberwave.rest.models.asset_schema import AssetSchema as AssetSchema
 from cyberwave.rest.models.asset_update_schema import AssetUpdateSchema as AssetUpdateSchema
 from cyberwave.rest.models.attachment_create_schema import AttachmentCreateSchema as AttachmentCreateSchema

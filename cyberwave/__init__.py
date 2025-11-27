@@ -109,6 +109,8 @@ __all__ = [
     "CV2VideoStreamTrack",
     # Edge controller
     "EdgeController",
+    # Utils
+    "TimeReference",
     # Version
     "__version__",
 ]

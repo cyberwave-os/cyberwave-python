@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from cyberwave.rest.models.asset_create_schema import AssetCreateSchema
 from cyberwave.rest.models.asset_create_with_urdf_schema import AssetCreateWithURDFSchema
 from cyberwave.rest.models.asset_glb_from_attachment_schema import AssetGLBFromAttachmentSchema
+from cyberwave.rest.models.asset_list_schema import AssetListSchema
 from cyberwave.rest.models.asset_schema import AssetSchema
 from cyberwave.rest.models.asset_update_schema import AssetUpdateSchema
 from cyberwave.rest.models.attachment_create_schema import AttachmentCreateSchema
@@ -2252,7 +2253,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> List[AssetSchema]:
+    ) -> List[AssetListSchema]:
         """List Assets
 
 
@@ -2286,7 +2287,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "List[AssetSchema]",
+            '200': "List[AssetListSchema]",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -2314,7 +2315,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[List[AssetSchema]]:
+    ) -> ApiResponse[List[AssetListSchema]]:
         """List Assets
 
 
@@ -2348,7 +2349,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "List[AssetSchema]",
+            '200': "List[AssetListSchema]",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -2410,7 +2411,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "List[AssetSchema]",
+            '200': "List[AssetListSchema]",
         }
         response_data = self.api_client.call_api(
             *_param,
