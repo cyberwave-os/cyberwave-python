@@ -42,7 +42,7 @@ DEFAULT_TURN_SERVERS = [
 class CV2VideoStreamTrack(VideoStreamTrack):
     """Video stream track using OpenCV for camera capture."""
 
-    def __init__(self, camera_id: int = 0, fps: int = 10, time_reference: TimeReference = None):
+    def __init__(self, camera_id: int = 0, fps: int = 30, time_reference: TimeReference = None):
         """
         Initialize the video stream track.
 
@@ -53,10 +53,12 @@ class CV2VideoStreamTrack(VideoStreamTrack):
         super().__init__()
         self.cap = cv2.VideoCapture(camera_id)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.fps = fps
         self.frame_count = 0
         self.data_channel = None
-        self.should_sync = False
+        self.should_sync = True
         self.time_reference = time_reference
         logger.info(f"Initialized camera {camera_id} at {fps} FPS")
 
