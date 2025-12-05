@@ -16,6 +16,8 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion  # type: ignore
 # Try to import CallbackAPIVersion for paho-mqtt 2.x, fallback for older versions
 
+from ..constants import SOURCE_TYPE_SIM, SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT
+
 logger = logging.getLogger(__name__)
 
 
@@ -259,6 +261,24 @@ class CyberwaveMQTTClient:
         if twin_uuid not in self.twin_uuids_with_telemetry_start:
             self.twin_uuids_with_telemetry_start.append(twin_uuid)
             self.publish_telemetry_start(twin_uuid, metadata)
+    
+    def _publish_connect_message(self, twin_uuid: str):
+        """Publish connect message to MQTT broker."""
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+        message = {
+            "type": "connected",
+            "timestamp": time.time(),
+        }
+        self.publish(topic, message)
+
+    def _publish_disconnect_message(self, twin_uuid: str):
+        """Publish disconnect message to MQTT broker."""
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/connect"
+        message = {
+            "type": "disconnected",
+            "timestamp": time.time(),
+        }
+        self.publish(topic, message)
 
     def connect(self):
         """Connect to MQTT broker."""
@@ -282,6 +302,7 @@ class CyberwaveMQTTClient:
 
             # send the telemetry start message
             for twin_uuid in self.twin_uuids:
+                self._publish_connect_message(twin_uuid)
                 self.publish_telemetry_start(twin_uuid)
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
@@ -291,6 +312,7 @@ class CyberwaveMQTTClient:
         """Disconnect from MQTT broker."""
 
         for twin_uuid in self.twin_uuids:
+            self._publish_disconnect_message(twin_uuid)
             self.publish_telemetry_end(twin_uuid)
         if self.connected:
             logger.info("Disconnecting from MQTT broker")
@@ -411,6 +433,7 @@ class CyberwaveMQTTClient:
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/position"
         message = {
+            "source_type": SOURCE_TYPE_SIM,
             "type": "position",
             "position": position,
             "timestamp": time.time(),
@@ -439,6 +462,7 @@ class CyberwaveMQTTClient:
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/rotation"
         message = {
+            "source_type": SOURCE_TYPE_SIM,
             "type": "rotation",
             "rotation": rotation,
             "timestamp": time.time(),
@@ -456,6 +480,7 @@ class CyberwaveMQTTClient:
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/scale"
         message = {
+            "source_type": SOURCE_TYPE_SIM,
             "type": "scale",
             "scale": scale,
             "timestamp": time.time(),
@@ -478,8 +503,31 @@ class CyberwaveMQTTClient:
         velocity: Optional[float] = None,
         effort: Optional[float] = None,
         timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
     ):
-        """Update joint state via MQTT."""
+        """
+        Update joint state via MQTT.
+
+        Args:
+            twin_uuid: UUID of the twin
+            joint_name: Name of the joint
+            position: Joint position (radians for revolute, meters for prismatic)
+            velocity: Joint velocity
+            effort: Joint effort/torque
+            timestamp: Unix timestamp (defaults to current time)
+            source_type: Source type for the message. Must be one of:
+                SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, SOURCE_TYPE_SIM.
+                Defaults to SOURCE_TYPE_EDGE (SDKs run on edge devices by default).
+                Users can override this to use any source type they need.
+        """
+        # Use provided source_type or default to SOURCE_TYPE_EDGE (SDKs run on edge)
+        if source_type is None:
+            source_type = SOURCE_TYPE_EDGE
+        elif source_type not in [SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, SOURCE_TYPE_SIM]:
+            raise ValueError(
+                f"Invalid source_type: {source_type}. Must be one of: "
+                f"{SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
+            )
 
         self._handle_twin_update_with_telemetry(twin_uuid)
         # Check rate limiting
@@ -497,13 +545,14 @@ class CyberwaveMQTTClient:
 
         topic = f"{self.topic_prefix}cyberwave/joint/{twin_uuid}/update"
         message = {
+            "source_type": source_type,
             "type": "joint_state",
             "joint_name": joint_name,
             "joint_state": joint_state,
             "timestamp": timestamp or time.time(),
         }
         logger.debug(
-            f"Publishing joint state for {twin_uuid} {joint_name}: {joint_state}"
+            f"Publishing joint state for {twin_uuid} {joint_name}: {joint_state} (source_type: {source_type})"
         )
 
         self.publish(topic, message)

@@ -13,6 +13,7 @@ import logging
 
 import os
 from cyberwave import Cyberwave
+from cyberwave.utils import TimeReference
 
 
 async def main():
@@ -36,11 +37,13 @@ async def main():
         twin_uuid = robot.uuid
         print(f"Created twin: {twin_uuid}")
 
+    time_reference = TimeReference()
     # Create camera streamer
     streamer = client.video_stream(
         twin_uuid=twin_uuid,
         camera_id=0,
         fps=10,
+        time_reference=time_reference,
     )
 
     print(f"Starting camera stream to twin {twin_uuid}...")

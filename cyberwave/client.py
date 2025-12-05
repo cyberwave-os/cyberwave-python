@@ -21,7 +21,7 @@ from cyberwave.resources import (
     AssetManager,
     TwinManager,
 )
-from cyberwave.twin import Twin
+from cyberwave.twin import Twin, create_twin
 from cyberwave.utils import TimeReference
 from cyberwave.exceptions import (
     CyberwaveError,
@@ -227,23 +227,32 @@ class Cyberwave:
         """
         Get or create a twin instance (compact API)
 
-        This is a convenience method for quickly creating twins.
+        This is a convenience method for quickly creating twins. The returned
+        twin will be an appropriate subclass based on the asset's capabilities:
+        
+        - CameraTwin: For assets with RGB sensors (has start_streaming(), etc.)
+        - DepthCameraTwin: For assets with depth sensors (has get_point_cloud(), etc.)
+        - FlyingTwin: For drones/UAVs (has takeoff(), land(), hover())
+        - GripperTwin: For manipulators (has grip(), release())
+        - Twin: Base class for assets without special capabilities
 
         Args:
             asset_key: Asset identifier (e.g., "the-robot-studio/so101")
             environment_id: Environment ID (uses default if not provided)
+            twin_id: Existing twin ID to fetch (skips creation)
             **kwargs: Additional twin creation parameters
 
         Returns:
-            Twin instance
+            Twin instance (or appropriate subclass based on capabilities)
 
         Example:
-            >>> robot = client.twin("the-robot-studio/so101")
+            >>> robot = client.twin("unitree/go2")  # Returns CameraTwin
+            >>> robot.start_streaming(fps=15)  # Available because of RGB sensor
             >>> robot.move(x=1, y=0, z=0.5)
         """
         if twin_id:
             twin_data = self.twins.get(twin_id)
-            return Twin(self, twin_data)
+            return create_twin(self, twin_data, registry_id=asset_key)
         
         env_id = environment_id or self.config.environment_id
         if not env_id:
@@ -261,24 +270,26 @@ class Cyberwave:
             ).uuid
             self.config.environment_id = env_id
 
-
         assets = self.assets.search(asset_key)
         if not assets:
             raise CyberwaveError(f"Asset '{asset_key}' not found")
         asset = assets[0]
+        
+        # Get registry_id for capability lookup
+        registry_id = getattr(asset, "registry_id", None) or asset_key
+        
         try:
             existing_twins = self.twins.list(environment_id=env_id)
             for twin_data in existing_twins:
                 if twin_data.asset_uuid == asset.uuid:
-                    return Twin(self, twin_data)
+                    return create_twin(self, twin_data, registry_id=registry_id)
             
             twin_data = self.twins.create(
                 asset_id=asset.uuid, environment_id=env_id, **kwargs
             )
-            return Twin(self, twin_data)
+            return create_twin(self, twin_data, registry_id=registry_id)
         except Exception:
-            pass
-            return Twin(self, twin_data)
+            return create_twin(self, twin_data, registry_id=registry_id)
 
     def configure(
         self,

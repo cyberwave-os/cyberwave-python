@@ -1,0 +1,302 @@
+{
+  "the-robot-studio/so101": {
+    "uuid": "89696429-d5d7-4243-85be-ac0d3c148044",
+    "name": "SO101",
+    "capabilities": {}
+  },
+  "berkeley/berkeley-humanoid": {
+    "uuid": "dd68c571-d40a-4680-a092-80aba890243e",
+    "name": "Berkeley Humanoid Lite",
+    "capabilities": {}
+  },
+  "agile-x-robotics/piper": {
+    "uuid": "2f1ae9fe-fac4-45fd-b2c5-dd64746703b6",
+    "name": "PiPER",
+    "capabilities": {}
+  },
+  "anybotics/anymal-b": {
+    "uuid": "f2261e53-8158-4815-a2de-4b986e4a39d4",
+    "name": "ANYMal B",
+    "capabilities": {}
+  },
+  "skydio/skydio-x2": {
+    "uuid": "f53f9d37-68c4-4b98-9715-46e83d4f7c50",
+    "name": "Skydio X2",
+    "capabilities": {}
+  },
+  "unitree/unitree-g1": {
+    "uuid": "ab7e7dab-a231-4347-af44-fdc0e590e656",
+    "name": "Unitree G1",
+    "capabilities": {}
+  },
+  "unitree/go2": {
+    "uuid": "85d9ae3d-0920-48cf-884d-ff122be86944",
+    "name": "Unitree Go2",
+    "capabilities": {}
+  },
+  "unitree/laikago": {
+    "uuid": "546e6a6c-857d-4d09-a8c9-0251da8d2d75",
+    "name": "Unitree Laikago",
+    "capabilities": {}
+  },
+  "kuka/kr6-r900": {
+    "uuid": "ec66b0d8-97ac-41b2-a6c8-e39c60aceafd",
+    "name": "Kuka KR6 R900",
+    "capabilities": {}
+  },
+  "arx-roboticsx/r5a": {
+    "uuid": "f1117188-ba61-40fd-b24f-46b6696b9e0d",
+    "name": "ARXroboticsX R5",
+    "capabilities": {}
+  },
+  "arx/arx-roboticsx": {
+    "uuid": "5eb682d5-a1e6-4dc0-86a2-97fa213eab6b",
+    "name": "ARX ARXroboticsX",
+    "capabilities": {}
+  },
+  "bitcraze/crazyflie": {
+    "uuid": "03d0b68d-8732-4cae-b1bf-82d97b753cbc",
+    "name": "Bitcraze Crazyflie",
+    "capabilities": {}
+  },
+  "booster-robotics/t1": {
+    "uuid": "bb4171cc-d3ce-463d-bdbd-2af70e6f8dd6",
+    "name": "Booster Robotics T1",
+    "capabilities": {}
+  },
+  "boston-dynamics/spot": {
+    "uuid": "c8bd2baf-fcf4-4517-9844-cfb9c595e68e",
+    "name": "Boston Dynamics Spot ",
+    "capabilities": {}
+  },
+  "fftai/gr2": {
+    "uuid": "03187288-c034-480c-9364-1747ae5acfbd",
+    "name": "FFTAI GR2",
+    "capabilities": {}
+  },
+  "kinova/jaco": {
+    "uuid": "6da9e385-cbcf-40ad-8932-f3986dabbe0d",
+    "name": "Kinova Jaco",
+    "capabilities": {}
+  },
+  "fanuc/m-710ic70": {
+    "uuid": "5dbbfbb8-be2e-428d-b2a7-079336d911f5",
+    "name": "Fanuc-M-710iC/70",
+    "capabilities": {}
+  },
+  "poppy-project/poppy-ergo-jr": {
+    "uuid": "beb2c440-585c-46f3-9269-44a438991b64",
+    "name": "Poppy Ergo Jr",
+    "capabilities": {}
+  },
+  "interbotix/vx300s": {
+    "uuid": "778c8e7e-1102-4f24-abf8-53e439a9a7ae",
+    "name": "Interbotix VX300S",
+    "capabilities": {}
+  },
+  "gepetto/bolt": {
+    "uuid": "a29ade65-6402-46dc-a6cb-1d7dda762d1a",
+    "name": "Gepetto Bolt",
+    "capabilities": {}
+  },
+  "disney/bdx": {
+    "uuid": "cbedbec3-ec6e-4d96-b916-f0d652f0d7a7",
+    "name": "Disney BDX",
+    "capabilities": {}
+  },
+  "agility-robotics/cassie": {
+    "uuid": "6c80fdb6-3d47-4f93-9023-4d253b3b27fa",
+    "name": "Cassie",
+    "capabilities": {}
+  },
+  "g-levine/rhea": {
+    "uuid": "ff08cd32-4823-431b-8a83-07e009879b87",
+    "name": "Rhea",
+    "capabilities": {}
+  },
+  "ben-bokser/spryped": {
+    "uuid": "3fa9dc9d-89f6-4d7f-a980-baa77b375884",
+    "name": "Spryped",
+    "capabilities": {}
+  },
+  "upkie/upkie": {
+    "uuid": "3a4dd83f-4a46-4ac7-af6a-38e81ca4bdae",
+    "name": "Upkie",
+    "capabilities": {}
+  },
+  "rethink-robotics/baxter": {
+    "uuid": "232973ff-4dac-4a4c-a052-b4425ae7cd6a",
+    "name": "Baxter",
+    "capabilities": {}
+  },
+  "kawada-industries/nextage": {
+    "uuid": "331020c9-bd5b-4c83-80ed-6ac27cc886a5",
+    "name": "Nextage",
+    "capabilities": {}
+  },
+  "poppy-project/poppy-torso": {
+    "uuid": "d0c0582a-5ed8-4bd1-9bda-87a5aa50f7cc",
+    "name": "Poppy Torso",
+    "capabilities": {}
+  },
+  "orebro-university/yumi": {
+    "uuid": "0306349a-bd46-40dc-b54a-7b16989a812c",
+    "name": "Orebro University Yumi",
+    "capabilities": {}
+  },
+  "interbotix/wx250s": {
+    "uuid": "8691422b-a780-4ccb-8dd5-320eb3b06457",
+    "name": "Interbotix wx250s",
+    "capabilities": {}
+  },
+  "robotis/op3": {
+    "uuid": "62b85e8c-7a3e-4e83-a932-95045af28305",
+    "name": "Robotis OP3",
+    "capabilities": {}
+  },
+  "rethink-robotics/sawyer": {
+    "uuid": "a8243dde-2152-4669-8334-5d3bf9324331",
+    "name": "Rethink Robotics Sawyer",
+    "capabilities": {}
+  },
+  "kinova-robotics/kortex-gen3": {
+    "uuid": "6cb1a4a7-ed24-4e2b-b126-5ac665ddf80a",
+    "name": "Kortex Gen3",
+    "capabilities": {}
+  },
+  "anybotics/anymal-c": {
+    "uuid": "c5d62885-da65-4939-ad91-552a4bbd4248",
+    "name": "Anymal C",
+    "capabilities": {}
+  },
+  "comau/edo": {
+    "uuid": "28600c31-faf1-48c9-bdfe-ef72cdce239f",
+    "name": "e.Do",
+    "capabilities": {}
+  },
+  "SZ-DJI-Technology/DJI-Tello": {
+    "uuid": "45393ad1-3c4b-4005-813f-281d6d46a417",
+    "name": "DJI Tello",
+    "capabilities": {}
+  },
+  "bitcraze/crazyflie-2": {
+    "uuid": "2f91f4fa-7b74-43a2-b243-031b47535b5e",
+    "name": "Bitcraze Crazyflie 2",
+    "capabilities": {}
+  },
+  "rhoban/rhoban-2r": {
+    "uuid": "d73732f4-b34b-4281-9d5e-486123c1793a",
+    "name": "Rhoban 2R",
+    "capabilities": {}
+  },
+  "fourier/fftai-gr1t1": {
+    "uuid": "032274b1-1615-4c08-af75-b1bd6607112c",
+    "name": "FFTAI GR1T1",
+    "capabilities": {}
+  },
+  "fourier/fftai-gr1t2": {
+    "uuid": "5ff33688-e1df-49f8-aa3a-1538bf8776e5",
+    "name": "FFTAI GR1T2",
+    "capabilities": {}
+  },
+  "unitree/unitree-h1": {
+    "uuid": "0824c184-2e1f-4eaa-894b-48614577d02c",
+    "name": "Unitree H1",
+    "capabilities": {}
+  },
+  "rt-net/sciurus17": {
+    "uuid": "17d2ac3f-dd68-4282-9cd2-b6df6ae0da85",
+    "name": "Rt-Net Sciurus17",
+    "capabilities": {}
+  },
+  "gepetto/finger-edu-gepetto": {
+    "uuid": "3a9abcda-ba62-4c47-ae11-f1c7c98efa29",
+    "name": "Finger EDU Gepetto",
+    "capabilities": {}
+  },
+  "laas-cnrs/simple-humanoid": {
+    "uuid": "d5a393df-b494-41ac-bd42-725d8ef503b3",
+    "name": "simple humanoid",
+    "capabilities": {}
+  },
+  "dexsuite/leap-hand-leap": {
+    "uuid": "565062e4-ea84-4fbe-b627-ad85b9e9c768",
+    "name": "Leap Hand",
+    "capabilities": {}
+  },
+  "timqian/bambot-bambot_v0": {
+    "uuid": "18bd8683-8557-438a-8599-52cfe04b0b66",
+    "name": "Bambot Bambot_v0",
+    "capabilities": {}
+  },
+  "timqian/bambot": {
+    "uuid": "ca107d78-16cb-4885-a0f2-311aa277949e",
+    "name": "Bambot",
+    "capabilities": {}
+  },
+  "robotis/turtlebot3-waffle": {
+    "uuid": "73588657-3e15-4704-b9a4-ab27130feda6",
+    "name": "TurtleBot3 Waffle",
+    "capabilities": {}
+  },
+  "robotis/turtlebot3-waffle-pi": {
+    "uuid": "178eaaaa-2f9f-472e-b0f7-6f9a4fe004dc",
+    "name": "TurtleBot3 Waffle Pi",
+    "capabilities": {}
+  },
+  "robotis/turtlebot3-burger": {
+    "uuid": "d2697d1d-3fb3-47b8-8df6-6e59cdcec7c2",
+    "name": "TurtleBot3 Burger",
+    "capabilities": {}
+  },
+  "unitree/unitree_go1": {
+    "uuid": "6fe74a78-f244-4b4a-8046-501e5c35a5b9",
+    "name": "Unitree Go1",
+    "capabilities": {}
+  },
+  "unitree/unitree-b1": {
+    "uuid": "954773d9-2605-4a70-9cd1-6877bec34b3f",
+    "name": "Unitree B1",
+    "capabilities": {}
+  },
+  "unitree/unitree_a1": {
+    "uuid": "fdf8a543-25fd-4537-bf36-0a9a9c3c53f1",
+    "name": "Unitree A1",
+    "capabilities": {}
+  },
+  "kuka/kuka_iiwa14": {
+    "uuid": "ede1875e-526d-4cae-bc1d-092a927b3950",
+    "name": "KUKA IIWA 14",
+    "capabilities": {}
+  },
+  "unitree/unitree_z1": {
+    "uuid": "55d8579c-a943-447d-b770-b448d887323e",
+    "name": "Unitree Z1",
+    "capabilities": {}
+  },
+  "fictionlab/leo-rover": {
+    "uuid": "ceea799a-e1fd-4f65-aa83-b383fc99cf0f",
+    "name": "Leo Rover",
+    "capabilities": {}
+  },
+  "cyberwave/generic_cube": {
+    "uuid": "f69e1538-9a4a-458c-bbd0-cc28632adce9",
+    "name": "Generic Cube",
+    "capabilities": {}
+  },
+  "cyberwave/generictable": {
+    "uuid": "0d9a292d-9a1c-4326-baf9-50dd00b3d528",
+    "name": "Generic Table",
+    "capabilities": {}
+  },
+  "cyberwave/generic-box": {
+    "uuid": "8cbd76ce-b150-4504-8ae1-d2248ed7657c",
+    "name": "Generic Box (Flaps Out)",
+    "capabilities": {}
+  },
+  "universal_robots/UR5": {
+    "uuid": "2325755a-fa07-4150-9091-b6c7b33bb551",
+    "name": "UR5e",
+    "capabilities": {}
+  }
+}

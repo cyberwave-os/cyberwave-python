@@ -35,8 +35,9 @@ class AssetListSchema(BaseModel):
     public: StrictBool
     registry_id: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
+    capabilities: Optional[Dict[str, Any]] = None
     thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "public", "registry_id", "metadata", "thumbnail"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "public", "registry_id", "metadata", "capabilities", "thumbnail"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,6 +88,11 @@ class AssetListSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if capabilities (nullable) is None
+        # and model_fields_set contains the field
+        if self.capabilities is None and "capabilities" in self.model_fields_set:
+            _dict['capabilities'] = None
+
         # set to None if thumbnail (nullable) is None
         # and model_fields_set contains the field
         if self.thumbnail is None and "thumbnail" in self.model_fields_set:
@@ -112,6 +118,7 @@ class AssetListSchema(BaseModel):
             "public": obj.get("public"),
             "registry_id": obj.get("registry_id"),
             "metadata": obj.get("metadata"),
+            "capabilities": obj.get("capabilities"),
             "thumbnail": obj.get("thumbnail")
         })
         return _obj

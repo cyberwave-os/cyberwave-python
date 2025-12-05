@@ -19,6 +19,7 @@ __version__ = "1.0.0"
 # Define package exports
 __all__ = [
     "DefaultApi",
+    "ProfileApi",
     "ApiResponse",
     "ApiClient",
     "Configuration",
@@ -28,6 +29,9 @@ __all__ = [
     "ApiKeyError",
     "ApiAttributeError",
     "ApiException",
+    "AddMemberByEmailRequest",
+    "AddMemberByEmailResponse",
+    "AddMemberUserSchema",
     "AssetCreateSchema",
     "AssetCreateWithURDFSchema",
     "AssetGLBFromAttachmentSchema",
@@ -67,6 +71,14 @@ __all__ = [
     "MLModelCreateSchema",
     "MLModelSchema",
     "MLModelUpdateSchema",
+    "MLTrainingCreateSchema",
+    "MLTrainingDeploySchema",
+    "MLTrainingSchema",
+    "MLTrainingUpdateSchema",
+    "OrgMemberSchema",
+    "OrgMemberUserSchema",
+    "OrgMembersResponse",
+    "OrganizationCreateSchema",
     "OrganizationSchema",
     "OrganizationUpdateSchema",
     "Payload",
@@ -74,6 +86,8 @@ __all__ = [
     "PlanSchema",
     "PopularTagSchema",
     "PopularTagsResponseSchema",
+    "ProfileResponseSchema",
+    "ProfileUpdateSchema",
     "ProjectCreateSchema",
     "ProjectSchema",
     "ProjectShareResponseSchema",
@@ -81,10 +95,12 @@ __all__ = [
     "RecordingGenerationRequestSchema",
     "RecordingGenerationRequestSchemaByDate",
     "RecordingGenerationResponseSchema",
+    "RemoveMemberResponse",
     "RobotDescriptionSchema",
     "ShareSchema",
     "SharesResponseSchema",
     "SimulationStartSchema",
+    "SlugAvailabilitySchema",
     "TeamMemberResponse",
     "TeamShareSchema",
     "TwinCreateSchema",
@@ -111,6 +127,7 @@ __all__ = [
     "WorkflowNodeUpdateSchema",
     "WorkflowSchema",
     "WorkflowUpdateSchema",
+    "WorkspaceCreateSchema",
     "WorkspaceResponseSchema",
     "WorkspaceSchema",
     "WorkspaceUpdateSchema",
@@ -119,6 +136,7 @@ __all__ = [
 
 # import apis into sdk package
 from cyberwave.rest.api.default_api import DefaultApi as DefaultApi
+from cyberwave.rest.api.profile_api import ProfileApi as ProfileApi
 
 # import ApiClient
 from cyberwave.rest.api_response import ApiResponse as ApiResponse
@@ -132,6 +150,9 @@ from cyberwave.rest.exceptions import ApiAttributeError as ApiAttributeError
 from cyberwave.rest.exceptions import ApiException as ApiException
 
 # import models into sdk package
+from cyberwave.rest.models.add_member_by_email_request import AddMemberByEmailRequest as AddMemberByEmailRequest
+from cyberwave.rest.models.add_member_by_email_response import AddMemberByEmailResponse as AddMemberByEmailResponse
+from cyberwave.rest.models.add_member_user_schema import AddMemberUserSchema as AddMemberUserSchema
 from cyberwave.rest.models.asset_create_schema import AssetCreateSchema as AssetCreateSchema
 from cyberwave.rest.models.asset_create_with_urdf_schema import AssetCreateWithURDFSchema as AssetCreateWithURDFSchema
 from cyberwave.rest.models.asset_glb_from_attachment_schema import AssetGLBFromAttachmentSchema as AssetGLBFromAttachmentSchema
@@ -171,6 +192,14 @@ from cyberwave.rest.models.link_share_schema import LinkShareSchema as LinkShare
 from cyberwave.rest.models.ml_model_create_schema import MLModelCreateSchema as MLModelCreateSchema
 from cyberwave.rest.models.ml_model_schema import MLModelSchema as MLModelSchema
 from cyberwave.rest.models.ml_model_update_schema import MLModelUpdateSchema as MLModelUpdateSchema
+from cyberwave.rest.models.ml_training_create_schema import MLTrainingCreateSchema as MLTrainingCreateSchema
+from cyberwave.rest.models.ml_training_deploy_schema import MLTrainingDeploySchema as MLTrainingDeploySchema
+from cyberwave.rest.models.ml_training_schema import MLTrainingSchema as MLTrainingSchema
+from cyberwave.rest.models.ml_training_update_schema import MLTrainingUpdateSchema as MLTrainingUpdateSchema
+from cyberwave.rest.models.org_member_schema import OrgMemberSchema as OrgMemberSchema
+from cyberwave.rest.models.org_member_user_schema import OrgMemberUserSchema as OrgMemberUserSchema
+from cyberwave.rest.models.org_members_response import OrgMembersResponse as OrgMembersResponse
+from cyberwave.rest.models.organization_create_schema import OrganizationCreateSchema as OrganizationCreateSchema
 from cyberwave.rest.models.organization_schema import OrganizationSchema as OrganizationSchema
 from cyberwave.rest.models.organization_update_schema import OrganizationUpdateSchema as OrganizationUpdateSchema
 from cyberwave.rest.models.payload import Payload as Payload
@@ -178,6 +207,8 @@ from cyberwave.rest.models.permissions_schema import PermissionsSchema as Permis
 from cyberwave.rest.models.plan_schema import PlanSchema as PlanSchema
 from cyberwave.rest.models.popular_tag_schema import PopularTagSchema as PopularTagSchema
 from cyberwave.rest.models.popular_tags_response_schema import PopularTagsResponseSchema as PopularTagsResponseSchema
+from cyberwave.rest.models.profile_response_schema import ProfileResponseSchema as ProfileResponseSchema
+from cyberwave.rest.models.profile_update_schema import ProfileUpdateSchema as ProfileUpdateSchema
 from cyberwave.rest.models.project_create_schema import ProjectCreateSchema as ProjectCreateSchema
 from cyberwave.rest.models.project_schema import ProjectSchema as ProjectSchema
 from cyberwave.rest.models.project_share_response_schema import ProjectShareResponseSchema as ProjectShareResponseSchema
@@ -185,10 +216,12 @@ from cyberwave.rest.models.public_user_schema import PublicUserSchema as PublicU
 from cyberwave.rest.models.recording_generation_request_schema import RecordingGenerationRequestSchema as RecordingGenerationRequestSchema
 from cyberwave.rest.models.recording_generation_request_schema_by_date import RecordingGenerationRequestSchemaByDate as RecordingGenerationRequestSchemaByDate
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema as RecordingGenerationResponseSchema
+from cyberwave.rest.models.remove_member_response import RemoveMemberResponse as RemoveMemberResponse
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema as RobotDescriptionSchema
 from cyberwave.rest.models.share_schema import ShareSchema as ShareSchema
 from cyberwave.rest.models.shares_response_schema import SharesResponseSchema as SharesResponseSchema
 from cyberwave.rest.models.simulation_start_schema import SimulationStartSchema as SimulationStartSchema
+from cyberwave.rest.models.slug_availability_schema import SlugAvailabilitySchema as SlugAvailabilitySchema
 from cyberwave.rest.models.team_member_response import TeamMemberResponse as TeamMemberResponse
 from cyberwave.rest.models.team_share_schema import TeamShareSchema as TeamShareSchema
 from cyberwave.rest.models.twin_create_schema import TwinCreateSchema as TwinCreateSchema
@@ -215,6 +248,7 @@ from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema as Wor
 from cyberwave.rest.models.workflow_node_update_schema import WorkflowNodeUpdateSchema as WorkflowNodeUpdateSchema
 from cyberwave.rest.models.workflow_schema import WorkflowSchema as WorkflowSchema
 from cyberwave.rest.models.workflow_update_schema import WorkflowUpdateSchema as WorkflowUpdateSchema
+from cyberwave.rest.models.workspace_create_schema import WorkspaceCreateSchema as WorkspaceCreateSchema
 from cyberwave.rest.models.workspace_response_schema import WorkspaceResponseSchema as WorkspaceResponseSchema
 from cyberwave.rest.models.workspace_schema import WorkspaceSchema as WorkspaceSchema
 from cyberwave.rest.models.workspace_update_schema import WorkspaceUpdateSchema as WorkspaceUpdateSchema

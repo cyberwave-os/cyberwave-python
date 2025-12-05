@@ -20,6 +20,7 @@ from av import VideoFrame
 
 from .mqtt_client import CyberwaveMQTTClient
 from .utils import TimeReference
+
 logger = logging.getLogger(__name__)
 
 # Default TURN/STUN server configuration
@@ -42,7 +43,9 @@ DEFAULT_TURN_SERVERS = [
 class CV2VideoStreamTrack(VideoStreamTrack):
     """Video stream track using OpenCV for camera capture."""
 
-    def __init__(self, camera_id: int = 0, fps: int = 30, time_reference: TimeReference = None):
+    def __init__(
+        self, camera_id: int = 0, fps: int = 30, time_reference: TimeReference = None
+    ):
         """
         Initialize the video stream track.
 
@@ -94,13 +97,15 @@ class CV2VideoStreamTrack(VideoStreamTrack):
         if self.data_channel and self.should_sync:
             logger.debug(f"Sending sync frame at frame {self.frame_count}")
             self.data_channel.send(
-                json.dumps({
-                    "type": "sync_frame",
-                    "read_timestamp": timestamp,
-                    "read_timestamp_monotonic": timestamp_monotonic,
-                    "pts": video_frame.pts,
-                    "track_id": self.id,
-                })
+                json.dumps(
+                    {
+                        "type": "sync_frame",
+                        "read_timestamp": timestamp,
+                        "read_timestamp_monotonic": timestamp_monotonic,
+                        "pts": video_frame.pts,
+                        "track_id": self.id,
+                    }
+                )
             )
 
         return video_frame
@@ -184,10 +189,15 @@ class CameraStreamer:
         self._monitor_task: Optional[asyncio.Task] = None
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
+        # Recording state
+        self._should_record = True
+
     def _reset_state(self):
         """Reset internal state for fresh connection."""
         self._answer_received = False
         self._answer_data = None
+        # Note: _should_record is intentionally NOT reset here to preserve the recording
+        # preference set by the command handler before start() is called
 
     # -------------------------------------------------------------------------
     # Public API - Start/Stop
@@ -292,7 +302,9 @@ class CameraStreamer:
     async def _setup_webrtc(self):
         """Initialize WebRTC peer connection and video track."""
         # Initialize video stream
-        self.streamer = CV2VideoStreamTrack(self.camera_id, self.fps, self.time_reference)
+        self.streamer = CV2VideoStreamTrack(
+            self.camera_id, self.fps, self.time_reference
+        )
 
         # Create peer connection with STUN/TURN servers
         ice_servers = [RTCIceServer(**server) for server in self.turn_servers]
@@ -341,9 +353,13 @@ class CameraStreamer:
                 return
 
             if parsed["type"] == "ping":
-                self.channel.send(json.dumps({"type": "pong", "timestamp": time.time()}))
+                self.channel.send(
+                    json.dumps({"type": "pong", "timestamp": time.time()})
+                )
             elif parsed["type"] == "pong":
-                self.channel.send(json.dumps({"type": "ping", "timestamp": time.time()}))
+                self.channel.send(
+                    json.dumps({"type": "ping", "timestamp": time.time()})
+                )
             elif parsed["type"] == "sync_frame_command":
                 self.streamer.set_should_sync(True)
 
@@ -380,6 +396,7 @@ class CameraStreamer:
             "sdp": sdp,
             "color_track_id": self.streamer.id,
             "timestamp": time.time(),
+            "recording": getattr(self, "_should_record", False),
         }
 
         self._publish_message(offer_topic, offer_payload)
@@ -506,9 +523,15 @@ class CameraStreamer:
                     return
 
                 if command_type == "start_video":
-                    asyncio.run_coroutine_threadsafe(self._handle_start_command(command_callback), self._event_loop)
+                    recording = payload.get("recording", False)
+                    self._should_record = recording
+                    asyncio.run_coroutine_threadsafe(
+                        self._handle_start_command(command_callback), self._event_loop
+                    )
                 elif command_type == "stop_video":
-                    asyncio.run_coroutine_threadsafe(self._handle_stop_command(command_callback), self._event_loop)
+                    asyncio.run_coroutine_threadsafe(
+                        self._handle_stop_command(command_callback), self._event_loop
+                    )
                 else:
                     logger.warning(f"Unknown command type: {command_type}")
 
@@ -527,7 +550,12 @@ class CameraStreamer:
     # -------------------------------------------------------------------------
 
     async def _handle_start_command(self, callback: Optional[Callable] = None):
-        """Handle start_video command."""
+        """Handle start_video command.
+
+        Args:
+            callback: Optional callback function to report status
+            recording: Whether to record the video stream on the backend
+        """
         try:
             if self.pc is not None:
                 logger.info("Video stream already running")
@@ -535,7 +563,9 @@ class CameraStreamer:
                     callback("ok", "Video stream already running")
                 return
 
-            logger.info(f"Starting video stream - Camera ID: {self.camera_id}, FPS: {self.fps}")
+            logger.info(
+                f"Starting video stream - Camera ID: {self.camera_id}, FPS: {self.fps}, Recording: {self._should_record}"
+            )
             await self.start()
             self._should_reconnect = self.auto_reconnect
             logger.info("Camera streaming started successfully!")
@@ -587,7 +617,10 @@ class CameraStreamer:
 
             if self._is_connection_lost():
                 reconnect_attempt = await self._attempt_reconnect(
-                    stop_event, reconnect_attempt, reconnect_delay, max_reconnect_attempts
+                    stop_event,
+                    reconnect_attempt,
+                    reconnect_delay,
+                    max_reconnect_attempts,
                 )
                 if reconnect_attempt < 0:  # Signal to stop
                     break
@@ -599,10 +632,11 @@ class CameraStreamer:
         connection_state = getattr(self.pc, "connectionState", None)
         ice_connection_state = getattr(self.pc, "iceConnectionState", None)
 
-        is_disconnected = (
-            connection_state in ("disconnected", "failed", "closed")
-            or ice_connection_state in ("disconnected", "failed", "closed")
-        )
+        is_disconnected = connection_state in (
+            "disconnected",
+            "failed",
+            "closed",
+        ) or ice_connection_state in ("disconnected", "failed", "closed")
 
         if is_disconnected:
             logger.warning(

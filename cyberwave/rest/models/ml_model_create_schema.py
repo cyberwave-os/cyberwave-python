@@ -38,7 +38,8 @@ class MLModelCreateSchema(BaseModel):
     can_take_audio_as_input: Optional[StrictBool] = False
     can_take_image_as_input: Optional[StrictBool] = False
     can_take_text_as_input: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["name", "description", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input"]
+    can_take_action_as_input: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["name", "description", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -117,7 +118,8 @@ class MLModelCreateSchema(BaseModel):
             "can_take_video_as_input": obj.get("can_take_video_as_input") if obj.get("can_take_video_as_input") is not None else False,
             "can_take_audio_as_input": obj.get("can_take_audio_as_input") if obj.get("can_take_audio_as_input") is not None else False,
             "can_take_image_as_input": obj.get("can_take_image_as_input") if obj.get("can_take_image_as_input") is not None else False,
-            "can_take_text_as_input": obj.get("can_take_text_as_input") if obj.get("can_take_text_as_input") is not None else True
+            "can_take_text_as_input": obj.get("can_take_text_as_input") if obj.get("can_take_text_as_input") is not None else True,
+            "can_take_action_as_input": obj.get("can_take_action_as_input") if obj.get("can_take_action_as_input") is not None else False
         })
         return _obj
 

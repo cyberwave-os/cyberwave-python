@@ -22,18 +22,16 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ControllerPolicyCreateSchema(BaseModel):
+class MLTrainingCreateSchema(BaseModel):
     """
-    ControllerPolicyCreateSchema
+    MLTrainingCreateSchema
     """ # noqa: E501
-    name: Optional[StrictStr] = ''
-    visibility: Optional[StrictStr] = 'private'
-    description: Optional[StrictStr] = ''
-    controller_type: StrictStr
+    dataset_uuid: StrictStr
+    mlmodel_uuid: StrictStr
+    workspace_uuid: StrictStr
+    status: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    workspace_uuid: Optional[StrictStr] = None
-    asset_uuids: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["name", "visibility", "description", "controller_type", "metadata", "workspace_uuid", "asset_uuids"]
+    __properties: ClassVar[List[str]] = ["dataset_uuid", "mlmodel_uuid", "workspace_uuid", "status", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -53,7 +51,7 @@ class ControllerPolicyCreateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ControllerPolicyCreateSchema from a JSON string"""
+        """Create an instance of MLTrainingCreateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,21 +72,21 @@ class ControllerPolicyCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if status (nullable) is None
+        # and model_fields_set contains the field
+        if self.status is None and "status" in self.model_fields_set:
+            _dict['status'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
-        # set to None if workspace_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ControllerPolicyCreateSchema from a dict"""
+        """Create an instance of MLTrainingCreateSchema from a dict"""
         if obj is None:
             return None
 
@@ -96,13 +94,11 @@ class ControllerPolicyCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name") if obj.get("name") is not None else '',
-            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
-            "description": obj.get("description") if obj.get("description") is not None else '',
-            "controller_type": obj.get("controller_type"),
-            "metadata": obj.get("metadata"),
+            "dataset_uuid": obj.get("dataset_uuid"),
+            "mlmodel_uuid": obj.get("mlmodel_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
-            "asset_uuids": obj.get("asset_uuids")
+            "status": obj.get("status"),
+            "metadata": obj.get("metadata")
         })
         return _obj
 

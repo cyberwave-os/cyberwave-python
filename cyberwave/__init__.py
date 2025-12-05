@@ -28,7 +28,17 @@ from .client import Cyberwave
 from .config import CyberwaveConfig, get_config, set_config
 
 # High-level abstractions
-from .twin import Twin, JointController
+from .twin import (
+    Twin,
+    JointController,
+    CameraTwin,
+    DepthCameraTwin,
+    FlyingTwin,
+    GripperTwin,
+    FlyingCameraTwin,
+    GripperCameraTwin,
+    create_twin,
+)
 
 # Exceptions
 from .exceptions import (
@@ -71,6 +81,15 @@ except ImportError:
 # Edge controller
 from .controller import EdgeController
 
+# Constants
+from .constants import (
+    SOURCE_TYPE_EDGE,
+    SOURCE_TYPE_TELE,
+    SOURCE_TYPE_EDIT,
+    SOURCE_TYPE_SIM,
+    SOURCE_TYPES,
+)
+
 # Version information
 __version__ = "0.2.4"
 
@@ -85,6 +104,13 @@ __all__ = [
     # High-level abstractions
     "Twin",
     "JointController",
+    "CameraTwin",
+    "DepthCameraTwin",
+    "FlyingTwin",
+    "GripperTwin",
+    "FlyingCameraTwin",
+    "GripperCameraTwin",
+    "create_twin",
     # Exceptions
     "CyberwaveError",
     "CyberwaveAPIError",
@@ -109,6 +135,12 @@ __all__ = [
     "CV2VideoStreamTrack",
     # Edge controller
     "EdgeController",
+    # Constants
+    "SOURCE_TYPE_EDGE",
+    "SOURCE_TYPE_TELE",
+    "SOURCE_TYPE_EDIT",
+    "SOURCE_TYPE_SIM",
+    "SOURCE_TYPES",
     # Utils
     "TimeReference",
     # Version

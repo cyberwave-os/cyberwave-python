@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -36,7 +36,10 @@ class ControllerPolicySchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by"]
+    workspace_uuid: Optional[StrictStr] = None
+    asset_uuids: Optional[List[StrictStr]] = None
+    can_edit: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_edit"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,6 +85,11 @@ class ControllerPolicySchema(BaseModel):
         if self.created_by is None and "created_by" in self.model_fields_set:
             _dict['created_by'] = None
 
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -102,7 +110,10 @@ class ControllerPolicySchema(BaseModel):
             "visibility": obj.get("visibility"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
-            "created_by": obj.get("created_by")
+            "created_by": obj.get("created_by"),
+            "workspace_uuid": obj.get("workspace_uuid"),
+            "asset_uuids": obj.get("asset_uuids"),
+            "can_edit": obj.get("can_edit") if obj.get("can_edit") is not None else False
         })
         return _obj
 

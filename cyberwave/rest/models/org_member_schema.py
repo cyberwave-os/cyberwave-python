@@ -17,23 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.org_member_user_schema import OrgMemberUserSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ControllerPolicyCreateSchema(BaseModel):
+class OrgMemberSchema(BaseModel):
     """
-    ControllerPolicyCreateSchema
+    OrgMemberSchema
     """ # noqa: E501
-    name: Optional[StrictStr] = ''
-    visibility: Optional[StrictStr] = 'private'
-    description: Optional[StrictStr] = ''
-    controller_type: StrictStr
-    metadata: Optional[Dict[str, Any]] = None
-    workspace_uuid: Optional[StrictStr] = None
-    asset_uuids: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["name", "visibility", "description", "controller_type", "metadata", "workspace_uuid", "asset_uuids"]
+    user: OrgMemberUserSchema
+    role: StrictStr
+    is_owner: StrictBool
+    __properties: ClassVar[List[str]] = ["user", "role", "is_owner"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -53,7 +50,7 @@ class ControllerPolicyCreateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ControllerPolicyCreateSchema from a JSON string"""
+        """Create an instance of OrgMemberSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,21 +71,14 @@ class ControllerPolicyCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
-        # set to None if workspace_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of user
+        if self.user:
+            _dict['user'] = self.user.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ControllerPolicyCreateSchema from a dict"""
+        """Create an instance of OrgMemberSchema from a dict"""
         if obj is None:
             return None
 
@@ -96,13 +86,9 @@ class ControllerPolicyCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name") if obj.get("name") is not None else '',
-            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
-            "description": obj.get("description") if obj.get("description") is not None else '',
-            "controller_type": obj.get("controller_type"),
-            "metadata": obj.get("metadata"),
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "asset_uuids": obj.get("asset_uuids")
+            "user": OrgMemberUserSchema.from_dict(obj["user"]) if obj.get("user") is not None else None,
+            "role": obj.get("role"),
+            "is_owner": obj.get("is_owner")
         })
         return _obj
 
