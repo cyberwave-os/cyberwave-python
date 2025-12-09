@@ -17,22 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.org_member_user_schema import OrgMemberUserSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class PublicUserSchema(BaseModel):
+class OrgMemberSchema(BaseModel):
     """
-    PublicUserSchema
+    OrgMemberSchema
     """ # noqa: E501
-    uuid: StrictStr
-    email: StrictStr
-    first_name: StrictStr
-    last_name: StrictStr
-    full_name: Optional[StrictStr] = ''
-    profile_picture: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "email", "first_name", "last_name", "full_name", "profile_picture"]
+    user: OrgMemberUserSchema
+    role: StrictStr
+    is_owner: StrictBool
+    __properties: ClassVar[List[str]] = ["user", "role", "is_owner"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +50,7 @@ class PublicUserSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of PublicUserSchema from a JSON string"""
+        """Create an instance of OrgMemberSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,16 +71,14 @@ class PublicUserSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if profile_picture (nullable) is None
-        # and model_fields_set contains the field
-        if self.profile_picture is None and "profile_picture" in self.model_fields_set:
-            _dict['profile_picture'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of user
+        if self.user:
+            _dict['user'] = self.user.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of PublicUserSchema from a dict"""
+        """Create an instance of OrgMemberSchema from a dict"""
         if obj is None:
             return None
 
@@ -90,12 +86,9 @@ class PublicUserSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "email": obj.get("email"),
-            "first_name": obj.get("first_name"),
-            "last_name": obj.get("last_name"),
-            "full_name": obj.get("full_name") if obj.get("full_name") is not None else '',
-            "profile_picture": obj.get("profile_picture")
+            "user": OrgMemberUserSchema.from_dict(obj["user"]) if obj.get("user") is not None else None,
+            "role": obj.get("role"),
+            "is_owner": obj.get("is_owner")
         })
         return _obj
 

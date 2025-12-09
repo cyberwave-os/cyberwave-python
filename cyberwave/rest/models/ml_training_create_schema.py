@@ -17,37 +17,21 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
-<<<<<<< HEAD
 from pydantic import BaseModel, ConfigDict, StrictStr
-=======
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
->>>>>>> d44a6fe (new APIs, easier autocomplete)
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ControllerPolicySchema(BaseModel):
+class MLTrainingCreateSchema(BaseModel):
     """
-    ControllerPolicySchema
+    MLTrainingCreateSchema
     """ # noqa: E501
-    uuid: StrictStr
-    name: StrictStr
-    description: StrictStr
-    controller_type: StrictStr
-    metadata: Dict[str, Any]
-    visibility: StrictStr
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[StrictStr] = None
-<<<<<<< HEAD
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by"]
-=======
-    workspace_uuid: Optional[StrictStr] = None
-    asset_uuids: Optional[List[StrictStr]] = None
-    can_edit: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_edit"]
->>>>>>> d44a6fe (new APIs, easier autocomplete)
+    dataset_uuid: StrictStr
+    mlmodel_uuid: StrictStr
+    workspace_uuid: StrictStr
+    status: Optional[StrictStr] = None
+    metadata: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["dataset_uuid", "mlmodel_uuid", "workspace_uuid", "status", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -67,7 +51,7 @@ class ControllerPolicySchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ControllerPolicySchema from a JSON string"""
+        """Create an instance of MLTrainingCreateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -88,24 +72,21 @@ class ControllerPolicySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if created_by (nullable) is None
+        # set to None if status (nullable) is None
         # and model_fields_set contains the field
-        if self.created_by is None and "created_by" in self.model_fields_set:
-            _dict['created_by'] = None
+        if self.status is None and "status" in self.model_fields_set:
+            _dict['status'] = None
 
-<<<<<<< HEAD
-=======
-        # set to None if workspace_uuid (nullable) is None
+        # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
+        if self.metadata is None and "metadata" in self.model_fields_set:
+            _dict['metadata'] = None
 
->>>>>>> d44a6fe (new APIs, easier autocomplete)
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ControllerPolicySchema from a dict"""
+        """Create an instance of MLTrainingCreateSchema from a dict"""
         if obj is None:
             return None
 
@@ -113,22 +94,11 @@ class ControllerPolicySchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "controller_type": obj.get("controller_type"),
-            "metadata": obj.get("metadata"),
-            "visibility": obj.get("visibility"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-<<<<<<< HEAD
-            "created_by": obj.get("created_by")
-=======
-            "created_by": obj.get("created_by"),
+            "dataset_uuid": obj.get("dataset_uuid"),
+            "mlmodel_uuid": obj.get("mlmodel_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
-            "asset_uuids": obj.get("asset_uuids"),
-            "can_edit": obj.get("can_edit") if obj.get("can_edit") is not None else False
->>>>>>> d44a6fe (new APIs, easier autocomplete)
+            "status": obj.get("status"),
+            "metadata": obj.get("metadata")
         })
         return _obj
 

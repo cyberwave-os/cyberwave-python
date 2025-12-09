@@ -17,24 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class AssetUpdateSchema(BaseModel):
+class WorkspaceCreateSchema(BaseModel):
     """
-    AssetUpdateSchema
+    WorkspaceCreateSchema
     """ # noqa: E501
-    name: Optional[StrictStr] = None
+    name: StrictStr
     description: Optional[StrictStr] = None
-    public: Optional[StrictBool] = None
-    visibility: Optional[StrictStr] = None
-    workspace_uuid: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    capabilities: Optional[Dict[str, Any]] = None
-    registry_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "public", "visibility", "workspace_uuid", "metadata", "capabilities", "registry_id"]
+    slug: Optional[StrictStr] = None
+    organization_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "slug", "organization_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -54,7 +50,7 @@ class AssetUpdateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of AssetUpdateSchema from a JSON string"""
+        """Create an instance of WorkspaceCreateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -75,51 +71,26 @@ class AssetUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if name (nullable) is None
-        # and model_fields_set contains the field
-        if self.name is None and "name" in self.model_fields_set:
-            _dict['name'] = None
-
         # set to None if description (nullable) is None
         # and model_fields_set contains the field
         if self.description is None and "description" in self.model_fields_set:
             _dict['description'] = None
 
-        # set to None if public (nullable) is None
+        # set to None if slug (nullable) is None
         # and model_fields_set contains the field
-        if self.public is None and "public" in self.model_fields_set:
-            _dict['public'] = None
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
 
-        # set to None if visibility (nullable) is None
+        # set to None if organization_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.visibility is None and "visibility" in self.model_fields_set:
-            _dict['visibility'] = None
-
-        # set to None if workspace_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
-
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
-        # set to None if capabilities (nullable) is None
-        # and model_fields_set contains the field
-        if self.capabilities is None and "capabilities" in self.model_fields_set:
-            _dict['capabilities'] = None
-
-        # set to None if registry_id (nullable) is None
-        # and model_fields_set contains the field
-        if self.registry_id is None and "registry_id" in self.model_fields_set:
-            _dict['registry_id'] = None
+        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
+            _dict['organization_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of AssetUpdateSchema from a dict"""
+        """Create an instance of WorkspaceCreateSchema from a dict"""
         if obj is None:
             return None
 
@@ -129,12 +100,8 @@ class AssetUpdateSchema(BaseModel):
         _obj = cls.model_validate({
             "name": obj.get("name"),
             "description": obj.get("description"),
-            "public": obj.get("public"),
-            "visibility": obj.get("visibility"),
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata"),
-            "capabilities": obj.get("capabilities"),
-            "registry_id": obj.get("registry_id")
+            "slug": obj.get("slug"),
+            "organization_uuid": obj.get("organization_uuid")
         })
         return _obj
 

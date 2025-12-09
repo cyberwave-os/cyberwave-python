@@ -22,17 +22,13 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class PublicUserSchema(BaseModel):
+class OrganizationCreateSchema(BaseModel):
     """
-    PublicUserSchema
+    OrganizationCreateSchema
     """ # noqa: E501
-    uuid: StrictStr
-    email: StrictStr
-    first_name: StrictStr
-    last_name: StrictStr
-    full_name: Optional[StrictStr] = ''
-    profile_picture: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "email", "first_name", "last_name", "full_name", "profile_picture"]
+    name: StrictStr
+    slug: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "slug"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +48,7 @@ class PublicUserSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of PublicUserSchema from a JSON string"""
+        """Create an instance of OrganizationCreateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,16 +69,16 @@ class PublicUserSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if profile_picture (nullable) is None
+        # set to None if slug (nullable) is None
         # and model_fields_set contains the field
-        if self.profile_picture is None and "profile_picture" in self.model_fields_set:
-            _dict['profile_picture'] = None
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of PublicUserSchema from a dict"""
+        """Create an instance of OrganizationCreateSchema from a dict"""
         if obj is None:
             return None
 
@@ -90,12 +86,8 @@ class PublicUserSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "email": obj.get("email"),
-            "first_name": obj.get("first_name"),
-            "last_name": obj.get("last_name"),
-            "full_name": obj.get("full_name") if obj.get("full_name") is not None else '',
-            "profile_picture": obj.get("profile_picture")
+            "name": obj.get("name"),
+            "slug": obj.get("slug")
         })
         return _obj
 

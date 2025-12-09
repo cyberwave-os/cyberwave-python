@@ -22,17 +22,18 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class PublicUserSchema(BaseModel):
+class AddMemberUserSchema(BaseModel):
     """
-    PublicUserSchema
+    AddMemberUserSchema
     """ # noqa: E501
     uuid: StrictStr
+    username: StrictStr
     email: StrictStr
-    first_name: StrictStr
-    last_name: StrictStr
+    first_name: Optional[StrictStr] = ''
+    last_name: Optional[StrictStr] = ''
     full_name: Optional[StrictStr] = ''
     profile_picture: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "email", "first_name", "last_name", "full_name", "profile_picture"]
+    __properties: ClassVar[List[str]] = ["uuid", "username", "email", "first_name", "last_name", "full_name", "profile_picture"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +53,7 @@ class PublicUserSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of PublicUserSchema from a JSON string"""
+        """Create an instance of AddMemberUserSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -82,7 +83,7 @@ class PublicUserSchema(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of PublicUserSchema from a dict"""
+        """Create an instance of AddMemberUserSchema from a dict"""
         if obj is None:
             return None
 
@@ -91,9 +92,10 @@ class PublicUserSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
+            "username": obj.get("username"),
             "email": obj.get("email"),
-            "first_name": obj.get("first_name"),
-            "last_name": obj.get("last_name"),
+            "first_name": obj.get("first_name") if obj.get("first_name") is not None else '',
+            "last_name": obj.get("last_name") if obj.get("last_name") is not None else '',
             "full_name": obj.get("full_name") if obj.get("full_name") is not None else '',
             "profile_picture": obj.get("profile_picture")
         })

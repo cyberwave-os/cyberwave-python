@@ -259,6 +259,24 @@ class CyberwaveMQTTClient:
         if twin_uuid not in self.twin_uuids_with_telemetry_start:
             self.twin_uuids_with_telemetry_start.append(twin_uuid)
             self.publish_telemetry_start(twin_uuid, metadata)
+    
+    def _publish_connect_message(self, twin_uuid: str):
+        """Publish connect message to MQTT broker."""
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+        message = {
+            "type": "connected",
+            "timestamp": time.time(),
+        }
+        self.publish(topic, message)
+
+    def _publish_disconnect_message(self, twin_uuid: str):
+        """Publish disconnect message to MQTT broker."""
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/connect"
+        message = {
+            "type": "disconnected",
+            "timestamp": time.time(),
+        }
+        self.publish(topic, message)
 
     def connect(self):
         """Connect to MQTT broker."""
@@ -282,6 +300,7 @@ class CyberwaveMQTTClient:
 
             # send the telemetry start message
             for twin_uuid in self.twin_uuids:
+                self._publish_connect_message(twin_uuid)
                 self.publish_telemetry_start(twin_uuid)
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
@@ -291,6 +310,7 @@ class CyberwaveMQTTClient:
         """Disconnect from MQTT broker."""
 
         for twin_uuid in self.twin_uuids:
+            self._publish_disconnect_message(twin_uuid)
             self.publish_telemetry_end(twin_uuid)
         if self.connected:
             logger.info("Disconnecting from MQTT broker")
