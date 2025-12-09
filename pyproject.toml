@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.2.4"
+version = "0.2.8"
 description = "Python SDK for Cyberwave"
 authors = ["Simone Di Somma <sdisomma@cyberwave.com>", "Vittorio Banfi <vbanfi@cyberwave.com>"]
 readme = "README.md"
@@ -30,6 +30,9 @@ pytest = "^7.2.1"
 pytest-cov = "^2.8.1"
 mypy = "^1.5"
 types-python-dateutil = "^2.8.19.14"
+
+[tool.poetry.scripts]
+cyberwave-generate-stubs = "cyberwave.stubs_generator:main"
 
 [build-system]
 requires = ["poetry-core"]

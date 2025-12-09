@@ -41,8 +41,9 @@ class AssetSchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     kinematics: Optional[Dict[str, Any]] = None
+    capabilities: Optional[Dict[str, Any]] = None
     thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "public", "visibility", "owner_uuid", "registry_id", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "thumbnail"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "public", "visibility", "owner_uuid", "registry_id", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -123,6 +124,11 @@ class AssetSchema(BaseModel):
         if self.kinematics is None and "kinematics" in self.model_fields_set:
             _dict['kinematics'] = None
 
+        # set to None if capabilities (nullable) is None
+        # and model_fields_set contains the field
+        if self.capabilities is None and "capabilities" in self.model_fields_set:
+            _dict['capabilities'] = None
+
         # set to None if thumbnail (nullable) is None
         # and model_fields_set contains the field
         if self.thumbnail is None and "thumbnail" in self.model_fields_set:
@@ -154,6 +160,7 @@ class AssetSchema(BaseModel):
             "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
             "kinematics": obj.get("kinematics"),
+            "capabilities": obj.get("capabilities"),
             "thumbnail": obj.get("thumbnail")
         })
         return _obj

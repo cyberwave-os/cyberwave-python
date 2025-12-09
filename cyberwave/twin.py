@@ -2,13 +2,40 @@
 High-level Twin abstraction for intuitive digital twin control
 """
 
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable
+import json
 import math
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable, Type
 
 if TYPE_CHECKING:
     from .client import Cyberwave
+    from .camera import CameraStreamer
 
 from .exceptions import CyberwaveError
+
+
+# Load capabilities cache for runtime class selection
+_CAPABILITIES_CACHE: Optional[Dict[str, Any]] = None
+
+
+def _load_capabilities_cache() -> Dict[str, Any]:
+    """Load the capabilities cache from JSON file."""
+    global _CAPABILITIES_CACHE
+    if _CAPABILITIES_CACHE is None:
+        cache_path = Path(__file__).parent / "assets_capabilities.json"
+        if cache_path.exists():
+            with open(cache_path, "r") as f:
+                _CAPABILITIES_CACHE = json.load(f)
+        else:
+            _CAPABILITIES_CACHE = {}
+    return _CAPABILITIES_CACHE
+
+
+def _get_asset_capabilities(registry_id: str) -> Dict[str, Any]:
+    """Get capabilities for an asset by registry_id."""
+    cache = _load_capabilities_cache()
+    asset_data = cache.get(registry_id, {})
+    return asset_data.get("capabilities", {})
 
 
 class JointController:
@@ -42,7 +69,13 @@ class JointController:
 
         return self._joint_states[joint_name]
 
-    def set(self, joint_name: str, position: float, degrees: bool = True):
+    def set(
+        self,
+        joint_name: str,
+        position: float,
+        degrees: bool = True,
+        timestamp: Optional[float] = None,
+    ):
         """
         Set position of a joint
 
@@ -60,7 +93,7 @@ class JointController:
 
             # Update joint state via MQTT
             self.twin.client.mqtt.update_joint_state(
-                self.twin.uuid, joint_name, position=position
+                self.twin.uuid, joint_name, position=position, timestamp=timestamp
             )
 
             # Update cached state
@@ -403,3 +436,285 @@ class Twin:
         """Subscribe to joint updates"""
         self._connect_to_mqtt_if_not_connected()
         self.client.mqtt.subscribe_joint_states(self.uuid, on_update)
+
+    @property
+    def capabilities(self) -> Dict[str, Any]:
+        """Get twin capabilities from the underlying data."""
+        if hasattr(self._data, "capabilities"):
+            return self._data.capabilities or {}
+        elif isinstance(self._data, dict):
+            return self._data.get("capabilities", {})
+        return {}
+
+    def has_capability(self, capability: str) -> bool:
+        """Check if the twin has a specific capability."""
+        return bool(self.capabilities.get(capability, False))
+
+    def has_sensor(self, sensor_type: Optional[str] = None) -> bool:
+        """Check if the twin has sensors, optionally of a specific type."""
+        sensors = self.capabilities.get("sensors", [])
+        if not sensors:
+            return False
+        if sensor_type is None:
+            return True
+        return any(s.get("type") == sensor_type for s in sensors)
+
+
+class CameraTwin(Twin):
+    """
+    Twin with camera/sensor capabilities.
+
+    Provides methods for video streaming and frame capture for twins
+    that have RGB or depth sensors.
+
+    Example:
+        >>> twin = client.twin("unitree/go2")  # Returns CameraTwin if has sensors
+        >>> await twin.start_streaming(fps=15)
+        >>> frame = twin.capture_frame()
+    """
+
+    _camera_streamer: Optional["CameraStreamer"] = None
+
+    def start_streaming(self, fps: int = 10, camera_id: int = 0) -> "CameraStreamer":
+        """
+        Start RGB camera streaming.
+
+        Args:
+            fps: Frames per second (default: 10)
+            camera_id: Camera device ID (default: 0)
+
+        Returns:
+            CameraStreamer instance for managing the stream
+        """
+        self._camera_streamer = self.client.video_stream(
+            twin_uuid=self.uuid,
+            camera_id=camera_id,
+            fps=fps,
+        )
+        return self._camera_streamer
+
+    def stop_streaming(self) -> None:
+        """Stop camera streaming."""
+        if self._camera_streamer is not None:
+            # The streamer handles cleanup in its stop method
+            self._camera_streamer = None
+
+    def capture_frame(self) -> bytes:
+        """
+        Capture a single frame from the RGB camera.
+
+        Note: Requires an active stream or will start one temporarily.
+
+        Returns:
+            Raw frame bytes
+        """
+        raise NotImplementedError(
+            "capture_frame() requires an active stream. "
+            "Use start_streaming() first to begin capturing frames."
+        )
+
+    def __repr__(self) -> str:
+        sensors = self.capabilities.get("sensors", [])
+        sensor_types = [s.get("type", "unknown") for s in sensors]
+        return f"CameraTwin(uuid='{self.uuid}', name='{self.name}', sensors={sensor_types})"
+
+
+class DepthCameraTwin(CameraTwin):
+    """
+    Twin with depth camera capabilities.
+
+    Extends CameraTwin with depth-specific methods for point cloud
+    generation and depth frame capture.
+    """
+
+    def start_depth_streaming(self, fps: int = 10) -> "CameraStreamer":
+        """
+        Start depth camera streaming.
+
+        Args:
+            fps: Frames per second (default: 10)
+
+        Returns:
+            CameraStreamer instance for managing the stream
+        """
+        return self.start_streaming(fps=fps)
+
+    def stop_depth_streaming(self) -> None:
+        """Stop depth streaming."""
+        self.stop_streaming()
+
+    def capture_depth_frame(self) -> bytes:
+        """
+        Capture a single depth frame.
+
+        Returns:
+            Raw depth frame bytes
+        """
+        raise NotImplementedError(
+            "capture_depth_frame() requires an active depth stream. "
+            "Use start_depth_streaming() first."
+        )
+
+    def get_point_cloud(self) -> List[tuple]:
+        """
+        Get point cloud from depth sensor.
+
+        Returns:
+            List of (x, y, z) tuples representing 3D points
+        """
+        raise NotImplementedError(
+            "get_point_cloud() requires depth sensor data processing. "
+            "This feature is not yet implemented."
+        )
+
+    def __repr__(self) -> str:
+        return f"DepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class FlyingTwin(Twin):
+    """
+    Twin with flight capabilities (drones, UAVs).
+
+    Provides methods for aerial control including takeoff, landing,
+    and hovering.
+    """
+
+    def takeoff(self, altitude: float = 1.0) -> None:
+        """
+        Take off to the specified altitude.
+
+        Args:
+            altitude: Target altitude in meters (default: 1.0)
+        """
+        self._connect_to_mqtt_if_not_connected()
+        # Send takeoff command via MQTT
+        self.client.mqtt.publish(
+            f"twins/{self.uuid}/commands/takeoff", {"altitude": altitude}
+        )
+
+    def land(self) -> None:
+        """Land the drone."""
+        self._connect_to_mqtt_if_not_connected()
+        self.client.mqtt.publish(f"twins/{self.uuid}/commands/land", {})
+
+    def hover(self) -> None:
+        """Hover in place."""
+        self._connect_to_mqtt_if_not_connected()
+        self.client.mqtt.publish(f"twins/{self.uuid}/commands/hover", {})
+
+    def __repr__(self) -> str:
+        return f"FlyingTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class GripperTwin(Twin):
+    """
+    Twin with gripper/manipulation capabilities.
+
+    Provides methods for controlling grippers and end effectors.
+    """
+
+    def grip(self, force: float = 1.0) -> None:
+        """
+        Close the gripper with specified force.
+
+        Args:
+            force: Grip force (0.0 to 1.0, default: 1.0)
+        """
+        self._connect_to_mqtt_if_not_connected()
+        self.client.mqtt.publish(
+            f"twins/{self.uuid}/commands/grip", {"force": max(0.0, min(1.0, force))}
+        )
+
+    def release(self) -> None:
+        """Open the gripper."""
+        self._connect_to_mqtt_if_not_connected()
+        self.client.mqtt.publish(f"twins/{self.uuid}/commands/release", {})
+
+    def __repr__(self) -> str:
+        return f"GripperTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class FlyingCameraTwin(FlyingTwin, CameraTwin):
+    """Twin with both flight and camera capabilities (camera drones)."""
+
+    def __repr__(self) -> str:
+        return f"FlyingCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class GripperCameraTwin(GripperTwin, CameraTwin):
+    """Twin with both gripper and camera capabilities (manipulators with vision)."""
+
+    def __repr__(self) -> str:
+        return f"GripperCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+def _select_twin_class(capabilities: Dict[str, Any]) -> Type[Twin]:
+    """
+    Select the appropriate Twin subclass based on capabilities.
+
+    Args:
+        capabilities: Asset capabilities dictionary
+
+    Returns:
+        The most appropriate Twin subclass
+    """
+    has_sensors = bool(capabilities.get("sensors", []))
+    has_depth = any(s.get("type") == "depth" for s in capabilities.get("sensors", []))
+    can_fly = capabilities.get("can_fly", False)
+    can_grip = capabilities.get("can_grip", False)
+
+    # Select class based on combination of capabilities
+    if can_fly and has_sensors:
+        return FlyingCameraTwin
+    elif can_grip and has_sensors:
+        return GripperCameraTwin
+    elif can_fly:
+        return FlyingTwin
+    elif can_grip:
+        return GripperTwin
+    elif has_depth:
+        return DepthCameraTwin
+    elif has_sensors:
+        return CameraTwin
+    else:
+        return Twin
+
+
+def create_twin(
+    client: "Cyberwave",
+    twin_data: Any,
+    registry_id: Optional[str] = None,
+) -> Twin:
+    """
+    Factory function to create the appropriate Twin subclass.
+
+    This function examines the twin's capabilities and returns an instance
+    of the most appropriate Twin subclass, providing IDE autocomplete
+    for capability-specific methods.
+
+    Args:
+        client: Cyberwave client instance
+        twin_data: Twin schema data from API
+        registry_id: Optional asset registry ID for capability lookup
+
+    Returns:
+        Appropriate Twin subclass instance (CameraTwin, FlyingTwin, etc.)
+
+    Example:
+        >>> twin = create_twin(client, twin_data, "unitree/go2")
+        >>> # twin is CameraTwin with start_streaming() available
+    """
+    # Try to get capabilities from twin_data first
+    capabilities = {}
+
+    if hasattr(twin_data, "capabilities") and twin_data.capabilities:
+        capabilities = twin_data.capabilities
+    elif isinstance(twin_data, dict) and twin_data.get("capabilities"):
+        capabilities = twin_data["capabilities"]
+    elif registry_id:
+        # Fall back to cached capabilities from registry_id
+        capabilities = _get_asset_capabilities(registry_id)
+
+    # Select and instantiate the appropriate class
+    twin_class = _select_twin_class(capabilities)
+    return twin_class(client, twin_data)

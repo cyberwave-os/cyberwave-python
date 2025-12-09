@@ -50,7 +50,9 @@ class TwinSchema(BaseModel):
     kinematics_override: Optional[Dict[str, Any]] = None
     joint_calibration: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata"]
+    capabilities: Dict[str, Any]
+    controller_policy_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -116,6 +118,11 @@ class TwinSchema(BaseModel):
         if self.joint_calibration is None and "joint_calibration" in self.model_fields_set:
             _dict['joint_calibration'] = None
 
+        # set to None if controller_policy_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.controller_policy_uuid is None and "controller_policy_uuid" in self.model_fields_set:
+            _dict['controller_policy_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -150,7 +157,9 @@ class TwinSchema(BaseModel):
             "joint_states": obj.get("joint_states"),
             "kinematics_override": obj.get("kinematics_override"),
             "joint_calibration": obj.get("joint_calibration"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "capabilities": obj.get("capabilities"),
+            "controller_policy_uuid": obj.get("controller_policy_uuid")
         })
         return _obj
 

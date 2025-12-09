@@ -19,28 +19,28 @@ import pprint
 import re  # noqa: F401
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Optional
-from cyberwave.rest.models.dataset_generation_request_schema import DatasetGenerationRequestSchema
-from cyberwave.rest.models.dataset_generation_request_schema_by_date import DatasetGenerationRequestSchemaByDate
+from cyberwave.rest.models.recording_generation_request_schema import RecordingGenerationRequestSchema
+from cyberwave.rest.models.recording_generation_request_schema_by_date import RecordingGenerationRequestSchemaByDate
 from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field
 
-PAYLOAD_ANY_OF_SCHEMAS = ["DatasetGenerationRequestSchema", "DatasetGenerationRequestSchemaByDate"]
+PAYLOAD_ANY_OF_SCHEMAS = ["RecordingGenerationRequestSchema", "RecordingGenerationRequestSchemaByDate"]
 
 class Payload(BaseModel):
     """
     Payload
     """
 
-    # data type: DatasetGenerationRequestSchema
-    anyof_schema_1_validator: Optional[DatasetGenerationRequestSchema] = None
-    # data type: DatasetGenerationRequestSchemaByDate
-    anyof_schema_2_validator: Optional[DatasetGenerationRequestSchemaByDate] = None
+    # data type: RecordingGenerationRequestSchema
+    anyof_schema_1_validator: Optional[RecordingGenerationRequestSchema] = None
+    # data type: RecordingGenerationRequestSchemaByDate
+    anyof_schema_2_validator: Optional[RecordingGenerationRequestSchemaByDate] = None
     if TYPE_CHECKING:
-        actual_instance: Optional[Union[DatasetGenerationRequestSchema, DatasetGenerationRequestSchemaByDate]] = None
+        actual_instance: Optional[Union[RecordingGenerationRequestSchema, RecordingGenerationRequestSchemaByDate]] = None
     else:
         actual_instance: Any = None
-    any_of_schemas: Set[str] = { "DatasetGenerationRequestSchema", "DatasetGenerationRequestSchemaByDate" }
+    any_of_schemas: Set[str] = { "RecordingGenerationRequestSchema", "RecordingGenerationRequestSchemaByDate" }
 
     model_config = {
         "validate_assignment": True,
@@ -61,21 +61,21 @@ class Payload(BaseModel):
     def actual_instance_must_validate_anyof(cls, v):
         instance = Payload.model_construct()
         error_messages = []
-        # validate data type: DatasetGenerationRequestSchema
-        if not isinstance(v, DatasetGenerationRequestSchema):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `DatasetGenerationRequestSchema`")
+        # validate data type: RecordingGenerationRequestSchema
+        if not isinstance(v, RecordingGenerationRequestSchema):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RecordingGenerationRequestSchema`")
         else:
             return v
 
-        # validate data type: DatasetGenerationRequestSchemaByDate
-        if not isinstance(v, DatasetGenerationRequestSchemaByDate):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `DatasetGenerationRequestSchemaByDate`")
+        # validate data type: RecordingGenerationRequestSchemaByDate
+        if not isinstance(v, RecordingGenerationRequestSchemaByDate):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RecordingGenerationRequestSchemaByDate`")
         else:
             return v
 
         if error_messages:
             # no match
-            raise ValueError("No match found when setting the actual_instance in Payload with anyOf schemas: DatasetGenerationRequestSchema, DatasetGenerationRequestSchemaByDate. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting the actual_instance in Payload with anyOf schemas: RecordingGenerationRequestSchema, RecordingGenerationRequestSchemaByDate. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -88,22 +88,22 @@ class Payload(BaseModel):
         """Returns the object represented by the json string"""
         instance = cls.model_construct()
         error_messages = []
-        # anyof_schema_1_validator: Optional[DatasetGenerationRequestSchema] = None
+        # anyof_schema_1_validator: Optional[RecordingGenerationRequestSchema] = None
         try:
-            instance.actual_instance = DatasetGenerationRequestSchema.from_json(json_str)
+            instance.actual_instance = RecordingGenerationRequestSchema.from_json(json_str)
             return instance
         except (ValidationError, ValueError) as e:
              error_messages.append(str(e))
-        # anyof_schema_2_validator: Optional[DatasetGenerationRequestSchemaByDate] = None
+        # anyof_schema_2_validator: Optional[RecordingGenerationRequestSchemaByDate] = None
         try:
-            instance.actual_instance = DatasetGenerationRequestSchemaByDate.from_json(json_str)
+            instance.actual_instance = RecordingGenerationRequestSchemaByDate.from_json(json_str)
             return instance
         except (ValidationError, ValueError) as e:
              error_messages.append(str(e))
 
         if error_messages:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into Payload with anyOf schemas: DatasetGenerationRequestSchema, DatasetGenerationRequestSchemaByDate. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into Payload with anyOf schemas: RecordingGenerationRequestSchema, RecordingGenerationRequestSchemaByDate. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -117,7 +117,7 @@ class Payload(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], DatasetGenerationRequestSchema, DatasetGenerationRequestSchemaByDate]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], RecordingGenerationRequestSchema, RecordingGenerationRequestSchemaByDate]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

@@ -44,7 +44,8 @@ class MLModelSchema(BaseModel):
     can_take_audio_as_input: StrictBool
     can_take_image_as_input: StrictBool
     can_take_text_as_input: StrictBool
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input"]
+    can_take_action_as_input: StrictBool
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -113,7 +114,8 @@ class MLModelSchema(BaseModel):
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),
             "can_take_image_as_input": obj.get("can_take_image_as_input"),
-            "can_take_text_as_input": obj.get("can_take_text_as_input")
+            "can_take_text_as_input": obj.get("can_take_text_as_input"),
+            "can_take_action_as_input": obj.get("can_take_action_as_input")
         })
         return _obj
 

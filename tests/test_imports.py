@@ -18,7 +18,8 @@ import sys
 def test_basic_imports():
     """Test that basic SDK modules can be imported"""
     try:
-        import cyberwave
+        from cyberwave import Cyberwave
+
         # assert hasattr(cyberwave, 'Cyberwave')
         # assert hasattr(cyberwave, 'Twin')
         # assert hasattr(cyberwave, 'configure')
@@ -37,8 +38,9 @@ def test_exception_imports():
         from cyberwave import (
             CyberwaveError,
             CyberwaveAPIError,
-            CyberwaveConnectionError
+            CyberwaveConnectionError,
         )
+
         assert issubclass(CyberwaveAPIError, CyberwaveError)
         assert issubclass(CyberwaveConnectionError, CyberwaveError)
         print("✓ Exception imports successful")
@@ -52,10 +54,8 @@ def test_client_creation():
     """Test that Cyberwave client can be created"""
     try:
         from cyberwave import Cyberwave
-        client = Cyberwave(
-            base_url="http://localhost:8000",
-            api_key="test_key"
-        )
+
+        client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
         assert client.config.base_url == "http://localhost:8000"
         assert client.config.api_key == "test_key"
         print("✓ Client creation successful")
@@ -69,10 +69,8 @@ def test_config():
     """Test configuration module"""
     try:
         from cyberwave.config import CyberwaveConfig, get_config, set_config
-        config = CyberwaveConfig(
-            base_url="http://test:8000",
-            api_key="test"
-        )
+
+        config = CyberwaveConfig(base_url="http://test:8000", api_key="test")
         assert config.base_url == "http://test:8000"
         assert config.api_key == "test"
         print("✓ Config module successful")
@@ -86,10 +84,11 @@ def test_compact_api():
     """Test compact API functions"""
     try:
         from cyberwave import configure, simulation
+
         # Just test that they exist and are callable/accessible
         assert callable(configure)
-        assert hasattr(simulation, 'play')
-        assert hasattr(simulation, 'pause')
+        assert hasattr(simulation, "play")
+        assert hasattr(simulation, "pause")
         print("✓ Compact API successful")
     except Exception as e:
         print(f"✗ Compact API error: {e}")
@@ -97,32 +96,64 @@ def test_compact_api():
     return True
 
 
+def test_mqtt_client():
+    """Test MQTT client can be imported and instantiated"""
+    try:
+        from cyberwave import CyberwaveMQTTClient
+        from cyberwave.mqtt import CyberwaveMQTTClient as DirectImport
+
+        # Verify it's the same class
+        assert CyberwaveMQTTClient is DirectImport
+
+        # Test instantiation (don't connect)
+        client = CyberwaveMQTTClient(
+            mqtt_broker="localhost",
+            mqtt_port=1883,
+            api_token="test_token",
+            auto_connect=False,  # Don't actually connect
+        )
+
+        assert client.mqtt_broker == "localhost"
+        assert client.mqtt_port == 1883
+        assert client.mqtt_password == "test_token"
+        assert client.topic_prefix == ""
+
+        print("✓ MQTT client import successful")
+    except Exception as e:
+        print(f"✗ MQTT client error: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+    return True
+
+
 if __name__ == "__main__":
     print("Cyberwave SDK Import Tests")
     print("=" * 50)
-    
+
     tests = [
         test_basic_imports,
         test_exception_imports,
         test_client_creation,
         test_config,
         test_compact_api,
+        test_mqtt_client,
     ]
-    
+
     results = []
     for test in tests:
         print(f"\nRunning {test.__name__}...")
         results.append(test())
-    
+
     print("\n" + "=" * 50)
     passed = sum(results)
     total = len(results)
     print(f"Tests: {passed}/{total} passed")
-    
+
     if passed == total:
         print("✓ All tests passed!")
         sys.exit(0)
     else:
         print("✗ Some tests failed")
         sys.exit(1)
-

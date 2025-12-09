@@ -37,7 +37,8 @@ class MLModelUpdateSchema(BaseModel):
     can_take_audio_as_input: Optional[StrictBool] = None
     can_take_image_as_input: Optional[StrictBool] = None
     can_take_text_as_input: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input"]
+    can_take_action_as_input: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -133,6 +134,11 @@ class MLModelUpdateSchema(BaseModel):
         if self.can_take_text_as_input is None and "can_take_text_as_input" in self.model_fields_set:
             _dict['can_take_text_as_input'] = None
 
+        # set to None if can_take_action_as_input (nullable) is None
+        # and model_fields_set contains the field
+        if self.can_take_action_as_input is None and "can_take_action_as_input" in self.model_fields_set:
+            _dict['can_take_action_as_input'] = None
+
         return _dict
 
     @classmethod
@@ -155,7 +161,8 @@ class MLModelUpdateSchema(BaseModel):
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),
             "can_take_image_as_input": obj.get("can_take_image_as_input"),
-            "can_take_text_as_input": obj.get("can_take_text_as_input")
+            "can_take_text_as_input": obj.get("can_take_text_as_input"),
+            "can_take_action_as_input": obj.get("can_take_action_as_input")
         })
         return _obj
 

@@ -26,11 +26,13 @@ class PublicUserSchema(BaseModel):
     """
     PublicUserSchema
     """ # noqa: E501
+    uuid: StrictStr
+    email: StrictStr
     first_name: StrictStr
     last_name: StrictStr
     full_name: Optional[StrictStr] = ''
     profile_picture: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["first_name", "last_name", "full_name", "profile_picture"]
+    __properties: ClassVar[List[str]] = ["uuid", "email", "first_name", "last_name", "full_name", "profile_picture"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -88,6 +90,8 @@ class PublicUserSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "uuid": obj.get("uuid"),
+            "email": obj.get("email"),
             "first_name": obj.get("first_name"),
             "last_name": obj.get("last_name"),
             "full_name": obj.get("full_name") if obj.get("full_name") is not None else '',

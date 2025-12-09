@@ -42,7 +42,9 @@ class TwinCreateSchema(BaseModel):
     scale_z: Optional[Union[StrictFloat, StrictInt]] = 1.0
     joint_calibration: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_calibration", "metadata"]
+    capabilities: Optional[Dict[str, Any]] = None
+    controller_policy_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -113,6 +115,16 @@ class TwinCreateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if capabilities (nullable) is None
+        # and model_fields_set contains the field
+        if self.capabilities is None and "capabilities" in self.model_fields_set:
+            _dict['capabilities'] = None
+
+        # set to None if controller_policy_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.controller_policy_uuid is None and "controller_policy_uuid" in self.model_fields_set:
+            _dict['controller_policy_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -140,7 +152,9 @@ class TwinCreateSchema(BaseModel):
             "scale_y": obj.get("scale_y") if obj.get("scale_y") is not None else 1.0,
             "scale_z": obj.get("scale_z") if obj.get("scale_z") is not None else 1.0,
             "joint_calibration": obj.get("joint_calibration"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "capabilities": obj.get("capabilities"),
+            "controller_policy_uuid": obj.get("controller_policy_uuid")
         })
         return _obj
 

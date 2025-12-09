@@ -32,8 +32,9 @@ class AssetCreateSchema(BaseModel):
     visibility: Optional[StrictStr] = 'private'
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
+    capabilities: Optional[Dict[str, Any]] = None
     registry_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "public", "visibility", "workspace_uuid", "metadata", "registry_id"]
+    __properties: ClassVar[List[str]] = ["name", "description", "public", "visibility", "workspace_uuid", "metadata", "capabilities", "registry_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -84,6 +85,11 @@ class AssetCreateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if capabilities (nullable) is None
+        # and model_fields_set contains the field
+        if self.capabilities is None and "capabilities" in self.model_fields_set:
+            _dict['capabilities'] = None
+
         # set to None if registry_id (nullable) is None
         # and model_fields_set contains the field
         if self.registry_id is None and "registry_id" in self.model_fields_set:
@@ -107,6 +113,7 @@ class AssetCreateSchema(BaseModel):
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
             "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
+            "capabilities": obj.get("capabilities"),
             "registry_id": obj.get("registry_id")
         })
         return _obj
