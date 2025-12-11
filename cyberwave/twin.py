@@ -213,16 +213,14 @@ class Twin:
         except Exception as e:
             raise CyberwaveError(f"Failed to refresh twin: {e}")
 
-    def edit_position(
+    def move(
         self,
         x: Optional[float] = None,
         y: Optional[float] = None,
         z: Optional[float] = None,
     ):
         """
-        Edit the twin's position in the environment.
-
-        NOTE: Does not move the twin in the real world.
+        Move the twin to a new position
 
         Args:
             x: X coordinate (optional, keeps current if None)
@@ -247,7 +245,19 @@ class Twin:
             "z": update_data["position_z"],
         }
 
-    def edit_rotation(
+    def move_to(self, position: List[float]):
+        """
+        Move to a specific position
+
+        Args:
+            position: [x, y, z] coordinates
+        """
+        if len(position) != 3:
+            raise CyberwaveError("Position must be [x, y, z]")
+
+        self.move(x=position[0], y=position[1], z=position[2])
+
+    def rotate(
         self,
         yaw: Optional[float] = None,
         pitch: Optional[float] = None,
@@ -255,8 +265,7 @@ class Twin:
         quaternion: Optional[List[float]] = None,
     ):
         """
-        Edit the twin's rotation in the environment.
-        NOTE: Does not rotate the twin in the real world.
+        Rotate the twin
 
         Args:
             yaw: Yaw angle in degrees (rotation around Z axis)
@@ -294,15 +303,14 @@ class Twin:
             "w": update_data["rotation_w"],
         }
 
-    def edit_scale(
+    def scale(
         self,
         x: Optional[float] = None,
         y: Optional[float] = None,
         z: Optional[float] = None,
     ):
         """
-        Edit the twin's scale in the environment.
-        NOTE: Does not scale the twin in the real world (nothing can be scaled in the real world).
+        Scale the twin
 
         Args:
             x: X scale factor
@@ -563,59 +571,6 @@ class DepthCameraTwin(CameraTwin):
         return f"DepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
 
 
-class LocomoteTwin(Twin):
-    """
-    Twin that can locomote across space.
-
-    Provides methods for locomotion including movement and rotation.
-
-    Note: Flying twins can locomoate AND fly, so a flying twin is a subset of the LocomoteTwin
-    """
-
-    def move(self, position: List[float]):
-        """
-        Move the twin to a specific position, relative to the zero of the environment.
-
-        NOTE: This does move the real-world robot
-
-        Args:
-            position: [x, y, z] coordinates
-        """
-        if len(position) != 3:
-            raise CyberwaveError("Position must be [x, y, z]")
-
-        self.edit_position(x=position[0], y=position[1], z=position[2])
-
-    def move_forward(self, distance: float):
-        """
-        Move in the direction the twin is facing.
-
-        NOTE: This does move the real-world robot
-
-        Args:
-            distance: Distance to move
-        """
-        # TODO: Implement this. First we should figure the direction the twin is facing, then the relative position to move and move it.
-        raise NotImplementedError("move_forward() is not implemented")
-
-    def rotate(self, yaw: float = 0, pitch: float = 0, roll: float = 0) -> None:
-        """
-        Rotate the twin in the specified direction.
-
-        NOTE: This does rotate the real-world robot
-
-        Args:
-            yaw: Yaw angle in degrees
-            pitch: Pitch angle in degrees
-            roll: Roll angle in degrees
-        """
-        self._connect_to_mqtt_if_not_connected()
-        self.client.mqtt.publish(
-            f"twins/{self.uuid}/commands/rotate",
-            {"yaw": yaw, "pitch": pitch, "roll": roll},
-        )
-
-
 class FlyingTwin(Twin):
     """
     Twin with flight capabilities (drones, UAVs).
@@ -693,69 +648,6 @@ class GripperCameraTwin(GripperTwin, CameraTwin):
         return f"GripperCameraTwin(uuid='{self.uuid}', name='{self.name}')"
 
 
-class GripperDepthCameraTwin(GripperTwin, DepthCameraTwin):
-    """Twin with both gripper and depth camera capabilities (manipulators with vision)."""
-
-    def __repr__(self) -> str:
-        return f"GripperDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class LocomoteGripperTwin(LocomoteTwin, GripperTwin):
-    """Twin with both locomotive and gripper capabilities (robots with grippers)."""
-
-    def __repr__(self) -> str:
-        return f"LocomoteGripperTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class FlyingGripperDepthCameraTwin(FlyingTwin, GripperDepthCameraTwin):
-    """Twin with both flight and gripper and depth camera capabilities (drones with vision)."""
-
-    def __repr__(self) -> str:
-        return f"FlyingGripperDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class LocomoteGripperDepthCameraTwin(LocomoteTwin, GripperDepthCameraTwin):
-    """Twin with both locomotive and gripper and depth camera capabilities (robots with vision)."""
-
-    def __repr__(self) -> str:
-        return f"LocomoteGripperDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class LocomoteDepthCameraTwin(LocomoteTwin, DepthCameraTwin):
-    """Twin with both locomotive and depth camera capabilities (robots with vision)."""
-
-    def __repr__(self) -> str:
-        return f"LocomoteDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class LocomoteGripperCameraTwin(LocomoteTwin, GripperCameraTwin):
-    """Twin with both locomotive and gripper and camera capabilities (robots with vision)."""
-
-    def __repr__(self) -> str:
-        return f"LocomoteGripperCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class LocomoteCameraTwin(LocomoteTwin, CameraTwin):
-    """Twin with both locomotive and camera capabilities (robots with vision)."""
-
-    def __repr__(self) -> str:
-        return f"LocomoteCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class FlyingGripperCameraTwin(FlyingTwin, GripperCameraTwin):
-    """Twin with both flight and gripper and camera capabilities (drones with vision)."""
-
-    def __repr__(self) -> str:
-        return f"FlyingGripperCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
-class FlyingDepthCameraTwin(FlyingTwin, DepthCameraTwin):
-    """Twin with both flight and depth camera capabilities (drones with vision)."""
-
-    def __repr__(self) -> str:
-        return f"FlyingDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-
-
 def _select_twin_class(capabilities: Dict[str, Any]) -> Type[Twin]:
     """
     Select the appropriate Twin subclass based on capabilities.
@@ -769,44 +661,15 @@ def _select_twin_class(capabilities: Dict[str, Any]) -> Type[Twin]:
     has_sensors = bool(capabilities.get("sensors", []))
     has_depth = any(s.get("type") == "depth" for s in capabilities.get("sensors", []))
     can_fly = capabilities.get("can_fly", False)
-    can_locomote = capabilities.get("can_locomote", False)
     can_grip = capabilities.get("can_grip", False)
 
     # Select class based on combination of capabilities
-    if can_fly:
-        if can_grip and has_depth:
-            return FlyingGripperDepthCameraTwin
-        elif can_grip and has_sensors:
-            return FlyingGripperCameraTwin
-        elif has_sensors:
-            return FlyingCameraTwin
-        elif has_depth:
-            return FlyingDepthCameraTwin
-        elif can_grip:
-            return FlyingGripperCameraTwin
-        else:
-            return FlyingTwin
-    elif can_locomote:
-        if can_grip and has_depth:
-            return LocomoteGripperDepthCameraTwin
-        elif can_grip and has_sensors:
-            return LocomoteGripperCameraTwin
-        elif can_grip:
-            return LocomoteGripperTwin
-        elif has_depth:
-            return LocomoteDepthCameraTwin
-        elif has_sensors:
-            return LocomoteCameraTwin
-        else:
-            return LocomoteTwin
+    if can_fly and has_sensors:
+        return FlyingCameraTwin
     elif can_grip and has_sensors:
         return GripperCameraTwin
-    elif can_grip and has_depth:
-        return GripperDepthCameraTwin
     elif can_fly:
         return FlyingTwin
-    elif can_locomote:
-        return LocomoteTwin
     elif can_grip:
         return GripperTwin
     elif has_depth:
@@ -841,23 +704,16 @@ def create_twin(
         >>> twin = create_twin(client, twin_data, "unitree/go2")
         >>> # twin is CameraTwin with start_streaming() available
     """
-    # Get capabilities - prefer cached JSON which has complete capability data
+    # Try to get capabilities from twin_data first
     capabilities = {}
 
-    if registry_id:
-        # Use cached capabilities from JSON (most complete source)
+    if hasattr(twin_data, "capabilities") and twin_data.capabilities:
+        capabilities = twin_data.capabilities
+    elif isinstance(twin_data, dict) and twin_data.get("capabilities"):
+        capabilities = twin_data["capabilities"]
+    elif registry_id:
+        # Fall back to cached capabilities from registry_id
         capabilities = _get_asset_capabilities(registry_id)
-
-    # Fall back to twin_data capabilities if no cached data
-    if not capabilities:
-        if hasattr(twin_data, "capabilities") and twin_data.capabilities:
-            caps = twin_data.capabilities
-            # Convert to dict if it's an object
-            capabilities = (
-                caps if isinstance(caps, dict) else getattr(caps, "__dict__", {})
-            )
-        elif isinstance(twin_data, dict) and twin_data.get("capabilities"):
-            capabilities = twin_data["capabilities"]
 
     # Select and instantiate the appropriate class
     twin_class = _select_twin_class(capabilities)

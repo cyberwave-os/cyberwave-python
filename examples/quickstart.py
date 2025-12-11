@@ -33,10 +33,10 @@ def compact_api_example():
     robot = cw.twin("the-robot-studio/so101")
 
     # Move the twin
-    robot.edit_position(x=1, y=0, z=0.5)
+    robot.move(x=1, y=0, z=0.5)
 
     # Rotate the twin (using euler angles in degrees)
-    robot.edit_rotation(yaw=90, pitch=0, roll=0)
+    robot.rotate(yaw=90, pitch=0, roll=0)
 
     # Control robot joints (for URDF assets)
     robot.joints.set("1", 30)
@@ -105,7 +105,7 @@ def mqtt_example():
     )
 
     # Move the robot - this will trigger MQTT updates
-    robot.edit_position(x=2, y=1, z=0.5)
+    robot.move(x=2, y=1, z=0.5)
 
     print("Connected to MQTT and moved stuff around successfully")
 

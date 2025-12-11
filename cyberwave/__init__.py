@@ -81,15 +81,6 @@ except ImportError:
 # Edge controller
 from .controller import EdgeController
 
-# Constants
-from .constants import (
-    SOURCE_TYPE_EDGE,
-    SOURCE_TYPE_TELE,
-    SOURCE_TYPE_EDIT,
-    SOURCE_TYPE_SIM,
-    SOURCE_TYPES,
-)
-
 # Version information
 __version__ = "0.2.4"
 
@@ -135,12 +126,6 @@ __all__ = [
     "CV2VideoStreamTrack",
     # Edge controller
     "EdgeController",
-    # Constants
-    "SOURCE_TYPE_EDGE",
-    "SOURCE_TYPE_TELE",
-    "SOURCE_TYPE_EDIT",
-    "SOURCE_TYPE_SIM",
-    "SOURCE_TYPES",
     # Utils
     "TimeReference",
     # Version

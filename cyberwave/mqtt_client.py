@@ -212,7 +212,6 @@ class CyberwaveMQTTClient:
         velocity: Optional[float] = None,
         effort: Optional[float] = None,
         timestamp: Optional[float] = None,
-        source_type: Optional[str] = None,
     ):
         """
         Update joint state via MQTT.
@@ -223,14 +222,9 @@ class CyberwaveMQTTClient:
             position: Joint position (radians for revolute, meters for prismatic)
             velocity: Joint velocity
             effort: Joint effort/torque
-            timestamp: Unix timestamp (defaults to current time)
-            source_type: Source type for the message. Must be one of:
-                SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, SOURCE_TYPE_SIM.
-                Defaults to SOURCE_TYPE_EDGE (SDKs run on edge devices by default).
-                Users can override this to use any source type they need.
         """
         return self._client.update_joint_state(
-            twin_uuid, joint_name, position, velocity, effort, timestamp, source_type
+            twin_uuid, joint_name, position, velocity, effort, timestamp
         )
 
     def subscribe_environment(

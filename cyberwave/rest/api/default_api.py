@@ -22469,7 +22469,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> MLTrainingSchema:
+    ) -> Dict[str, object]:
         """Create Mltraining
 
         Create a new ML training.
@@ -22507,7 +22507,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "MLTrainingSchema",
+            '200': "Dict[str, object]",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -22536,7 +22536,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[MLTrainingSchema]:
+    ) -> ApiResponse[Dict[str, object]]:
         """Create Mltraining
 
         Create a new ML training.
@@ -22574,7 +22574,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "MLTrainingSchema",
+            '200': "Dict[str, object]",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -22641,7 +22641,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "MLTrainingSchema",
+            '200': "Dict[str, object]",
         }
         response_data = self.api_client.call_api(
             *_param,
