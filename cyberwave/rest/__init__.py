@@ -216,10 +216,7 @@ from cyberwave.rest.models.public_user_schema import PublicUserSchema as PublicU
 from cyberwave.rest.models.recording_generation_request_schema import RecordingGenerationRequestSchema as RecordingGenerationRequestSchema
 from cyberwave.rest.models.recording_generation_request_schema_by_date import RecordingGenerationRequestSchemaByDate as RecordingGenerationRequestSchemaByDate
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema as RecordingGenerationResponseSchema
-<<<<<<< HEAD
-=======
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse as RemoveMemberResponse
->>>>>>> d44a6fe (new APIs, easier autocomplete)
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema as RobotDescriptionSchema
 from cyberwave.rest.models.share_schema import ShareSchema as ShareSchema
 from cyberwave.rest.models.shares_response_schema import SharesResponseSchema as SharesResponseSchema

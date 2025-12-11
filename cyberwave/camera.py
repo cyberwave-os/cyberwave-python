@@ -189,6 +189,9 @@ class CameraStreamer:
         self._monitor_task: Optional[asyncio.Task] = None
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
+        # Recording state
+        self._should_record = True
+
     def _reset_state(self):
         """Reset internal state for fresh connection."""
         self._answer_received = False

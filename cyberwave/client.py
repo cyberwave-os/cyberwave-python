@@ -239,6 +239,7 @@ class Cyberwave:
         - FlyingTwin: For drones/UAVs (has takeoff(), land(), hover())
         - GripperTwin: For manipulators (has grip(), release())
         - Twin: Base class for assets without special capabilities
+        - LocomoteTwin: For assets that can locomote (has move(), etc.)
 
         Args:
             asset_key: Asset identifier (e.g., "the-robot-studio/so101")
@@ -258,12 +259,25 @@ class Cyberwave:
             twin_data = self.twins.get(twin_id)
             return create_twin(self, twin_data, registry_id=asset_key)
 
+        twin_name = kwargs.get("name", None)
+
         env_id = environment_id or self.config.environment_id
         if not env_id:
             projects = self.projects.list()
             if not projects:
+                workspace_id = self.config.workspace_id
+                if not workspace_id:
+                    workspaces = self.workspaces.list()
+                    if not workspaces:
+                        # create a new workspace
+                        workspace_id = self.workspaces.create(
+                            name="Quickstart Workspace",
+                        ).uuid
+                        self.config.workspace_id = workspace_id
+                    workspace_id = workspaces[0].uuid
                 project_id = self.projects.create(
                     name="Quickstart Project",
+                    workspace_id=self.config.workspace_id,
                 ).uuid
                 self.config.project_id = project_id
             else:
@@ -285,7 +299,9 @@ class Cyberwave:
         try:
             existing_twins = self.twins.list(environment_id=env_id)
             for twin_data in existing_twins:
-                if twin_data.asset_uuid == asset.uuid:
+                if twin_data.asset_uuid == asset.uuid and (
+                    not twin_name or twin_data.name == twin_name
+                ):
                     return create_twin(self, twin_data, registry_id=registry_id)
 
             twin_data = self.twins.create(

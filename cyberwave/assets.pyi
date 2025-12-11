@@ -14,392 +14,702 @@ class TheRobotStudioso101Twin(Twin):
     Digital twin for SO101
     Registry ID: the-robot-studio/so101
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class BerkeleyberkeleyHumanoidTwin(Twin):
     """
     Digital twin for Berkeley Humanoid Lite
     Registry ID: berkeley/berkeley-humanoid
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class AgileXRoboticspiperTwin(Twin):
     """
     Digital twin for PiPER
     Registry ID: agile-x-robotics/piper
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class AnyboticsanymalBTwin(Twin):
     """
     Digital twin for ANYMal B
     Registry ID: anybotics/anymal-b
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class SkydioskydioX2Twin(Twin):
     """
     Digital twin for Skydio X2
     Registry ID: skydio/skydio-x2
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class UnitreeunitreeG1Twin(Twin):
     """
     Digital twin for Unitree G1
     Registry ID: unitree/unitree-g1
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Unitreego2Twin(Twin):
     """
     Digital twin for Unitree Go2
     Registry ID: unitree/go2
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class UnitreelaikagoTwin(Twin):
     """
     Digital twin for Unitree Laikago
     Registry ID: unitree/laikago
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Kukakr6R900Twin(Twin):
     """
     Digital twin for Kuka KR6 R900
     Registry ID: kuka/kr6-r900
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class ArxRoboticsxr5aTwin(Twin):
     """
     Digital twin for ARXroboticsX R5
     Registry ID: arx-roboticsx/r5a
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class ArxarxRoboticsxTwin(Twin):
     """
     Digital twin for ARX ARXroboticsX
     Registry ID: arx/arx-roboticsx
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class BitcrazecrazyflieTwin(Twin):
     """
     Digital twin for Bitcraze Crazyflie
     Registry ID: bitcraze/crazyflie
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class BoosterRoboticst1Twin(Twin):
     """
     Digital twin for Booster Robotics T1
     Registry ID: booster-robotics/t1
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class BostonDynamicsspotTwin(Twin):
     """
     Digital twin for Boston Dynamics Spot 
     Registry ID: boston-dynamics/spot
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Fftaigr2Twin(Twin):
     """
     Digital twin for FFTAI GR2
     Registry ID: fftai/gr2
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class KinovajacoTwin(Twin):
     """
     Digital twin for Kinova Jaco
     Registry ID: kinova/jaco
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Fanucm710ic70Twin(Twin):
     """
     Digital twin for Fanuc-M-710iC/70
     Registry ID: fanuc/m-710ic70
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class PoppyProjectpoppyErgoJrTwin(Twin):
     """
     Digital twin for Poppy Ergo Jr
     Registry ID: poppy-project/poppy-ergo-jr
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Interbotixvx300sTwin(Twin):
     """
     Digital twin for Interbotix VX300S
     Registry ID: interbotix/vx300s
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class GepettoboltTwin(Twin):
     """
     Digital twin for Gepetto Bolt
     Registry ID: gepetto/bolt
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class DisneybdxTwin(Twin):
     """
     Digital twin for Disney BDX
     Registry ID: disney/bdx
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class AgilityRoboticscassieTwin(Twin):
     """
     Digital twin for Cassie
     Registry ID: agility-robotics/cassie
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class GLevinerheaTwin(Twin):
     """
     Digital twin for Rhea
     Registry ID: g-levine/rhea
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class BenBoksersprypedTwin(Twin):
     """
     Digital twin for Spryped
     Registry ID: ben-bokser/spryped
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class UpkieupkieTwin(Twin):
     """
     Digital twin for Upkie
     Registry ID: upkie/upkie
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class RethinkRoboticsbaxterTwin(Twin):
     """
     Digital twin for Baxter
     Registry ID: rethink-robotics/baxter
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class KawadaIndustriesnextageTwin(Twin):
     """
     Digital twin for Nextage
     Registry ID: kawada-industries/nextage
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class PoppyProjectpoppyTorsoTwin(Twin):
     """
     Digital twin for Poppy Torso
     Registry ID: poppy-project/poppy-torso
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class OrebroUniversityyumiTwin(Twin):
     """
     Digital twin for Orebro University Yumi
     Registry ID: orebro-university/yumi
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Interbotixwx250sTwin(Twin):
     """
     Digital twin for Interbotix wx250s
     Registry ID: interbotix/wx250s
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Robotisop3Twin(Twin):
     """
     Digital twin for Robotis OP3
     Registry ID: robotis/op3
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class RethinkRoboticssawyerTwin(Twin):
     """
     Digital twin for Rethink Robotics Sawyer
     Registry ID: rethink-robotics/sawyer
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class KinovaRoboticskortexGen3Twin(Twin):
     """
     Digital twin for Kortex Gen3
     Registry ID: kinova-robotics/kortex-gen3
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class AnyboticsanymalCTwin(Twin):
     """
     Digital twin for Anymal C
     Registry ID: anybotics/anymal-c
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class ComauedoTwin(Twin):
     """
     Digital twin for e.Do
     Registry ID: comau/edo
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class SzDjiTechnologydjiTelloTwin(Twin):
     """
     Digital twin for DJI Tello
     Registry ID: SZ-DJI-Technology/DJI-Tello
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class Bitcrazecrazyflie2Twin(Twin):
     """
     Digital twin for Bitcraze Crazyflie 2
     Registry ID: bitcraze/crazyflie-2
     """
-    pass
-
-class Rhobanrhoban2rTwin(Twin):
-    """
-    Digital twin for Rhoban 2R
-    Registry ID: rhoban/rhoban-2r
-    """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class FourierfftaiGr1t1Twin(Twin):
     """
     Digital twin for FFTAI GR1T1
     Registry ID: fourier/fftai-gr1t1
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class FourierfftaiGr1t2Twin(Twin):
     """
     Digital twin for FFTAI GR1T2
     Registry ID: fourier/fftai-gr1t2
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class UnitreeunitreeH1Twin(Twin):
     """
     Digital twin for Unitree H1
     Registry ID: unitree/unitree-h1
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class RtNetsciurus17Twin(Twin):
     """
     Digital twin for Rt-Net Sciurus17
     Registry ID: rt-net/sciurus17
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class GepettofingerEduGepettoTwin(Twin):
     """
     Digital twin for Finger EDU Gepetto
     Registry ID: gepetto/finger-edu-gepetto
     """
-    pass
-
-class LaasCnrssimpleHumanoidTwin(Twin):
-    """
-    Digital twin for simple humanoid
-    Registry ID: laas-cnrs/simple-humanoid
-    """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class DexsuiteleapHandLeapTwin(Twin):
     """
     Digital twin for Leap Hand
     Registry ID: dexsuite/leap-hand-leap
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class TimqianbambotBambotV0Twin(Twin):
     """
     Digital twin for Bambot Bambot_v0
     Registry ID: timqian/bambot-bambot_v0
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class TimqianbambotTwin(Twin):
     """
     Digital twin for Bambot
     Registry ID: timqian/bambot
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class Robotisturtlebot3WaffleTwin(Twin):
     """
     Digital twin for TurtleBot3 Waffle
     Registry ID: robotis/turtlebot3-waffle
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class Robotisturtlebot3WafflePiTwin(Twin):
     """
     Digital twin for TurtleBot3 Waffle Pi
     Registry ID: robotis/turtlebot3-waffle-pi
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class Robotisturtlebot3BurgerTwin(Twin):
     """
     Digital twin for TurtleBot3 Burger
     Registry ID: robotis/turtlebot3-burger
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class UnitreeunitreeGo1Twin(Twin):
     """
     Digital twin for Unitree Go1
     Registry ID: unitree/unitree_go1
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class UnitreeunitreeB1Twin(Twin):
     """
     Digital twin for Unitree B1
     Registry ID: unitree/unitree-b1
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class UnitreeunitreeA1Twin(Twin):
     """
     Digital twin for Unitree A1
     Registry ID: unitree/unitree_a1
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class KukakukaIiwa14Twin(Twin):
     """
     Digital twin for KUKA IIWA 14
     Registry ID: kuka/kuka_iiwa14
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class UnitreeunitreeZ1Twin(Twin):
     """
     Digital twin for Unitree Z1
     Registry ID: unitree/unitree_z1
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class FictionlableoRoverTwin(Twin):
     """
     Digital twin for Leo Rover
     Registry ID: fictionlab/leo-rover
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class CyberwavegenericCubeTwin(Twin):
     """
@@ -426,6 +736,23 @@ class UniversalRobotsur5Twin(Twin):
     """
     Digital twin for UR5e
     Registry ID: universal_robots/UR5
+    """
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class CyberwavegenericNvrTwin(Twin):
+    """
+    Digital twin for Generic NVR2
+    Registry ID: cyberwave/generic-nvr
+    """
+    pass
+
+class Intelrealsensed455Twin(Twin):
+    """
+    Digital twin for Realsense D455
+    Registry ID: intel/realsensed455
     """
     pass
 
@@ -468,13 +795,11 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "comau/edo": ComauedoTwin,
     "SZ-DJI-Technology/DJI-Tello": SzDjiTechnologydjiTelloTwin,
     "bitcraze/crazyflie-2": Bitcrazecrazyflie2Twin,
-    "rhoban/rhoban-2r": Rhobanrhoban2rTwin,
     "fourier/fftai-gr1t1": FourierfftaiGr1t1Twin,
     "fourier/fftai-gr1t2": FourierfftaiGr1t2Twin,
     "unitree/unitree-h1": UnitreeunitreeH1Twin,
     "rt-net/sciurus17": RtNetsciurus17Twin,
     "gepetto/finger-edu-gepetto": GepettofingerEduGepettoTwin,
-    "laas-cnrs/simple-humanoid": LaasCnrssimpleHumanoidTwin,
     "dexsuite/leap-hand-leap": DexsuiteleapHandLeapTwin,
     "timqian/bambot-bambot_v0": TimqianbambotBambotV0Twin,
     "timqian/bambot": TimqianbambotTwin,
@@ -491,4 +816,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave/generictable": CyberwavegenerictableTwin,
     "cyberwave/generic-box": CyberwavegenericBoxTwin,
     "universal_robots/UR5": UniversalRobotsur5Twin,
+    "cyberwave/generic-nvr": CyberwavegenericNvrTwin,
+    "intel/realsensed455": Intelrealsensed455Twin,
 }
