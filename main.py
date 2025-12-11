@@ -22,20 +22,19 @@ Usage Examples:
 1. Compact API (Recommended for quick prototyping):
    ```python
    import cyberwave as cw
-   
+
    # Configure
    cw.configure(
-       base_url="http://localhost:8000",
        api_key="your_api_key",
        environment="env_uuid"
    )
-   
+
    # Create and control a twin
    robot = cw.twin("cyberwave/so101")
    robot.move(x=1, y=0, z=0.5)
    robot.rotate(yaw=90)
    robot.joints.arm_joint = 45
-   
+
    # Simulation control
    cw.simulation.play()
    cw.simulation.step()
@@ -45,51 +44,50 @@ Usage Examples:
 2. Advanced API (Full control):
    ```python
    from cyberwave import Cyberwave
-   
+
    # Create client
    client = Cyberwave(
-       base_url="http://localhost:8000",
        token="your_bearer_token",
        environment_id="env_uuid"
    )
-   
+
    # List workspaces
    workspaces = client.workspaces.list()
-   
+
    # Create project
    project = client.projects.create(
        name="My Project",
        workspace_id=workspaces[0].uuid
    )
-   
+
    # Create environment
    env = client.environments.create(
        name="Production",
        project_id=project.uuid
    )
-   
+
    # Search for assets
    assets = client.assets.search("robot")
-   
+
    # Create twin
    twin_data = client.twins.create(
        asset_id=assets[0].uuid,
        environment_id=env.uuid,
        name="Robot 1"
    )
-   
+
    # Work with Twin abstraction
    from cyberwave import Twin
    twin = Twin(client, twin_data)
    twin.move(x=1, y=0, z=0.5)
    twin.joints.set("shoulder_joint", 45)
-   
+
    # Real-time updates via MQTT
    def on_position_update(data):
        print(f"Position updated: {data}")
-   
+
    twin.subscribe_updates(on_position=on_position_update)
-   
+
    # Context manager for automatic cleanup
    with Cyberwave(base_url="http://localhost:8000", token="token") as client:
        twins = client.twins.list()
@@ -100,12 +98,12 @@ Usage Examples:
 3. Direct API Access:
    ```python
    from cyberwave import Cyberwave
-   
+
    client = Cyberwave(base_url="http://localhost:8000", token="token")
-   
+
    # Access REST API directly
    response = client.api.api_v1_assets_list()
-   
+
    # Access MQTT client directly
    client.mqtt.connect()
    client.mqtt.subscribe_twin_position("twin_uuid", callback)
@@ -167,7 +165,6 @@ if __name__ == "__main__":
     print()
     print("  # Configure the SDK")
     print("  cw.configure(")
-    print('      base_url="http://localhost:8000",')
     print('      api_key="your_api_key",')
     print('      environment="env_uuid"')
     print("  )")
