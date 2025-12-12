@@ -6,19 +6,13 @@ including REST APIs, MQTT messaging, and high-level abstractions for digital twi
 
 Quick Start:
     >>> from cyberwave import Cyberwave
-    >>> client = Cyberwave(base_url="http://localhost:8000", api_key="your_key")
-    >>> workspaces = client.workspaces.list()
-
-    Or use the compact API:
-    >>> import cyberwave as cw
-    >>> cw.configure(api_key="your_key", base_url="http://localhost:8000")
-    >>> robot = cw.twin("the-robot-studio/so101")
-    >>> robot.move(x=1, y=0, z=0.5)
+    >>> cw = Cyberwave(api_key="your_key")
+    >>> workspaces = cw.workspaces.list()
 
     Video Streaming (requires: pip install cyberwave[camera]):
-    >>> client = Cyberwave(token="your_token")
-    >>> streamer = client.video_stream(twin_uuid="your_twin_uuid")
-    >>> await streamer.start()
+    >>> cw = Cyberwave(token="your_token")
+    >>> twin = cw.twin("cyberwave/generic-camera")
+    >>> twin.start_streaming()
 """
 
 # Core client
@@ -81,6 +75,15 @@ except ImportError:
 # Edge controller
 from .controller import EdgeController
 
+# Constants
+from .constants import (
+    SOURCE_TYPE_EDGE,
+    SOURCE_TYPE_TELE,
+    SOURCE_TYPE_EDIT,
+    SOURCE_TYPE_SIM,
+    SOURCE_TYPES,
+)
+
 # Version information
 __version__ = "0.2.11"
 
@@ -126,6 +129,12 @@ __all__ = [
     "CV2VideoStreamTrack",
     # Edge controller
     "EdgeController",
+    # Constants
+    "SOURCE_TYPE_EDGE",
+    "SOURCE_TYPE_TELE",
+    "SOURCE_TYPE_EDIT",
+    "SOURCE_TYPE_SIM",
+    "SOURCE_TYPES",
     # Utils
     "TimeReference",
     # Version
