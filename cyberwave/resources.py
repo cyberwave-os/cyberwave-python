@@ -9,6 +9,7 @@ from cyberwave.rest import (
     WorkspaceSchema,
     WorkspaceResponseSchema,
     WorkspaceUpdateSchema,
+    WorkspaceCreateSchema,
     ProjectSchema,
     ProjectCreateSchema,
     EnvironmentSchema,
@@ -83,6 +84,15 @@ class WorkspaceManager(BaseResourceManager):
             return result
         except Exception as e:
             self._handle_error(e, f"update workspace {workspace_id}")
+            raise  # For type checker
+    
+    def create(self, name: str, description: str = "", **kwargs) -> WorkspaceSchema:
+        """Create a new workspace"""
+        try:
+            create_schema = WorkspaceCreateSchema(name=name, description=description, **kwargs)
+            return self.api.src_users_api_workspaces_create_workspace(create_schema)
+        except Exception as e:
+            self._handle_error(e, "create workspace")
             raise  # For type checker
 
 

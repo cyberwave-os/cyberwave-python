@@ -87,15 +87,45 @@ def get_base_class(capabilities: dict[str, Any] | None) -> str:
     has_sensors = bool(capabilities.get("sensors", []))
     has_depth = any(s.get("type") == "depth" for s in capabilities.get("sensors", []))
     can_fly = capabilities.get("can_fly", False)
+    can_locomote = capabilities.get("can_locomote", False)
     can_grip = capabilities.get("can_grip", False)
 
     # Select class based on combination of capabilities
-    if can_fly and has_sensors:
-        return "FlyingCameraTwin"
+    # Select class based on combination of capabilities
+    if can_fly:
+        if can_grip and has_depth:
+            return "FlyingGripperDepthCameraTwin"
+        elif can_grip and has_sensors:
+            return "FlyingGripperCameraTwin"
+        elif has_sensors:
+            return "FlyingCameraTwin"
+        elif has_depth:
+            return "FlyingDepthCameraTwin"
+        elif can_grip:
+            return "FlyingGripperCameraTwin"
+        else:
+            return "FlyingTwin"
+    elif can_locomote:
+        if can_grip and has_depth:
+            return "LocomoteGripperDepthCameraTwin"
+        elif can_grip and has_sensors:
+            return "LocomoteGripperCameraTwin"
+        elif can_grip:
+            return "LocomoteGripperTwin"
+        elif has_depth:
+            return "LocomoteDepthCameraTwin"
+        elif has_sensors:
+            return "LocomoteCameraTwin"
+        else:
+            return "LocomoteTwin"
     elif can_grip and has_sensors:
         return "GripperCameraTwin"
+    elif can_grip and has_depth:
+        return "GripperDepthCameraTwin"
     elif can_fly:
         return "FlyingTwin"
+    elif can_locomote:
+        return "LocomoteTwin"
     elif can_grip:
         return "GripperTwin"
     elif has_depth:
@@ -325,6 +355,13 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
         "    GripperTwin,",
         "    FlyingCameraTwin,",
         "    GripperCameraTwin,",
+        "    LocomoteTwin,",
+        "    LocomoteCameraTwin,",
+        "    LocomoteGripperTwin,",
+        "    LocomoteGripperCameraTwin,",
+        "    LocomoteGripperDepthCameraTwin,",
+        "    LocomoteDepthCameraTwin,",
+        "    LocomoteCameraTwin,",
         ")",
         "from .camera import CameraStreamer",
         "from .controller import EdgeController",

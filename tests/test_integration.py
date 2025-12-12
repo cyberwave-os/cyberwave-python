@@ -153,7 +153,7 @@ class TestIntegrationWorkflow:
             twin = Twin(client, twin_data)
 
             # Move the twin to a new position
-            twin.move(x=1.0, y=0.5, z=0.3)
+            twin.edit_position(x=1.0, y=0.5, z=0.3)
 
             # Refresh to verify the position was updated
             twin.refresh()
@@ -163,7 +163,7 @@ class TestIntegrationWorkflow:
             )
 
             # Step 6: Rotate the twin
-            twin.rotate(yaw=45)
+            twin.edit_rotation(yaw=45)
 
             # Refresh to verify the rotation was updated
             twin.refresh()
