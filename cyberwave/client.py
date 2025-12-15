@@ -222,19 +222,24 @@ class Cyberwave:
         return self._mqtt_client
 
     def twin(
-        self, asset_key: str, environment_id: Optional[str] = None, twin_id: Optional[str] = None, **kwargs
+        self,
+        asset_key: str,
+        environment_id: Optional[str] = None,
+        twin_id: Optional[str] = None,
+        **kwargs,
     ) -> Twin:
         """
         Get or create a twin instance (compact API)
 
         This is a convenience method for quickly creating twins. The returned
         twin will be an appropriate subclass based on the asset's capabilities:
-        
+
         - CameraTwin: For assets with RGB sensors (has start_streaming(), etc.)
         - DepthCameraTwin: For assets with depth sensors (has get_point_cloud(), etc.)
         - FlyingTwin: For drones/UAVs (has takeoff(), land(), hover())
         - GripperTwin: For manipulators (has grip(), release())
         - Twin: Base class for assets without special capabilities
+        - LocomoteTwin: For assets that can locomote (has move(), etc.)
 
         Args:
             asset_key: Asset identifier (e.g., "the-robot-studio/so101")
@@ -253,13 +258,26 @@ class Cyberwave:
         if twin_id:
             twin_data = self.twins.get(twin_id)
             return create_twin(self, twin_data, registry_id=asset_key)
-        
+
+        twin_name = kwargs.get("name", None)
+
         env_id = environment_id or self.config.environment_id
         if not env_id:
             projects = self.projects.list()
             if not projects:
+                workspace_id = self.config.workspace_id
+                if not workspace_id:
+                    workspaces = self.workspaces.list()
+                    if not workspaces:
+                        # create a new workspace
+                        workspace_id = self.workspaces.create(
+                            name="Quickstart Workspace",
+                        ).uuid
+                        self.config.workspace_id = workspace_id
+                    workspace_id = workspaces[0].uuid
                 project_id = self.projects.create(
                     name="Quickstart Project",
+                    workspace_id=self.config.workspace_id,
                 ).uuid
                 self.config.project_id = project_id
             else:
@@ -274,16 +292,18 @@ class Cyberwave:
         if not assets:
             raise CyberwaveError(f"Asset '{asset_key}' not found")
         asset = assets[0]
-        
+
         # Get registry_id for capability lookup
         registry_id = getattr(asset, "registry_id", None) or asset_key
-        
+
         try:
             existing_twins = self.twins.list(environment_id=env_id)
             for twin_data in existing_twins:
-                if twin_data.asset_uuid == asset.uuid:
+                if twin_data.asset_uuid == asset.uuid and (
+                    not twin_name or twin_data.name == twin_name
+                ):
                     return create_twin(self, twin_data, registry_id=registry_id)
-            
+
             twin_data = self.twins.create(
                 asset_id=asset.uuid, environment_id=env_id, **kwargs
             )
