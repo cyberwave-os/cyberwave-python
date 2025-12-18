@@ -13,7 +13,6 @@ import logging
 
 import os
 from cyberwave import Cyberwave
-from cyberwave.utils import TimeReference
 
 
 async def main():
@@ -25,7 +24,7 @@ async def main():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    client = Cyberwave(
+    cw = Cyberwave(
         token=token,
     )
 
@@ -33,22 +32,13 @@ async def main():
     print("Twin UUID: ", twin_uuid)
     if not twin_uuid:
         print("Creating a new twin for streaming...")
-        robot = client.twin("cyberwave/standard-cam")
-        twin_uuid = robot.uuid
-        print(f"Created twin: {twin_uuid}")
-
-    time_reference = TimeReference()
-    # Create camera streamer
-    streamer = client.video_stream(
-        twin_uuid=twin_uuid,
-        camera_id=0,
-        fps=10,
-        time_reference=time_reference,
-    )
+        camera = cw.twin("cyberwave/standard-cam")
+        twin_uuid = camera.uuid
+        print(f"Created camera twin: {twin_uuid}")
 
     print(f"Starting camera stream to twin {twin_uuid}...")
     try:
-        await streamer.start()
+        camera.start_streaming()
         print("Camera streaming started successfully!")
         print("Stream is active. Press Ctrl+C to stop...")
 
@@ -56,13 +46,12 @@ async def main():
             await asyncio.sleep(1)
 
     except KeyboardInterrupt:
-        client.mqtt.disconnect()
+        camera.stop_streaming()
         print("\nStopping stream...")
     except Exception as e:
         print(f"Error during streaming: {e}")
     finally:
-        await streamer.stop()
-        client.disconnect()
+        camera.stop_streaming()
         print("Stream stopped and resources cleaned up")
 
 

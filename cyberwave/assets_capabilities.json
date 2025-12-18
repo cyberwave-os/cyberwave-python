@@ -1459,9 +1459,9 @@
       "navigation_obstacle_avoidance": false
     }
   },
-  "timqian/bambot-bambot_v0": {
+  "timqian/bambot-b0": {
     "uuid": "18bd8683-8557-438a-8599-52cfe04b0b66",
-    "name": "Bambot Bambot_v0",
+    "name": "Bambot-b0",
     "capabilities": {
       "can_fly": false,
       "sensors": [],
@@ -1479,9 +1479,9 @@
       "navigation_obstacle_avoidance": false
     }
   },
-  "timqian/bambot": {
+  "timqian/bambot-b0-base": {
     "uuid": "ca107d78-16cb-4885-a0f2-311aa277949e",
-    "name": "Bambot",
+    "name": "Bambot-b0-base",
     "capabilities": {
       "can_fly": false,
       "sensors": [],

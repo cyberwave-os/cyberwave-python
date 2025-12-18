@@ -31,9 +31,9 @@ cw = Cyberwave(
 # Create a digital twin from an asset
 robot = cw.twin("the-robot-studio/so101")
 
-# Control position and rotation
-robot.move(x=1.0, y=0.0, z=0.5)
-robot.rotate(yaw=90)  # degrees
+# Change position and rotation in the environemtn
+robot.edit_positon(x=1.0, y=0.0, z=0.5)
+robot.edit_rotation(yaw=90)  # degrees
 
 # Move the robot arm to 30 degrees
 robot.joints.set("1", 30)
@@ -82,11 +82,11 @@ environment = cw.environments.create(
 assets = cw.assets.search("so101")
 robot = cw.twin(assets[0].registry_id) # the registry_id is the unique identifier for the asset in the catalog. in this case it's the-robot-studio/so101
 
-# Move to a specific position
-robot.move_to([1.0, 0.5, 0.0])
+# Edit the twin to a specific position
+robot.edit_position([1.0, 0.5, 0.0])
 
 # Update scale
-robot.scale(x=1.5, y=1.5, z=1.5)
+robot.edit_scale(x=1.5, y=1.5, z=1.5)
 
 # Move a joint to a specific position using radians
 robot.joints.set("shoulder_joint", math.pi/4)
@@ -151,31 +151,18 @@ from cyberwave import Cyberwave
 # Initialize client
 cw = Cyberwave()
 
-# Create camera streamer - integrated into the Cyberwave client!
-streamer = cw.video_stream(
-    twin_uuid="your_twin_uuid",
-    camera_id=0,  # Default camera
-    fps=10        # Frames per second
-)
+camera = cw.twin("cyberwave/standard-cam")
 
 # Start streaming
 async def stream_camera():
-    await streamer.start()
+    await camera.start_streaming()
     # Stream runs until stopped
     await asyncio.sleep(60)  # Stream for 60 seconds
-    await streamer.stop()
+    await streamer.stop_streaming()
 
 # Run the async function
 asyncio.run(stream_camera())
 ```
-
-The `video_stream()` method:
-
-- Automatically uses the client's MQTT connection
-- Pre-configures the streamer with the twin UUID
-- Handles WebRTC peer connection setup
-- Manages ICE candidate gathering with STUN/TURN servers
-- Handles video encoding and streaming
 
 ## Advanced Usage
 
@@ -203,19 +190,33 @@ joint_names = robot.joints.list()
 all_joints = robot.joints.get_all()
 ```
 
-## API Reference
+To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
 
-You can use the lower level API by using the `client` attribute:
+### Changing data source
+
+By default, the SDK will send data marked as arriving from the real world. If you want to send data from a simulated environment using the SDK, you can initialize the SDK as follows:
 
 ```python
 from cyberwave import Cyberwave
 
-cw = Cyberwave()
-client = cw.client.rest # for the rest API
-client = cw.client.mqtt # for the MQTT API
+cw = Cyberwave(source_type="sim")
 ```
 
-To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
+You can also use the SDK as a client of the Studio editor - making it appear as if it was just another editor on the web app. To do so, you can initialize it as follows:
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave(source_type="edit")
+```
+
+Lastly, if you want to have your SDK act as a remote teleoperator, sending commands to the actual device from the cloud, you can init the SDK as follows:
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave(source_type="tele")
+```
 
 ## Examples
 
@@ -241,4 +242,4 @@ poetry run python tests/test_imports.py
 
 - **Documentation**: [docs.cyberwave.com](https://docs.cyberwave.com)
 - **Issues**: [GitHub Issues](https://github.com/cyberwave/cyberwave-python/issues)
-<!-- - **Community**: [Discord](https://discord.gg/cyberwave) -->
+- **Community**: [Discord](https://discord.gg/dfGhNrawyF)

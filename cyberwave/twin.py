@@ -145,7 +145,7 @@ class Twin:
 
     Example:
         >>> twin = client.twin("the-robot-studio/so101")
-        >>> twin.move(x=1, y=0, z=0.5)
+        >>> twin.edit_position(x=1, y=0, z=0.5)
         >>> twin.rotate(yaw=90)
         >>> twin.joints.arm_joint = 45
     """
@@ -467,7 +467,7 @@ class CameraTwin(Twin):
 
     _camera_streamer: Optional["CameraStreamer"] = None
 
-    def start_streaming(self, fps: int = 10, camera_id: int = 0) -> "CameraStreamer":
+    def start_streaming(self, fps: int = 30, camera_id: int = 0) -> "CameraStreamer":
         """
         Start RGB camera streaming.
 
@@ -584,7 +584,10 @@ class LocomoteTwin(Twin):
         if len(position) != 3:
             raise CyberwaveError("Position must be [x, y, z]")
 
-        self.edit_position(x=position[0], y=position[1], z=position[2])
+        self._connect_to_mqtt_if_not_connected()
+        self.client.mqtt.update_twin_position(
+            self.uuid, {"x": position[0], "y": position[1], "z": position[2]}
+        )
 
     def move_forward(self, distance: float):
         """
@@ -610,10 +613,8 @@ class LocomoteTwin(Twin):
             roll: Roll angle in degrees
         """
         self._connect_to_mqtt_if_not_connected()
-        self.client.mqtt.publish(
-            f"twins/{self.uuid}/commands/rotate",
-            {"yaw": yaw, "pitch": pitch, "roll": roll},
-        )
+        topic = f"{self.client.mqtt.topic_prefix}cyberwave/twin/{self.uuid}/rotation"
+        self.client.mqtt.publish(topic, {"yaw": yaw, "pitch": pitch, "roll": roll})
 
 
 class FlyingTwin(Twin):

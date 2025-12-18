@@ -407,7 +407,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["timqian/bambot"],
+        asset_key: Literal["timqian/bambot-b0-base"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -497,7 +497,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["timqian/bambot-bambot_v0"],
+        asset_key: Literal["timqian/bambot-b0"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

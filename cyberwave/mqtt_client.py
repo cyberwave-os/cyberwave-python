@@ -190,11 +190,7 @@ class CyberwaveMQTTClient:
         """
         return self._client.update_twin_scale(twin_uuid, scale)
 
-    def publish_initial_observation(
-        self, 
-        twin_uuid: str,
-        observations: Dict[str, Any]
-    ):
+    def publish_initial_observation(self, twin_uuid: str, observations: Dict[str, Any]):
         """
         Send initial observations to the leader twin.
 
@@ -230,8 +226,30 @@ class CyberwaveMQTTClient:
                 Users can override this to use any source type they need.
         """
         return self._client.update_joint_state(
-            twin_uuid, joint_name, position, velocity, effort, timestamp, source_type
+            twin_uuid,
+            joint_name,
+            position,
+            velocity,
+            effort,
+            timestamp,
         )
+
+    def update_joints_state(
+        self,
+        twin_uuid: str,
+        joint_positions: Dict[str, float],
+        source_type: Optional[str] = None,
+    ):
+        """
+        Update multiple joints at once via MQTT. Sends all positions in a single
+        message to create a coordinated trajectory instead of conflicting ones.
+
+        Args:
+            twin_uuid: UUID of the twin
+            joint_positions: Dict of joint names to positions (e.g., {"shoulder_pan_joint": 1.5})
+            source_type: SOURCE_TYPE_EDGE (default), SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, or SOURCE_TYPE_SIM
+        """
+        return self._client.update_joints_state(twin_uuid, joint_positions, source_type)
 
     def subscribe_environment(
         self, environment_uuid: str, on_update: Optional[Callable] = None

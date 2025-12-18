@@ -567,10 +567,10 @@ class DexsuiteleapHandLeapTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class TimqianbambotBambotV0Twin(Twin):
+class TimqianbambotB0Twin(Twin):
     """
-    Digital twin for Bambot Bambot_v0
-    Registry ID: timqian/bambot-bambot_v0
+    Digital twin for Bambot-b0
+    Registry ID: timqian/bambot-b0
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -583,10 +583,10 @@ class TimqianbambotBambotV0Twin(Twin):
         """Controller for robot joints"""
         ...
 
-class TimqianbambotTwin(Twin):
+class TimqianbambotB0BaseTwin(Twin):
     """
-    Digital twin for Bambot
-    Registry ID: timqian/bambot
+    Digital twin for Bambot-b0-base
+    Registry ID: timqian/bambot-b0-base
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -801,8 +801,8 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "rt-net/sciurus17": RtNetsciurus17Twin,
     "gepetto/finger-edu-gepetto": GepettofingerEduGepettoTwin,
     "dexsuite/leap-hand-leap": DexsuiteleapHandLeapTwin,
-    "timqian/bambot-bambot_v0": TimqianbambotBambotV0Twin,
-    "timqian/bambot": TimqianbambotTwin,
+    "timqian/bambot-b0": TimqianbambotB0Twin,
+    "timqian/bambot-b0-base": TimqianbambotB0BaseTwin,
     "robotis/turtlebot3-waffle": Robotisturtlebot3WaffleTwin,
     "robotis/turtlebot3-waffle-pi": Robotisturtlebot3WafflePiTwin,
     "robotis/turtlebot3-burger": Robotisturtlebot3BurgerTwin,

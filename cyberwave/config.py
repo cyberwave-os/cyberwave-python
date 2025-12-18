@@ -6,6 +6,7 @@ import os
 from typing import Optional
 from dataclasses import dataclass
 
+from cyberwave.constants import SOURCE_TYPE_EDGE
 
 # Production defaults values
 DEFAULT_BASE_URL = "https://api.cyberwave.com"
@@ -14,6 +15,7 @@ DEFAULT_MQTT_PORT = 1883
 DEFAULT_MQTT_USERNAME = "mqttcyb"
 DEFAULT_MQTT_PASSWORD = "mqttcyb231"
 DEFAULT_TIMEOUT = 30
+
 
 @dataclass
 class CyberwaveConfig:
@@ -45,6 +47,7 @@ class CyberwaveConfig:
     workspace_id: Optional[str] = None
     timeout: int = DEFAULT_TIMEOUT
     verify_ssl: bool = True
+    source_type: str = SOURCE_TYPE_EDGE
 
     def __post_init__(self):
         """Load configuration from environment variables if not provided"""
@@ -64,16 +67,23 @@ class CyberwaveConfig:
                 self.mqtt_port = int(port_str)
 
         if not self.mqtt_username:
-            self.mqtt_username = os.getenv("CYBERWAVE_MQTT_USERNAME", DEFAULT_MQTT_USERNAME)
+            self.mqtt_username = os.getenv(
+                "CYBERWAVE_MQTT_USERNAME", DEFAULT_MQTT_USERNAME
+            )
 
         if not self.mqtt_password:
-            self.mqtt_password = os.getenv("CYBERWAVE_MQTT_PASSWORD", DEFAULT_MQTT_PASSWORD)
+            self.mqtt_password = os.getenv(
+                "CYBERWAVE_MQTT_PASSWORD", DEFAULT_MQTT_PASSWORD
+            )
 
         if not self.environment_id:
             self.environment_id = os.getenv("CYBERWAVE_ENVIRONMENT_ID")
 
         if not self.workspace_id:
             self.workspace_id = os.getenv("CYBERWAVE_WORKSPACE_ID")
+
+        if not self.source_type:
+            self.source_type = os.getenv("CYBERWAVE_SOURCE_TYPE", SOURCE_TYPE_EDGE)
 
     @property
     def auth_header(self) -> dict:

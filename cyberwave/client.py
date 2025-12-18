@@ -28,6 +28,7 @@ from cyberwave.exceptions import (
     CyberwaveAPIError,
     UnauthorizedException,
 )
+from cyberwave.constants import SOURCE_TYPE_EDGE
 
 # Import CameraStreamer with optional dependency handling
 try:
@@ -71,6 +72,7 @@ class Cyberwave:
         mqtt_port: int | None = None,
         mqtt_username: Optional[str] = None,
         mqtt_password: Optional[str] = None,
+        source_type: Optional[str] = SOURCE_TYPE_EDGE,
         **config_kwargs,
     ):
         if not base_url:
@@ -97,6 +99,7 @@ class Cyberwave:
             mqtt_password=mqtt_password,
             environment_id=os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
             workspace_id=os.getenv("CYBERWAVE_WORKSPACE_ID", None),
+            source_type=os.getenv("CYBERWAVE_SOURCE_TYPE", SOURCE_TYPE_EDGE),
             **config_kwargs,
         )
 
@@ -253,7 +256,7 @@ class Cyberwave:
         Example:
             >>> robot = client.twin("unitree/go2")  # Returns CameraTwin
             >>> robot.start_streaming(fps=15)  # Available because of RGB sensor
-            >>> robot.move(x=1, y=0, z=0.5)
+            >>> robot.edit_position(x=1, y=0, z=0.5)
         """
         if twin_id:
             twin_data = self.twins.get(twin_id)
@@ -356,9 +359,9 @@ class Cyberwave:
         self,
         twin_uuid: str,
         camera_id: int = 0,
-        fps: int = 10,
+        fps: int = 30,
         turn_servers: Optional[list] = None,
-        time_reference: TimeReference = None,
+        time_reference: TimeReference = TimeReference(),
     ) -> "CameraStreamer":
         """
         Create a camera streamer for the specified twin.

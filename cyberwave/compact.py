@@ -8,7 +8,7 @@ Example:
     >>> import cyberwave as cw
     >>> cw.configure(api_key="your_key", base_url="http://localhost:8000")
     >>> robot = cw.twin("the-robot-studio/so101")
-    >>> robot.move(x=1, y=0, z=0.5)
+    >>> robot.edit_position(x=1, y=0, z=0.5)
 """
 
 from typing import Optional
@@ -121,7 +121,7 @@ def twin(asset_key: str, environment: Optional[str] = None, **kwargs) -> Twin:
     Example:
         >>> import cyberwave as cw
         >>> robot = cw.twin("the-robot-studio/so101")
-        >>> robot.move(x=1, y=0, z=0.5)
+        >>> robot.edit_position(x=1, y=0, z=0.5)
         >>> robot.joints.arm_joint = 45
     """
     client = _get_client()

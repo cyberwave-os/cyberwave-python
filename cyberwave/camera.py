@@ -149,7 +149,7 @@ class CameraStreamer:
         self,
         client: "CyberwaveMQTTClient",
         camera_id: int = 0,
-        fps: int = 10,
+        fps: int = 30,
         turn_servers: Optional[list] = None,
         twin_uuid: Optional[str] = None,
         time_reference: TimeReference = None,
@@ -390,7 +390,7 @@ class CameraStreamer:
         offer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-offer"
 
         offer_payload = {
-            "target": "backend",
+            "target": "backend-mediasoup",
             "sender": "edge",
             "type": self.pc.localDescription.type,
             "sdp": sdp,
