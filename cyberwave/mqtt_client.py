@@ -166,20 +166,6 @@ class CyberwaveMQTTClient:
         """
         return self._client.update_twin_rotation(twin_uuid, rotation)
 
-    def publish_twin_rotation(
-        self, twin_uuid: str, x: float, y: float, z: float, w: float
-    ):
-        """
-        Publish twin rotation update as quaternion (backward compatibility method).
-
-        Args:
-            twin_uuid: UUID of the twin
-            x, y, z, w: Quaternion components
-        """
-        return self._client.update_twin_rotation(
-            twin_uuid, {"x": x, "y": y, "z": z, "w": w}
-        )
-
     def update_twin_scale(self, twin_uuid: str, scale: Dict[str, float]):
         """
         Update twin scale via MQTT.

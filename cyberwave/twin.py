@@ -601,20 +601,82 @@ class LocomoteTwin(Twin):
         # TODO: Implement this. First we should figure the direction the twin is facing, then the relative position to move and move it.
         raise NotImplementedError("move_forward() is not implemented")
 
-    def rotate(self, yaw: float = 0, pitch: float = 0, roll: float = 0) -> None:
+    def rotate(
+        self,
+        *,
+        w: Optional[float] = None,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+        z: Optional[float] = None,
+        yaw: Optional[float] = None,
+        pitch: Optional[float] = None,
+        roll: Optional[float] = None,
+    ) -> None:
         """
-        Rotate the twin in the specified direction.
+        Rotate the twin using either a quaternion or Euler angles.
 
         NOTE: This does rotate the real-world robot
 
+        You can provide either:
+        - Quaternion values (w, x, y, z)
+        - Euler angles in degrees (yaw, pitch, roll)
+
+        Mixing quaternion and Euler angle parameters will raise a ValueError.
+
         Args:
-            yaw: Yaw angle in degrees
-            pitch: Pitch angle in degrees
-            roll: Roll angle in degrees
+            w: Quaternion w component
+            x: Quaternion x component
+            y: Quaternion y component
+            z: Quaternion z component
+            yaw: Rotation around vertical axis in degrees
+            pitch: Rotation around lateral axis in degrees
+            roll: Rotation around longitudinal axis in degrees
         """
+        # Check if quaternion values are provided
+        quaternion_provided = any(v is not None for v in [w, x, y, z])
+        euler_provided = any(v is not None for v in [yaw, pitch, roll])
+
+        if quaternion_provided and euler_provided:
+            raise ValueError(
+                "Cannot mix quaternion (w, x, y, z) and Euler angle (yaw, pitch, roll) "
+                "parameters. Use one format or the other."
+            )
+
+        if quaternion_provided:
+            # Use quaternion directly, defaulting missing values
+            rotation = {
+                "w": w if w is not None else 1.0,
+                "x": x if x is not None else 0.0,
+                "y": y if y is not None else 0.0,
+                "z": z if z is not None else 0.0,
+            }
+        elif euler_provided:
+            # Convert Euler angles to quaternion
+            # Default to 0 for any missing angle
+            yaw_rad = math.radians(yaw if yaw is not None else 0.0)
+            pitch_rad = math.radians(pitch if pitch is not None else 0.0)
+            roll_rad = math.radians(roll if roll is not None else 0.0)
+
+            # Euler to quaternion conversion (ZYX order)
+            cy = math.cos(yaw_rad * 0.5)
+            sy = math.sin(yaw_rad * 0.5)
+            cp = math.cos(pitch_rad * 0.5)
+            sp = math.sin(pitch_rad * 0.5)
+            cr = math.cos(roll_rad * 0.5)
+            sr = math.sin(roll_rad * 0.5)
+
+            rotation = {
+                "w": cr * cp * cy + sr * sp * sy,
+                "x": sr * cp * cy - cr * sp * sy,
+                "y": cr * sp * cy + sr * cp * sy,
+                "z": cr * cp * sy - sr * sp * cy,
+            }
+        else:
+            # Default to identity quaternion
+            rotation = {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+
         self._connect_to_mqtt_if_not_connected()
-        topic = f"{self.client.mqtt.topic_prefix}cyberwave/twin/{self.uuid}/rotation"
-        self.client.mqtt.publish(topic, {"yaw": yaw, "pitch": pitch, "roll": roll})
+        self.client.mqtt.update_twin_rotation(self.uuid, rotation)
 
 
 class FlyingTwin(Twin):
