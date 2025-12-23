@@ -22,14 +22,15 @@ from .mqtt_client import CyberwaveMQTTClient
 from .utils import TimeReference
 
 logger = logging.getLogger(__name__)
-
+logging.getLogger("aiortc").setLevel(logging.DEBUG)
+logging.getLogger("aioice").setLevel(logging.DEBUG)
 # Default TURN/STUN server configuration
 DEFAULT_TURN_SERVERS = [
     {
         "urls": [
             "stun:turn.cyberwave.com:3478",
-            "stun:stun.cloudflare.com:3478",
-            "stun:stun.fbsbx.com:3478",
+            # "stun:stun.cloudflare.com:3478",
+            # "stun:stun.fbsbx.com:3478",
         ]
     },
     {
@@ -76,7 +77,7 @@ class CV2VideoStreamTrack(VideoStreamTrack):
     async def recv(self):
         """Receive and encode the next video frame."""
         self.frame_count += 1
-        logger.debug(f"Sending frame {self.frame_count}")
+        # logger.debug(f"Sending frame {self.frame_count}")
 
         ret, frame = self.cap.read()
         if not ret:
@@ -93,9 +94,9 @@ class CV2VideoStreamTrack(VideoStreamTrack):
         video_frame = video_frame.reformat(format="yuv420p")
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, self.fps)
-
+        # logger.info(f"Data channel: {self.data_channel}")
         if self.data_channel and self.should_sync:
-            logger.debug(f"Sending sync frame at frame {self.frame_count}")
+            # logger.info(f"Sending sync frame at frame {self.frame_count}")
             self.data_channel.send(
                 json.dumps(
                     {
@@ -313,8 +314,11 @@ class CameraStreamer:
         # Set up event handlers
         self._setup_pc_handlers()
 
-        # Create data channel and add video track
-        self.channel = self.pc.createDataChannel("track_info")
+        # Create data channel with explicit stream_id (negotiated mode)
+        # Using id=1 for the first offerer DataChannel (odd numbers for offerer)
+        # This allows us to signal the stream_id before the channel opens
+        self.channel = self.pc.createDataChannel("track_info", negotiated=True, id=1)
+        logger.info(f"Data channel created: {self.channel}, id={self.channel.id}")
         self.pc.addTrack(self.streamer)
 
         # Set up data channel handlers
@@ -390,7 +394,7 @@ class CameraStreamer:
         offer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-offer"
 
         offer_payload = {
-            "target": "backend-mediasoup",
+            "target": "backend",
             "sender": "edge",
             "type": self.pc.localDescription.type,
             "sdp": sdp,
@@ -401,6 +405,10 @@ class CameraStreamer:
 
         self._publish_message(offer_topic, offer_payload)
         logger.debug(f"WebRTC offer sent to {offer_topic}")
+        
+        # Signal DataChannel info immediately after offer
+        # We use negotiated mode with explicit id, so stream_id is known
+        self._signal_datachannel_info()
 
     async def _wait_for_answer(self, timeout: float = 60.0):
         """Wait for WebRTC answer from backend."""
@@ -464,6 +472,44 @@ class CameraStreamer:
                 final_sdp_lines.append(line)
 
         return "\r\n".join(final_sdp_lines)
+
+    def _signal_datachannel_info(self):
+        """Signal DataChannel SCTP parameters to mediasoup via MQTT.
+
+        This allows mediasoup to set up the DataProducer with the correct
+        SCTP stream parameters to receive DataChannel messages.
+        
+        NOTE: This must be called AFTER the DataChannel is open, otherwise
+        the stream_id will be None.
+        """
+        if not self.channel or not self.twin_uuid:
+            return
+
+        # Get SCTP stream ID from the DataChannel
+        # aiortc assigns stream IDs after the channel is open
+        # For the offerer (client), first DataChannel gets stream_id=1 (odd numbers)
+        stream_id = getattr(self.channel, "id", None)
+        ordered = getattr(self.channel, "ordered", True)
+        
+        # If stream_id is still None, use default of 1 (first offerer DataChannel)
+        if stream_id is None:
+            logger.warning("DataChannel stream_id is None, using default of 1")
+            stream_id = 1
+
+        prefix = self.client.topic_prefix
+        topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/datachannel-info"
+
+        payload = {
+            "type": "datachannel_ready",
+            "sender": "edge",
+            "stream_id": stream_id,
+            "ordered": ordered,
+            "label": self.channel.label if hasattr(self.channel, "label") else "track_info",
+            "timestamp": time.time(),
+        }
+
+        self._publish_message(topic, payload)
+        logger.info(f"Signaled DataChannel info to mediasoup: stream_id={stream_id}, ordered={ordered}")
 
     # -------------------------------------------------------------------------
     # MQTT Communication

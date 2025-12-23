@@ -16,7 +16,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
@@ -79,7 +79,7 @@ COMMON_METHODS = [
 ]
 
 
-def get_base_class(capabilities: dict[str, Any] | None) -> str:
+def get_base_class(capabilities: Optional[dict[str, Any]]) -> str:
     """Determine the appropriate base class based on capabilities."""
     if not capabilities:
         return "Twin"
@@ -157,7 +157,7 @@ def fetch_assets(api_url: str) -> list[dict[str, Any]]:
 
 
 def get_methods_for_capabilities(
-    capabilities: dict[str, Any] | None,
+    capabilities: Optional[dict[str, Any]],
 ) -> list[tuple[str, str, str]]:
     """Get list of methods based on capabilities."""
     if not capabilities:
@@ -331,7 +331,11 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
         if not registry_id:
             continue
         capabilities = asset.get("capabilities", {})
-        base_class = get_base_class(capabilities)
+        try:
+            base_class = get_base_class(capabilities)
+        except Exception as e:
+            print(f"Error getting base class for {registry_id}: {e}", file=sys.stderr)
+            continue
         if base_class not in type_groups:
             type_groups[base_class] = []
         type_groups[base_class].append(registry_id)
