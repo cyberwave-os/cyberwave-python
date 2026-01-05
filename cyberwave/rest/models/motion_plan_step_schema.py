@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class MotionPlanStepSchema(BaseModel):
     """
-    MotionPlanStepSchema
+    @sync cyberwave-frontend/lib/types/motion.ts:MotionPlanStep
     """ # noqa: E501
     keyframe: Optional[StrictStr] = None
     joints: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None

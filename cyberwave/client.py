@@ -39,6 +39,12 @@ except ImportError:
     _has_camera = False
     CameraStreamer = None
 
+try:
+    from cyberwave.camera import RealSenseStreamer
+    _has_realsense = True
+except ImportError:
+    _has_realsense = False
+    RealSenseStreamer = None
 
 class Cyberwave:
     """
@@ -367,6 +373,7 @@ class Cyberwave:
         fps: int = 30,
         turn_servers: Optional[list] = None,
         time_reference: TimeReference = TimeReference(),
+        sensor_type: Optional[str] = None,
     ) -> "CameraStreamer":
         """
         Create a camera streamer for the specified twin.
@@ -403,7 +410,8 @@ class Cyberwave:
 
         self.mqtt.connect()
         self.mqtt._client._handle_twin_update_with_telemetry(twin_uuid)
-        return CameraStreamer(
+        if sensor_type=="rgb":
+            return CameraStreamer(
             client=self.mqtt,
             camera_id=camera_id,
             fps=fps,
@@ -411,6 +419,18 @@ class Cyberwave:
             twin_uuid=twin_uuid,
             time_reference=time_reference,
         )
+        elif sensor_type=="depth" and _has_realsense:
+            return RealSenseStreamer(
+                client=self.mqtt,
+                turn_servers=turn_servers,
+                twin_uuid=twin_uuid,
+                time_reference=time_reference,
+            )
+        else:
+            raise CyberwaveError(
+                f"Only RGB and depth sensors are supported, got {sensor_type} sensor. Try installing the correct dependencies."
+                "Install them with: pip install cyberwave[camera,realsense]"
+            )
 
     def controller(
         self,

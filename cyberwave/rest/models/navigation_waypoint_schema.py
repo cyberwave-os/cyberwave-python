@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class NavigationWaypointSchema(BaseModel):
     """
-    NavigationWaypointSchema
+    @sync cyberwave-frontend/lib/types/navigation-types.ts:NavigationWaypoint
     """ # noqa: E501
     id: Optional[StrictStr] = None
     position: Dict[str, Union[StrictFloat, StrictInt]]

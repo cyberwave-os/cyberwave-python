@@ -1,11 +1,13 @@
 """Camera streaming functionality for Cyberwave SDK."""
 
+import abc
 import asyncio
+import base64
 import fractions
 import json
 import logging
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import cv2
 from aiortc import (
@@ -17,14 +19,14 @@ from aiortc import (
     VideoStreamTrack,
 )
 from av import VideoFrame
-
+import pyrealsense2 as rs
+import numpy as np
 from .mqtt_client import CyberwaveMQTTClient
 from .utils import TimeReference
 
 logger = logging.getLogger(__name__)
-logging.getLogger("aiortc").setLevel(logging.DEBUG)
-logging.getLogger("aioice").setLevel(logging.DEBUG)
-# Default TURN/STUN server configuration
+# logging.getLogger("aiortc").setLevel(logging.DEBUG)
+# logging.getLogger("aioice").setLevel(logging.DEBUG)
 DEFAULT_TURN_SERVERS = [
     {
         "urls": [
@@ -41,7 +43,32 @@ DEFAULT_TURN_SERVERS = [
 ]
 
 
-class CV2VideoStreamTrack(VideoStreamTrack):
+class BaseVideoTrack(VideoStreamTrack, abc.ABC):
+    """Video stream track using OpenCV for camera capture."""
+    @abc.abstractmethod
+    def __init__(self):
+        super().__init__()
+
+    def set_data_channel(self, data_channel):
+        """Set the data channel for sending metadata."""
+        self.data_channel = data_channel
+
+    def set_should_sync(self, should_sync: bool):
+        """Set whether to sync frames."""
+        self.should_sync = should_sync
+
+    @abc.abstractmethod
+    async def recv(self):
+        """Receive and encode the next video frame."""
+        raise NotImplementedError("Subclasses must implement this method")
+
+    @abc.abstractmethod
+    def close(self):
+        """Release camera resources."""
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class CV2VideoTrack(BaseVideoTrack):
     """Video stream track using OpenCV for camera capture."""
 
     def __init__(
@@ -65,14 +92,6 @@ class CV2VideoStreamTrack(VideoStreamTrack):
         self.should_sync = True
         self.time_reference = time_reference
         logger.info(f"Initialized camera {camera_id} at {fps} FPS")
-
-    def set_data_channel(self, data_channel):
-        """Set the data channel for sending metadata."""
-        self.data_channel = data_channel
-
-    def set_should_sync(self, should_sync: bool):
-        """Set whether to sync frames."""
-        self.should_sync = should_sync
 
     async def recv(self):
         """Receive and encode the next video frame."""
@@ -116,6 +135,206 @@ class CV2VideoStreamTrack(VideoStreamTrack):
         if self.cap:
             self.cap.release()
             logger.info("Camera released")
+
+
+class RealSenseVideoTrack(BaseVideoTrack):
+    def __init__(
+        self,
+        color_stream_fps: int = 30,
+        depth_stream_fps: int = 30,
+        color_stream_width: int = 640,
+        color_stream_height: int = 480,
+        depth_stream_width: int = 640,
+        depth_stream_height: int = 480,
+        enable_depth: bool = True,
+        client: "CyberwaveMQTTClient" = None,
+        time_reference: TimeReference = None,
+        twin_uuid: Optional[str] = None,
+    ):
+        super().__init__()
+        self.client = client
+        self.time_reference = time_reference
+        self.color_stream_width = color_stream_width
+        self.color_stream_height = color_stream_height
+        self.depth_stream_width = depth_stream_width
+        self.depth_stream_height = depth_stream_height
+        self.color_stream_fps = color_stream_fps
+        self.depth_stream_fps = depth_stream_fps
+        self.enable_depth = enable_depth
+        self.depth_sample_count = 0
+        self.twin_uuid = twin_uuid
+        self.pipeline: Optional[rs.pipeline] = None
+        self.config: Optional[rs.config] = None
+        self.align: Optional[rs.align] = None
+
+        self.start_time = None
+        self.frame_count = 0
+        self.data_channel = None
+        self.should_sync = True
+
+        if not self.client and self.enable_depth or not self.twin_uuid:
+            raise ValueError("To enable stream depth, client and twin_uuid must be provided")
+        self.camera_initialized = self.initialize_realsense()
+        if not self.camera_initialized:
+            raise RuntimeError("Failed to initialize RealSense camera")
+
+    def initialize_realsense(self) -> bool:
+        """Initialize RealSense camera and pipeline.
+
+        Returns:
+            bool: True if initialization successful, False otherwise
+        """
+        try:
+            # Create a context to manage devices
+            ctx = rs.context()
+            devices = ctx.query_devices()
+
+            if len(devices) == 0:
+                logger.error("No RealSense devices found!")
+                return False
+
+            logger.info(f"Found {len(devices)} RealSense device(s)")
+
+            # Print device information
+            for i, device in enumerate(devices):
+                logger.debug(
+                    f"Device {i}: {device.get_info(rs.camera_info.name)} "
+                    f"Serial: {device.get_info(rs.camera_info.serial_number)}"
+                )
+
+            # Create pipeline and configuration
+            self.pipeline = rs.pipeline()
+            self.config = rs.config()
+
+            # Configure streams
+            self.config.enable_stream(
+                rs.stream.color,
+                self.color_stream_width,
+                self.color_stream_height,
+                rs.format.bgr8,
+                self.color_stream_fps,
+            )
+            if self.enable_depth:
+                self.config.enable_stream(
+                    rs.stream.depth,
+                    self.depth_stream_width,
+                    self.depth_stream_height,
+                    rs.format.z16,
+                    self.depth_stream_fps,
+                )
+
+            # Create alignment object to align depth to color
+            self.align = rs.align(rs.stream.color)
+
+            # Start pipeline
+            profile = self.pipeline.start(self.config)
+
+            # Get device information
+            device = profile.get_device()
+            logger.info(
+                f"Started pipeline from: {device.get_info(rs.camera_info.name)}"
+            )
+
+            # Let camera warm up
+            logger.info("Warming up camera...")
+            for i in range(30):
+                _ = self.pipeline.wait_for_frames()
+                logger.debug(f"Warmup frame {i + 1}/30")
+
+            logger.info("RealSense camera initialized successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error initializing RealSense camera: {e}")
+            return False
+
+    def close(self):
+        """Release camera resources."""
+        if self.pipeline:
+            self.pipeline.stop()
+            logger.info("Camera released")
+
+    def get_frames(
+        self,
+    ) -> Optional[Tuple[bool, Optional[Tuple[np.ndarray, np.ndarray]]]]:
+        """Get aligned color and depth frames from RealSense camera.
+
+        Returns:
+            Tuple of (color_frame, depth_frame) or None if failed
+        """
+        timeout = 1000 // self.color_stream_fps
+        try:
+            # Get frames from the camera
+            if not self.pipeline:
+                logger.error("Pipeline not initialized")
+                return False, None
+            if not self.align:
+                logger.error("Align not initialized")
+                return False, None
+            frames = self.pipeline.wait_for_frames(timeout_ms=timeout)
+            aligned_frames = self.align.process(frames)
+
+            color_frame = aligned_frames.get_color_frame()
+            depth_frame = aligned_frames.get_depth_frame()
+
+            if not color_frame or not depth_frame:
+                logger.warning("Could not get both color and depth frames")
+                return False, None
+
+            # Convert to numpy arrays
+            color_image = np.asanyarray(color_frame.get_data())
+            depth_image = np.asanyarray(depth_frame.get_data())
+
+            return True, (color_image, depth_image)
+        except RuntimeError as e:
+            # Handle specific RealSense runtime errors
+            if "Frame didn't arrive" in str(e):
+                logger.warning(f"Frame timeout after {timeout}ms")
+            else:
+                logger.error(f"RealSense runtime error: {e}")
+            return False, None
+        except Exception as e:
+            logger.error(f"Error getting frames: {e}")
+            return False, None
+
+    async def recv(self):
+        """Receive and encode the next video frame."""
+        self.frame_count += 1
+        # logger.debug(f"Sending frame {self.frame_count}")
+
+        ret, frames = self.get_frames()
+        if not ret:
+            logger.error("Failed to read frames from realsense camera")
+            return None
+
+        timestamp, timestamp_monotonic = self.time_reference.read()
+        color_image, depth_image = frames
+
+        # Create video frame
+        video_frame = VideoFrame.from_ndarray(color_image, format="rgb24")
+        video_frame = video_frame.reformat(format="yuv420p")
+        video_frame.pts = self.frame_count
+        video_frame.time_base = fractions.Fraction(1, self.color_stream_fps)
+        if self.data_channel and self.should_sync:
+            # logger.info(f"Sending sync frame at frame {self.frame_count}")
+            self.data_channel.send(
+                json.dumps(
+                    {
+                        "type": "sync_frame",
+                        "read_timestamp": timestamp,
+                        "read_timestamp_monotonic": timestamp_monotonic,
+                        "pts": video_frame.pts,
+                        "track_id": self.id,
+                    }
+                )
+            )
+        # Publish depth frame every 30 frames
+        if self.enable_depth and self.frame_count % 30 == 0:
+            if depth_image.dtype != np.uint16:
+                depth_image = depth_image.astype(np.uint16)
+        
+            depth_binary = base64.b64encode(depth_image.tobytes()).decode('utf-8')
+            self.client.publish_depth_frame(self.twin_uuid, depth_binary, timestamp)
+        return video_frame
 
 
 class CameraStreamer:
@@ -177,7 +396,7 @@ class CameraStreamer:
         self.time_reference = time_reference
         # WebRTC state
         self.pc: Optional[RTCPeerConnection] = None
-        self.streamer: Optional[CV2VideoStreamTrack] = None
+        self.streamer: Optional[CV2VideoTrack] = None
         self.channel: Optional[RTCDataChannel] = None
 
         # Answer handling state
@@ -192,6 +411,10 @@ class CameraStreamer:
 
         # Recording state
         self._should_record = True
+
+    def initialize_track(self):
+        """Initialize the video track."""
+        self.streamer = CV2VideoTrack(self.camera_id, self.fps, self.time_reference)
 
     def _reset_state(self):
         """Reset internal state for fresh connection."""
@@ -303,9 +526,7 @@ class CameraStreamer:
     async def _setup_webrtc(self):
         """Initialize WebRTC peer connection and video track."""
         # Initialize video stream
-        self.streamer = CV2VideoStreamTrack(
-            self.camera_id, self.fps, self.time_reference
-        )
+        self.initialize_track()
 
         # Create peer connection with STUN/TURN servers
         ice_servers = [RTCIceServer(**server) for server in self.turn_servers]
@@ -405,7 +626,7 @@ class CameraStreamer:
 
         self._publish_message(offer_topic, offer_payload)
         logger.debug(f"WebRTC offer sent to {offer_topic}")
-        
+
         # Signal DataChannel info immediately after offer
         # We use negotiated mode with explicit id, so stream_id is known
         self._signal_datachannel_info()
@@ -478,7 +699,7 @@ class CameraStreamer:
 
         This allows mediasoup to set up the DataProducer with the correct
         SCTP stream parameters to receive DataChannel messages.
-        
+
         NOTE: This must be called AFTER the DataChannel is open, otherwise
         the stream_id will be None.
         """
@@ -490,7 +711,7 @@ class CameraStreamer:
         # For the offerer (client), first DataChannel gets stream_id=1 (odd numbers)
         stream_id = getattr(self.channel, "id", None)
         ordered = getattr(self.channel, "ordered", True)
-        
+
         # If stream_id is still None, use default of 1 (first offerer DataChannel)
         if stream_id is None:
             logger.warning("DataChannel stream_id is None, using default of 1")
@@ -504,12 +725,16 @@ class CameraStreamer:
             "sender": "edge",
             "stream_id": stream_id,
             "ordered": ordered,
-            "label": self.channel.label if hasattr(self.channel, "label") else "track_info",
+            "label": self.channel.label
+            if hasattr(self.channel, "label")
+            else "track_info",
             "timestamp": time.time(),
         }
 
         self._publish_message(topic, payload)
-        logger.info(f"Signaled DataChannel info to mediasoup: stream_id={stream_id}, ordered={ordered}")
+        logger.info(
+            f"Signaled DataChannel info to mediasoup: stream_id={stream_id}, ordered={ordered}"
+        )
 
     # -------------------------------------------------------------------------
     # MQTT Communication
@@ -758,3 +983,95 @@ class CameraStreamer:
                 await self.stop()
             except Exception as e:
                 logger.error(f"Error stopping streamer during cleanup: {e}")
+
+
+class RealSenseStreamer(CameraStreamer):
+    """
+    Manages WebRTC realsense camera streaming to Cyberwave platform.
+
+    Example (Direct instantiation):
+        >>> from cyberwave import Cyberwave, RealSenseStreamer
+        >>> import asyncio
+        >>>
+        >>> client = Cyberwave(token="your_token")
+        >>> streamer = RealSenseStreamer(client.mqtt, twin_uuid="your_twin_uuid")
+        >>> asyncio.run(streamer.start())
+    """
+
+    # -------------------------------------------------------------------------
+    # Initialization
+    # -------------------------------------------------------------------------
+
+    def __init__(
+        self,
+        client: "CyberwaveMQTTClient",
+        color_stream_fps: int = 30,
+        depth_stream_fps: int = 30,
+        color_stream_width: int = 640,
+        color_stream_height: int = 480,
+        depth_stream_width: int = 640,
+        depth_stream_height: int = 480,
+        enable_depth: bool = True,
+        turn_servers: Optional[list] = None,
+        twin_uuid: Optional[str] = None,
+        time_reference: TimeReference = None,
+        auto_reconnect: bool = True,
+    ):
+        """
+        Initialize the camera streamer.
+
+        Args:
+            client: Cyberwave SDK client instance
+            camera_id: Camera device ID (default: 0)
+            fps: Frames per second (default: 10)
+            turn_servers: Optional list of TURN server configurations
+            twin_uuid: Optional UUID of the digital twin (can be provided here or in start())
+            auto_reconnect: Whether to automatically reconnect on disconnection (default: True)
+        """
+        # Configuration
+        super().__init__(client, twin_uuid=twin_uuid, time_reference=time_reference, auto_reconnect=auto_reconnect) 
+        self.client = client
+        self.color_stream_fps = color_stream_fps
+        self.depth_stream_fps = depth_stream_fps
+        self.color_stream_width = color_stream_width
+        self.color_stream_height = color_stream_height
+        self.depth_stream_width = depth_stream_width
+        self.depth_stream_height = depth_stream_height
+        self.enable_depth = enable_depth
+        self.twin_uuid: Optional[str] = twin_uuid
+        self.auto_reconnect = auto_reconnect
+        self.turn_servers = turn_servers or DEFAULT_TURN_SERVERS
+        self.time_reference = time_reference
+        # WebRTC state
+        self.pc: Optional[RTCPeerConnection] = None
+        self.streamer: Optional[RealSenseVideoTrack] = None
+        self.channel: Optional[RTCDataChannel] = None
+
+        # Answer handling state
+        self._answer_received = False
+        self._answer_data: Optional[Dict[str, Any]] = None
+
+        # Reconnection state
+        self._should_reconnect = False
+        self._is_running = False
+        self._monitor_task: Optional[asyncio.Task] = None
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+        # Recording state
+        self._should_record = True
+
+    def initialize_track(self):
+        """Initialize the video track."""
+        self.streamer = RealSenseVideoTrack(
+            self.color_stream_fps,
+            self.depth_stream_fps,
+            self.color_stream_width,
+            self.color_stream_height,
+            self.depth_stream_width,
+            self.depth_stream_height,
+            self.enable_depth,
+            self.client,
+            self.time_reference,
+            self.twin_uuid,
+        )
+

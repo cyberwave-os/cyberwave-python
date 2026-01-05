@@ -577,10 +577,16 @@ class CameraTwin(Twin):
         Returns:
             CameraStreamer instance for managing the stream
         """
+        sensors = self.capabilities.get("sensors", [])
+        sensor_type = "rgb"
+        for sensor in sensors:
+            if sensor.get("type") == "depth":
+                sensor_type = "depth"
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_id=camera_id,
             fps=fps,
+            sensor_type=sensor_type
         )
         return self._camera_streamer
 

@@ -282,9 +282,9 @@ class CyberwaveMQTTClient:
         """Subscribe to point cloud stream via MQTT."""
         return self._client.subscribe_pointcloud_stream(twin_uuid, on_pointcloud)
 
-    def publish_depth_frame(self, twin_uuid: str, depth_data: Dict[str, Any]):
+    def publish_depth_frame(self, twin_uuid: str, depth_data: Dict[str, Any], timestamp: Optional[float] = None):
         """Publish depth frame data via MQTT."""
-        return self._client.publish_depth_frame(twin_uuid, depth_data)
+        return self._client.publish_depth_frame(twin_uuid, depth_data, timestamp)
 
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):
         """Publish WebRTC signaling message via MQTT."""

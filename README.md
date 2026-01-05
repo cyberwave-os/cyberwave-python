@@ -137,11 +137,12 @@ On Ubuntu:
 sudo apt-get install ffmpeg
 ```
 
-Then install the additional deps for camera streaming:
+Then install the additional deps for camera streaming, you can select between standard cameras or intel realsense ones:
 
 ```bash
 # Install with camera support
 pip install cyberwave[camera]
+pip install cyberwave[realsense]
 ```
 
 ```python

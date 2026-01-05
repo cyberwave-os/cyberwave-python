@@ -75,7 +75,8 @@ async def main():
     streamer = None
     print(f"Starting camera stream to twin {twin_uuid}...")
     try:
-        camera.start_streaming()
+        streamer = camera.start_streaming()
+        await streamer.start()
         print("Camera streaming started successfully!")
         print("Stream is active. Press 'q' and Enter to stop, or Ctrl+C...")
 

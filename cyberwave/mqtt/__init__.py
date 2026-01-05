@@ -662,14 +662,14 @@ class CyberwaveMQTTClient:
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/pointcloud"
         self.subscribe(topic, on_pointcloud)
 
-    def publish_depth_frame(self, twin_uuid: str, depth_data: Dict[str, Any]):
+    def publish_depth_frame(self, twin_uuid: str, depth_data: Dict[str, Any], timestamp: Optional[float] = None):
         """Publish depth frame data via MQTT."""
         self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/depth"
         message = {
             "type": "depth_data",
             "data": depth_data,
-            "timestamp": time.time(),
+            "timestamp": timestamp or time.time(),
         }
         self.publish(topic, message)
 

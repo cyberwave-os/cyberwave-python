@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 class MotionPlanSchema(BaseModel):
     """
-    MotionPlanSchema
+    @sync cyberwave-frontend/lib/types/motion.ts:MotionPlan
     """ # noqa: E501
     name: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
