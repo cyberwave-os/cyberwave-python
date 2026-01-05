@@ -305,7 +305,7 @@ class Twin:
     def refresh(self):
         """Refresh twin data from the server"""
         try:
-            self._data = self.client.twins.get(self.uuid)
+            self._data = self.client.twins.get_raw(self.uuid)
             self._position = None
             self._rotation = None
             self._scale = None
