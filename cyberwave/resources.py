@@ -262,6 +262,10 @@ class AssetManager(BaseResourceManager):
 class TwinManager(BaseResourceManager):
     """Manager for digital twin operations"""
 
+    def __init__(self, api_client, client=None):
+        super().__init__(api_client)
+        self._client = client
+
     def list(self, environment_id: Optional[str] = None) -> List[TwinSchema]:
         """List all twins, optionally filtered by environment"""
         try:
@@ -275,8 +279,20 @@ class TwinManager(BaseResourceManager):
             self._handle_error(e, "list twins")
             raise  # For type checker
 
-    def get(self, twin_id: str) -> TwinSchema:
-        """Get twin by ID"""
+    def get(self, twin_id: str):
+        """Get twin by ID. Returns a Twin object with motion/navigation handles."""
+        try:
+            twin_data = self.api.src_app_api_twins_get_twin(twin_id)
+            if self._client:
+                from .twin import create_twin
+                return create_twin(self._client, twin_data)
+            return twin_data
+        except Exception as e:
+            self._handle_error(e, f"get twin {twin_id}")
+            raise  # For type checker
+
+    def get_raw(self, twin_id: str) -> TwinSchema:
+        """Get raw twin data by ID (returns TwinSchema)"""
         try:
             return self.api.src_app_api_twins_get_twin(twin_id)
         except Exception as e:

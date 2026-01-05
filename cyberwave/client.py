@@ -110,7 +110,7 @@ class Cyberwave:
         self.projects = ProjectManager(self.api)
         self.environments = EnvironmentManager(self.api)
         self.assets = AssetManager(self.api)
-        self.twins = TwinManager(self.api)
+        self.twins = TwinManager(self.api, client=self)
 
     def _setup_rest_client(self):
         """Setup the REST API client with authentication"""
@@ -226,7 +226,7 @@ class Cyberwave:
 
     def twin(
         self,
-        asset_key: str,
+        asset_key: Optional[str] = None,
         environment_id: Optional[str] = None,
         twin_id: Optional[str] = None,
         **kwargs,
@@ -245,7 +245,7 @@ class Cyberwave:
         - LocomoteTwin: For assets that can locomote (has move(), etc.)
 
         Args:
-            asset_key: Asset identifier (e.g., "the-robot-studio/so101")
+            asset_key: Asset identifier (e.g., "the-robot-studio/so101"). Required for creation, optional when twin_id is provided.
             environment_id: Environment ID (uses default if not provided)
             twin_id: Existing twin ID to fetch (skips creation)
             **kwargs: Additional twin creation parameters
@@ -254,13 +254,18 @@ class Cyberwave:
             Twin instance (or appropriate subclass based on capabilities)
 
         Example:
-            >>> robot = client.twin("unitree/go2")  # Returns CameraTwin
+            >>> robot = client.twin("unitree/go2")  # Create new twin
+            >>> robot = client.twin(twin_id="uuid")  # Fetch existing twin by ID
             >>> robot.start_streaming(fps=15)  # Available because of RGB sensor
             >>> robot.edit_position(x=1, y=0, z=0.5)
         """
         if twin_id:
-            twin_data = self.twins.get(twin_id)
+            twin_data = self.twins.get_raw(twin_id)
             return create_twin(self, twin_data, registry_id=asset_key)
+
+        # asset_key is required for twin creation
+        if not asset_key:
+            raise CyberwaveError("asset_key is required when creating a new twin (twin_id not provided)")
 
         twin_name = kwargs.get("name", None)
 

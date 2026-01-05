@@ -97,7 +97,7 @@ from .constants import (
 )
 
 # Version information
-__version__ = "0.2.20"
+__version__ = "0.2.21"
 
 # Define public API
 __all__ = [
