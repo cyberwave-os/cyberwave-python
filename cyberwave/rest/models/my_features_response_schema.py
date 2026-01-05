@@ -17,21 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Union
+from pydantic import BaseModel, ConfigDict, StrictBool
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.feature_status_schema import FeatureStatusSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinTelemetrySchema(BaseModel):
+class MyFeaturesResponseSchema(BaseModel):
     """
-    TwinTelemetrySchema
+    MyFeaturesResponseSchema
     """ # noqa: E501
-    id: StrictInt
-    timestamp: StrictInt
-    twin_uuid: StrictStr
-    twin_telemetry: Dict[str, Union[StrictFloat, StrictInt]]
-    environment_telemetry: Dict[str, Union[StrictFloat, StrictInt]]
-    __properties: ClassVar[List[str]] = ["id", "timestamp", "twin_uuid", "twin_telemetry", "environment_telemetry"]
+    features: List[FeatureStatusSchema]
+    is_staff: StrictBool
+    __properties: ClassVar[List[str]] = ["features", "is_staff"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -51,7 +49,7 @@ class TwinTelemetrySchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinTelemetrySchema from a JSON string"""
+        """Create an instance of MyFeaturesResponseSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,11 +70,18 @@ class TwinTelemetrySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in features (list)
+        _items = []
+        if self.features:
+            for _item_features in self.features:
+                if _item_features:
+                    _items.append(_item_features.to_dict())
+            _dict['features'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinTelemetrySchema from a dict"""
+        """Create an instance of MyFeaturesResponseSchema from a dict"""
         if obj is None:
             return None
 
@@ -84,11 +89,8 @@ class TwinTelemetrySchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "id": obj.get("id"),
-            "timestamp": obj.get("timestamp"),
-            "twin_uuid": obj.get("twin_uuid"),
-            "twin_telemetry": obj.get("twin_telemetry"),
-            "environment_telemetry": obj.get("environment_telemetry")
+            "features": [FeatureStatusSchema.from_dict(_item) for _item in obj["features"]] if obj.get("features") is not None else None,
+            "is_staff": obj.get("is_staff")
         })
         return _obj
 

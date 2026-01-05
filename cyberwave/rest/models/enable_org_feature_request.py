@@ -17,19 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetGenerationRequestSchema(BaseModel):
+class EnableOrgFeatureRequest(BaseModel):
     """
-    DatasetGenerationRequestSchema
+    EnableOrgFeatureRequest
     """ # noqa: E501
-    twin_uuid: StrictStr
-    start_timestamp: StrictInt
-    end_timestamp: StrictInt
-    __properties: ClassVar[List[str]] = ["twin_uuid", "start_timestamp", "end_timestamp"]
+    organization_uuid: Optional[StrictStr] = None
+    feature: StrictStr
+    expires_at: Optional[datetime] = None
+    __properties: ClassVar[List[str]] = ["organization_uuid", "feature", "expires_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -49,7 +50,7 @@ class DatasetGenerationRequestSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetGenerationRequestSchema from a JSON string"""
+        """Create an instance of EnableOrgFeatureRequest from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -70,11 +71,21 @@ class DatasetGenerationRequestSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if organization_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
+            _dict['organization_uuid'] = None
+
+        # set to None if expires_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.expires_at is None and "expires_at" in self.model_fields_set:
+            _dict['expires_at'] = None
+
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetGenerationRequestSchema from a dict"""
+        """Create an instance of EnableOrgFeatureRequest from a dict"""
         if obj is None:
             return None
 
@@ -82,9 +93,9 @@ class DatasetGenerationRequestSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "twin_uuid": obj.get("twin_uuid"),
-            "start_timestamp": obj.get("start_timestamp"),
-            "end_timestamp": obj.get("end_timestamp")
+            "organization_uuid": obj.get("organization_uuid"),
+            "feature": obj.get("feature"),
+            "expires_at": obj.get("expires_at")
         })
         return _obj
 

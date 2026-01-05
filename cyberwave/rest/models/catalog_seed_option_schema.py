@@ -17,25 +17,21 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetSchema(BaseModel):
+class CatalogSeedOptionSchema(BaseModel):
     """
-    DatasetSchema
+    CatalogSeedOptionSchema
     """ # noqa: E501
-    uuid: StrictStr
-    episodes: List[StrictStr]
+    key: StrictStr
+    name: StrictStr
     description: StrictStr
-    metadata: Dict[str, Any]
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[StrictStr] = None
-    updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    controller_type: Optional[StrictStr] = None
+    model_provider_name: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["key", "name", "description", "controller_type", "model_provider_name"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -55,7 +51,7 @@ class DatasetSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a JSON string"""
+        """Create an instance of CatalogSeedOptionSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,21 +72,21 @@ class DatasetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if created_by (nullable) is None
+        # set to None if controller_type (nullable) is None
         # and model_fields_set contains the field
-        if self.created_by is None and "created_by" in self.model_fields_set:
-            _dict['created_by'] = None
+        if self.controller_type is None and "controller_type" in self.model_fields_set:
+            _dict['controller_type'] = None
 
-        # set to None if updated_by (nullable) is None
+        # set to None if model_provider_name (nullable) is None
         # and model_fields_set contains the field
-        if self.updated_by is None and "updated_by" in self.model_fields_set:
-            _dict['updated_by'] = None
+        if self.model_provider_name is None and "model_provider_name" in self.model_fields_set:
+            _dict['model_provider_name'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a dict"""
+        """Create an instance of CatalogSeedOptionSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,14 +94,11 @@ class DatasetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "episodes": obj.get("episodes"),
+            "key": obj.get("key"),
+            "name": obj.get("name"),
             "description": obj.get("description"),
-            "metadata": obj.get("metadata"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "created_by": obj.get("created_by"),
-            "updated_by": obj.get("updated_by")
+            "controller_type": obj.get("controller_type"),
+            "model_provider_name": obj.get("model_provider_name")
         })
         return _obj
 

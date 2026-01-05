@@ -17,25 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.catalog_seed_option_schema import CatalogSeedOptionSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetSchema(BaseModel):
+class CatalogSeedOptionsResponseSchema(BaseModel):
     """
-    DatasetSchema
+    CatalogSeedOptionsResponseSchema
     """ # noqa: E501
-    uuid: StrictStr
-    episodes: List[StrictStr]
-    description: StrictStr
-    metadata: Dict[str, Any]
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[StrictStr] = None
-    updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    controllers: List[CatalogSeedOptionSchema]
+    mlmodels: List[CatalogSeedOptionSchema]
+    __properties: ClassVar[List[str]] = ["controllers", "mlmodels"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -55,7 +49,7 @@ class DatasetSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a JSON string"""
+        """Create an instance of CatalogSeedOptionsResponseSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,21 +70,25 @@ class DatasetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if created_by (nullable) is None
-        # and model_fields_set contains the field
-        if self.created_by is None and "created_by" in self.model_fields_set:
-            _dict['created_by'] = None
-
-        # set to None if updated_by (nullable) is None
-        # and model_fields_set contains the field
-        if self.updated_by is None and "updated_by" in self.model_fields_set:
-            _dict['updated_by'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each item in controllers (list)
+        _items = []
+        if self.controllers:
+            for _item_controllers in self.controllers:
+                if _item_controllers:
+                    _items.append(_item_controllers.to_dict())
+            _dict['controllers'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in mlmodels (list)
+        _items = []
+        if self.mlmodels:
+            for _item_mlmodels in self.mlmodels:
+                if _item_mlmodels:
+                    _items.append(_item_mlmodels.to_dict())
+            _dict['mlmodels'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a dict"""
+        """Create an instance of CatalogSeedOptionsResponseSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,14 +96,8 @@ class DatasetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "episodes": obj.get("episodes"),
-            "description": obj.get("description"),
-            "metadata": obj.get("metadata"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "created_by": obj.get("created_by"),
-            "updated_by": obj.get("updated_by")
+            "controllers": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["controllers"]] if obj.get("controllers") is not None else None,
+            "mlmodels": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["mlmodels"]] if obj.get("mlmodels") is not None else None
         })
         return _obj
 

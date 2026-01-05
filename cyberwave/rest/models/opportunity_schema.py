@@ -18,24 +18,36 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetSchema(BaseModel):
+class OpportunitySchema(BaseModel):
     """
-    DatasetSchema
+    OpportunitySchema
     """ # noqa: E501
     uuid: StrictStr
-    episodes: List[StrictStr]
+    name: StrictStr
     description: StrictStr
+    opportunity_type: StrictStr
+    stage: StrictStr
+    value: Optional[Union[StrictFloat, StrictInt]] = None
+    contact_name: StrictStr
+    contact_email: StrictStr
+    company_name: StrictStr
+    expected_close_date: Optional[StrictStr] = None
+    notes: StrictStr
     metadata: Dict[str, Any]
+    year: StrictInt
+    is_archived: StrictBool
+    owner_uuid: StrictStr
+    organization_uuid: StrictStr
     created_at: datetime
     updated_at: datetime
-    created_by: Optional[StrictStr] = None
-    updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    created_by: StrictStr
+    updated_by: StrictStr
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "opportunity_type", "stage", "value", "contact_name", "contact_email", "company_name", "expected_close_date", "notes", "metadata", "year", "is_archived", "owner_uuid", "organization_uuid", "created_at", "updated_at", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -55,7 +67,7 @@ class DatasetSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a JSON string"""
+        """Create an instance of OpportunitySchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,21 +88,21 @@ class DatasetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if created_by (nullable) is None
+        # set to None if value (nullable) is None
         # and model_fields_set contains the field
-        if self.created_by is None and "created_by" in self.model_fields_set:
-            _dict['created_by'] = None
+        if self.value is None and "value" in self.model_fields_set:
+            _dict['value'] = None
 
-        # set to None if updated_by (nullable) is None
+        # set to None if expected_close_date (nullable) is None
         # and model_fields_set contains the field
-        if self.updated_by is None and "updated_by" in self.model_fields_set:
-            _dict['updated_by'] = None
+        if self.expected_close_date is None and "expected_close_date" in self.model_fields_set:
+            _dict['expected_close_date'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a dict"""
+        """Create an instance of OpportunitySchema from a dict"""
         if obj is None:
             return None
 
@@ -99,9 +111,21 @@ class DatasetSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
-            "episodes": obj.get("episodes"),
+            "name": obj.get("name"),
             "description": obj.get("description"),
+            "opportunity_type": obj.get("opportunity_type"),
+            "stage": obj.get("stage"),
+            "value": obj.get("value"),
+            "contact_name": obj.get("contact_name"),
+            "contact_email": obj.get("contact_email"),
+            "company_name": obj.get("company_name"),
+            "expected_close_date": obj.get("expected_close_date"),
+            "notes": obj.get("notes"),
             "metadata": obj.get("metadata"),
+            "year": obj.get("year"),
+            "is_archived": obj.get("is_archived"),
+            "owner_uuid": obj.get("owner_uuid"),
+            "organization_uuid": obj.get("organization_uuid"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),

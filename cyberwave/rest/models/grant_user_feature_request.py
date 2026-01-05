@@ -23,19 +23,15 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetSchema(BaseModel):
+class GrantUserFeatureRequest(BaseModel):
     """
-    DatasetSchema
+    GrantUserFeatureRequest
     """ # noqa: E501
-    uuid: StrictStr
-    episodes: List[StrictStr]
-    description: StrictStr
-    metadata: Dict[str, Any]
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[StrictStr] = None
-    updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    user_uuid: StrictStr
+    feature: StrictStr
+    reason: Optional[StrictStr] = ''
+    expires_at: Optional[datetime] = None
+    __properties: ClassVar[List[str]] = ["user_uuid", "feature", "reason", "expires_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -55,7 +51,7 @@ class DatasetSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a JSON string"""
+        """Create an instance of GrantUserFeatureRequest from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,21 +72,16 @@ class DatasetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if created_by (nullable) is None
+        # set to None if expires_at (nullable) is None
         # and model_fields_set contains the field
-        if self.created_by is None and "created_by" in self.model_fields_set:
-            _dict['created_by'] = None
-
-        # set to None if updated_by (nullable) is None
-        # and model_fields_set contains the field
-        if self.updated_by is None and "updated_by" in self.model_fields_set:
-            _dict['updated_by'] = None
+        if self.expires_at is None and "expires_at" in self.model_fields_set:
+            _dict['expires_at'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a dict"""
+        """Create an instance of GrantUserFeatureRequest from a dict"""
         if obj is None:
             return None
 
@@ -98,14 +89,10 @@ class DatasetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "episodes": obj.get("episodes"),
-            "description": obj.get("description"),
-            "metadata": obj.get("metadata"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "created_by": obj.get("created_by"),
-            "updated_by": obj.get("updated_by")
+            "user_uuid": obj.get("user_uuid"),
+            "feature": obj.get("feature"),
+            "reason": obj.get("reason") if obj.get("reason") is not None else '',
+            "expires_at": obj.get("expires_at")
         })
         return _obj
 

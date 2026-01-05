@@ -17,17 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class UpdateDatasetMetadataSchema(BaseModel):
+class UserSearchResultSchema(BaseModel):
     """
-    UpdateDatasetMetadataSchema
+    UserSearchResultSchema
     """ # noqa: E501
-    session_name_defined_by_user: StrictStr
-    __properties: ClassVar[List[str]] = ["session_name_defined_by_user"]
+    uuid: StrictStr
+    email: StrictStr
+    name: StrictStr
+    is_staff: StrictBool
+    __properties: ClassVar[List[str]] = ["uuid", "email", "name", "is_staff"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -47,7 +50,7 @@ class UpdateDatasetMetadataSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of UpdateDatasetMetadataSchema from a JSON string"""
+        """Create an instance of UserSearchResultSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,7 +75,7 @@ class UpdateDatasetMetadataSchema(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of UpdateDatasetMetadataSchema from a dict"""
+        """Create an instance of UserSearchResultSchema from a dict"""
         if obj is None:
             return None
 
@@ -80,7 +83,10 @@ class UpdateDatasetMetadataSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "session_name_defined_by_user": obj.get("session_name_defined_by_user")
+            "uuid": obj.get("uuid"),
+            "email": obj.get("email"),
+            "name": obj.get("name"),
+            "is_staff": obj.get("is_staff")
         })
         return _obj
 

@@ -17,17 +17,23 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class EdgeCommandSchema(BaseModel):
+class FeatureStatusSchema(BaseModel):
     """
-    Schema for sending commands to edge devices.
+    FeatureStatusSchema
     """ # noqa: E501
-    command: StrictStr
-    __properties: ClassVar[List[str]] = ["command"]
+    feature: StrictStr
+    label: StrictStr
+    enabled: StrictBool
+    source: StrictStr
+    reason: StrictStr
+    expires_at: Optional[datetime] = None
+    __properties: ClassVar[List[str]] = ["feature", "label", "enabled", "source", "reason", "expires_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -47,7 +53,7 @@ class EdgeCommandSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of EdgeCommandSchema from a JSON string"""
+        """Create an instance of FeatureStatusSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -68,11 +74,16 @@ class EdgeCommandSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if expires_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.expires_at is None and "expires_at" in self.model_fields_set:
+            _dict['expires_at'] = None
+
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of EdgeCommandSchema from a dict"""
+        """Create an instance of FeatureStatusSchema from a dict"""
         if obj is None:
             return None
 
@@ -80,7 +91,12 @@ class EdgeCommandSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "command": obj.get("command")
+            "feature": obj.get("feature"),
+            "label": obj.get("label"),
+            "enabled": obj.get("enabled"),
+            "source": obj.get("source"),
+            "reason": obj.get("reason"),
+            "expires_at": obj.get("expires_at")
         })
         return _obj
 

@@ -17,25 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetSchema(BaseModel):
+class AssetCatalogImportSchema(BaseModel):
     """
-    DatasetSchema
+    AssetCatalogImportSchema
     """ # noqa: E501
-    uuid: StrictStr
-    episodes: List[StrictStr]
-    description: StrictStr
-    metadata: Dict[str, Any]
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[StrictStr] = None
-    updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    registry_id: StrictStr
+    workspace_slug: StrictStr
+    source_url: Optional[StrictStr] = None
+    source_token: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["registry_id", "workspace_slug", "source_url", "source_token"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -55,7 +50,7 @@ class DatasetSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a JSON string"""
+        """Create an instance of AssetCatalogImportSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,21 +71,21 @@ class DatasetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if created_by (nullable) is None
+        # set to None if source_url (nullable) is None
         # and model_fields_set contains the field
-        if self.created_by is None and "created_by" in self.model_fields_set:
-            _dict['created_by'] = None
+        if self.source_url is None and "source_url" in self.model_fields_set:
+            _dict['source_url'] = None
 
-        # set to None if updated_by (nullable) is None
+        # set to None if source_token (nullable) is None
         # and model_fields_set contains the field
-        if self.updated_by is None and "updated_by" in self.model_fields_set:
-            _dict['updated_by'] = None
+        if self.source_token is None and "source_token" in self.model_fields_set:
+            _dict['source_token'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a dict"""
+        """Create an instance of AssetCatalogImportSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,14 +93,10 @@ class DatasetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "episodes": obj.get("episodes"),
-            "description": obj.get("description"),
-            "metadata": obj.get("metadata"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "created_by": obj.get("created_by"),
-            "updated_by": obj.get("updated_by")
+            "registry_id": obj.get("registry_id"),
+            "workspace_slug": obj.get("workspace_slug"),
+            "source_url": obj.get("source_url"),
+            "source_token": obj.get("source_token")
         })
         return _obj
 

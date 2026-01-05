@@ -17,20 +17,18 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.pipeline_stages_schema import PipelineStagesSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class CombinedDatasetGenerationRequestSchema(BaseModel):
+class PipelineConfigSchema(BaseModel):
     """
-    CombinedDatasetGenerationRequestSchema
+    PipelineConfigSchema
     """ # noqa: E501
-    twin_uuids: List[StrictStr]
-    start_timestamp: StrictInt
-    end_timestamp: StrictInt
-    var_date: Optional[StrictStr] = Field(default=None, alias="date")
-    __properties: ClassVar[List[str]] = ["twin_uuids", "start_timestamp", "end_timestamp", "date"]
+    pipelines: List[PipelineStagesSchema]
+    __properties: ClassVar[List[str]] = ["pipelines"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +48,7 @@ class CombinedDatasetGenerationRequestSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of CombinedDatasetGenerationRequestSchema from a JSON string"""
+        """Create an instance of PipelineConfigSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,16 +69,18 @@ class CombinedDatasetGenerationRequestSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if var_date (nullable) is None
-        # and model_fields_set contains the field
-        if self.var_date is None and "var_date" in self.model_fields_set:
-            _dict['date'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each item in pipelines (list)
+        _items = []
+        if self.pipelines:
+            for _item_pipelines in self.pipelines:
+                if _item_pipelines:
+                    _items.append(_item_pipelines.to_dict())
+            _dict['pipelines'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of CombinedDatasetGenerationRequestSchema from a dict"""
+        """Create an instance of PipelineConfigSchema from a dict"""
         if obj is None:
             return None
 
@@ -88,10 +88,7 @@ class CombinedDatasetGenerationRequestSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "twin_uuids": obj.get("twin_uuids"),
-            "start_timestamp": obj.get("start_timestamp"),
-            "end_timestamp": obj.get("end_timestamp"),
-            "date": obj.get("date")
+            "pipelines": [PipelineStagesSchema.from_dict(_item) for _item in obj["pipelines"]] if obj.get("pipelines") is not None else None
         })
         return _obj
 

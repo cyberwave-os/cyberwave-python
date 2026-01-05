@@ -17,17 +17,21 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinCommandSchema(BaseModel):
+class NavigationWaypointSchema(BaseModel):
     """
-    Schema for sending commands to edge devices.
+    NavigationWaypointSchema
     """ # noqa: E501
-    command: StrictStr
-    __properties: ClassVar[List[str]] = ["command"]
+    id: Optional[StrictStr] = None
+    position: Dict[str, Union[StrictFloat, StrictInt]]
+    rotation: Optional[List[Union[StrictFloat, StrictInt]]] = None
+    yaw: Optional[Union[StrictFloat, StrictInt]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["id", "position", "rotation", "yaw", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -47,7 +51,7 @@ class TwinCommandSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinCommandSchema from a JSON string"""
+        """Create an instance of NavigationWaypointSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -68,11 +72,31 @@ class TwinCommandSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if id (nullable) is None
+        # and model_fields_set contains the field
+        if self.id is None and "id" in self.model_fields_set:
+            _dict['id'] = None
+
+        # set to None if rotation (nullable) is None
+        # and model_fields_set contains the field
+        if self.rotation is None and "rotation" in self.model_fields_set:
+            _dict['rotation'] = None
+
+        # set to None if yaw (nullable) is None
+        # and model_fields_set contains the field
+        if self.yaw is None and "yaw" in self.model_fields_set:
+            _dict['yaw'] = None
+
+        # set to None if metadata (nullable) is None
+        # and model_fields_set contains the field
+        if self.metadata is None and "metadata" in self.model_fields_set:
+            _dict['metadata'] = None
+
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinCommandSchema from a dict"""
+        """Create an instance of NavigationWaypointSchema from a dict"""
         if obj is None:
             return None
 
@@ -80,7 +104,11 @@ class TwinCommandSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "command": obj.get("command")
+            "id": obj.get("id"),
+            "position": obj.get("position"),
+            "rotation": obj.get("rotation"),
+            "yaw": obj.get("yaw"),
+            "metadata": obj.get("metadata")
         })
         return _obj
 

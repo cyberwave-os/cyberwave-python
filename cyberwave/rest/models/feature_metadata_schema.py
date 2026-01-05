@@ -22,14 +22,14 @@ from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetGenerationResponseSchema(BaseModel):
+class FeatureMetadataSchema(BaseModel):
     """
-    DatasetGenerationResponseSchema
+    FeatureMetadataSchema
     """ # noqa: E501
-    task_id: StrictStr
-    status: StrictStr
-    message: StrictStr
-    __properties: ClassVar[List[str]] = ["task_id", "status", "message"]
+    code: StrictStr
+    label: StrictStr
+    description: StrictStr
+    __properties: ClassVar[List[str]] = ["code", "label", "description"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -49,7 +49,7 @@ class DatasetGenerationResponseSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetGenerationResponseSchema from a JSON string"""
+        """Create an instance of FeatureMetadataSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,7 +74,7 @@ class DatasetGenerationResponseSchema(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetGenerationResponseSchema from a dict"""
+        """Create an instance of FeatureMetadataSchema from a dict"""
         if obj is None:
             return None
 
@@ -82,9 +82,9 @@ class DatasetGenerationResponseSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "task_id": obj.get("task_id"),
-            "status": obj.get("status"),
-            "message": obj.get("message")
+            "code": obj.get("code"),
+            "label": obj.get("label"),
+            "description": obj.get("description")
         })
         return _obj
 
