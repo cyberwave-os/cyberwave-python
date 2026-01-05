@@ -25,6 +25,7 @@ from .config import CyberwaveConfig, get_config, set_config
 from .twin import (
     Twin,
     JointController,
+    TwinControllerHandle,
     CameraTwin,
     DepthCameraTwin,
     FlyingTwin,
@@ -96,7 +97,7 @@ from .constants import (
 )
 
 # Version information
-__version__ = "0.2.19"
+__version__ = "0.2.17"
 
 # Define public API
 __all__ = [
@@ -109,6 +110,7 @@ __all__ = [
     # High-level abstractions
     "Twin",
     "JointController",
+    "TwinControllerHandle",
     "CameraTwin",
     "DepthCameraTwin",
     "FlyingTwin",

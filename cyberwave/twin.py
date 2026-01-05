@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from .client import Cyberwave
     from .camera import CameraStreamer
     from .motion import TwinMotionHandle, TwinNavigationHandle
+    from .keyboard import KeyboardTeleop
 
 from .exceptions import CyberwaveError
 
@@ -137,6 +138,47 @@ class JointController:
         return self._joint_states.copy()
 
 
+class TwinControllerHandle:
+    """Handle for controller functionality like keyboard teleop."""
+
+    def __init__(self, twin: "Twin"):
+        self._twin = twin
+
+    def keyboard(
+        self,
+        bindings: Any,
+        *,
+        step: float = 0.05,
+        rate_hz: int = 20,
+        fetch_initial: bool = True,
+        verbose: bool = True,
+    ) -> "KeyboardTeleop":
+        """
+        Create a keyboard teleop controller.
+
+        Args:
+            bindings: KeyboardBindings instance or list of binding dicts
+            step: Position change per keypress (degrees)
+            rate_hz: Polling rate in Hz
+            fetch_initial: Whether to fetch initial joint positions
+            verbose: Whether to print status messages
+
+        Returns:
+            KeyboardTeleop instance ready to run
+        """
+        from .keyboard import KeyboardBindings, KeyboardTeleop
+
+        payload = bindings.build() if isinstance(bindings, KeyboardBindings) else bindings
+        return KeyboardTeleop(
+            self._twin,
+            payload,
+            step=step,
+            rate_hz=rate_hz,
+            fetch_initial=fetch_initial,
+            verbose=verbose,
+        )
+
+
 class Twin:
     """
     High-level abstraction for a digital twin.
@@ -166,39 +208,11 @@ class Twin:
         # Cache for current state
         self._position: Optional[Dict[str, float]] = None
         self._rotation: Optional[Dict[str, float]] = None
-        self._scale: Optional[Dict[str, float]] = None
 
-        # Lazy-initialized handles
+        # Lazy-initialized motion and navigation handles
         self._motion: Optional["TwinMotionHandle"] = None
         self._navigation: Optional["TwinNavigationHandle"] = None
-
-    @property
-    def motion(self) -> "TwinMotionHandle":
-        """
-        Get motion handle for pose and animation control.
-
-        Example:
-            >>> twin.motion.asset.pose("Picking from below", transition_ms=800)
-            >>> twin.motion.twin.animation("wave")
-        """
-        if self._motion is None:
-            from .motion import TwinMotionHandle
-            self._motion = TwinMotionHandle(self)
-        return self._motion
-
-    @property
-    def navigation(self) -> "TwinNavigationHandle":
-        """
-        Get navigation handle for waypoint-based movement.
-
-        Example:
-            >>> twin.navigation.goto([1, 2, 0])
-            >>> twin.navigation.follow_path([[0, 0, 0], [1, 0, 0]])
-        """
-        if self._navigation is None:
-            from .motion import TwinNavigationHandle
-            self._navigation = TwinNavigationHandle(self)
-        return self._navigation
+        self._scale: Optional[Dict[str, float]] = None
 
     @property
     def uuid(self) -> str:
@@ -235,6 +249,58 @@ class Twin:
             if hasattr(self._data, "environment_uuid")
             else str(self._data.get("environment_uuid", ""))
         )
+
+    @property
+    def motion(self) -> "TwinMotionHandle":
+        """
+        Access motion control for poses and animations.
+
+        Example:
+            >>> twin.motion.asset.pose("Picking from below", transition_ms=800)
+            >>> twin.motion.twin.animation("wave", transition_ms=500)
+            >>> keyframes = twin.motion.asset.list_keyframes()
+
+        Returns:
+            TwinMotionHandle for motion control
+        """
+        if self._motion is None:
+            from .motion import TwinMotionHandle
+            self._motion = TwinMotionHandle(self)
+        return self._motion
+
+    @property
+    def navigation(self) -> "TwinNavigationHandle":
+        """
+        Access navigation control for waypoint-based movement.
+
+        Example:
+            >>> twin.navigation.goto([1, 2, 0])
+            >>> twin.navigation.follow_path([[0, 0, 0], [1, 0, 0], [1, 1, 0]])
+            >>> twin.navigation.stop()
+
+        Returns:
+            TwinNavigationHandle for navigation control
+        """
+        if self._navigation is None:
+            from .motion import TwinNavigationHandle
+            self._navigation = TwinNavigationHandle(self)
+        return self._navigation
+
+    @property
+    def controller(self) -> "TwinControllerHandle":
+        """
+        Access controller functionality for keyboard teleop.
+
+        Example:
+            >>> from cyberwave import KeyboardBindings
+            >>> bindings = KeyboardBindings().bind("W", "joint1", "increase")
+            >>> teleop = twin.controller.keyboard(bindings, step=2.0)
+            >>> teleop.run()
+
+        Returns:
+            TwinControllerHandle for controller access
+        """
+        return TwinControllerHandle(self)
 
     def refresh(self):
         """Refresh twin data from the server"""

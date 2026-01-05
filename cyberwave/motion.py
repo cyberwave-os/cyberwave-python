@@ -331,7 +331,6 @@ class TwinMotionHandle:
         response_data = api_client.call_api(*_param)
         response_data.read()
 
-        # Return raw JSON response
         import json
         return json.loads(response_data.data.decode("utf-8"))
 
