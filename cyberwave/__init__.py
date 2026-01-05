@@ -34,6 +34,17 @@ from .twin import (
     create_twin,
 )
 
+# Motion and navigation
+from .motion import (
+    TwinMotionHandle,
+    ScopedMotionHandle,
+    TwinNavigationHandle,
+)
+from .navigation import NavigationPlan
+
+# Keyboard teleop
+from .keyboard import KeyboardBindings, KeyboardTeleop
+
 # Exceptions
 from .exceptions import (
     CyberwaveError,
@@ -85,7 +96,7 @@ from .constants import (
 )
 
 # Version information
-__version__ = "0.2.14"
+__version__ = "0.2.18"
 
 # Define public API
 __all__ = [
@@ -105,6 +116,14 @@ __all__ = [
     "FlyingCameraTwin",
     "GripperCameraTwin",
     "create_twin",
+    # Motion and navigation
+    "TwinMotionHandle",
+    "ScopedMotionHandle",
+    "TwinNavigationHandle",
+    "NavigationPlan",
+    # Keyboard teleop
+    "KeyboardBindings",
+    "KeyboardTeleop",
     # Exceptions
     "CyberwaveError",
     "CyberwaveAPIError",
