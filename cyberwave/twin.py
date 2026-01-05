@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable, Type
 if TYPE_CHECKING:
     from .client import Cyberwave
     from .camera import CameraStreamer
+    from .motion import TwinMotionHandle, TwinNavigationHandle
 
 from .exceptions import CyberwaveError
 
@@ -166,6 +167,38 @@ class Twin:
         self._position: Optional[Dict[str, float]] = None
         self._rotation: Optional[Dict[str, float]] = None
         self._scale: Optional[Dict[str, float]] = None
+
+        # Lazy-initialized handles
+        self._motion: Optional["TwinMotionHandle"] = None
+        self._navigation: Optional["TwinNavigationHandle"] = None
+
+    @property
+    def motion(self) -> "TwinMotionHandle":
+        """
+        Get motion handle for pose and animation control.
+
+        Example:
+            >>> twin.motion.asset.pose("Picking from below", transition_ms=800)
+            >>> twin.motion.twin.animation("wave")
+        """
+        if self._motion is None:
+            from .motion import TwinMotionHandle
+            self._motion = TwinMotionHandle(self)
+        return self._motion
+
+    @property
+    def navigation(self) -> "TwinNavigationHandle":
+        """
+        Get navigation handle for waypoint-based movement.
+
+        Example:
+            >>> twin.navigation.goto([1, 2, 0])
+            >>> twin.navigation.follow_path([[0, 0, 0], [1, 0, 0]])
+        """
+        if self._navigation is None:
+            from .motion import TwinNavigationHandle
+            self._navigation = TwinNavigationHandle(self)
+        return self._navigation
 
     @property
     def uuid(self) -> str:
