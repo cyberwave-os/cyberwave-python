@@ -19,10 +19,17 @@ from aiortc import (
     VideoStreamTrack,
 )
 from av import VideoFrame
-import pyrealsense2 as rs
 import numpy as np
 from .mqtt_client import CyberwaveMQTTClient
 from .utils import TimeReference
+
+# Make pyrealsense2 optional
+try:
+    import pyrealsense2 as rs
+    _has_realsense = True
+except ImportError:
+    rs = None  
+    _has_realsense = False
 
 logger = logging.getLogger(__name__)
 # logging.getLogger("aiortc").setLevel(logging.DEBUG)
@@ -151,6 +158,10 @@ class RealSenseVideoTrack(BaseVideoTrack):
         time_reference: TimeReference = None,
         twin_uuid: Optional[str] = None,
     ):
+        if not _has_realsense:
+            raise ImportError(
+                "RealSense camera support requires pyrealsense2. "
+            )
         super().__init__()
         self.client = client
         self.time_reference = time_reference
@@ -1028,6 +1039,10 @@ class RealSenseStreamer(CameraStreamer):
             twin_uuid: Optional UUID of the digital twin (can be provided here or in start())
             auto_reconnect: Whether to automatically reconnect on disconnection (default: True)
         """
+        if not _has_realsense:
+            raise ImportError(
+                "RealSense camera support requires pyrealsense2. "
+            )
         # Configuration
         super().__init__(client, twin_uuid=twin_uuid, time_reference=time_reference, auto_reconnect=auto_reconnect) 
         self.client = client
