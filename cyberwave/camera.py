@@ -310,7 +310,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
         color_image, depth_image = frames
 
         # Create video frame
-        video_frame = VideoFrame.from_ndarray(color_image, format="rgb24")
+        video_frame = VideoFrame.from_ndarray(color_image, format="bgr24")
         video_frame = video_frame.reformat(format="yuv420p")
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, self.color_stream_fps)
