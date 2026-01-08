@@ -717,7 +717,7 @@ class CameraStreamer:
             "sdp": sdp,
             "color_track_id": self.streamer.id,
             "timestamp": time.time(),
-            "recording": getattr(self, "_should_record", False),
+            "recording": self._should_record,
         }
 
         self._publish_message(offer_topic, offer_payload)
