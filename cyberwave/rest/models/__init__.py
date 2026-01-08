@@ -112,6 +112,7 @@ from cyberwave.rest.models.share_schema import ShareSchema
 from cyberwave.rest.models.shares_response_schema import SharesResponseSchema
 from cyberwave.rest.models.simulation_start_schema import SimulationStartSchema
 from cyberwave.rest.models.slug_availability_schema import SlugAvailabilitySchema
+from cyberwave.rest.models.sync_with_asset_schema import SyncWithAssetSchema
 from cyberwave.rest.models.team_member_response import TeamMemberResponse
 from cyberwave.rest.models.team_share_schema import TeamShareSchema
 from cyberwave.rest.models.twin_action_request_schema import TwinActionRequestSchema

@@ -48,6 +48,7 @@ class CyberwaveConfig:
     timeout: int = DEFAULT_TIMEOUT
     verify_ssl: bool = True
     source_type: str = SOURCE_TYPE_EDGE
+    topic_prefix: Optional[str] = None
 
     def __post_init__(self):
         """Load configuration from environment variables if not provided"""
@@ -84,6 +85,18 @@ class CyberwaveConfig:
 
         if not self.source_type:
             self.source_type = os.getenv("CYBERWAVE_SOURCE_TYPE", SOURCE_TYPE_EDGE)
+
+        if not self.topic_prefix:
+            # Check for explicit prefix first
+            self.topic_prefix = os.getenv("CYBERWAVE_MQTT_TOPIC_PREFIX")
+            
+            # If not set, derive from environment (legacy behavior)
+            if not self.topic_prefix:
+                env_value = os.getenv("CYBERWAVE_ENVIRONMENT", "").strip()
+                if env_value and env_value.lower() != "production":
+                    self.topic_prefix = env_value
+                else:
+                    self.topic_prefix = ""
 
     @property
     def auth_header(self) -> dict:
