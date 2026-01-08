@@ -98,11 +98,28 @@ class CV2VideoTrack(BaseVideoTrack):
         self.data_channel = None
         self.should_sync = True
         self.time_reference = time_reference
+        self.frame_0_timestamp = None
         logger.info(f"Initialized camera {camera_id} at {fps} FPS")
+
+    
+    def _send_sync_frame(self, timestamp: float, timestamp_monotonic: float, pts: int):
+        """Send a sync frame to the data channel."""
+        if self.data_channel and self.should_sync:
+            # logger.info(f"Sending sync frame at frame {self.frame_count}")
+            self.data_channel.send(
+                json.dumps(
+                    {
+                        "type": "sync_frame",
+                        "read_timestamp": timestamp,
+                        "read_timestamp_monotonic": timestamp_monotonic,
+                        "pts": pts,
+                        "track_id": self.id,
+                    }
+                )
+            )
 
     async def recv(self):
         """Receive and encode the next video frame."""
-        self.frame_count += 1
         # logger.debug(f"Sending frame {self.frame_count}")
 
         ret, frame = self.cap.read()
@@ -112,29 +129,16 @@ class CV2VideoTrack(BaseVideoTrack):
 
         timestamp, timestamp_monotonic = self.time_reference.read()
 
-        # Convert BGR to RGB
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
         # Create video frame
-        video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
+        video_frame = VideoFrame.from_ndarray(frame, format="bgr24")
         video_frame = video_frame.reformat(format="yuv420p")
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, self.fps)
         # logger.info(f"Data channel: {self.data_channel}")
-        if self.data_channel and self.should_sync:
-            # logger.info(f"Sending sync frame at frame {self.frame_count}")
-            self.data_channel.send(
-                json.dumps(
-                    {
-                        "type": "sync_frame",
-                        "read_timestamp": timestamp,
-                        "read_timestamp_monotonic": timestamp_monotonic,
-                        "pts": video_frame.pts,
-                        "track_id": self.id,
-                    }
-                )
-            )
-
+        self._send_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        if self.frame_count == 0:
+            self.frame_0_timestamp = timestamp
+        self.frame_count += 1
         return video_frame
 
     def close(self):
@@ -180,6 +184,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
 
         self.start_time = None
         self.frame_count = 0
+        self.frame_0_timestamp = None
         self.data_channel = None
         self.should_sync = True
 
@@ -306,12 +311,25 @@ class RealSenseVideoTrack(BaseVideoTrack):
         except Exception as e:
             logger.error(f"Error getting frames: {e}")
             return False, None
+    
+    def _send_sync_frame(self, timestamp: float, timestamp_monotonic: float, pts: int):
+        """Send a sync frame to the data channel."""
+        if self.data_channel and self.should_sync:
+            # logger.info(f"Sending sync frame at frame {self.frame_count}")
+            self.data_channel.send(
+                json.dumps(
+                    {
+                        "type": "sync_frame",
+                        "read_timestamp": timestamp,
+                        "read_timestamp_monotonic": timestamp_monotonic,
+                        "pts": pts,
+                        "track_id": self.id,
+                    }
+                )
+            )
 
     async def recv(self):
         """Receive and encode the next video frame."""
-        self.frame_count += 1
-        # logger.debug(f"Sending frame {self.frame_count}")
-
         ret, frames = self.get_frames()
         if not ret:
             logger.error("Failed to read frames from realsense camera")
@@ -325,19 +343,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
         video_frame = video_frame.reformat(format="yuv420p")
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, self.color_stream_fps)
-        if self.data_channel and self.should_sync:
-            # logger.info(f"Sending sync frame at frame {self.frame_count}")
-            self.data_channel.send(
-                json.dumps(
-                    {
-                        "type": "sync_frame",
-                        "read_timestamp": timestamp,
-                        "read_timestamp_monotonic": timestamp_monotonic,
-                        "pts": video_frame.pts,
-                        "track_id": self.id,
-                    }
-                )
-            )
+        self._send_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
         # Publish depth frame every 30 frames
         if self.enable_depth and self.frame_count % 30 == 0:
             if depth_image.dtype != np.uint16:
@@ -345,6 +351,9 @@ class RealSenseVideoTrack(BaseVideoTrack):
         
             depth_binary = base64.b64encode(depth_image.tobytes()).decode('utf-8')
             self.client.publish_depth_frame(self.twin_uuid, depth_binary, timestamp)
+        if self.frame_count == 0:
+            self.frame_0_timestamp = timestamp
+        self.frame_count += 1
         return video_frame
 
 
@@ -434,6 +443,31 @@ class CameraStreamer:
         # Note: _should_record is intentionally NOT reset here to preserve the recording
         # preference set by the command handler before start() is called
 
+    def _publish_frame_0_timestamp(self, timestamp: float):
+        """Publish the frame_0_timestamp via MQTT."""
+        prefix = self.client.topic_prefix
+        topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/telemetry"
+        payload = {
+            "type": "video_start_timestamp",
+            "sender": "edge",
+            "timestamp": timestamp,
+            "track_id": self.streamer.id if self.streamer else None,
+        }
+        self._publish_message(topic, payload)
+        logger.info(f"Published frame_0_timestamp: {timestamp}")
+
+    async def _wait_and_publish_frame_0_timestamp(self, timeout: float = 10.0):
+        """Wait for the first frame to be sent and publish its timestamp."""
+        start_time = time.time()
+        while self.streamer and self.streamer.frame_count == 0:
+            if time.time() - start_time > timeout:
+                logger.warning("Timeout waiting for first frame")
+                return
+            await asyncio.sleep(0.1)
+        
+        if self.streamer and self.streamer.frame_0_timestamp is not None:
+            self._publish_frame_0_timestamp(self.streamer.frame_0_timestamp)
+
     # -------------------------------------------------------------------------
     # Public API - Start/Stop
     # -------------------------------------------------------------------------
@@ -470,6 +504,9 @@ class CameraStreamer:
         await self._perform_signaling()
 
         logger.debug("WebRTC connection established")
+
+        # Wait for first frame and publish its timestamp
+        asyncio.create_task(self._wait_and_publish_frame_0_timestamp())
 
     async def stop(self):
         """Stop streaming and cleanup resources."""
@@ -598,6 +635,7 @@ class CameraStreamer:
                 )
             elif parsed["type"] == "sync_frame_command":
                 self.streamer.set_should_sync(True)
+            
 
     # -------------------------------------------------------------------------
     # WebRTC Signaling

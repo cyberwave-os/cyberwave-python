@@ -336,6 +336,8 @@ class CyberwaveMQTTClient:
             return
 
         try:
+            if isinstance(message, dict):
+                message.setdefault("session_id", self.client_id)
             payload = json.dumps(message) if isinstance(message, dict) else message
             result = self.client.publish(topic, payload, qos=qos)
 
