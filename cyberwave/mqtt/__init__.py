@@ -54,7 +54,7 @@ class CyberwaveMQTTClient:
         client_id: Optional[str] = None,
         topic_prefix: str = "",
         auto_connect: bool = False,
-        twin_uuids: [List[str]] = [],
+        twin_uuids: List[str] = [],
         source_type: Optional[str] = SOURCE_TYPE_EDGE,
     ):
         self.mqtt_broker = mqtt_broker
@@ -269,6 +269,7 @@ class CyberwaveMQTTClient:
 
         if twin_uuid not in self.twin_uuids_with_telemetry_start:
             self.twin_uuids_with_telemetry_start.append(twin_uuid)
+            self._publish_connect_message(twin_uuid)
             self.publish_telemetry_start(twin_uuid, metadata)
 
     def _publish_connect_message(self, twin_uuid: str):
@@ -282,7 +283,7 @@ class CyberwaveMQTTClient:
 
     def _publish_disconnect_message(self, twin_uuid: str):
         """Publish disconnect message to MQTT broker."""
-        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/connect"
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
         message = {
             "type": "disconnected",
             "timestamp": time.time(),
@@ -336,6 +337,8 @@ class CyberwaveMQTTClient:
             return
 
         try:
+            if isinstance(message, dict):
+                message.setdefault("session_id", self.client_id)
             payload = json.dumps(message) if isinstance(message, dict) else message
             result = self.client.publish(topic, payload, qos=qos)
 
@@ -512,6 +515,7 @@ class CyberwaveMQTTClient:
         velocity: Optional[float] = None,
         effort: Optional[float] = None,
         timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
     ):
         """
         Update joint state via MQTT.
@@ -528,17 +532,17 @@ class CyberwaveMQTTClient:
                 Defaults to SOURCE_TYPE_EDGE (SDKs run on edge devices by default).
                 Users can override this to use any source type they need.
         """
-        # Use provided source_type or default to SOURCE_TYPE_EDGE (SDKs run on edge)
-        if self.source_type is None:
-            self.source_type = SOURCE_TYPE_EDGE
-        elif self.source_type not in [
+        # Use provided source_type or default to self.source_type
+        effective_source_type = source_type or self.source_type or SOURCE_TYPE_EDGE
+        
+        if effective_source_type not in [
             SOURCE_TYPE_EDGE,
             SOURCE_TYPE_TELE,
             SOURCE_TYPE_EDIT,
             SOURCE_TYPE_SIM,
         ]:
             raise ValueError(
-                f"Invalid source_type: {self.source_type}. Must be one of: "
+                f"Invalid source_type: {effective_source_type}. Must be one of: "
                 f"{SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
             )
 
@@ -558,14 +562,14 @@ class CyberwaveMQTTClient:
 
         topic = f"{self.topic_prefix}cyberwave/joint/{twin_uuid}/update"
         message = {
-            "source_type": self.source_type,
+            "source_type": effective_source_type,
             "type": "joint_state",
             "joint_name": joint_name,
             "joint_state": joint_state,
             "timestamp": timestamp or time.time(),
         }
         logger.debug(
-            f"Publishing joint state for {twin_uuid} {joint_name}: {joint_state} (source_type: {self.source_type})"
+            f"Publishing joint state for {twin_uuid} {joint_name}: {joint_state} (source_type: {effective_source_type})"
         )
 
         self.publish(topic, message)
@@ -574,6 +578,7 @@ class CyberwaveMQTTClient:
         self,
         twin_uuid: str,
         joint_positions: Dict[str, float],
+        source_type: Optional[str] = None,
     ):
         """
         Update multiple joints at once via MQTT. Sends all positions in a single
@@ -584,17 +589,17 @@ class CyberwaveMQTTClient:
             joint_positions: Dict of joint names to positions (e.g., {"shoulder_pan_joint": 1.5})
             source_type: SOURCE_TYPE_EDGE (default), SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, or SOURCE_TYPE_SIM
         """
-        # Use provided source_type or default to SOURCE_TYPE_EDGE (SDKs run on edge)
-        if self.source_type is None:
-            self.source_type = SOURCE_TYPE_EDGE
-        elif self.source_type not in [
+        # Use provided source_type or default to self.source_type
+        effective_source_type = source_type or self.source_type or SOURCE_TYPE_EDGE
+        
+        if effective_source_type not in [
             SOURCE_TYPE_EDGE,
             SOURCE_TYPE_TELE,
             SOURCE_TYPE_EDIT,
             SOURCE_TYPE_SIM,
         ]:
             raise ValueError(
-                f"Invalid source_type: {self.source_type}. Must be one of: "
+                f"Invalid source_type: {effective_source_type}. Must be one of: "
                 f"{SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
             )
 
@@ -607,12 +612,12 @@ class CyberwaveMQTTClient:
         # Format: {"source_type": "tele", "joint_name_1": position1, "joint_name_2": position2, ...}
         topic = f"{self.topic_prefix}cyberwave/joint/{twin_uuid}/update"
         message = {
-            "source_type": self.source_type,
+            "source_type": effective_source_type,
             **joint_positions,  # Unpack joint positions into message
         }
 
         logger.debug(
-            f"Publishing multi-joint state for {twin_uuid}: {len(joint_positions)} joints (source_type: {self.source_type})"
+            f"Publishing multi-joint state for {twin_uuid}: {len(joint_positions)} joints (source_type: {effective_source_type})"
         )
 
         self.publish(topic, message)

@@ -11,7 +11,7 @@ from .twin import Twin, JointController
 
 class TheRobotStudioso101Twin(Twin):
     """
-    Digital twin for SO101
+    Digital twin for SO-101
     Registry ID: the-robot-studio/so101
     """
     @property

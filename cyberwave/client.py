@@ -9,7 +9,6 @@ from cyberwave.rest import DefaultApi, ApiClient, Configuration
 from cyberwave.config import (
     CyberwaveConfig,
     DEFAULT_BASE_URL,
-    DEFAULT_MQTT_HOST,
     DEFAULT_MQTT_PORT,
 )
 from cyberwave.controller import EdgeController
@@ -78,6 +77,7 @@ class Cyberwave:
         mqtt_port: int | None = None,
         mqtt_username: Optional[str] = None,
         mqtt_password: Optional[str] = None,
+        topic_prefix: Optional[str] = None,
         source_type: Optional[str] = SOURCE_TYPE_EDGE,
         **config_kwargs,
     ):
@@ -103,6 +103,7 @@ class Cyberwave:
             mqtt_port=mqtt_port or DEFAULT_MQTT_PORT,
             mqtt_username=mqtt_username,
             mqtt_password=mqtt_password,
+            topic_prefix=topic_prefix,
             environment_id=os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
             workspace_id=os.getenv("CYBERWAVE_WORKSPACE_ID", None),
             source_type=os.getenv("CYBERWAVE_SOURCE_TYPE", SOURCE_TYPE_EDGE),

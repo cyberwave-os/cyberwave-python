@@ -6,7 +6,6 @@ from the mqtt module to work with the CyberwaveConfig object used by the main cl
 """
 
 import logging
-import os
 from typing import Callable, Optional, Dict, Any
 
 from .config import CyberwaveConfig
@@ -43,12 +42,8 @@ class CyberwaveMQTTClient:
         mqtt_username = config.mqtt_username or "mqttcyb"
         mqtt_password = config.mqtt_password or "mqttcyb231"
 
-        # Determine topic prefix from CYBERWAVE_ENVIRONMENT variable
-        env_value = os.getenv("CYBERWAVE_ENVIRONMENT", "").strip()
-        if not env_value or env_value.lower() == "production":
-            topic_prefix = ""
-        else:
-            topic_prefix = env_value
+        # Determine topic prefix from config (which handles env vars)
+        topic_prefix = config.topic_prefix or ""
 
         self._topic_prefix = topic_prefix
 
@@ -218,6 +213,7 @@ class CyberwaveMQTTClient:
             velocity,
             effort,
             timestamp,
+            source_type=source_type,
         )
 
     def update_joints_state(
