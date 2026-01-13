@@ -472,11 +472,13 @@ class RealSenseDiscovery:
                     elif stream_type == "infrared":
                         info.infrared_profiles.append(sp)
 
-            # Get sensor options
+            # Get sensor options using get_supported_options() instead of iterating rs.option
+            # (rs.option is not directly iterable in some pyrealsense2 versions)
             sensor_options = []
-            for option in rs.option:
-                try:
-                    if sensor.supports(option):
+            try:
+                supported_options = sensor.get_supported_options()
+                for option in supported_options:
+                    try:
                         option_range = sensor.get_option_range(option)
                         current_value = sensor.get_option(option)
                         description = sensor.get_option_description(option)
@@ -492,9 +494,12 @@ class RealSenseDiscovery:
                                 description=description,
                             )
                         )
-                except Exception:
-                    # Some options may not be queryable
-                    pass
+                    except Exception:
+                        # Some options may not be queryable
+                        pass
+            except Exception:
+                # get_supported_options() may not be available in older versions
+                pass
 
             if sensor_options:
                 info.sensor_options[sensor_name] = sensor_options
