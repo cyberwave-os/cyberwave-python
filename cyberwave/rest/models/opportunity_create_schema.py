@@ -38,7 +38,9 @@ class OpportunityCreateSchema(BaseModel):
     notes: Optional[StrictStr] = ''
     metadata: Optional[Dict[str, Any]] = None
     year: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "opportunity_type", "stage", "value", "contact_name", "contact_email", "company_name", "expected_close_date", "notes", "metadata", "year"]
+    workspace_uuid: Optional[StrictStr] = None
+    assigned_to_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "opportunity_type", "stage", "value", "contact_name", "contact_email", "company_name", "expected_close_date", "notes", "metadata", "year", "workspace_uuid", "assigned_to_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -104,6 +106,16 @@ class OpportunityCreateSchema(BaseModel):
         if self.year is None and "year" in self.model_fields_set:
             _dict['year'] = None
 
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
+        # set to None if assigned_to_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.assigned_to_uuid is None and "assigned_to_uuid" in self.model_fields_set:
+            _dict['assigned_to_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -127,7 +139,9 @@ class OpportunityCreateSchema(BaseModel):
             "expected_close_date": obj.get("expected_close_date"),
             "notes": obj.get("notes") if obj.get("notes") is not None else '',
             "metadata": obj.get("metadata"),
-            "year": obj.get("year")
+            "year": obj.get("year"),
+            "workspace_uuid": obj.get("workspace_uuid"),
+            "assigned_to_uuid": obj.get("assigned_to_uuid")
         })
         return _obj
 

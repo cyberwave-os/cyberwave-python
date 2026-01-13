@@ -692,10 +692,18 @@ class CyberwaveMQTTClient:
         self._handle_twin_update_with_telemetry(twin_uuid)
         self.subscribe(topic, on_message)
 
-    def publish_command_message(self, twin_uuid: str, status: str):
-        """Publish command response message via MQTT."""
+    def publish_command_message(self, twin_uuid: str, status):
+        """Publish command response message via MQTT.
+        
+        Args:
+            twin_uuid: The twin UUID to publish to
+            status: Either a string status (e.g., "ok") or a dict with status and other fields
+        """
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/command"
-        message = {"status": status}
+        if isinstance(status, dict):
+            message = status  # Use dict directly
+        else:
+            message = {"status": status}  # Wrap string in dict
         self.publish(topic, message)
 
     def subscribe_command_message(

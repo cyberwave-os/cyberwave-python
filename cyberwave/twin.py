@@ -566,13 +566,13 @@ class CameraTwin(Twin):
 
     _camera_streamer: Optional["CameraStreamer"] = None
 
-    def start_streaming(self, fps: int = 30, camera_id: int = 0) -> "CameraStreamer":
+    def start_streaming(self, fps: int = 30, camera_id: int | str = 0) -> "CameraStreamer":
         """
         Start RGB camera streaming.
 
         Args:
             fps: Frames per second (default: 10)
-            camera_id: Camera device ID (default: 0)
+            camera_id: Camera device ID or stream URL (default: 0)
 
         Returns:
             CameraStreamer instance for managing the stream

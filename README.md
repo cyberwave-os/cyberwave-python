@@ -121,48 +121,165 @@ This code will return you the first SO101 twin in your environment, or create it
 
 ### Video Streaming (WebRTC)
 
-Stream camera feeds to your digital twins using WebRTC.
+Stream camera feeds to your digital twins using WebRTC. The SDK supports both standard USB/webcam cameras (via OpenCV) and Intel RealSense cameras with RGB and depth streaming.
 
-To stream you will need to install FFMPEG if you don't have it.
+#### Prerequisites
 
-On Mac with brew:
+Install FFMPEG if you don't have it:
 
 ```bash
+# Mac
 brew install ffmpeg pkg-config
-```
 
-On Ubuntu:
-
-```bash
+# Ubuntu
 sudo apt-get install ffmpeg
 ```
 
-Then install the additional deps for camera streaming, you can select between standard cameras or intel realsense ones:
+Install camera dependencies:
 
 ```bash
-# Install with camera support
+# Standard cameras (OpenCV)
 pip install cyberwave[camera]
+
+# Intel RealSense cameras
 pip install cyberwave[realsense]
 ```
+
+#### Quick Start
 
 ```python
 import asyncio
 from cyberwave import Cyberwave
+from cyberwave.sensor import CV2CameraStreamer, RealSenseStreamer, Resolution
 
-# Initialize client
 cw = Cyberwave()
 
-camera = cw.twin("cyberwave/standard-cam")
+# CV2 Camera (USB/webcam)
+streamer = CV2CameraStreamer(
+    cw.mqtt,
+    camera_id=0,
+    resolution=Resolution.HD,
+    fps=30,
+    twin_uuid="your_twin_uuid"
+)
 
-# Start streaming
-async def stream_camera():
-    await camera.start_streaming()
-    # Stream runs until stopped
-    await asyncio.sleep(60)  # Stream for 60 seconds
-    await streamer.stop_streaming()
+async def stream():
+    await streamer.start()
+    await asyncio.sleep(60)
+    await streamer.stop()
 
-# Run the async function
-asyncio.run(stream_camera())
+asyncio.run(stream())
+```
+
+#### Resolution Options
+
+| Resolution | Size      | Description                 |
+| ---------- | --------- | --------------------------- |
+| `QVGA`     | 320×240   | Quarter VGA - low bandwidth |
+| `VGA`      | 640×480   | Standard (default)          |
+| `SVGA`     | 800×600   | Super VGA                   |
+| `HD`       | 1280×720  | 720p HD                     |
+| `FULL_HD`  | 1920×1080 | 1080p Full HD               |
+
+#### CV2 Camera (USB/Webcam)
+
+```python
+from cyberwave.sensor import CV2VideoTrack, CV2CameraStreamer, CameraConfig, Resolution
+
+# Check supported resolutions for a camera
+supported = CV2VideoTrack.get_supported_resolutions(camera_id=0)
+print(f"Supported: {[str(r) for r in supported]}")
+
+# Get camera info
+info = CV2VideoTrack.get_camera_info(camera_id=0)
+print(f"Camera: {info}")
+
+# Using CameraConfig
+config = CameraConfig(resolution=Resolution.HD, fps=30, camera_id=0)
+streamer = CV2CameraStreamer.from_config(cw.mqtt, config, twin_uuid="...")
+```
+
+#### RealSense Camera (RGB + Depth)
+
+The SDK supports dynamic discovery of RealSense device capabilities:
+
+```python
+from cyberwave.sensor import (
+    RealSenseDiscovery,
+    RealSenseConfig,
+    RealSenseStreamer,
+    Resolution
+)
+
+# Check if RealSense SDK is available
+if RealSenseDiscovery.is_available():
+    # List connected devices
+    devices = RealSenseDiscovery.list_devices()
+    for dev in devices:
+        print(f"{dev.name} (SN: {dev.serial_number})")
+
+    # Get detailed device info with all supported profiles
+    info = RealSenseDiscovery.get_device_info()
+    print(f"Color resolutions: {info.get_color_resolutions()}")
+    print(f"Depth resolutions: {info.get_depth_resolutions()}")
+    print(f"Sensor options: {info.sensor_options}")
+
+# Auto-detect and create streamer from device capabilities
+streamer = RealSenseStreamer.from_device(
+    cw.mqtt,
+    prefer_resolution=Resolution.HD,
+    prefer_fps=30,
+    enable_depth=True,
+    twin_uuid="your_twin_uuid"
+)
+
+# Or use manual configuration with validation
+config = RealSenseConfig(
+    color_resolution=Resolution.HD,
+    depth_resolution=Resolution.VGA,
+    color_fps=30,
+    depth_fps=15,
+    enable_depth=True
+)
+
+# Validate against device
+is_valid, errors = config.validate()
+if not is_valid:
+    print(f"Config errors: {errors}")
+
+streamer = RealSenseStreamer.from_config(cw.mqtt, config, twin_uuid="...")
+```
+
+#### RealSense Device Discovery
+
+Query detailed device capabilities:
+
+```python
+info = RealSenseDiscovery.get_device_info()
+
+# Check if a specific profile is supported
+if info.supports_color_profile(1280, 720, 30, "BGR8"):
+    print("HD @ 30fps with BGR8 is supported")
+
+# Get available FPS for a resolution
+fps_options = info.get_color_fps_options(1280, 720)
+print(f"Available FPS for HD: {fps_options}")
+
+# Get sensor options (exposure, gain, laser power, etc.)
+for sensor_name, options in info.sensor_options.items():
+    print(f"\n{sensor_name}:")
+    for opt in options:
+        print(f"  {opt.name}: {opt.value} (range: {opt.min_value}-{opt.max_value})")
+```
+
+#### Sensor Module Structure
+
+```
+cyberwave/sensor/
+├── __init__.py      # Base classes + exports
+├── config.py        # Resolution, CameraConfig, RealSenseConfig, RealSenseDiscovery
+├── camera_cv2.py    # CV2VideoTrack, CV2CameraStreamer
+└── camera_rs.py     # RealSenseVideoTrack, RealSenseStreamer
 ```
 
 ## Advanced Usage

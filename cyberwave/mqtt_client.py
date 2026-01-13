@@ -292,8 +292,13 @@ class CyberwaveMQTTClient:
         """Subscribe to WebRTC signaling messages via MQTT."""
         return self._client.subscribe_webrtc_messages(twin_uuid, on_message)
 
-    def publish_command_message(self, twin_uuid: str, status: str):
-        """Publish Edge command response message via MQTT."""
+    def publish_command_message(self, twin_uuid: str, status):
+        """Publish Edge command response message via MQTT.
+        
+        Args:
+            twin_uuid: The twin UUID to publish to
+            status: Either a string status (e.g., "ok") or a dict with status and other fields
+        """
         return self._client.publish_command_message(twin_uuid, status)
 
     def subscribe_command_message(

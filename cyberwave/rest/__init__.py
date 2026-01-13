@@ -19,7 +19,9 @@ __version__ = "1.0.0"
 # Define package exports
 __all__ = [
     "CRMApi",
+    "CRMInboxApi",
     "CatalogApi",
+    "ContactApi",
     "FeaturesApi",
     "DefaultApi",
     "ProfileApi",
@@ -55,6 +57,10 @@ __all__ = [
     "CombinedRecordingGenerationRequestSchema",
     "CompleteLargeUploadSchema",
     "ContactFormSchema",
+    "ContactSubmissionAIResponseSchema",
+    "ContactSubmissionAISuggestSchema",
+    "ContactSubmissionSchema",
+    "ContactSubmissionUpdateSchema",
     "ControllerPolicyCreateSchema",
     "ControllerPolicyExecuteResponseSchema",
     "ControllerPolicyExecuteSchema",
@@ -137,6 +143,7 @@ __all__ = [
     "TwinActionRequestSchema",
     "TwinActionResponseSchema",
     "TwinActionStatusSchema",
+    "TwinConnectionEventSchema",
     "TwinCreateSchema",
     "TwinMotionResponseSchema",
     "TwinNavigationCommandSchema",
@@ -171,11 +178,14 @@ __all__ = [
     "WorkspaceSchema",
     "WorkspaceUpdateSchema",
     "WorkspaceUserSchema",
+    "WorkspaceUsersSchema",
 ]
 
 # import apis into sdk package
 from cyberwave.rest.api.crm_api import CRMApi as CRMApi
+from cyberwave.rest.api.crm_inbox_api import CRMInboxApi as CRMInboxApi
 from cyberwave.rest.api.catalog_api import CatalogApi as CatalogApi
+from cyberwave.rest.api.contact_api import ContactApi as ContactApi
 from cyberwave.rest.api.features_api import FeaturesApi as FeaturesApi
 from cyberwave.rest.api.default_api import DefaultApi as DefaultApi
 from cyberwave.rest.api.profile_api import ProfileApi as ProfileApi
@@ -215,6 +225,10 @@ from cyberwave.rest.models.catalog_seed_response_schema import CatalogSeedRespon
 from cyberwave.rest.models.combined_recording_generation_request_schema import CombinedRecordingGenerationRequestSchema as CombinedRecordingGenerationRequestSchema
 from cyberwave.rest.models.complete_large_upload_schema import CompleteLargeUploadSchema as CompleteLargeUploadSchema
 from cyberwave.rest.models.contact_form_schema import ContactFormSchema as ContactFormSchema
+from cyberwave.rest.models.contact_submission_ai_response_schema import ContactSubmissionAIResponseSchema as ContactSubmissionAIResponseSchema
+from cyberwave.rest.models.contact_submission_ai_suggest_schema import ContactSubmissionAISuggestSchema as ContactSubmissionAISuggestSchema
+from cyberwave.rest.models.contact_submission_schema import ContactSubmissionSchema as ContactSubmissionSchema
+from cyberwave.rest.models.contact_submission_update_schema import ContactSubmissionUpdateSchema as ContactSubmissionUpdateSchema
 from cyberwave.rest.models.controller_policy_create_schema import ControllerPolicyCreateSchema as ControllerPolicyCreateSchema
 from cyberwave.rest.models.controller_policy_execute_response_schema import ControllerPolicyExecuteResponseSchema as ControllerPolicyExecuteResponseSchema
 from cyberwave.rest.models.controller_policy_execute_schema import ControllerPolicyExecuteSchema as ControllerPolicyExecuteSchema
@@ -297,6 +311,7 @@ from cyberwave.rest.models.team_share_schema import TeamShareSchema as TeamShare
 from cyberwave.rest.models.twin_action_request_schema import TwinActionRequestSchema as TwinActionRequestSchema
 from cyberwave.rest.models.twin_action_response_schema import TwinActionResponseSchema as TwinActionResponseSchema
 from cyberwave.rest.models.twin_action_status_schema import TwinActionStatusSchema as TwinActionStatusSchema
+from cyberwave.rest.models.twin_connection_event_schema import TwinConnectionEventSchema as TwinConnectionEventSchema
 from cyberwave.rest.models.twin_create_schema import TwinCreateSchema as TwinCreateSchema
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema as TwinMotionResponseSchema
 from cyberwave.rest.models.twin_navigation_command_schema import TwinNavigationCommandSchema as TwinNavigationCommandSchema
@@ -331,4 +346,5 @@ from cyberwave.rest.models.workspace_response_schema import WorkspaceResponseSch
 from cyberwave.rest.models.workspace_schema import WorkspaceSchema as WorkspaceSchema
 from cyberwave.rest.models.workspace_update_schema import WorkspaceUpdateSchema as WorkspaceUpdateSchema
 from cyberwave.rest.models.workspace_user_schema import WorkspaceUserSchema as WorkspaceUserSchema
+from cyberwave.rest.models.workspace_users_schema import WorkspaceUsersSchema as WorkspaceUsersSchema
 

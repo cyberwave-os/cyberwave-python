@@ -29,9 +29,9 @@ from cyberwave.exceptions import (
 )
 from cyberwave.constants import SOURCE_TYPE_EDGE
 
-# Import CameraStreamer with optional dependency handling
+# Import camera streamers with optional dependency handling
 try:
-    from cyberwave.camera import CameraStreamer
+    from cyberwave.sensor import CV2CameraStreamer as CameraStreamer
 
     _has_camera = True
 except ImportError:
@@ -39,7 +39,8 @@ except ImportError:
     CameraStreamer = None
 
 try:
-    from cyberwave.camera import RealSenseStreamer
+    from cyberwave.sensor import RealSenseStreamer
+
     _has_realsense = True
 except ImportError:
     _has_realsense = False
@@ -367,38 +368,97 @@ class Cyberwave:
             self._mqtt_client.disconnect()
             self._mqtt_client = None
 
+    @property
+    def time_reference(self) -> TimeReference:
+        """Get a shared time reference for synchronization."""
+        if not hasattr(self, "_time_reference"):
+            self._time_reference = TimeReference()
+        return self._time_reference
+
     def video_stream(
         self,
         twin_uuid: str,
-        camera_id: int = 0,
+        camera_type: str = "cv2",
+        camera_id: int | str = 0,
         fps: int = 30,
+        resolution: Optional[tuple] = None,
+        enable_depth: bool = False,
+        depth_fps: int = 30,
+        depth_resolution: Optional[tuple] = None,
+        auto_detect: bool = True,
         turn_servers: Optional[list] = None,
-        time_reference: TimeReference = TimeReference(),
-        sensor_type: Optional[str] = None,
-    ) -> "CameraStreamer":
+        time_reference: Optional[TimeReference] = None,
+        keyframe_interval: Optional[int] = None,
+        frame_callback: Optional[callable] = None,
+    ):
         """
         Create a camera streamer for the specified twin.
 
-        This method creates a CameraStreamer instance that's pre-configured with
+        This method creates a camera streamer instance that's pre-configured with
         the client's MQTT connection, providing a seamless experience for streaming
         video to digital twins.
 
+        Supports:
+        - Local cameras: camera_id=0, camera_id=1 (device index)
+        - IP cameras: camera_id="http://192.168.1.100/snapshot.jpg"
+        - RTSP streams: camera_id="rtsp://192.168.1.100:554/stream"
+        - Intel RealSense: camera_type="realsense"
+
         Args:
             twin_uuid: UUID of the digital twin to stream to
-            camera_id: Camera device ID (default: 0)
-            fps: Frames per second (default: 10)
+            camera_type: Camera type - "cv2" for USB/webcam/IP, "realsense" for Intel RealSense
+            camera_id: Camera device ID (int) or stream URL (str) (default: 0)
+            fps: Frames per second (default: 30)
+            resolution: Video resolution as (width, height) tuple (default: 640x480)
+            enable_depth: Enable depth streaming for RealSense (default: False)
+            depth_fps: Depth stream FPS for RealSense (default: 30)
+            depth_resolution: Depth resolution as (width, height) tuple (default: same as color)
+            auto_detect: Auto-detect RealSense capabilities (default: True)
             turn_servers: Optional list of TURN server configurations
+            time_reference: Optional time reference for synchronization
+            keyframe_interval: Force a keyframe every N frames for better streaming start.
+                If None, uses CYBERWAVE_KEYFRAME_INTERVAL env var, or disables forced keyframes.
+                Recommended: fps * 2 (e.g., 60 for 30fps = keyframe every 2 seconds)
+            frame_callback: Optional callback for each frame (ML inference, etc.).
+                Signature: callback(frame: np.ndarray, frame_count: int) -> None
 
         Returns:
-            CameraStreamer instance ready to start streaming
+            Camera streamer instance (CV2CameraStreamer or RealSenseStreamer)
 
         Example:
             >>> client = Cyberwave(token="your_token")
-            >>> streamer = client.video_stream(twin_uuid="your_twin_uuid")
+            >>>
+            >>> # Local USB camera
+            >>> streamer = client.video_stream(
+            ...     twin_uuid="your_twin_uuid",
+            ...     camera_type="cv2",
+            ...     camera_id=0,
+            ...     resolution=(1280, 720),
+            ...     fps=30
+            ... )
+            >>>
+            >>> # IP camera / RTSP stream
+            >>> streamer = client.video_stream(
+            ...     twin_uuid="your_twin_uuid",
+            ...     camera_type="cv2",
+            ...     camera_id="rtsp://192.168.1.100:554/stream",
+            ...     fps=15
+            ... )
+            >>>
+            >>> # RealSense camera with depth
+            >>> streamer = client.video_stream(
+            ...     twin_uuid="your_twin_uuid",
+            ...     camera_type="realsense",
+            ...     resolution=(1280, 720),
+            ...     enable_depth=True,
+            ...     auto_detect=True
+            ... )
+            >>>
             >>> await streamer.start()
 
         Raises:
-            ImportError: If camera dependencies are not installed (install with: pip install cyberwave[camera])
+            ImportError: If camera dependencies are not installed
+            CyberwaveError: If camera type is not supported
         """
         if not _has_camera:
             raise ImportError(
@@ -411,26 +471,75 @@ class Cyberwave:
 
         self.mqtt.connect()
         self.mqtt._client._handle_twin_update_with_telemetry(twin_uuid)
-        if sensor_type=="rgb":
+
+        # Use shared time reference if not provided
+        if time_reference is None:
+            time_reference = self.time_reference
+
+        # Default resolution
+        if resolution is None:
+            resolution = (640, 480)
+
+        camera_type_lower = camera_type.lower()
+
+        if camera_type_lower == "cv2":
             return CameraStreamer(
-            client=self.mqtt,
-            camera_id=camera_id,
-            fps=fps,
-            turn_servers=turn_servers,
-            twin_uuid=twin_uuid,
-            time_reference=time_reference,
-        )
-        elif sensor_type=="depth" and _has_realsense:
-            return RealSenseStreamer(
                 client=self.mqtt,
+                camera_id=camera_id,
+                fps=fps,
+                resolution=resolution,
                 turn_servers=turn_servers,
                 twin_uuid=twin_uuid,
                 time_reference=time_reference,
+                keyframe_interval=keyframe_interval,
+                frame_callback=frame_callback,
             )
+        elif camera_type_lower == "realsense":
+            if not _has_realsense:
+                raise ImportError(
+                    "RealSense camera support requires additional dependencies. "
+                    "Install them with: pip install cyberwave[realsense]"
+                )
+
+            # Import Resolution for RealSense
+            from cyberwave.sensor import Resolution
+
+            # Convert tuple to Resolution enum for from_device
+            def to_resolution(res):
+                if isinstance(res, tuple):
+                    return Resolution.from_size(res[0], res[1]) or Resolution.closest(res[0], res[1])
+                return res
+
+            # Depth resolution defaults to color resolution
+            if depth_resolution is None:
+                depth_resolution = resolution
+
+            if auto_detect:
+                return RealSenseStreamer.from_device(
+                    client=self.mqtt,
+                    prefer_resolution=to_resolution(resolution),
+                    prefer_fps=fps,
+                    enable_depth=enable_depth,
+                    turn_servers=turn_servers,
+                    twin_uuid=twin_uuid,
+                    time_reference=time_reference,
+                )
+            else:
+                return RealSenseStreamer(
+                    client=self.mqtt,
+                    color_fps=fps,
+                    depth_fps=depth_fps,
+                    color_resolution=resolution,
+                    depth_resolution=depth_resolution,
+                    enable_depth=enable_depth,
+                    turn_servers=turn_servers,
+                    twin_uuid=twin_uuid,
+                    time_reference=time_reference,
+                )
         else:
             raise CyberwaveError(
-                f"Only RGB and depth sensors are supported, got {sensor_type} sensor. Try installing the correct dependencies."
-                "Install them with: pip install cyberwave[camera,realsense]"
+                f"Unsupported camera type: {camera_type}. "
+                "Supported types: 'cv2', 'realsense'"
             )
 
     def controller(

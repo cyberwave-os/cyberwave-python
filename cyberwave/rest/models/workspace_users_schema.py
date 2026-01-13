@@ -18,22 +18,18 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ContactFormSchema(BaseModel):
+class WorkspaceUsersSchema(BaseModel):
     """
-    ContactFormSchema
+    Schema for listing users in a workspace for assignment dropdowns.
     """ # noqa: E501
-    first_name: StrictStr
-    last_name: StrictStr
+    uuid: StrictStr
+    name: StrictStr
     email: StrictStr
-    subject: StrictStr
-    message: StrictStr
-    source: Optional[StrictStr] = 'contact_form'
-    workspace_slug: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["first_name", "last_name", "email", "subject", "message", "source", "workspace_slug"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "email"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -53,7 +49,7 @@ class ContactFormSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ContactFormSchema from a JSON string"""
+        """Create an instance of WorkspaceUsersSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,16 +70,11 @@ class ContactFormSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if workspace_slug (nullable) is None
-        # and model_fields_set contains the field
-        if self.workspace_slug is None and "workspace_slug" in self.model_fields_set:
-            _dict['workspace_slug'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ContactFormSchema from a dict"""
+        """Create an instance of WorkspaceUsersSchema from a dict"""
         if obj is None:
             return None
 
@@ -91,13 +82,9 @@ class ContactFormSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "first_name": obj.get("first_name"),
-            "last_name": obj.get("last_name"),
-            "email": obj.get("email"),
-            "subject": obj.get("subject"),
-            "message": obj.get("message"),
-            "source": obj.get("source") if obj.get("source") is not None else 'contact_form',
-            "workspace_slug": obj.get("workspace_slug")
+            "uuid": obj.get("uuid"),
+            "name": obj.get("name"),
+            "email": obj.get("email")
         })
         return _obj
 

@@ -18,42 +18,35 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from pydantic import BaseModel, ConfigDict, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class OpportunitySchema(BaseModel):
+class ContactSubmissionSchema(BaseModel):
     """
-    OpportunitySchema
+    ContactSubmissionSchema
     """ # noqa: E501
     uuid: StrictStr
     name: StrictStr
-    description: StrictStr
-    opportunity_type: StrictStr
-    stage: StrictStr
-    value: Optional[Union[StrictFloat, StrictInt]] = None
-    contact_name: StrictStr
-    contact_email: StrictStr
-    company_name: StrictStr
-    expected_close_date: Optional[StrictStr] = None
+    email: StrictStr
+    subject: StrictStr
+    message: StrictStr
+    status: StrictStr
+    source: StrictStr
     notes: StrictStr
+    suggested_response: StrictStr
+    suggested_opportunity_type: StrictStr
     metadata: Dict[str, Any]
-    year: StrictInt
-    is_archived: StrictBool
-    sort_order: StrictInt
-    owner_uuid: StrictStr
     organization_uuid: StrictStr
     workspace_uuid: Optional[StrictStr] = None
     workspace_name: Optional[StrictStr] = None
     assigned_to_uuid: Optional[StrictStr] = None
     assigned_to_name: Optional[StrictStr] = None
+    opportunity_uuid: Optional[StrictStr] = None
     created_at: datetime
     updated_at: datetime
-    created_by: StrictStr
-    created_by_name: Optional[StrictStr] = None
-    updated_by: StrictStr
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "opportunity_type", "stage", "value", "contact_name", "contact_email", "company_name", "expected_close_date", "notes", "metadata", "year", "is_archived", "sort_order", "owner_uuid", "organization_uuid", "workspace_uuid", "workspace_name", "assigned_to_uuid", "assigned_to_name", "created_at", "updated_at", "created_by", "created_by_name", "updated_by"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "email", "subject", "message", "status", "source", "notes", "suggested_response", "suggested_opportunity_type", "metadata", "organization_uuid", "workspace_uuid", "workspace_name", "assigned_to_uuid", "assigned_to_name", "opportunity_uuid", "created_at", "updated_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -73,7 +66,7 @@ class OpportunitySchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of OpportunitySchema from a JSON string"""
+        """Create an instance of ContactSubmissionSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -94,16 +87,6 @@ class OpportunitySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if value (nullable) is None
-        # and model_fields_set contains the field
-        if self.value is None and "value" in self.model_fields_set:
-            _dict['value'] = None
-
-        # set to None if expected_close_date (nullable) is None
-        # and model_fields_set contains the field
-        if self.expected_close_date is None and "expected_close_date" in self.model_fields_set:
-            _dict['expected_close_date'] = None
-
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -124,16 +107,16 @@ class OpportunitySchema(BaseModel):
         if self.assigned_to_name is None and "assigned_to_name" in self.model_fields_set:
             _dict['assigned_to_name'] = None
 
-        # set to None if created_by_name (nullable) is None
+        # set to None if opportunity_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.created_by_name is None and "created_by_name" in self.model_fields_set:
-            _dict['created_by_name'] = None
+        if self.opportunity_uuid is None and "opportunity_uuid" in self.model_fields_set:
+            _dict['opportunity_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of OpportunitySchema from a dict"""
+        """Create an instance of ContactSubmissionSchema from a dict"""
         if obj is None:
             return None
 
@@ -143,30 +126,23 @@ class OpportunitySchema(BaseModel):
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
-            "description": obj.get("description"),
-            "opportunity_type": obj.get("opportunity_type"),
-            "stage": obj.get("stage"),
-            "value": obj.get("value"),
-            "contact_name": obj.get("contact_name"),
-            "contact_email": obj.get("contact_email"),
-            "company_name": obj.get("company_name"),
-            "expected_close_date": obj.get("expected_close_date"),
+            "email": obj.get("email"),
+            "subject": obj.get("subject"),
+            "message": obj.get("message"),
+            "status": obj.get("status"),
+            "source": obj.get("source"),
             "notes": obj.get("notes"),
+            "suggested_response": obj.get("suggested_response"),
+            "suggested_opportunity_type": obj.get("suggested_opportunity_type"),
             "metadata": obj.get("metadata"),
-            "year": obj.get("year"),
-            "is_archived": obj.get("is_archived"),
-            "sort_order": obj.get("sort_order"),
-            "owner_uuid": obj.get("owner_uuid"),
             "organization_uuid": obj.get("organization_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "workspace_name": obj.get("workspace_name"),
             "assigned_to_uuid": obj.get("assigned_to_uuid"),
             "assigned_to_name": obj.get("assigned_to_name"),
+            "opportunity_uuid": obj.get("opportunity_uuid"),
             "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "created_by": obj.get("created_by"),
-            "created_by_name": obj.get("created_by_name"),
-            "updated_by": obj.get("updated_by")
+            "updated_at": obj.get("updated_at")
         })
         return _obj
 

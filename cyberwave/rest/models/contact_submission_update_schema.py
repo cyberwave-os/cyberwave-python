@@ -22,18 +22,16 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ContactFormSchema(BaseModel):
+class ContactSubmissionUpdateSchema(BaseModel):
     """
-    ContactFormSchema
+    ContactSubmissionUpdateSchema
     """ # noqa: E501
-    first_name: StrictStr
-    last_name: StrictStr
-    email: StrictStr
-    subject: StrictStr
-    message: StrictStr
-    source: Optional[StrictStr] = 'contact_form'
-    workspace_slug: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["first_name", "last_name", "email", "subject", "message", "source", "workspace_slug"]
+    status: Optional[StrictStr] = None
+    notes: Optional[StrictStr] = None
+    suggested_response: Optional[StrictStr] = None
+    suggested_opportunity_type: Optional[StrictStr] = None
+    assigned_to_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["status", "notes", "suggested_response", "suggested_opportunity_type", "assigned_to_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -53,7 +51,7 @@ class ContactFormSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ContactFormSchema from a JSON string"""
+        """Create an instance of ContactSubmissionUpdateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,16 +72,36 @@ class ContactFormSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if workspace_slug (nullable) is None
+        # set to None if status (nullable) is None
         # and model_fields_set contains the field
-        if self.workspace_slug is None and "workspace_slug" in self.model_fields_set:
-            _dict['workspace_slug'] = None
+        if self.status is None and "status" in self.model_fields_set:
+            _dict['status'] = None
+
+        # set to None if notes (nullable) is None
+        # and model_fields_set contains the field
+        if self.notes is None and "notes" in self.model_fields_set:
+            _dict['notes'] = None
+
+        # set to None if suggested_response (nullable) is None
+        # and model_fields_set contains the field
+        if self.suggested_response is None and "suggested_response" in self.model_fields_set:
+            _dict['suggested_response'] = None
+
+        # set to None if suggested_opportunity_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.suggested_opportunity_type is None and "suggested_opportunity_type" in self.model_fields_set:
+            _dict['suggested_opportunity_type'] = None
+
+        # set to None if assigned_to_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.assigned_to_uuid is None and "assigned_to_uuid" in self.model_fields_set:
+            _dict['assigned_to_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ContactFormSchema from a dict"""
+        """Create an instance of ContactSubmissionUpdateSchema from a dict"""
         if obj is None:
             return None
 
@@ -91,13 +109,11 @@ class ContactFormSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "first_name": obj.get("first_name"),
-            "last_name": obj.get("last_name"),
-            "email": obj.get("email"),
-            "subject": obj.get("subject"),
-            "message": obj.get("message"),
-            "source": obj.get("source") if obj.get("source") is not None else 'contact_form',
-            "workspace_slug": obj.get("workspace_slug")
+            "status": obj.get("status"),
+            "notes": obj.get("notes"),
+            "suggested_response": obj.get("suggested_response"),
+            "suggested_opportunity_type": obj.get("suggested_opportunity_type"),
+            "assigned_to_uuid": obj.get("assigned_to_uuid")
         })
         return _obj
 

@@ -40,7 +40,10 @@ class OpportunityUpdateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     year: Optional[StrictInt] = None
     is_archived: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "opportunity_type", "stage", "value", "contact_name", "contact_email", "company_name", "expected_close_date", "notes", "metadata", "year", "is_archived"]
+    sort_order: Optional[StrictInt] = None
+    workspace_uuid: Optional[StrictStr] = None
+    assigned_to_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "opportunity_type", "stage", "value", "contact_name", "contact_email", "company_name", "expected_close_date", "notes", "metadata", "year", "is_archived", "sort_order", "workspace_uuid", "assigned_to_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -149,6 +152,21 @@ class OpportunityUpdateSchema(BaseModel):
         if self.is_archived is None and "is_archived" in self.model_fields_set:
             _dict['is_archived'] = None
 
+        # set to None if sort_order (nullable) is None
+        # and model_fields_set contains the field
+        if self.sort_order is None and "sort_order" in self.model_fields_set:
+            _dict['sort_order'] = None
+
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
+        # set to None if assigned_to_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.assigned_to_uuid is None and "assigned_to_uuid" in self.model_fields_set:
+            _dict['assigned_to_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -173,7 +191,10 @@ class OpportunityUpdateSchema(BaseModel):
             "notes": obj.get("notes"),
             "metadata": obj.get("metadata"),
             "year": obj.get("year"),
-            "is_archived": obj.get("is_archived")
+            "is_archived": obj.get("is_archived"),
+            "sort_order": obj.get("sort_order"),
+            "workspace_uuid": obj.get("workspace_uuid"),
+            "assigned_to_uuid": obj.get("assigned_to_uuid")
         })
         return _obj
 
