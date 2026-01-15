@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 class EdgeSchema(BaseModel):
     """
-    EdgeSchema
+    Edge device schema using resolver mixins.
     """ # noqa: E501
     uuid: StrictStr
     name: StrictStr

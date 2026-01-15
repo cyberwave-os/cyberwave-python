@@ -34,12 +34,13 @@ class MLModelCreateSchema(BaseModel):
     tags: Optional[List[StrictStr]] = None
     model_external_id: StrictStr
     model_provider_name: StrictStr
+    deployment: Optional[StrictStr] = 'cloud'
     can_take_video_as_input: Optional[StrictBool] = False
     can_take_audio_as_input: Optional[StrictBool] = False
     can_take_image_as_input: Optional[StrictBool] = False
     can_take_text_as_input: Optional[StrictBool] = True
     can_take_action_as_input: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["name", "description", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
+    __properties: ClassVar[List[str]] = ["name", "description", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -115,6 +116,7 @@ class MLModelCreateSchema(BaseModel):
             "tags": obj.get("tags"),
             "model_external_id": obj.get("model_external_id"),
             "model_provider_name": obj.get("model_provider_name"),
+            "deployment": obj.get("deployment") if obj.get("deployment") is not None else 'cloud',
             "can_take_video_as_input": obj.get("can_take_video_as_input") if obj.get("can_take_video_as_input") is not None else False,
             "can_take_audio_as_input": obj.get("can_take_audio_as_input") if obj.get("can_take_audio_as_input") is not None else False,
             "can_take_image_as_input": obj.get("can_take_image_as_input") if obj.get("can_take_image_as_input") is not None else False,

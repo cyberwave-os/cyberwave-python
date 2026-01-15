@@ -30,6 +30,9 @@ from cyberwave.rest.models.asset_update_schema import AssetUpdateSchema
 from cyberwave.rest.models.attachment_create_schema import AttachmentCreateSchema
 from cyberwave.rest.models.attachment_schema import AttachmentSchema
 from cyberwave.rest.models.bulk_joint_states_update_schema import BulkJointStatesUpdateSchema
+from cyberwave.rest.models.business_event_create_schema import BusinessEventCreateSchema
+from cyberwave.rest.models.business_event_list_response_schema import BusinessEventListResponseSchema
+from cyberwave.rest.models.business_event_schema import BusinessEventSchema
 from cyberwave.rest.models.combined_recording_generation_request_schema import CombinedRecordingGenerationRequestSchema
 from cyberwave.rest.models.complete_large_upload_schema import CompleteLargeUploadSchema
 from cyberwave.rest.models.controller_policy_create_schema import ControllerPolicyCreateSchema
@@ -21731,6 +21734,628 @@ class DefaultApi:
 
 
     @validate_call
+    def src_app_api_events_create_business_event(
+        self,
+        business_event_create_schema: BusinessEventCreateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> BusinessEventSchema:
+        """Create Business Event
+
+        Create a business event and trigger matching workflows.  Sources: sensor, robot, edge_node, workflow, user, system  For ML model events, use source='edge_node' or 'system' and include model details in the data field: {\"model\": \"yolo-v8\", \"version\": \"1.0\", ...}
+
+        :param business_event_create_schema: (required)
+        :type business_event_create_schema: BusinessEventCreateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_events_create_business_event_serialize(
+            business_event_create_schema=business_event_create_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "BusinessEventSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_events_create_business_event_with_http_info(
+        self,
+        business_event_create_schema: BusinessEventCreateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[BusinessEventSchema]:
+        """Create Business Event
+
+        Create a business event and trigger matching workflows.  Sources: sensor, robot, edge_node, workflow, user, system  For ML model events, use source='edge_node' or 'system' and include model details in the data field: {\"model\": \"yolo-v8\", \"version\": \"1.0\", ...}
+
+        :param business_event_create_schema: (required)
+        :type business_event_create_schema: BusinessEventCreateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_events_create_business_event_serialize(
+            business_event_create_schema=business_event_create_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "BusinessEventSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_events_create_business_event_without_preload_content(
+        self,
+        business_event_create_schema: BusinessEventCreateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Create Business Event
+
+        Create a business event and trigger matching workflows.  Sources: sensor, robot, edge_node, workflow, user, system  For ML model events, use source='edge_node' or 'system' and include model details in the data field: {\"model\": \"yolo-v8\", \"version\": \"1.0\", ...}
+
+        :param business_event_create_schema: (required)
+        :type business_event_create_schema: BusinessEventCreateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_events_create_business_event_serialize(
+            business_event_create_schema=business_event_create_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "BusinessEventSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_events_create_business_event_serialize(
+        self,
+        business_event_create_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if business_event_create_schema is not None:
+            _body_params = business_event_create_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/events',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_events_list_live_events(
+        self,
+        environment_uuid: Optional[StrictStr] = None,
+        source: Optional[StrictStr] = None,
+        severity: Optional[StrictStr] = None,
+        event_type: Optional[StrictStr] = None,
+        last_timestamp_ms: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> BusinessEventListResponseSchema:
+        """List Live Events
+
+        Get recent business events for live visualization.  Supports filtering by: - environment_uuid: Filter by environment - source: Filter by source type (sensor, robot, edge_node, workflow, user, system) - severity: Filter by severity level (DEBUG, INFO, WARNING, ERROR, CRITICAL) - event_type: Filter by event type (exact match) - last_timestamp_ms: Get events after this timestamp (for polling)
+
+        :param environment_uuid:
+        :type environment_uuid: str
+        :param source:
+        :type source: str
+        :param severity:
+        :type severity: str
+        :param event_type:
+        :type event_type: str
+        :param last_timestamp_ms:
+        :type last_timestamp_ms: int
+        :param limit:
+        :type limit: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_events_list_live_events_serialize(
+            environment_uuid=environment_uuid,
+            source=source,
+            severity=severity,
+            event_type=event_type,
+            last_timestamp_ms=last_timestamp_ms,
+            limit=limit,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "BusinessEventListResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_events_list_live_events_with_http_info(
+        self,
+        environment_uuid: Optional[StrictStr] = None,
+        source: Optional[StrictStr] = None,
+        severity: Optional[StrictStr] = None,
+        event_type: Optional[StrictStr] = None,
+        last_timestamp_ms: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[BusinessEventListResponseSchema]:
+        """List Live Events
+
+        Get recent business events for live visualization.  Supports filtering by: - environment_uuid: Filter by environment - source: Filter by source type (sensor, robot, edge_node, workflow, user, system) - severity: Filter by severity level (DEBUG, INFO, WARNING, ERROR, CRITICAL) - event_type: Filter by event type (exact match) - last_timestamp_ms: Get events after this timestamp (for polling)
+
+        :param environment_uuid:
+        :type environment_uuid: str
+        :param source:
+        :type source: str
+        :param severity:
+        :type severity: str
+        :param event_type:
+        :type event_type: str
+        :param last_timestamp_ms:
+        :type last_timestamp_ms: int
+        :param limit:
+        :type limit: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_events_list_live_events_serialize(
+            environment_uuid=environment_uuid,
+            source=source,
+            severity=severity,
+            event_type=event_type,
+            last_timestamp_ms=last_timestamp_ms,
+            limit=limit,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "BusinessEventListResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_events_list_live_events_without_preload_content(
+        self,
+        environment_uuid: Optional[StrictStr] = None,
+        source: Optional[StrictStr] = None,
+        severity: Optional[StrictStr] = None,
+        event_type: Optional[StrictStr] = None,
+        last_timestamp_ms: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """List Live Events
+
+        Get recent business events for live visualization.  Supports filtering by: - environment_uuid: Filter by environment - source: Filter by source type (sensor, robot, edge_node, workflow, user, system) - severity: Filter by severity level (DEBUG, INFO, WARNING, ERROR, CRITICAL) - event_type: Filter by event type (exact match) - last_timestamp_ms: Get events after this timestamp (for polling)
+
+        :param environment_uuid:
+        :type environment_uuid: str
+        :param source:
+        :type source: str
+        :param severity:
+        :type severity: str
+        :param event_type:
+        :type event_type: str
+        :param last_timestamp_ms:
+        :type last_timestamp_ms: int
+        :param limit:
+        :type limit: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_events_list_live_events_serialize(
+            environment_uuid=environment_uuid,
+            source=source,
+            severity=severity,
+            event_type=event_type,
+            last_timestamp_ms=last_timestamp_ms,
+            limit=limit,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "BusinessEventListResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_events_list_live_events_serialize(
+        self,
+        environment_uuid,
+        source,
+        severity,
+        event_type,
+        last_timestamp_ms,
+        limit,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        if environment_uuid is not None:
+            
+            _query_params.append(('environment_uuid', environment_uuid))
+            
+        if source is not None:
+            
+            _query_params.append(('source', source))
+            
+        if severity is not None:
+            
+            _query_params.append(('severity', severity))
+            
+        if event_type is not None:
+            
+            _query_params.append(('event_type', event_type))
+            
+        if last_timestamp_ms is not None:
+            
+            _query_params.append(('last_timestamp_ms', last_timestamp_ms))
+            
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/events/live',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
     def src_app_api_invitation_router_accept_invitation_endpoint(
         self,
         token: StrictStr,
@@ -23044,6 +23669,8 @@ class DefaultApi:
     @validate_call
     def src_app_api_mlmodels_list_mlmodels(
         self,
+        deployment: Optional[StrictStr] = None,
+        edge_compatible: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -23059,8 +23686,12 @@ class DefaultApi:
     ) -> List[MLModelSchema]:
         """List Mlmodels
 
-        List all ML models for the authenticated user's workspace.
+        List all ML models for the authenticated user's workspace.  Query params:     deployment: Filter by deployment type (cloud, edge, hybrid)     edge_compatible: If true, return only edge or hybrid models
 
+        :param deployment:
+        :type deployment: str
+        :param edge_compatible:
+        :type edge_compatible: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -23084,6 +23715,8 @@ class DefaultApi:
         """ # noqa: E501
 
         _param = self._src_app_api_mlmodels_list_mlmodels_serialize(
+            deployment=deployment,
+            edge_compatible=edge_compatible,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -23107,6 +23740,8 @@ class DefaultApi:
     @validate_call
     def src_app_api_mlmodels_list_mlmodels_with_http_info(
         self,
+        deployment: Optional[StrictStr] = None,
+        edge_compatible: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -23122,8 +23757,12 @@ class DefaultApi:
     ) -> ApiResponse[List[MLModelSchema]]:
         """List Mlmodels
 
-        List all ML models for the authenticated user's workspace.
+        List all ML models for the authenticated user's workspace.  Query params:     deployment: Filter by deployment type (cloud, edge, hybrid)     edge_compatible: If true, return only edge or hybrid models
 
+        :param deployment:
+        :type deployment: str
+        :param edge_compatible:
+        :type edge_compatible: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -23147,6 +23786,8 @@ class DefaultApi:
         """ # noqa: E501
 
         _param = self._src_app_api_mlmodels_list_mlmodels_serialize(
+            deployment=deployment,
+            edge_compatible=edge_compatible,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -23170,6 +23811,8 @@ class DefaultApi:
     @validate_call
     def src_app_api_mlmodels_list_mlmodels_without_preload_content(
         self,
+        deployment: Optional[StrictStr] = None,
+        edge_compatible: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -23185,8 +23828,12 @@ class DefaultApi:
     ) -> RESTResponseType:
         """List Mlmodels
 
-        List all ML models for the authenticated user's workspace.
+        List all ML models for the authenticated user's workspace.  Query params:     deployment: Filter by deployment type (cloud, edge, hybrid)     edge_compatible: If true, return only edge or hybrid models
 
+        :param deployment:
+        :type deployment: str
+        :param edge_compatible:
+        :type edge_compatible: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -23210,6 +23857,8 @@ class DefaultApi:
         """ # noqa: E501
 
         _param = self._src_app_api_mlmodels_list_mlmodels_serialize(
+            deployment=deployment,
+            edge_compatible=edge_compatible,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -23228,6 +23877,8 @@ class DefaultApi:
 
     def _src_app_api_mlmodels_list_mlmodels_serialize(
         self,
+        deployment,
+        edge_compatible,
         _request_auth,
         _content_type,
         _headers,
@@ -23250,6 +23901,14 @@ class DefaultApi:
 
         # process the path parameters
         # process the query parameters
+        if deployment is not None:
+            
+            _query_params.append(('deployment', deployment))
+            
+        if edge_compatible is not None:
+            
+            _query_params.append(('edge_compatible', edge_compatible))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -38596,6 +39255,267 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='DELETE',
             resource_path='/api/v1/workflows/{workflow_uuid}/nodes/{node_uuid}',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_workflows_edge_sync_workflows(
+        self,
+        twin_uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> Dict[str, object]:
+        """Edge Sync Workflows
+
+        Sync workflows for an edge node.  Returns active workflows with camera_frame triggers for the specified twin, along with resolved plugin requirements from MLModel metadata.  Edge nodes call this to know: 1. Which workflows to run 2. Which plugins/models to install 3. What events to emit
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_workflows_edge_sync_workflows_serialize(
+            twin_uuid=twin_uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, object]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_workflows_edge_sync_workflows_with_http_info(
+        self,
+        twin_uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[Dict[str, object]]:
+        """Edge Sync Workflows
+
+        Sync workflows for an edge node.  Returns active workflows with camera_frame triggers for the specified twin, along with resolved plugin requirements from MLModel metadata.  Edge nodes call this to know: 1. Which workflows to run 2. Which plugins/models to install 3. What events to emit
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_workflows_edge_sync_workflows_serialize(
+            twin_uuid=twin_uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, object]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_workflows_edge_sync_workflows_without_preload_content(
+        self,
+        twin_uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Edge Sync Workflows
+
+        Sync workflows for an edge node.  Returns active workflows with camera_frame triggers for the specified twin, along with resolved plugin requirements from MLModel metadata.  Edge nodes call this to know: 1. Which workflows to run 2. Which plugins/models to install 3. What events to emit
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_workflows_edge_sync_workflows_serialize(
+            twin_uuid=twin_uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, object]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_workflows_edge_sync_workflows_serialize(
+        self,
+        twin_uuid,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if twin_uuid is not None:
+            _path_params['twin_uuid'] = twin_uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/workflows/edge-sync/{twin_uuid}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
