@@ -136,24 +136,44 @@ def get_base_class(capabilities: Optional[dict[str, Any]]) -> str:
         return "Twin"
 
 
-def fetch_assets(api_url: str) -> list[dict[str, Any]]:
-    """Fetch assets from the Cyberwave API."""
-    url = f"{api_url}/api/v1/assets"
+def fetch_assets(api_url: str, limit: int = 100) -> list[dict[str, Any]]:
+    """Fetch all assets from the Cyberwave API, handling pagination."""
+    all_assets: list[dict[str, Any]] = []
+    offset = 0
 
-    try:
-        request = Request(url, headers={"Accept": "application/json"})
-        with urlopen(request, timeout=30) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            return data if isinstance(data, list) else []
-    except HTTPError as e:
-        print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
-        return []
-    except URLError as e:
-        print(f"URL Error: {e.reason}", file=sys.stderr)
-        return []
-    except Exception as e:
-        print(f"Error fetching assets: {e}", file=sys.stderr)
-        return []
+    while True:
+        url = f"{api_url}/api/v1/assets?limit={limit}&offset={offset}"
+
+        try:
+            request = Request(url, headers={"Accept": "application/json"})
+            with urlopen(request, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                page_assets = data if isinstance(data, list) else []
+
+                if not page_assets:
+                    # No more assets to fetch
+                    break
+
+                all_assets.extend(page_assets)
+                print(f"  Fetched {len(page_assets)} assets (total: {len(all_assets)})")
+
+                if len(page_assets) < limit:
+                    # Last page reached (fewer items than requested)
+                    break
+
+                offset += limit
+
+        except HTTPError as e:
+            print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
+            break
+        except URLError as e:
+            print(f"URL Error: {e.reason}", file=sys.stderr)
+            break
+        except Exception as e:
+            print(f"Error fetching assets: {e}", file=sys.stderr)
+            break
+
+    return all_assets
 
 
 def get_methods_for_capabilities(

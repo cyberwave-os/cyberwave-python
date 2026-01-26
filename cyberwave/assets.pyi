@@ -756,6 +756,191 @@ class Intelrealsensed455Twin(Twin):
     """
     pass
 
+class BaslerbaslerAgAceGigeTwin(Twin):
+    """
+    Digital twin for Basler AG ace GigE
+    Registry ID: basler/basler_ag_ace_gige
+    """
+    pass
+
+class Logitechc275Twin(Twin):
+    """
+    Digital twin for Logitech c275
+    Registry ID: logitech/c275
+    """
+    pass
+
+class RaspberrypiCamerav3Twin(Twin):
+    """
+    Digital twin for Pi-cameraV3
+    Registry ID: raspberry/pi-camerav3
+    """
+    pass
+
+class CyberwavestandardCamTwin(Twin):
+    """
+    Digital twin for Standard Camera
+    Registry ID: cyberwave/standard-cam
+    """
+    pass
+
+class CyberwavegenericIpcameraTwin(Twin):
+    """
+    Digital twin for Generic IP Camera
+    Registry ID: cyberwave/generic_ipcamera
+    """
+    pass
+
+class ProxDynamicsblackHornetNanoTwin(Twin):
+    """
+    Digital twin for Black Hornet Nano
+    Registry ID: prox-dynamics/black-hornet-nano
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class CyberwavegenericAuvTwin(Twin):
+    """
+    Digital twin for Generic Auv
+    Registry ID: cyberwave/generic-auv
+    """
+    pass
+
+class CyberwavesubstationTwin(Twin):
+    """
+    Digital twin for Electric Substation
+    Registry ID: cyberwave/substation
+    """
+    pass
+
+class SzDjiTechnologydjiMini3ProTwin(Twin):
+    """
+    Digital twin for DJI Mini 3 Pro
+    Registry ID: SZ-DJI-Technology/DJI-Mini-3-Pro
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class SzDjiTechnologydjiMini4ProTwin(Twin):
+    """
+    Digital twin for DJI Mini 4 Pro
+    Registry ID: SZ-DJI-Technology/DJI-Mini-4-Pro
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class Holybropx4visionTwin(Twin):
+    """
+    Digital twin for PX4 Vision
+    Registry ID: Holybro/PX4Vision
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class HoverspectavientoryPlatformTwin(Twin):
+    """
+    Digital twin for Avientory Platform
+    Registry ID: hoverspect/Avientory-Platform
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class Apeiroonbx100Twin(Twin):
+    """
+    Digital twin for BX100
+    Registry ID: apeiroon/bx100
+    """
+    pass
+
+class Logitechc920Twin(Twin):
+    """
+    Digital twin for Logitech C920
+    Registry ID: logitech/c920
+    """
+    pass
+
+class TheRobotStudioso101WithCameraTwin(Twin):
+    """
+    Digital twin for SO-101 with camera
+    Registry ID: the-robot-studio/so101-with-camera
+    """
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur7Twin(Twin):
+    """
+    Digital twin for UR7
+    Registry ID: universal_robots/UR7
+    """
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class Enacticopenarm01Twin(Twin):
+    """
+    Digital twin for OpenARM
+    Registry ID: enactic/openarm01
+    """
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class WaveshareugvBestTwin(Twin):
+    """
+    Digital twin for UGV Beast
+    Registry ID: waveshare/ugv-best
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class AltoRoboticsnodeTwin(Twin):
+    """
+    Digital twin for Node
+    Registry ID: alto-robotics/node
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -818,4 +1003,23 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "universal_robots/UR5": UniversalRobotsur5Twin,
     "cyberwave/generic-nvr": CyberwavegenericNvrTwin,
     "intel/realsensed455": Intelrealsensed455Twin,
+    "basler/basler_ag_ace_gige": BaslerbaslerAgAceGigeTwin,
+    "logitech/c275": Logitechc275Twin,
+    "raspberry/pi-camerav3": RaspberrypiCamerav3Twin,
+    "cyberwave/standard-cam": CyberwavestandardCamTwin,
+    "cyberwave/generic_ipcamera": CyberwavegenericIpcameraTwin,
+    "prox-dynamics/black-hornet-nano": ProxDynamicsblackHornetNanoTwin,
+    "cyberwave/generic-auv": CyberwavegenericAuvTwin,
+    "cyberwave/substation": CyberwavesubstationTwin,
+    "SZ-DJI-Technology/DJI-Mini-3-Pro": SzDjiTechnologydjiMini3ProTwin,
+    "SZ-DJI-Technology/DJI-Mini-4-Pro": SzDjiTechnologydjiMini4ProTwin,
+    "Holybro/PX4Vision": Holybropx4visionTwin,
+    "hoverspect/Avientory-Platform": HoverspectavientoryPlatformTwin,
+    "apeiroon/bx100": Apeiroonbx100Twin,
+    "logitech/c920": Logitechc920Twin,
+    "the-robot-studio/so101-with-camera": TheRobotStudioso101WithCameraTwin,
+    "universal_robots/UR7": UniversalRobotsur7Twin,
+    "enactic/openarm01": Enacticopenarm01Twin,
+    "waveshare/ugv-best": WaveshareugvBestTwin,
+    "alto-robotics/node": AltoRoboticsnodeTwin,
 }

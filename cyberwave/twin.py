@@ -168,7 +168,9 @@ class TwinControllerHandle:
         """
         from .keyboard import KeyboardBindings, KeyboardTeleop
 
-        payload = bindings.build() if isinstance(bindings, KeyboardBindings) else bindings
+        payload = (
+            bindings.build() if isinstance(bindings, KeyboardBindings) else bindings
+        )
         return KeyboardTeleop(
             self._twin,
             payload,
@@ -265,6 +267,7 @@ class Twin:
         """
         if self._motion is None:
             from .motion import TwinMotionHandle
+
             self._motion = TwinMotionHandle(self)
         return self._motion
 
@@ -283,6 +286,7 @@ class Twin:
         """
         if self._navigation is None:
             from .motion import TwinNavigationHandle
+
             self._navigation = TwinNavigationHandle(self)
         return self._navigation
 
@@ -566,7 +570,15 @@ class CameraTwin(Twin):
 
     _camera_streamer: Optional["CameraStreamer"] = None
 
-    def start_streaming(self, fps: int = 30, camera_id: int | str = 0) -> "CameraStreamer":
+    def streamer(self) -> "CameraStreamer":
+        """Get the camera streamer."""
+        if self._camera_streamer is None:
+            raise CyberwaveError("Camera streamer not initialized")
+        return self._camera_streamer
+
+    async def start_streaming(
+        self, fps: int = 30, camera_id: int | str = 0
+    ) -> "CameraStreamer":
         """
         Start RGB camera streaming.
 
@@ -577,23 +589,19 @@ class CameraTwin(Twin):
         Returns:
             CameraStreamer instance for managing the stream
         """
-        sensors = self.capabilities.get("sensors", [])
-        sensor_type = "rgb"
-        for sensor in sensors:
-            if sensor.get("type") == "depth":
-                sensor_type = "depth"
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_id=camera_id,
             fps=fps,
-            sensor_type=sensor_type
         )
+        await self._camera_streamer.start()
         return self._camera_streamer
 
-    def stop_streaming(self) -> None:
+    async def stop_streaming(self) -> None:
         """Stop camera streaming."""
         if self._camera_streamer is not None:
             # The streamer handles cleanup in its stop method
+            await self._camera_streamer.stop()
             self._camera_streamer = None
 
     def capture_frame(self) -> bytes:
@@ -624,7 +632,24 @@ class DepthCameraTwin(CameraTwin):
     generation and depth frame capture.
     """
 
-    def start_depth_streaming(self, fps: int = 10) -> "CameraStreamer":
+    _camera_streamer: Optional["CameraStreamer"] = None
+
+    def streamer(self) -> "CameraStreamer":
+        """Get the camera streamer."""
+        if self._camera_streamer is None:
+            raise CyberwaveError("Camera streamer not initialized")
+        return self._camera_streamer
+
+    async def stop_streaming(self) -> None:
+        """Stop camera streaming."""
+        if self._camera_streamer is not None:
+            # The streamer handles cleanup in its stop method
+            await self._camera_streamer.stop()
+            self._camera_streamer = None
+
+    async def start_streaming(
+        self, fps: int = 10, camera_id: int | str = 0
+    ) -> "CameraStreamer":
         """
         Start depth camera streaming.
 
@@ -634,11 +659,14 @@ class DepthCameraTwin(CameraTwin):
         Returns:
             CameraStreamer instance for managing the stream
         """
-        return self.start_streaming(fps=fps)
-
-    def stop_depth_streaming(self) -> None:
-        """Stop depth streaming."""
-        self.stop_streaming()
+        self._camera_streamer = self.client.video_stream(
+            twin_uuid=self.uuid,
+            camera_type="realsense",
+            camera_id=camera_id,
+            fps=fps,
+        )
+        await self._camera_streamer.start()
+        return self._camera_streamer
 
     def capture_depth_frame(self) -> bytes:
         """

@@ -6,16 +6,7 @@ using both the compact API and the advanced API.
 """
 
 import os
-from importlib.metadata import version, PackageNotFoundError
-from cyberwave import Cyberwave, Twin
-
-
-try:
-    v = version("Cyberwave")
-    print(f"cyberwave package version: {v}")
-except PackageNotFoundError:
-    v = None  # not installed
-    print(f"cyberwave package version: unknown")
+from cyberwave import Cyberwave
 
 
 # ============================================================================
@@ -27,7 +18,7 @@ def compact_api_example():
     """Example using the compact, module-level API"""
 
     # Configure the SDK
-    cw = Cyberwave(api_key=os.getenv("CYBERWAVE_API_KEY"))
+    cw = Cyberwave()
 
     # Create a digital twin from an asset
     robot = cw.twin("the-robot-studio/so101")
@@ -54,11 +45,7 @@ def compact_api_example():
 def mqtt_example():
     """Example using MQTT for real-time updates"""
 
-    client = Cyberwave(
-        token=os.getenv("CYBERWAVE_TOKEN"),
-        mqtt_host="mqtt.cyberwave.com",
-        mqtt_port=1883,
-    )
+    client = Cyberwave()
 
     # Connect to MQTT explicitly before checking connection
     client.mqtt.connect()

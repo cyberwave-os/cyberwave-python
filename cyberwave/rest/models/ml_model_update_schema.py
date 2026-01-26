@@ -33,13 +33,15 @@ class MLModelUpdateSchema(BaseModel):
     tags: Optional[List[StrictStr]] = None
     model_external_id: Optional[StrictStr] = None
     model_provider_name: Optional[StrictStr] = None
+    mapped_model_id: Optional[StrictStr] = None
+    output_format: Optional[StrictStr] = None
     deployment: Optional[StrictStr] = None
     can_take_video_as_input: Optional[StrictBool] = None
     can_take_audio_as_input: Optional[StrictBool] = None
     can_take_image_as_input: Optional[StrictBool] = None
     can_take_text_as_input: Optional[StrictBool] = None
     can_take_action_as_input: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
+    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -115,6 +117,16 @@ class MLModelUpdateSchema(BaseModel):
         if self.model_provider_name is None and "model_provider_name" in self.model_fields_set:
             _dict['model_provider_name'] = None
 
+        # set to None if mapped_model_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.mapped_model_id is None and "mapped_model_id" in self.model_fields_set:
+            _dict['mapped_model_id'] = None
+
+        # set to None if output_format (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_format is None and "output_format" in self.model_fields_set:
+            _dict['output_format'] = None
+
         # set to None if deployment (nullable) is None
         # and model_fields_set contains the field
         if self.deployment is None and "deployment" in self.model_fields_set:
@@ -164,6 +176,8 @@ class MLModelUpdateSchema(BaseModel):
             "tags": obj.get("tags"),
             "model_external_id": obj.get("model_external_id"),
             "model_provider_name": obj.get("model_provider_name"),
+            "mapped_model_id": obj.get("mapped_model_id"),
+            "output_format": obj.get("output_format"),
             "deployment": obj.get("deployment"),
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),

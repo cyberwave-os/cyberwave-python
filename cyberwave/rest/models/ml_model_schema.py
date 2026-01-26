@@ -40,6 +40,8 @@ class MLModelSchema(BaseModel):
     tags: List[StrictStr]
     model_external_id: StrictStr
     model_provider_name: StrictStr
+    mapped_model_id: Optional[StrictStr] = None
+    output_format: Optional[StrictStr] = None
     deployment: StrictStr
     can_take_video_as_input: StrictBool
     can_take_audio_as_input: StrictBool
@@ -48,7 +50,7 @@ class MLModelSchema(BaseModel):
     can_take_action_as_input: StrictBool
     is_edge_compatible: StrictBool
     is_cloud_compatible: StrictBool
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -99,6 +101,16 @@ class MLModelSchema(BaseModel):
         if self.updated_by is None and "updated_by" in self.model_fields_set:
             _dict['updated_by'] = None
 
+        # set to None if mapped_model_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.mapped_model_id is None and "mapped_model_id" in self.model_fields_set:
+            _dict['mapped_model_id'] = None
+
+        # set to None if output_format (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_format is None and "output_format" in self.model_fields_set:
+            _dict['output_format'] = None
+
         return _dict
 
     @classmethod
@@ -124,6 +136,8 @@ class MLModelSchema(BaseModel):
             "tags": obj.get("tags"),
             "model_external_id": obj.get("model_external_id"),
             "model_provider_name": obj.get("model_provider_name"),
+            "mapped_model_id": obj.get("mapped_model_id"),
+            "output_format": obj.get("output_format"),
             "deployment": obj.get("deployment"),
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),

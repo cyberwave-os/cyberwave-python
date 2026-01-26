@@ -17,22 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinConnectionEventSchema(BaseModel):
+class DeviceHeartbeatSchema(BaseModel):
     """
-    Schema for twin connection events (edge telemetry)
+    Schema for device heartbeat updates.
     """ # noqa: E501
-    uuid: StrictStr
-    timestamp: StrictStr
-    event_type: StrictStr
-    metadata: Dict[str, Any]
-    twin_uuid: Optional[StrictStr] = None
-    environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
+    fingerprint: StrictStr = Field(description="Device fingerprint")
+    status_data: Optional[Dict[str, Any]] = None
+    ip_address: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["fingerprint", "status_data", "ip_address"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +49,7 @@ class TwinConnectionEventSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a JSON string"""
+        """Create an instance of DeviceHeartbeatSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,21 +70,21 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if twin_uuid (nullable) is None
+        # set to None if status_data (nullable) is None
         # and model_fields_set contains the field
-        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
-            _dict['twin_uuid'] = None
+        if self.status_data is None and "status_data" in self.model_fields_set:
+            _dict['status_data'] = None
 
-        # set to None if environment_uuid (nullable) is None
+        # set to None if ip_address (nullable) is None
         # and model_fields_set contains the field
-        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
-            _dict['environment_uuid'] = None
+        if self.ip_address is None and "ip_address" in self.model_fields_set:
+            _dict['ip_address'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a dict"""
+        """Create an instance of DeviceHeartbeatSchema from a dict"""
         if obj is None:
             return None
 
@@ -95,12 +92,9 @@ class TwinConnectionEventSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "timestamp": obj.get("timestamp"),
-            "event_type": obj.get("event_type"),
-            "metadata": obj.get("metadata"),
-            "twin_uuid": obj.get("twin_uuid"),
-            "environment_uuid": obj.get("environment_uuid")
+            "fingerprint": obj.get("fingerprint"),
+            "status_data": obj.get("status_data"),
+            "ip_address": obj.get("ip_address")
         })
         return _obj
 

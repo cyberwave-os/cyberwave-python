@@ -17,22 +17,21 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinConnectionEventSchema(BaseModel):
+class MeshFromPromptSchema(BaseModel):
     """
-    Schema for twin connection events (edge telemetry)
+    MeshFromPromptSchema
     """ # noqa: E501
-    uuid: StrictStr
-    timestamp: StrictStr
-    event_type: StrictStr
-    metadata: Dict[str, Any]
-    twin_uuid: Optional[StrictStr] = None
-    environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
+    prompt: StrictStr
+    image_url: Optional[StrictStr] = None
+    name: Optional[StrictStr] = None
+    save_to_catalog: Optional[StrictBool] = False
+    workspace_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["prompt", "image_url", "name", "save_to_catalog", "workspace_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +51,7 @@ class TwinConnectionEventSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a JSON string"""
+        """Create an instance of MeshFromPromptSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,21 +72,26 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if twin_uuid (nullable) is None
+        # set to None if image_url (nullable) is None
         # and model_fields_set contains the field
-        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
-            _dict['twin_uuid'] = None
+        if self.image_url is None and "image_url" in self.model_fields_set:
+            _dict['image_url'] = None
 
-        # set to None if environment_uuid (nullable) is None
+        # set to None if name (nullable) is None
         # and model_fields_set contains the field
-        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
-            _dict['environment_uuid'] = None
+        if self.name is None and "name" in self.model_fields_set:
+            _dict['name'] = None
+
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a dict"""
+        """Create an instance of MeshFromPromptSchema from a dict"""
         if obj is None:
             return None
 
@@ -95,12 +99,11 @@ class TwinConnectionEventSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "timestamp": obj.get("timestamp"),
-            "event_type": obj.get("event_type"),
-            "metadata": obj.get("metadata"),
-            "twin_uuid": obj.get("twin_uuid"),
-            "environment_uuid": obj.get("environment_uuid")
+            "prompt": obj.get("prompt"),
+            "image_url": obj.get("image_url"),
+            "name": obj.get("name"),
+            "save_to_catalog": obj.get("save_to_catalog") if obj.get("save_to_catalog") is not None else False,
+            "workspace_uuid": obj.get("workspace_uuid")
         })
         return _obj
 

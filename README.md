@@ -145,43 +145,119 @@ pip install cyberwave[camera]
 pip install cyberwave[realsense]
 ```
 
+> **📌 Note for ARM64/Raspberry Pi**: The `pip install cyberwave[realsense]` command installs the Python wrapper, but you'll still need the librealsense SDK installed on your system. On x86_64 systems, you can install it via `sudo apt install librealsense2` or use pre-built wheels. **On Raspberry Pi OS (ARM64), you must build librealsense from source** - see our [Raspberry Pi Installation Guide](install_realsense_raspian_os.md).
+
 #### Quick Start
 
 ```python
 import asyncio
+import os
 from cyberwave import Cyberwave
-from cyberwave.sensor import CV2CameraStreamer, RealSenseStreamer, Resolution
-
 cw = Cyberwave()
+camera = cw.twin("cyberwave/standard-cam")
 
-# CV2 Camera (USB/webcam)
-streamer = CV2CameraStreamer(
-    cw.mqtt,
-    camera_id=0,
-    resolution=Resolution.HD,
-    fps=30,
-    twin_uuid="your_twin_uuid"
-)
+try:
+    print(f"Streaming to twin {camera.uuid}... (Ctrl+C to stop)")
+    await camera.start_streaming()
 
-async def stream():
-    await streamer.start()
-    await asyncio.sleep(60)
-    await streamer.stop()
-
-asyncio.run(stream())
+    while True:
+        await asyncio.sleep(1)
+except (KeyboardInterrupt, asyncio.CancelledError):
+    print("\nStopping...")
+finally:
+    await camera.stop_streaming()
+    cw.disconnect()
 ```
 
-#### Resolution Options
+If you have a depth camera - that streams also a point cloud - it's the same thing! You just change the twin name and Cyberwave takes care of the rest:
 
-| Resolution | Size      | Description                 |
-| ---------- | --------- | --------------------------- |
-| `QVGA`     | 320×240   | Quarter VGA - low bandwidth |
-| `VGA`      | 640×480   | Standard (default)          |
-| `SVGA`     | 800×600   | Super VGA                   |
-| `HD`       | 1280×720  | 720p HD                     |
-| `FULL_HD`  | 1920×1080 | 1080p Full HD               |
+```python
+import asyncio
+import os
+from cyberwave import Cyberwave
+cw = Cyberwave()
+camera = cw.twin("intel/realsensed455")
 
-#### CV2 Camera (USB/Webcam)
+try:
+    print(f"Streaming to twin {camera.uuid}... (Ctrl+C to stop)")
+    await camera.start_streaming()
+
+    while True:
+        await asyncio.sleep(1)
+except (KeyboardInterrupt, asyncio.CancelledError):
+    print("\nStopping...")
+finally:
+    await camera.stop_streaming()
+    cw.disconnect()
+```
+
+## Examples
+
+Check the [examples](examples) directory for complete examples:
+
+- Basic twin control
+- Multi-robot coordination
+- Real-time synchronization
+- Joint manipulation for robot arms
+
+## Advanced Usage
+
+
+### Joint Control
+
+You can change a specific joint actuation. You can use degrees or radiants:
+
+```python
+robot = cw.twin("the-robot-studio/so101")
+
+# Set individual joints (degrees by default)
+robot.joints.set("shoulder_joint", 45, degrees=True)
+
+# Or use radians
+import math
+robot.joints.set("elbow_joint", math.pi/4, degrees=False)
+
+# Get current joint position
+angle = robot.joints.get("shoulder_joint")
+
+# List all joints
+joint_names = robot.joints.list()
+
+# Get all joint states at once
+all_joints = robot.joints.get_all()
+```
+
+To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
+
+### Changing data source
+
+By default, the SDK will send data marked as arriving from the real world. If you want to send data from a simulated environment using the SDK, you can initialize the SDK as follows:
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave(source_type="sim")
+```
+
+You can also use the SDK as a client of the Studio editor - making it appear as if it was just another editor on the web app. To do so, you can initialize it as follows:
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave(source_type="edit")
+```
+
+Lastly, if you want to have your SDK act as a remote teleoperator, sending commands to the actual device from the cloud, you can init the SDK as follows:
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave(source_type="tele")
+```
+
+### Camera & Sensor discovery
+
+You can leverage the SDK to discover the CV2 (standard webcameras) attached to your device:
 
 ```python
 from cyberwave.sensor import CV2VideoTrack, CV2CameraStreamer, CameraConfig, Resolution
@@ -199,7 +275,11 @@ config = CameraConfig(resolution=Resolution.HD, fps=30, camera_id=0)
 streamer = CV2CameraStreamer.from_config(cw.mqtt, config, twin_uuid="...")
 ```
 
-#### RealSense Camera (RGB + Depth)
+### RealSense Camera (RGB + Depth)
+
+You can also discover and set up RGD+D (Depth) cameras.
+
+> **⚠️ Raspberry Pi / ARM64 Users**: If you're running on Raspberry Pi OS or other ARM64 systems, you'll need to manually build librealsense from source, as pre-built packages aren't available. See our [Raspberry Pi Installation Guide](install_realsense_raspian_os.md) for detailed instructions.
 
 The SDK supports dynamic discovery of RealSense device capabilities:
 
@@ -272,78 +352,6 @@ for sensor_name, options in info.sensor_options.items():
         print(f"  {opt.name}: {opt.value} (range: {opt.min_value}-{opt.max_value})")
 ```
 
-#### Sensor Module Structure
-
-```
-cyberwave/sensor/
-├── __init__.py      # Base classes + exports
-├── config.py        # Resolution, CameraConfig, RealSenseConfig, RealSenseDiscovery
-├── camera_cv2.py    # CV2VideoTrack, CV2CameraStreamer
-└── camera_rs.py     # RealSenseVideoTrack, RealSenseStreamer
-```
-
-## Advanced Usage
-
-### Joint Control
-
-You can change a specific joint actuation. You can use degrees or radiants:
-
-```python
-robot = cw.twin("the-robot-studio/so101")
-
-# Set individual joints (degrees by default)
-robot.joints.set("shoulder_joint", 45, degrees=True)
-
-# Or use radians
-import math
-robot.joints.set("elbow_joint", math.pi/4, degrees=False)
-
-# Get current joint position
-angle = robot.joints.get("shoulder_joint")
-
-# List all joints
-joint_names = robot.joints.list()
-
-# Get all joint states at once
-all_joints = robot.joints.get_all()
-```
-
-To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
-
-### Changing data source
-
-By default, the SDK will send data marked as arriving from the real world. If you want to send data from a simulated environment using the SDK, you can initialize the SDK as follows:
-
-```python
-from cyberwave import Cyberwave
-
-cw = Cyberwave(source_type="sim")
-```
-
-You can also use the SDK as a client of the Studio editor - making it appear as if it was just another editor on the web app. To do so, you can initialize it as follows:
-
-```python
-from cyberwave import Cyberwave
-
-cw = Cyberwave(source_type="edit")
-```
-
-Lastly, if you want to have your SDK act as a remote teleoperator, sending commands to the actual device from the cloud, you can init the SDK as follows:
-
-```python
-from cyberwave import Cyberwave
-
-cw = Cyberwave(source_type="tele")
-```
-
-## Examples
-
-Check the [examples](examples) directory for complete examples:
-
-- Basic twin control
-- Multi-robot coordination
-- Real-time synchronization
-- Joint manipulation for robot arms
 
 ## Testing
 

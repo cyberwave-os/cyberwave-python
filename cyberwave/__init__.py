@@ -87,6 +87,13 @@ except ImportError:
 # Edge controller
 from .controller import EdgeController
 
+# Device fingerprinting (for edge devices)
+from .fingerprint import (
+    generate_fingerprint,
+    get_device_info,
+    format_device_info_table,
+)
+
 # Constants
 from .constants import (
     SOURCE_TYPE_EDGE,
@@ -158,6 +165,10 @@ __all__ = [
     "SOURCE_TYPES",
     # Utils
     "TimeReference",
+    # Device fingerprinting
+    "generate_fingerprint",
+    "get_device_info",
+    "format_device_info_table",
     # Version
     "__version__",
 ]

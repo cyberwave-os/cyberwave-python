@@ -58,9 +58,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "wired",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1947,19 +1956,19 @@
       "can_fly": false,
       "sensors": [
         {
-          "id": "55fa25a6-be2a-49e9-996e-81b4ffe44bab",
+          "id": "depth-camera",
           "type": "depth",
           "offset": {
             "position": {
               "x": 0,
-              "y": 0.0215,
-              "z": 0.0215
+              "y": 0.0216,
+              "z": 0.0314
             },
             "rotation": {
-              "w": 0.7128,
-              "x": 0.0006,
-              "y": 0.7014,
-              "z": -0.0006
+              "w": 0.7552,
+              "x": 0,
+              "y": -0.6555,
+              "z": 0
             }
           }
         }
@@ -1969,6 +1978,574 @@
       "has_joints": false,
       "has_wheels": false,
       "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
+      },
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "basler/basler_ag_ace_gige": {
+    "uuid": "d410748f-a906-48d2-82d2-766d0ca8568f",
+    "name": "Basler AG ace GigE",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Basler AG ace GigE camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0.011,
+              "y": 0.0358,
+              "z": 0
+            },
+            "rotation": {
+              "w": -0.0285,
+              "x": 0,
+              "y": -0.9996,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "logitech/c275": {
+    "uuid": "730e1973-4c46-49be-a177-76e1bb2a841f",
+    "name": "Logitech c275",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Logitech c275 camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0.016,
+              "y": 0.0197,
+              "z": -0.0518
+            },
+            "rotation": {
+              "w": 0.6988,
+              "x": -0.0076,
+              "y": 0.7112,
+              "z": 0.0768
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "raspberry/pi-camerav3": {
+    "uuid": "02a2cbb1-cfeb-4b67-bd79-b0a1340fa6cc",
+    "name": "Pi-cameraV3",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Pi-cameraV3 camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": -0.0023,
+              "y": 0.0196,
+              "z": -0.0032
+            },
+            "rotation": {
+              "w": 0.5127,
+              "x": -0.4869,
+              "y": -0.5142,
+              "z": 0.4855
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "cyberwave/standard-cam": {
+    "uuid": "6bce0a96-860f-4fa0-994c-f78f64cc1fc3",
+    "name": "Standard Camera",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Standard Camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0.0419,
+              "y": 0.0288,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "cyberwave/generic_ipcamera": {
+    "uuid": "1d7fa94f-9a03-4c9e-a27f-e6d7db5bc905",
+    "name": "Generic IP Camera",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Generic IP Camera camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0.1059,
+              "z": 0.0855
+            },
+            "rotation": {
+              "w": 0.7139,
+              "x": 0,
+              "y": -0.7003,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "prox-dynamics/black-hornet-nano": {
+    "uuid": "b86f9fef-f1c7-401b-831c-3404d5a6350b",
+    "name": "Black Hornet Nano",
+    "capabilities": {
+      "can_fly": true,
+      "sensors": [
+        {
+          "id": "Black Hornet Nano camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0.02,
+              "z": 0.0447
+            },
+            "rotation": {
+              "w": 0.6908,
+              "x": 0,
+              "y": -0.723,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "waypoint",
+      "navigation_obstacle_avoidance": true
+    }
+  },
+  "cyberwave/generic-auv": {
+    "uuid": "ebec6015-fbfe-42e3-9a1a-06ebc965f4c0",
+    "name": "Generic Auv",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Generic Auv camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": -0.1774,
+              "y": 0.2229,
+              "z": 0
+            },
+            "rotation": {
+              "w": 0.0113,
+              "x": 0,
+              "y": 0.9999,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "cyberwave/substation": {
+    "uuid": "d5db027d-5320-49cd-b616-961124dc2035",
+    "name": "Electric Substation",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0.0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "SZ-DJI-Technology/DJI-Mini-3-Pro": {
+    "uuid": "e07a26e1-1419-4523-81cf-8ae97fb1fb73",
+    "name": "DJI Mini 3 Pro",
+    "capabilities": {
+      "can_fly": true,
+      "sensors": [
+        {
+          "id": "DJI Mini 3 Pro camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0.0467,
+              "z": 0.0526
+            },
+            "rotation": {
+              "w": 0.7118,
+              "x": 0,
+              "y": -0.7024,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "semi_autonomous",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "SZ-DJI-Technology/DJI-Mini-4-Pro": {
+    "uuid": "39bc32a4-b0fe-422f-8b20-ce8d9af63fa4",
+    "name": "DJI Mini 4 Pro",
+    "capabilities": {
+      "can_fly": true,
+      "sensors": [
+        {
+          "id": "DJI Mini 4 Pro camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0.052,
+              "z": -0.0759
+            },
+            "rotation": {
+              "w": 0.7086,
+              "x": -0.0184,
+              "y": 0.7039,
+              "z": -0.0448
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "semi_autonomous",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "Holybro/PX4Vision": {
+    "uuid": "36e7e7c0-696c-410f-83f0-0d6a3f239bde",
+    "name": "PX4 Vision",
+    "capabilities": {
+      "can_fly": true,
+      "sensors": [
+        {
+          "id": "PX4 Vision camera",
+          "type": "depth",
+          "offset": {
+            "position": {
+              "x": -0.0587,
+              "y": 0.0858,
+              "z": 0
+            },
+            "rotation": {
+              "w": -0.0096,
+              "x": 0,
+              "y": 1,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0.05,
+      "navigation_autonomy_level": "semi_autonomous",
+      "navigation_obstacle_avoidance": true
+    }
+  },
+  "hoverspect/Avientory-Platform": {
+    "uuid": "fdcf5f96-16a5-4072-bcb5-362b4e6caa00",
+    "name": "Avientory Platform",
+    "capabilities": {
+      "can_fly": true,
+      "sensors": [
+        {
+          "id": "HoverSpect camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0.0505,
+              "y": 0.1,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "fully_autonomous",
+      "navigation_obstacle_avoidance": true
+    }
+  },
+  "apeiroon/bx100": {
+    "uuid": "0581d561-cc64-4ece-8f4b-7f4b2c926b7d",
+    "name": "BX100",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0.0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "logitech/c920": {
+    "uuid": "d3f02e5e-a712-4cab-b6a0-8879389f0b99",
+    "name": "Logitech C920",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Logitech C920 camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": -0.063,
+              "y": 0.0391,
+              "z": -0.0013
+            },
+            "rotation": {
+              "w": 0.699,
+              "x": 0,
+              "y": -0.7151,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "the-robot-studio/so101-with-camera": {
+    "uuid": "422f0fc6-93af-4131-a7af-82547a2d0b0a",
+    "name": "SO-101 with camera",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "SO101 with camera cam",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0.0734,
+              "y": 0.1045,
+              "z": 0.4155
+            },
+            "rotation": {
+              "w": 0.513,
+              "x": 0.0905,
+              "y": -0.8517,
+              "z": -0.0573
+            }
+          }
+        }
+      ],
+      "can_grip": true,
+      "has_legs": false,
+      "has_joints": true,
+      "has_wheels": false,
+      "can_actuate": true,
+      "can_locomote": false,
+      "power_source": "wired",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "manipulator_count": 1,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 0.5,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "universal_robots/UR7": {
+    "uuid": "89605c93-8a1b-4d14-aa88-c6f592a08837",
+    "name": "UR7",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [],
+      "can_grip": true,
+      "has_legs": false,
+      "has_joints": true,
+      "has_wheels": false,
+      "can_actuate": true,
       "can_locomote": false,
       "power_source": "wired",
       "locomotion_mode": "stationary",
@@ -1984,6 +2561,114 @@
       "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
+    }
+  },
+  "enactic/openarm01": {
+    "uuid": "789690dd-163f-461d-a9d5-96cac7ca59ce",
+    "name": "OpenARM",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [],
+      "can_grip": true,
+      "has_legs": false,
+      "has_joints": true,
+      "has_wheels": false,
+      "can_actuate": true,
+      "can_locomote": false,
+      "power_source": "wired",
+      "manipulator_count": 2,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 6,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "waveshare/ugv-best": {
+    "uuid": "6be88314-bd1b-4fba-809a-448c4aedbf4a",
+    "name": "UGV Beast",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "UGV Beats camera",
+          "type": "rgb",
+          "offset": {
+            "position": {
+              "x": 0.0611,
+              "y": 0.2233,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": true,
+      "has_wheels": true,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "manipulator_count": 0,
+      "power_capacity_wh": 2,
+      "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "waypoint",
+      "navigation_obstacle_avoidance": true
+    }
+  },
+  "alto-robotics/node": {
+    "uuid": "716072de-cd87-4c04-8bcb-02152b033ea3",
+    "name": "Node",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [
+        {
+          "id": "Node_frontal_depth",
+          "type": "depth",
+          "offset": {
+            "position": {
+              "x": 0.4382,
+              "y": 0.5376,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": true,
+      "has_wheels": true,
+      "can_actuate": true,
+      "can_locomote": true,
+      "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "payload_capacity_kg": 100,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "waypoint",
+      "navigation_obstacle_avoidance": true
     }
   }
 }

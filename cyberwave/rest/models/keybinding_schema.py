@@ -17,22 +17,23 @@ import pprint
 import re  # noqa: F401
 import json
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinConnectionEventSchema(BaseModel):
+class KeybindingSchema(BaseModel):
     """
-    Schema for twin connection events (edge telemetry)
+    Schema for Keybinding model.
     """ # noqa: E501
     uuid: StrictStr
-    timestamp: StrictStr
-    event_type: StrictStr
+    name: StrictStr
     metadata: Dict[str, Any]
-    twin_uuid: Optional[StrictStr] = None
-    environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
+    created_at: datetime
+    updated_at: datetime
+    user_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "metadata", "created_at", "updated_at", "user_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +53,7 @@ class TwinConnectionEventSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a JSON string"""
+        """Create an instance of KeybindingSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,21 +74,16 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if twin_uuid (nullable) is None
+        # set to None if user_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
-            _dict['twin_uuid'] = None
-
-        # set to None if environment_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
-            _dict['environment_uuid'] = None
+        if self.user_uuid is None and "user_uuid" in self.model_fields_set:
+            _dict['user_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a dict"""
+        """Create an instance of KeybindingSchema from a dict"""
         if obj is None:
             return None
 
@@ -96,11 +92,11 @@ class TwinConnectionEventSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
-            "timestamp": obj.get("timestamp"),
-            "event_type": obj.get("event_type"),
+            "name": obj.get("name"),
             "metadata": obj.get("metadata"),
-            "twin_uuid": obj.get("twin_uuid"),
-            "environment_uuid": obj.get("environment_uuid")
+            "created_at": obj.get("created_at"),
+            "updated_at": obj.get("updated_at"),
+            "user_uuid": obj.get("user_uuid")
         })
         return _obj
 

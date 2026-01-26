@@ -1,9 +1,11 @@
 """Camera configuration classes for Cyberwave SDK.
 
 Provides resolution presets and camera configuration utilities.
+These classes are shared between the SDK and Edge service.
 """
 
 import logging
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -18,6 +20,21 @@ try:
 except ImportError:
     rs = None
     _has_realsense = False
+
+
+# =============================================================================
+# Camera Types and Resolution - Shared enums for SDK and Edge
+# =============================================================================
+
+
+class CameraType(Enum):
+    """Supported camera types for streaming.
+
+    Used by both SDK streamers and Edge service.
+    """
+
+    CV2 = "cv2"  # Standard USB/webcam/IP camera via OpenCV
+    REALSENSE = "realsense"  # Intel RealSense
 
 
 class Resolution(Enum):
@@ -77,6 +94,43 @@ class Resolution(Enum):
         return None
 
     @classmethod
+    def from_string(cls, value: str) -> "Resolution":
+        """Parse resolution from string (e.g., 'VGA', '640x480', 'hd').
+
+        Args:
+            value: Resolution string - can be enum name or WxH format
+
+        Returns:
+            Resolution enum value
+
+        Raises:
+            ValueError: If resolution string is not recognized
+        """
+        value = value.strip().upper()
+
+        # Try enum name first
+        try:
+            return cls[value]
+        except KeyError:
+            pass
+
+        # Try WxH format
+        if "X" in value:
+            try:
+                w, h = value.split("X")
+                size = (int(w), int(h))
+                for res in cls:
+                    if res.value == size:
+                        return res
+            except ValueError:
+                pass
+
+        raise ValueError(
+            f"Unknown resolution: {value}. "
+            f"Valid options: {', '.join(r.name for r in cls)} or WxH format"
+        )
+
+    @classmethod
     def closest(cls, width: int, height: int) -> "Resolution":
         """Find the closest standard resolution to given dimensions.
 
@@ -93,7 +147,10 @@ class Resolution(Enum):
 
 @dataclass
 class CameraConfig:
-    """Configuration for camera capture settings.
+    """Basic configuration for camera capture settings.
+
+    For simple SDK usage. For Edge service with IP cameras, NVR, RealSense depth,
+    etc., use EdgeCameraConfig instead.
 
     Attributes:
         resolution: Video resolution (default: VGA 640x480)
@@ -117,6 +174,251 @@ class CameraConfig:
 
     def __str__(self) -> str:
         return f"CameraConfig(camera={self.camera_id}, {self.resolution}, {self.fps}fps)"
+
+
+# =============================================================================
+# Edge Camera Configuration - Full-featured config for Edge service
+# =============================================================================
+
+
+@dataclass
+class EdgeCameraConfig:
+    """
+    Full-featured camera configuration for Edge service.
+
+    Supports:
+    - Local cameras: source=0, source=1 (device index)
+    - IP cameras: source="http://192.168.1.100/snapshot.jpg"
+    - RTSP streams: source="rtsp://192.168.1.100:554/stream"
+    - NVR channels: source="rtsp://nvr-ip:554/ch{channel}/{stream}"
+    - RealSense: camera_type=CameraType.REALSENSE
+
+    Example .env:
+        CAMERA_TYPE=cv2
+        CAMERA_SOURCE=0
+        CAMERA_RESOLUTION=HD
+        CAMERA_FPS=30
+
+    Example for IP camera:
+        CAMERA_TYPE=cv2
+        CAMERA_SOURCE=rtsp://192.168.1.100:554/stream
+        CAMERA_USERNAME=admin
+        CAMERA_PASSWORD=secret
+        CAMERA_FPS=15
+
+    Example for RealSense:
+        CAMERA_TYPE=realsense
+        CAMERA_RESOLUTION=HD
+        CAMERA_FPS=30
+        CAMERA_ENABLE_DEPTH=true
+    """
+
+    # Basic settings
+    camera_id: str = "default"
+    camera_type: CameraType = CameraType.CV2
+    source: Union[int, str] = 0  # Device index or URL
+    resolution: Resolution = Resolution.VGA
+    fps: int = 30
+    enabled: bool = True
+
+    # Twin association (for multi-camera setups)
+    twin_uuid: Optional[str] = None
+
+    # IP camera authentication (optional)
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+    # NVR settings (optional)
+    channel: Optional[int] = None
+    stream_type: str = "main"  # "main" or "sub"
+
+    # RealSense depth settings
+    enable_depth: bool = False
+    depth_resolution: Resolution = Resolution.VGA
+    depth_fps: int = 30
+    auto_detect: bool = True
+
+    # Streaming settings
+    keyframe_interval: Optional[int] = None  # Force keyframe every N frames
+
+    @property
+    def width(self) -> int:
+        """Get configured width in pixels."""
+        return self.resolution.width
+
+    @property
+    def height(self) -> int:
+        """Get configured height in pixels."""
+        return self.resolution.height
+
+    @property
+    def is_ip_camera(self) -> bool:
+        """Check if this is an IP camera (URL source)."""
+        return isinstance(self.source, str) and self.source.startswith(
+            ("rtsp://", "http://", "https://")
+        )
+
+    @property
+    def is_realsense(self) -> bool:
+        """Check if this is a RealSense camera."""
+        return self.camera_type == CameraType.REALSENSE
+
+    def get_source_url(self) -> Union[int, str]:
+        """Get camera source with authentication embedded if needed."""
+        if isinstance(self.source, int):
+            return self.source
+
+        url = str(self.source)
+
+        # Handle NVR channel/stream substitution
+        if self.channel is not None and "{channel}" in url:
+            url = url.replace("{channel}", str(self.channel))
+        if "{stream}" in url:
+            url = url.replace("{stream}", self.stream_type)
+
+        # Embed authentication in URL if provided
+        if self.username and self.password and "://" in url:
+            protocol, rest = url.split("://", 1)
+            if "@" not in rest:
+                url = f"{protocol}://{self.username}:{self.password}@{rest}"
+
+        return url
+
+    def to_sdk_kwargs(self) -> Dict[str, Any]:
+        """Convert to kwargs for Cyberwave.video_stream()."""
+        kwargs: Dict[str, Any] = {
+            "camera_type": self.camera_type.value,
+            "camera_id": self.get_source_url(),
+            "fps": self.fps,
+            "resolution": self.resolution.size,
+        }
+
+        if self.keyframe_interval:
+            kwargs["keyframe_interval"] = self.keyframe_interval
+
+        if self.is_realsense:
+            kwargs["enable_depth"] = self.enable_depth
+            kwargs["depth_fps"] = self.depth_fps
+            kwargs["depth_resolution"] = self.depth_resolution.size
+            kwargs["auto_detect"] = self.auto_detect
+
+        return kwargs
+
+    @classmethod
+    def from_env(cls) -> "EdgeCameraConfig":
+        """Load camera config from environment variables."""
+        # Camera type
+        camera_type_str = os.getenv("CAMERA_TYPE", "cv2").lower()
+        try:
+            camera_type = CameraType(camera_type_str)
+        except ValueError:
+            logger.warning(f"Unknown CAMERA_TYPE '{camera_type_str}', defaulting to cv2")
+            camera_type = CameraType.CV2
+
+        # Source - can be int or URL string
+        source_str = os.getenv("CAMERA_SOURCE", os.getenv("CAMERA_ID", "0"))
+        try:
+            source: Union[int, str] = int(source_str)
+        except ValueError:
+            source = source_str  # It's a URL
+
+        # Resolution
+        resolution_str = os.getenv("CAMERA_RESOLUTION", "VGA")
+        try:
+            resolution = Resolution.from_string(resolution_str)
+        except ValueError as e:
+            logger.warning(f"{e}, defaulting to VGA")
+            resolution = Resolution.VGA
+
+        # FPS
+        fps = int(os.getenv("CAMERA_FPS", "30"))
+
+        # IP camera auth
+        username = os.getenv("CAMERA_USERNAME")
+        password = os.getenv("CAMERA_PASSWORD")
+
+        # NVR settings
+        channel_str = os.getenv("CAMERA_CHANNEL")
+        channel = int(channel_str) if channel_str else None
+        stream_type = os.getenv("CAMERA_STREAM_TYPE", "main")
+
+        # RealSense depth
+        enable_depth = os.getenv("CAMERA_ENABLE_DEPTH", "false").lower() in ("true", "1", "yes")
+        depth_resolution_str = os.getenv("CAMERA_DEPTH_RESOLUTION", "VGA")
+        try:
+            depth_resolution = Resolution.from_string(depth_resolution_str)
+        except ValueError:
+            depth_resolution = Resolution.VGA
+        depth_fps = int(os.getenv("CAMERA_DEPTH_FPS", "30"))
+        auto_detect = os.getenv("CAMERA_AUTO_DETECT", "true").lower() in ("true", "1", "yes")
+
+        # Keyframe interval
+        keyframe_str = os.getenv("CAMERA_KEYFRAME_INTERVAL")
+        keyframe_interval = int(keyframe_str) if keyframe_str else None
+
+        return cls(
+            camera_type=camera_type,
+            source=source,
+            resolution=resolution,
+            fps=fps,
+            username=username,
+            password=password,
+            channel=channel,
+            stream_type=stream_type,
+            enable_depth=enable_depth,
+            depth_resolution=depth_resolution,
+            depth_fps=depth_fps,
+            auto_detect=auto_detect,
+            keyframe_interval=keyframe_interval,
+        )
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "EdgeCameraConfig":
+        """Create from dictionary (for CAMERAS JSON env var)."""
+        camera_type_str = data.get("camera_type", data.get("type", "cv2"))
+        try:
+            camera_type = CameraType(camera_type_str.lower())
+        except ValueError:
+            camera_type = CameraType.CV2
+
+        resolution_str = data.get("resolution", "VGA")
+        try:
+            resolution = Resolution.from_string(str(resolution_str))
+        except ValueError:
+            resolution = Resolution.VGA
+
+        depth_resolution_str = data.get("depth_resolution", "VGA")
+        try:
+            depth_resolution = Resolution.from_string(str(depth_resolution_str))
+        except ValueError:
+            depth_resolution = Resolution.VGA
+
+        return cls(
+            camera_id=data.get("camera_id", data.get("id", "default")),
+            camera_type=camera_type,
+            source=data.get("source", data.get("url", 0)),
+            resolution=resolution,
+            fps=data.get("fps", 30),
+            enabled=data.get("enabled", True),
+            twin_uuid=data.get("twin_uuid"),
+            username=data.get("username"),
+            password=data.get("password"),
+            channel=data.get("channel"),
+            stream_type=data.get("stream_type", "main"),
+            enable_depth=data.get("enable_depth", False),
+            depth_resolution=depth_resolution,
+            depth_fps=data.get("depth_fps", 30),
+            auto_detect=data.get("auto_detect", True),
+            keyframe_interval=data.get("keyframe_interval"),
+        )
+
+    def __repr__(self) -> str:
+        """Safe repr that doesn't expose password."""
+        source_display = self.source if isinstance(self.source, int) else "***url***"
+        return (
+            f"EdgeCameraConfig({self.camera_type.value}, source={source_display}, "
+            f"{self.resolution.name}@{self.fps}fps)"
+        )
 
 
 # =============================================================================

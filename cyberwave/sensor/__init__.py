@@ -162,7 +162,8 @@ class BaseVideoStreamer(abc.ABC):
         self.client = client
         self.twin_uuid: Optional[str] = twin_uuid
         self.auto_reconnect = auto_reconnect
-        self.turn_servers = turn_servers or DEFAULT_TURN_SERVERS
+        # Use explicit None check so empty list [] disables TURN servers
+        self.turn_servers = turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
         self.time_reference = time_reference
 
         # WebRTC state
@@ -746,8 +747,10 @@ class BaseVideoStreamer(abc.ABC):
 
 # Import configuration classes
 from .config import (  # noqa: E402
+    CameraType,
     Resolution,
     CameraConfig,
+    EdgeCameraConfig,
     RealSenseConfig,
     StreamProfile,
     SensorOption,
@@ -762,14 +765,17 @@ from .config import (  # noqa: E402
 # Import concrete implementations for convenience
 from .camera_cv2 import CV2VideoTrack, CV2CameraStreamer  # noqa: E402
 from .camera_rs import RealSenseVideoTrack, RealSenseStreamer  # noqa: E402
+from .camera_callback import CallbackVideoTrack, CallbackCameraStreamer  # noqa: E402
 
 __all__ = [
     # Base classes
     "BaseVideoTrack",
     "BaseVideoStreamer",
     # Configuration
+    "CameraType",
     "Resolution",
     "CameraConfig",
+    "EdgeCameraConfig",
     "RealSenseConfig",
     "StreamProfile",
     "SensorOption",
@@ -782,6 +788,9 @@ __all__ = [
     # CV2 implementations
     "CV2VideoTrack",
     "CV2CameraStreamer",
+    # Callback implementations
+    "CallbackVideoTrack",
+    "CallbackCameraStreamer",
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",

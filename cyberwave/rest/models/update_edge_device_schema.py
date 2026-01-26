@@ -22,17 +22,14 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinConnectionEventSchema(BaseModel):
+class UpdateEdgeDeviceSchema(BaseModel):
     """
-    Schema for twin connection events (edge telemetry)
+    Schema for updating an edge device configuration.
     """ # noqa: E501
-    uuid: StrictStr
-    timestamp: StrictStr
-    event_type: StrictStr
-    metadata: Dict[str, Any]
-    twin_uuid: Optional[StrictStr] = None
-    environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
+    edge_config: Optional[Dict[str, Any]] = None
+    hostname: Optional[StrictStr] = None
+    platform: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["edge_config", "hostname", "platform"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +49,7 @@ class TwinConnectionEventSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a JSON string"""
+        """Create an instance of UpdateEdgeDeviceSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,21 +70,26 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if twin_uuid (nullable) is None
+        # set to None if edge_config (nullable) is None
         # and model_fields_set contains the field
-        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
-            _dict['twin_uuid'] = None
+        if self.edge_config is None and "edge_config" in self.model_fields_set:
+            _dict['edge_config'] = None
 
-        # set to None if environment_uuid (nullable) is None
+        # set to None if hostname (nullable) is None
         # and model_fields_set contains the field
-        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
-            _dict['environment_uuid'] = None
+        if self.hostname is None and "hostname" in self.model_fields_set:
+            _dict['hostname'] = None
+
+        # set to None if platform (nullable) is None
+        # and model_fields_set contains the field
+        if self.platform is None and "platform" in self.model_fields_set:
+            _dict['platform'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a dict"""
+        """Create an instance of UpdateEdgeDeviceSchema from a dict"""
         if obj is None:
             return None
 
@@ -95,12 +97,9 @@ class TwinConnectionEventSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "timestamp": obj.get("timestamp"),
-            "event_type": obj.get("event_type"),
-            "metadata": obj.get("metadata"),
-            "twin_uuid": obj.get("twin_uuid"),
-            "environment_uuid": obj.get("environment_uuid")
+            "edge_config": obj.get("edge_config"),
+            "hostname": obj.get("hostname"),
+            "platform": obj.get("platform")
         })
         return _obj
 

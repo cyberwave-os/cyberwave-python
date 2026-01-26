@@ -30,6 +30,7 @@ from cyberwave.rest.models.bulk_joint_states_update_schema import BulkJointState
 from cyberwave.rest.models.business_event_create_schema import BusinessEventCreateSchema
 from cyberwave.rest.models.business_event_list_response_schema import BusinessEventListResponseSchema
 from cyberwave.rest.models.business_event_schema import BusinessEventSchema
+from cyberwave.rest.models.camera_config_update_schema import CameraConfigUpdateSchema
 from cyberwave.rest.models.catalog_seed_group_schema import CatalogSeedGroupSchema
 from cyberwave.rest.models.catalog_seed_item_schema import CatalogSeedItemSchema
 from cyberwave.rest.models.catalog_seed_option_schema import CatalogSeedOptionSchema
@@ -51,7 +52,11 @@ from cyberwave.rest.models.controller_policy_update_schema import ControllerPoli
 from cyberwave.rest.models.dataset_create_schema import DatasetCreateSchema
 from cyberwave.rest.models.dataset_schema import DatasetSchema
 from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema
+from cyberwave.rest.models.device_heartbeat_schema import DeviceHeartbeatSchema
+from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema
+from cyberwave.rest.models.edge_device_schema import EdgeDeviceSchema
+from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema
@@ -68,6 +73,9 @@ from cyberwave.rest.models.joint_schema import JointSchema
 from cyberwave.rest.models.joint_state_schema import JointStateSchema
 from cyberwave.rest.models.joint_state_update_schema import JointStateUpdateSchema
 from cyberwave.rest.models.joint_states_schema import JointStatesSchema
+from cyberwave.rest.models.keybinding_create_schema import KeybindingCreateSchema
+from cyberwave.rest.models.keybinding_schema import KeybindingSchema
+from cyberwave.rest.models.keybinding_update_schema import KeybindingUpdateSchema
 from cyberwave.rest.models.llm_generation_schema import LLMGenerationSchema
 from cyberwave.rest.models.llm_response_schema import LLMResponseSchema
 from cyberwave.rest.models.link_share_create_schema import LinkShareCreateSchema
@@ -81,6 +89,11 @@ from cyberwave.rest.models.ml_training_deploy_schema import MLTrainingDeploySche
 from cyberwave.rest.models.ml_training_failed_creation_schema import MLTrainingFailedCreationSchema
 from cyberwave.rest.models.ml_training_schema import MLTrainingSchema
 from cyberwave.rest.models.ml_training_update_schema import MLTrainingUpdateSchema
+from cyberwave.rest.models.map_create_schema import MapCreateSchema
+from cyberwave.rest.models.map_data_schema import MapDataSchema
+from cyberwave.rest.models.map_stream_start_schema import MapStreamStartSchema
+from cyberwave.rest.models.mesh_from_prompt_schema import MeshFromPromptSchema
+from cyberwave.rest.models.metadata import Metadata
 from cyberwave.rest.models.motion_plan_schema import MotionPlanSchema
 from cyberwave.rest.models.motion_plan_step_schema import MotionPlanStepSchema
 from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponseSchema
@@ -95,6 +108,8 @@ from cyberwave.rest.models.org_members_response import OrgMembersResponse
 from cyberwave.rest.models.organization_create_schema import OrganizationCreateSchema
 from cyberwave.rest.models.organization_schema import OrganizationSchema
 from cyberwave.rest.models.organization_update_schema import OrganizationUpdateSchema
+from cyberwave.rest.models.pair_device_schema import PairDeviceSchema
+from cyberwave.rest.models.pair_twin_schema import PairTwinSchema
 from cyberwave.rest.models.payload import Payload
 from cyberwave.rest.models.permissions_schema import PermissionsSchema
 from cyberwave.rest.models.pipeline_config_schema import PipelineConfigSchema
@@ -120,11 +135,15 @@ from cyberwave.rest.models.shares_response_schema import SharesResponseSchema
 from cyberwave.rest.models.simulation_start_schema import SimulationStartSchema
 from cyberwave.rest.models.slug_availability_schema import SlugAvailabilitySchema
 from cyberwave.rest.models.sync_with_asset_schema import SyncWithAssetSchema
+from cyberwave.rest.models.tagged_frames_create_schema import TaggedFramesCreateSchema
+from cyberwave.rest.models.tagged_frames_schema import TaggedFramesSchema
+from cyberwave.rest.models.tagged_frames_update_schema import TaggedFramesUpdateSchema
 from cyberwave.rest.models.team_member_response import TeamMemberResponse
 from cyberwave.rest.models.team_share_schema import TeamShareSchema
 from cyberwave.rest.models.twin_action_request_schema import TwinActionRequestSchema
 from cyberwave.rest.models.twin_action_response_schema import TwinActionResponseSchema
 from cyberwave.rest.models.twin_action_status_schema import TwinActionStatusSchema
+from cyberwave.rest.models.twin_binding_schema import TwinBindingSchema
 from cyberwave.rest.models.twin_connection_event_schema import TwinConnectionEventSchema
 from cyberwave.rest.models.twin_create_schema import TwinCreateSchema
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema
@@ -135,6 +154,7 @@ from cyberwave.rest.models.twin_state_update_schema import TwinStateUpdateSchema
 from cyberwave.rest.models.twin_telemetry_metadata_schema import TwinTelemetryMetadataSchema
 from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSchema
 from cyberwave.rest.models.urdf_project_schema import URDFProjectSchema
+from cyberwave.rest.models.update_edge_device_schema import UpdateEdgeDeviceSchema
 from cyberwave.rest.models.update_recording_metadata_schema import UpdateRecordingMetadataSchema
 from cyberwave.rest.models.user_feature_schema import UserFeatureSchema
 from cyberwave.rest.models.user_schema import UserSchema

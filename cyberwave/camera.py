@@ -18,6 +18,9 @@ from .sensor import (
     # CV2 implementations
     CV2VideoTrack,
     CV2CameraStreamer,
+    # Callback implementations
+    CallbackVideoTrack,
+    CallbackCameraStreamer,
     # RealSense implementations
     RealSenseVideoTrack,
     RealSenseStreamer,
@@ -36,6 +39,9 @@ __all__ = [
     "CV2VideoTrack",
     "CV2CameraStreamer",
     "CameraStreamer",  # Legacy alias
+    # Callback implementations
+    "CallbackVideoTrack",
+    "CallbackCameraStreamer",
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",

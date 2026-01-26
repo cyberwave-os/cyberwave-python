@@ -17,22 +17,32 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
+from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.metadata import Metadata
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinConnectionEventSchema(BaseModel):
+class MapCreateSchema(BaseModel):
     """
-    Schema for twin connection events (edge telemetry)
+    Schema for creating/uploading a map.
     """ # noqa: E501
-    uuid: StrictStr
-    timestamp: StrictStr
-    event_type: StrictStr
-    metadata: Dict[str, Any]
     twin_uuid: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
+    map_type: StrictStr
+    resolution: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_x: Optional[Union[StrictFloat, StrictInt]] = 0.0
+    origin_y: Optional[Union[StrictFloat, StrictInt]] = 0.0
+    origin_z: Optional[Union[StrictFloat, StrictInt]] = 0.0
+    metadata: Optional[Metadata] = None
+    __properties: ClassVar[List[str]] = ["twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "metadata"]
+
+    @field_validator('map_type')
+    def map_type_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['occupancy_grid', 'point_cloud']):
+            raise ValueError("must be one of enum values ('occupancy_grid', 'point_cloud')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +62,7 @@ class TwinConnectionEventSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a JSON string"""
+        """Create an instance of MapCreateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,6 +83,9 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of metadata
+        if self.metadata:
+            _dict['metadata'] = self.metadata.to_dict()
         # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
@@ -83,11 +96,21 @@ class TwinConnectionEventSchema(BaseModel):
         if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
             _dict['environment_uuid'] = None
 
+        # set to None if resolution (nullable) is None
+        # and model_fields_set contains the field
+        if self.resolution is None and "resolution" in self.model_fields_set:
+            _dict['resolution'] = None
+
+        # set to None if metadata (nullable) is None
+        # and model_fields_set contains the field
+        if self.metadata is None and "metadata" in self.model_fields_set:
+            _dict['metadata'] = None
+
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a dict"""
+        """Create an instance of MapCreateSchema from a dict"""
         if obj is None:
             return None
 
@@ -95,12 +118,14 @@ class TwinConnectionEventSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "timestamp": obj.get("timestamp"),
-            "event_type": obj.get("event_type"),
-            "metadata": obj.get("metadata"),
             "twin_uuid": obj.get("twin_uuid"),
-            "environment_uuid": obj.get("environment_uuid")
+            "environment_uuid": obj.get("environment_uuid"),
+            "map_type": obj.get("map_type"),
+            "resolution": obj.get("resolution"),
+            "origin_x": obj.get("origin_x") if obj.get("origin_x") is not None else 0.0,
+            "origin_y": obj.get("origin_y") if obj.get("origin_y") is not None else 0.0,
+            "origin_z": obj.get("origin_z") if obj.get("origin_z") is not None else 0.0,
+            "metadata": Metadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None
         })
         return _obj
 

@@ -22,17 +22,18 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinConnectionEventSchema(BaseModel):
+class TaggedFramesSchema(BaseModel):
     """
-    Schema for twin connection events (edge telemetry)
+    Schema for TaggedFrames response.
     """ # noqa: E501
     uuid: StrictStr
-    timestamp: StrictStr
-    event_type: StrictStr
-    metadata: Dict[str, Any]
-    twin_uuid: Optional[StrictStr] = None
-    environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
+    recording_uuid: StrictStr
+    created_by_uuid: Optional[StrictStr] = None
+    updated_by_uuid: Optional[StrictStr] = None
+    created_at: StrictStr
+    updated_at: StrictStr
+    frames: Dict[str, Any]
+    __properties: ClassVar[List[str]] = ["uuid", "recording_uuid", "created_by_uuid", "updated_by_uuid", "created_at", "updated_at", "frames"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +53,7 @@ class TwinConnectionEventSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a JSON string"""
+        """Create an instance of TaggedFramesSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,21 +74,21 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if twin_uuid (nullable) is None
+        # set to None if created_by_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
-            _dict['twin_uuid'] = None
+        if self.created_by_uuid is None and "created_by_uuid" in self.model_fields_set:
+            _dict['created_by_uuid'] = None
 
-        # set to None if environment_uuid (nullable) is None
+        # set to None if updated_by_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
-            _dict['environment_uuid'] = None
+        if self.updated_by_uuid is None and "updated_by_uuid" in self.model_fields_set:
+            _dict['updated_by_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a dict"""
+        """Create an instance of TaggedFramesSchema from a dict"""
         if obj is None:
             return None
 
@@ -96,11 +97,12 @@ class TwinConnectionEventSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
-            "timestamp": obj.get("timestamp"),
-            "event_type": obj.get("event_type"),
-            "metadata": obj.get("metadata"),
-            "twin_uuid": obj.get("twin_uuid"),
-            "environment_uuid": obj.get("environment_uuid")
+            "recording_uuid": obj.get("recording_uuid"),
+            "created_by_uuid": obj.get("created_by_uuid"),
+            "updated_by_uuid": obj.get("updated_by_uuid"),
+            "created_at": obj.get("created_at"),
+            "updated_at": obj.get("updated_at"),
+            "frames": obj.get("frames")
         })
         return _obj
 

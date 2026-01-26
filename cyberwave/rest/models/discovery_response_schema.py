@@ -18,21 +18,19 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.twin_binding_schema import TwinBindingSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class TwinConnectionEventSchema(BaseModel):
+class DiscoveryResponseSchema(BaseModel):
     """
-    Schema for twin connection events (edge telemetry)
+    Schema for discovery API response.
     """ # noqa: E501
-    uuid: StrictStr
-    timestamp: StrictStr
-    event_type: StrictStr
-    metadata: Dict[str, Any]
-    twin_uuid: Optional[StrictStr] = None
-    environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
+    edge_uuid: StrictStr
+    fingerprint: StrictStr
+    twins: List[TwinBindingSchema]
+    __properties: ClassVar[List[str]] = ["edge_uuid", "fingerprint", "twins"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +50,7 @@ class TwinConnectionEventSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a JSON string"""
+        """Create an instance of DiscoveryResponseSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,21 +71,18 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if twin_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
-            _dict['twin_uuid'] = None
-
-        # set to None if environment_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
-            _dict['environment_uuid'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each item in twins (list)
+        _items = []
+        if self.twins:
+            for _item_twins in self.twins:
+                if _item_twins:
+                    _items.append(_item_twins.to_dict())
+            _dict['twins'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TwinConnectionEventSchema from a dict"""
+        """Create an instance of DiscoveryResponseSchema from a dict"""
         if obj is None:
             return None
 
@@ -95,12 +90,9 @@ class TwinConnectionEventSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "timestamp": obj.get("timestamp"),
-            "event_type": obj.get("event_type"),
-            "metadata": obj.get("metadata"),
-            "twin_uuid": obj.get("twin_uuid"),
-            "environment_uuid": obj.get("environment_uuid")
+            "edge_uuid": obj.get("edge_uuid"),
+            "fingerprint": obj.get("fingerprint"),
+            "twins": [TwinBindingSchema.from_dict(_item) for _item in obj["twins"]] if obj.get("twins") is not None else None
         })
         return _obj
 
