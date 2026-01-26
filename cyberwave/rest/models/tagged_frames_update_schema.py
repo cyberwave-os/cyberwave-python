@@ -17,20 +17,18 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class WorkspaceUpdateSchema(BaseModel):
+class TaggedFramesUpdateSchema(BaseModel):
     """
-    WorkspaceUpdateSchema
+    Schema for updating TaggedFrames.
     """ # noqa: E501
-    name: StrictStr
-    description: Optional[StrictStr] = None
-    slug: Optional[StrictStr] = None
-    organization_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "slug", "organization_uuid"]
+    frames: Optional[Dict[str, Any]] = None
+    tags: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["frames", "tags"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +48,7 @@ class WorkspaceUpdateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a JSON string"""
+        """Create an instance of TaggedFramesUpdateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +69,21 @@ class WorkspaceUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if description (nullable) is None
+        # set to None if frames (nullable) is None
         # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
+        if self.frames is None and "frames" in self.model_fields_set:
+            _dict['frames'] = None
 
-        # set to None if slug (nullable) is None
+        # set to None if tags (nullable) is None
         # and model_fields_set contains the field
-        if self.slug is None and "slug" in self.model_fields_set:
-            _dict['slug'] = None
-
-        # set to None if organization_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
+        if self.tags is None and "tags" in self.model_fields_set:
+            _dict['tags'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a dict"""
+        """Create an instance of TaggedFramesUpdateSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +91,8 @@ class WorkspaceUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "slug": obj.get("slug"),
-            "organization_uuid": obj.get("organization_uuid")
+            "frames": obj.get("frames"),
+            "tags": obj.get("tags")
         })
         return _obj
 

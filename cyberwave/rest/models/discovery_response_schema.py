@@ -18,19 +18,19 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.twin_binding_schema import TwinBindingSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class WorkspaceUpdateSchema(BaseModel):
+class DiscoveryResponseSchema(BaseModel):
     """
-    WorkspaceUpdateSchema
+    Schema for discovery API response.
     """ # noqa: E501
-    name: StrictStr
-    description: Optional[StrictStr] = None
-    slug: Optional[StrictStr] = None
-    organization_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "slug", "organization_uuid"]
+    edge_uuid: StrictStr
+    fingerprint: StrictStr
+    twins: List[TwinBindingSchema]
+    __properties: ClassVar[List[str]] = ["edge_uuid", "fingerprint", "twins"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +50,7 @@ class WorkspaceUpdateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a JSON string"""
+        """Create an instance of DiscoveryResponseSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +71,18 @@ class WorkspaceUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if description (nullable) is None
-        # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
-
-        # set to None if slug (nullable) is None
-        # and model_fields_set contains the field
-        if self.slug is None and "slug" in self.model_fields_set:
-            _dict['slug'] = None
-
-        # set to None if organization_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each item in twins (list)
+        _items = []
+        if self.twins:
+            for _item_twins in self.twins:
+                if _item_twins:
+                    _items.append(_item_twins.to_dict())
+            _dict['twins'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a dict"""
+        """Create an instance of DiscoveryResponseSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +90,9 @@ class WorkspaceUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "slug": obj.get("slug"),
-            "organization_uuid": obj.get("organization_uuid")
+            "edge_uuid": obj.get("edge_uuid"),
+            "fingerprint": obj.get("fingerprint"),
+            "twins": [TwinBindingSchema.from_dict(_item) for _item in obj["twins"]] if obj.get("twins") is not None else None
         })
         return _obj
 

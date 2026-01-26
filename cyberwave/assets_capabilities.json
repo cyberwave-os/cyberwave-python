@@ -1947,19 +1947,19 @@
       "can_fly": false,
       "sensors": [
         {
-          "id": "55fa25a6-be2a-49e9-996e-81b4ffe44bab",
+          "id": "depth-camera",
           "type": "depth",
           "offset": {
             "position": {
               "x": 0,
-              "y": 0.0215,
-              "z": 0.0215
+              "y": 0.0216,
+              "z": 0.0314
             },
             "rotation": {
-              "w": 0.7128,
-              "x": 0.0006,
-              "y": 0.7014,
-              "z": -0.0006
+              "w": 0.7552,
+              "x": 0,
+              "y": -0.6555,
+              "z": 0
             }
           }
         }
@@ -1974,8 +1974,8 @@
       "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
       },
       "manipulator_count": 0,
       "power_capacity_wh": -1,

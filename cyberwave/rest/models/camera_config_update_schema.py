@@ -17,20 +17,21 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class WorkspaceUpdateSchema(BaseModel):
+class CameraConfigUpdateSchema(BaseModel):
     """
-    WorkspaceUpdateSchema
+    Schema for updating camera configuration.
     """ # noqa: E501
-    name: StrictStr
-    description: Optional[StrictStr] = None
-    slug: Optional[StrictStr] = None
-    organization_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "slug", "organization_uuid"]
+    camera_id: Optional[StrictStr] = None
+    source: Optional[StrictStr] = None
+    fps: Optional[StrictInt] = 10
+    resolution: Optional[StrictStr] = 'VGA'
+    camera_type: Optional[StrictStr] = 'cv2'
+    __properties: ClassVar[List[str]] = ["camera_id", "source", "fps", "resolution", "camera_type"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +51,7 @@ class WorkspaceUpdateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a JSON string"""
+        """Create an instance of CameraConfigUpdateSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +72,21 @@ class WorkspaceUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if description (nullable) is None
+        # set to None if camera_id (nullable) is None
         # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
+        if self.camera_id is None and "camera_id" in self.model_fields_set:
+            _dict['camera_id'] = None
 
-        # set to None if slug (nullable) is None
+        # set to None if source (nullable) is None
         # and model_fields_set contains the field
-        if self.slug is None and "slug" in self.model_fields_set:
-            _dict['slug'] = None
-
-        # set to None if organization_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
+        if self.source is None and "source" in self.model_fields_set:
+            _dict['source'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a dict"""
+        """Create an instance of CameraConfigUpdateSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +94,11 @@ class WorkspaceUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "slug": obj.get("slug"),
-            "organization_uuid": obj.get("organization_uuid")
+            "camera_id": obj.get("camera_id"),
+            "source": obj.get("source"),
+            "fps": obj.get("fps") if obj.get("fps") is not None else 10,
+            "resolution": obj.get("resolution") if obj.get("resolution") is not None else 'VGA',
+            "camera_type": obj.get("camera_type") if obj.get("camera_type") is not None else 'cv2'
         })
         return _obj
 

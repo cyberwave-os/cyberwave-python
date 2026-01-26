@@ -17,20 +17,29 @@ import pprint
 import re  # noqa: F401
 import json
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class WorkspaceUpdateSchema(BaseModel):
+class EdgeDeviceSchema(BaseModel):
     """
-    WorkspaceUpdateSchema
+    Schema for edge device responses.
     """ # noqa: E501
-    name: StrictStr
-    description: Optional[StrictStr] = None
-    slug: Optional[StrictStr] = None
-    organization_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "slug", "organization_uuid"]
+    uuid: StrictStr
+    fingerprint: StrictStr
+    twin_uuid: StrictStr
+    hostname: StrictStr
+    platform: StrictStr
+    status: StrictStr
+    last_heartbeat: Optional[datetime] = None
+    last_ip_address: Optional[StrictStr] = None
+    edge_config: Dict[str, Any]
+    paired_at: datetime
+    paired_by_uuid: Optional[StrictStr] = None
+    updated_at: datetime
+    __properties: ClassVar[List[str]] = ["uuid", "fingerprint", "twin_uuid", "hostname", "platform", "status", "last_heartbeat", "last_ip_address", "edge_config", "paired_at", "paired_by_uuid", "updated_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +59,7 @@ class WorkspaceUpdateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a JSON string"""
+        """Create an instance of EdgeDeviceSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +80,26 @@ class WorkspaceUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if description (nullable) is None
+        # set to None if last_heartbeat (nullable) is None
         # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
+        if self.last_heartbeat is None and "last_heartbeat" in self.model_fields_set:
+            _dict['last_heartbeat'] = None
 
-        # set to None if slug (nullable) is None
+        # set to None if last_ip_address (nullable) is None
         # and model_fields_set contains the field
-        if self.slug is None and "slug" in self.model_fields_set:
-            _dict['slug'] = None
+        if self.last_ip_address is None and "last_ip_address" in self.model_fields_set:
+            _dict['last_ip_address'] = None
 
-        # set to None if organization_uuid (nullable) is None
+        # set to None if paired_by_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
+        if self.paired_by_uuid is None and "paired_by_uuid" in self.model_fields_set:
+            _dict['paired_by_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a dict"""
+        """Create an instance of EdgeDeviceSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +107,18 @@ class WorkspaceUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "slug": obj.get("slug"),
-            "organization_uuid": obj.get("organization_uuid")
+            "uuid": obj.get("uuid"),
+            "fingerprint": obj.get("fingerprint"),
+            "twin_uuid": obj.get("twin_uuid"),
+            "hostname": obj.get("hostname"),
+            "platform": obj.get("platform"),
+            "status": obj.get("status"),
+            "last_heartbeat": obj.get("last_heartbeat"),
+            "last_ip_address": obj.get("last_ip_address"),
+            "edge_config": obj.get("edge_config"),
+            "paired_at": obj.get("paired_at"),
+            "paired_by_uuid": obj.get("paired_by_uuid"),
+            "updated_at": obj.get("updated_at")
         })
         return _obj
 

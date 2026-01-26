@@ -19,33 +19,38 @@ import json
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
 class MLModelSchema(BaseModel):
     """
-    MLModelSchema
+    ML Model schema.
     """ # noqa: E501
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
     created_at: datetime
     updated_at: datetime
-    created_by: StrictStr
-    updated_by: StrictStr
+    created_by: Optional[StrictStr] = None
+    updated_by: Optional[StrictStr] = None
     workspace_uuid: StrictStr
     metadata: Dict[str, Any]
     visibility: StrictStr
     tags: List[StrictStr]
     model_external_id: StrictStr
     model_provider_name: StrictStr
+    mapped_model_id: Optional[StrictStr] = None
+    output_format: Optional[StrictStr] = None
+    deployment: StrictStr
     can_take_video_as_input: StrictBool
     can_take_audio_as_input: StrictBool
     can_take_image_as_input: StrictBool
     can_take_text_as_input: StrictBool
     can_take_action_as_input: StrictBool
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
+    is_edge_compatible: StrictBool
+    is_cloud_compatible: StrictBool
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,6 +91,26 @@ class MLModelSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if created_by (nullable) is None
+        # and model_fields_set contains the field
+        if self.created_by is None and "created_by" in self.model_fields_set:
+            _dict['created_by'] = None
+
+        # set to None if updated_by (nullable) is None
+        # and model_fields_set contains the field
+        if self.updated_by is None and "updated_by" in self.model_fields_set:
+            _dict['updated_by'] = None
+
+        # set to None if mapped_model_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.mapped_model_id is None and "mapped_model_id" in self.model_fields_set:
+            _dict['mapped_model_id'] = None
+
+        # set to None if output_format (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_format is None and "output_format" in self.model_fields_set:
+            _dict['output_format'] = None
+
         return _dict
 
     @classmethod
@@ -111,11 +136,16 @@ class MLModelSchema(BaseModel):
             "tags": obj.get("tags"),
             "model_external_id": obj.get("model_external_id"),
             "model_provider_name": obj.get("model_provider_name"),
+            "mapped_model_id": obj.get("mapped_model_id"),
+            "output_format": obj.get("output_format"),
+            "deployment": obj.get("deployment"),
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),
             "can_take_image_as_input": obj.get("can_take_image_as_input"),
             "can_take_text_as_input": obj.get("can_take_text_as_input"),
-            "can_take_action_as_input": obj.get("can_take_action_as_input")
+            "can_take_action_as_input": obj.get("can_take_action_as_input"),
+            "is_edge_compatible": obj.get("is_edge_compatible"),
+            "is_cloud_compatible": obj.get("is_cloud_compatible")
         })
         return _obj
 

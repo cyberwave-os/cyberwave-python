@@ -199,6 +199,14 @@ class CV2VideoTrack(BaseVideoTrack):
             cv2.CAP_ANY: "AUTO",
         }
 
+        # For RTSP streams, use TCP transport for better reliability with HEVC
+        # This avoids "Could not find ref with POC" errors from lost UDP packets
+        is_rtsp = isinstance(camera_id, str) and camera_id.startswith("rtsp://")
+        if is_rtsp:
+            # Set FFmpeg options for TCP transport
+            os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+            logger.info("Using TCP transport for RTSP stream")
+
         # Try each backend in order
         for backend in backends:
             cap = cv2.VideoCapture(camera_id, backend)

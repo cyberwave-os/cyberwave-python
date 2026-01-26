@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -30,7 +30,9 @@ class TwinConnectionEventSchema(BaseModel):
     timestamp: StrictStr
     event_type: StrictStr
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata"]
+    twin_uuid: Optional[StrictStr] = None
+    environment_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "event_type", "metadata", "twin_uuid", "environment_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -71,6 +73,16 @@ class TwinConnectionEventSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if twin_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
+            _dict['twin_uuid'] = None
+
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -86,7 +98,9 @@ class TwinConnectionEventSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "timestamp": obj.get("timestamp"),
             "event_type": obj.get("event_type"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "twin_uuid": obj.get("twin_uuid"),
+            "environment_uuid": obj.get("environment_uuid")
         })
         return _obj
 

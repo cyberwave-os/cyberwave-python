@@ -17,20 +17,23 @@ import pprint
 import re  # noqa: F401
 import json
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class WorkspaceUpdateSchema(BaseModel):
+class KeybindingSchema(BaseModel):
     """
-    WorkspaceUpdateSchema
+    Schema for Keybinding model.
     """ # noqa: E501
+    uuid: StrictStr
     name: StrictStr
-    description: Optional[StrictStr] = None
-    slug: Optional[StrictStr] = None
-    organization_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "slug", "organization_uuid"]
+    metadata: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+    user_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "metadata", "created_at", "updated_at", "user_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +53,7 @@ class WorkspaceUpdateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a JSON string"""
+        """Create an instance of KeybindingSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +74,16 @@ class WorkspaceUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if description (nullable) is None
+        # set to None if user_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
-
-        # set to None if slug (nullable) is None
-        # and model_fields_set contains the field
-        if self.slug is None and "slug" in self.model_fields_set:
-            _dict['slug'] = None
-
-        # set to None if organization_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
+        if self.user_uuid is None and "user_uuid" in self.model_fields_set:
+            _dict['user_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a dict"""
+        """Create an instance of KeybindingSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +91,12 @@ class WorkspaceUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "uuid": obj.get("uuid"),
             "name": obj.get("name"),
-            "description": obj.get("description"),
-            "slug": obj.get("slug"),
-            "organization_uuid": obj.get("organization_uuid")
+            "metadata": obj.get("metadata"),
+            "created_at": obj.get("created_at"),
+            "updated_at": obj.get("updated_at"),
+            "user_uuid": obj.get("user_uuid")
         })
         return _obj
 

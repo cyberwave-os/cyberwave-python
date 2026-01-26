@@ -17,20 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class WorkspaceUpdateSchema(BaseModel):
+class DeviceHeartbeatSchema(BaseModel):
     """
-    WorkspaceUpdateSchema
+    Schema for device heartbeat updates.
     """ # noqa: E501
-    name: StrictStr
-    description: Optional[StrictStr] = None
-    slug: Optional[StrictStr] = None
-    organization_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "slug", "organization_uuid"]
+    fingerprint: StrictStr = Field(description="Device fingerprint")
+    status_data: Optional[Dict[str, Any]] = None
+    ip_address: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["fingerprint", "status_data", "ip_address"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +49,7 @@ class WorkspaceUpdateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a JSON string"""
+        """Create an instance of DeviceHeartbeatSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +70,21 @@ class WorkspaceUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if description (nullable) is None
+        # set to None if status_data (nullable) is None
         # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
+        if self.status_data is None and "status_data" in self.model_fields_set:
+            _dict['status_data'] = None
 
-        # set to None if slug (nullable) is None
+        # set to None if ip_address (nullable) is None
         # and model_fields_set contains the field
-        if self.slug is None and "slug" in self.model_fields_set:
-            _dict['slug'] = None
-
-        # set to None if organization_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
+        if self.ip_address is None and "ip_address" in self.model_fields_set:
+            _dict['ip_address'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of WorkspaceUpdateSchema from a dict"""
+        """Create an instance of DeviceHeartbeatSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +92,9 @@ class WorkspaceUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "slug": obj.get("slug"),
-            "organization_uuid": obj.get("organization_uuid")
+            "fingerprint": obj.get("fingerprint"),
+            "status_data": obj.get("status_data"),
+            "ip_address": obj.get("ip_address")
         })
         return _obj
 
