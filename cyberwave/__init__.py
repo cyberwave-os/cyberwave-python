@@ -76,16 +76,37 @@ from .mqtt import CyberwaveMQTTClient
 
 # Camera streaming (optional, requires additional dependencies)
 try:
-    from .camera import CameraStreamer, CV2VideoStreamTrack
+    from .sensor import (
+        CV2VideoTrack,
+        CV2CameraStreamer,
+        CallbackVideoTrack,
+        CallbackCameraStreamer,
+        RealSenseVideoTrack,
+        RealSenseStreamer,
+        BaseVideoTrack,
+        BaseVideoStreamer,
+    )
+    # Legacy alias for backwards compatibility
+    CameraStreamer = CV2CameraStreamer
 
     _has_camera = True
 except ImportError:
     _has_camera = False
     CameraStreamer = None  # type: ignore
-    CV2VideoStreamTrack = None  # type: ignore
+    CV2VideoTrack = None  # type: ignore
+    CV2CameraStreamer = None  # type: ignore
+    CallbackVideoTrack = None  # type: ignore
+    CallbackCameraStreamer = None  # type: ignore
+    RealSenseVideoTrack = None  # type: ignore
+    RealSenseStreamer = None  # type: ignore
+    BaseVideoTrack = None  # type: ignore
+    BaseVideoStreamer = None  # type: ignore
 
 # Edge controller
 from .controller import EdgeController
+
+# Utils
+from .utils import TimeReference
 
 # Device fingerprinting (for edge devices)
 from .fingerprint import (
@@ -142,7 +163,6 @@ __all__ = [
     # Compact API
     "configure",
     "twin",
-    "simulation",
     "get_client",
     # Resource managers
     "WorkspaceManager",
@@ -153,8 +173,15 @@ __all__ = [
     # MQTT client
     "CyberwaveMQTTClient",
     # Camera streaming (optional)
-    "CameraStreamer",
-    "CV2VideoStreamTrack",
+    "CameraStreamer",  # Legacy alias for CV2CameraStreamer
+    "CV2VideoTrack",
+    "CV2CameraStreamer",
+    "CallbackVideoTrack",
+    "CallbackCameraStreamer",
+    "RealSenseVideoTrack",
+    "RealSenseStreamer",
+    "BaseVideoTrack",
+    "BaseVideoStreamer",
     # Edge controller
     "EdgeController",
     # Constants

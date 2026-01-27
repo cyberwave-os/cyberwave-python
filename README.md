@@ -2,18 +2,16 @@
 
 The official Python SDK for Cyberwave. Create, control, and simulate robotics with ease.
 
-## Test Status
+## Status
 
+[![PyPI version](https://img.shields.io/pypi/v/cyberwave.svg)](https://pypi.org/project/cyberwave/)
+[![PyPI Python versions](https://img.shields.io/pypi/pyversions/cyberwave.svg)](https://pypi.org/project/cyberwave/)
 ![Tests](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml/badge.svg)
-
-**Python Version Compatibility:**
-
 [![Python 3.10](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.10&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
 [![Python 3.11](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.11&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
 [![Python 3.12](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.12&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
 [![Python 3.13](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.13&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
-
-> **Note:** Each badge shows the overall workflow status. Click any badge to view detailed test results for all Python versions. Individual job statuses for each version can be viewed in the [workflow runs](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml).
+[![Python 3.14](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.14&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
 
 ## Installation
 
@@ -215,7 +213,6 @@ Check the [examples](examples) directory for complete examples:
 
 ## Advanced Usage
 
-
 ### Joint Control
 
 You can change a specific joint actuation. You can use degrees or radiants:
@@ -364,7 +361,6 @@ for sensor_name, options in info.sensor_options.items():
     for opt in options:
         print(f"  {opt.name}: {opt.value} (range: {opt.min_value}-{opt.max_value})")
 ```
-
 
 ## Testing
 
