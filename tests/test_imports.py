@@ -77,11 +77,24 @@ def test_client_creation():
 def test_config():
     """Test configuration module"""
     try:
-        from cyberwave.config import CyberwaveConfig, get_config, set_config
+        from cyberwave import CyberwaveConfig, get_config, set_config
+        from cyberwave.config import CyberwaveConfig as DirectConfig
 
+        # Test direct import
+        assert CyberwaveConfig is DirectConfig
+        
         config = CyberwaveConfig(base_url="http://test:8000", api_key="test")
         assert config.base_url == "http://test:8000"
         assert config.api_key == "test"
+        
+        # Test get_config and set_config functions
+        assert callable(get_config)
+        assert callable(set_config)
+        
+        # Test that get_config returns a config object
+        current_config = get_config()
+        assert current_config is not None
+        
         print("✓ Config module successful")
     except Exception as e:
         print(f"✗ Config error: {e}")
@@ -152,6 +165,8 @@ def test_twin_classes():
     try:
         from cyberwave import (
             Twin,
+            JointController,
+            TwinControllerHandle,
             CameraTwin,
             DepthCameraTwin,
             FlyingTwin,
@@ -163,7 +178,14 @@ def test_twin_classes():
 
         assert callable(Twin)
         assert callable(CameraTwin)
+        assert callable(DepthCameraTwin)
+        assert callable(FlyingTwin)
+        assert callable(GripperTwin)
+        assert callable(FlyingCameraTwin)
+        assert callable(GripperCameraTwin)
         assert callable(create_twin)
+        assert JointController is not None
+        assert TwinControllerHandle is not None
         print("✓ Twin classes import successful")
     except Exception as e:
         print(f"✗ Twin classes import error: {e}")
@@ -181,6 +203,10 @@ def test_motion_navigation():
             NavigationPlan,
         )
 
+        # All should be importable
+        assert TwinMotionHandle is not None
+        assert ScopedMotionHandle is not None
+        assert TwinNavigationHandle is not None
         assert callable(NavigationPlan)
         print("✓ Motion and navigation imports successful")
     except Exception as e:
@@ -200,8 +226,17 @@ def test_resource_managers():
             TwinManager,
         )
 
+        # All should be importable
+        assert WorkspaceManager is not None
+        assert ProjectManager is not None
+        assert EnvironmentManager is not None
+        assert AssetManager is not None
+        assert TwinManager is not None
         assert callable(WorkspaceManager)
         assert callable(ProjectManager)
+        assert callable(EnvironmentManager)
+        assert callable(AssetManager)
+        assert callable(TwinManager)
         print("✓ Resource managers import successful")
     except Exception as e:
         print(f"✗ Resource managers import error: {e}")
@@ -212,12 +247,36 @@ def test_resource_managers():
 def test_camera_streaming():
     """Test camera streaming classes (optional, may not be available)"""
     try:
-        from cyberwave import CameraStreamer, CV2CameraStreamer, CV2VideoTrack
+        from cyberwave import (
+            CameraStreamer,
+            CV2VideoTrack,
+            CV2CameraStreamer,
+            CallbackVideoTrack,
+            CallbackCameraStreamer,
+            RealSenseVideoTrack,
+            RealSenseStreamer,
+            BaseVideoTrack,
+            BaseVideoStreamer,
+        )
 
         # These may be None if camera dependencies aren't installed
         if CameraStreamer is not None and CV2CameraStreamer is not None:
             assert CameraStreamer is CV2CameraStreamer  # Legacy alias
-            print("✓ Camera streaming imports successful (dependencies installed)")
+            # Check all classes are available
+            classes_available = all([
+                CV2VideoTrack is not None,
+                CV2CameraStreamer is not None,
+                CallbackVideoTrack is not None,
+                CallbackCameraStreamer is not None,
+                RealSenseVideoTrack is not None,
+                RealSenseStreamer is not None,
+                BaseVideoTrack is not None,
+                BaseVideoStreamer is not None,
+            ])
+            if classes_available:
+                print("✓ Camera streaming imports successful (all dependencies installed)")
+            else:
+                print("✓ Camera streaming imports successful (partial dependencies installed)")
         elif CameraStreamer is None and CV2CameraStreamer is None:
             print("✓ Camera streaming imports handled gracefully (dependencies not installed)")
         else:
@@ -304,6 +363,62 @@ def test_version():
     return True
 
 
+def test_keyboard_teleop():
+    """Test keyboard teleop classes"""
+    try:
+        from cyberwave import KeyboardBindings, KeyboardTeleop
+
+        assert KeyboardBindings is not None
+        assert KeyboardTeleop is not None
+        # KeyboardTeleop should be callable (it's a class)
+        assert callable(KeyboardTeleop)
+        print("✓ Keyboard teleop imports successful")
+    except Exception as e:
+        print(f"✗ Keyboard teleop import error: {e}")
+        return False
+    return True
+
+
+def test_edge_controller():
+    """Test edge controller class"""
+    try:
+        from cyberwave import EdgeController
+
+        assert EdgeController is not None
+        assert callable(EdgeController)
+        print("✓ Edge controller import successful")
+    except Exception as e:
+        print(f"✗ Edge controller import error: {e}")
+        return False
+    return True
+
+
+def test_all_exports():
+    """Test that all items in __all__ can be imported"""
+    try:
+        from cyberwave import __all__
+        
+        # Import everything from __all__
+        import cyberwave
+        
+        failed_imports = []
+        for item_name in __all__:
+            if not hasattr(cyberwave, item_name):
+                failed_imports.append(item_name)
+        
+        if failed_imports:
+            print(f"✗ Some exports not available: {failed_imports}")
+            return False
+        
+        print(f"✓ All {len(__all__)} exports are available")
+        return True
+    except Exception as e:
+        print(f"✗ All exports test error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 if __name__ == "__main__":
     print("Cyberwave SDK Import Tests")
     print("=" * 50)
@@ -321,7 +436,10 @@ if __name__ == "__main__":
         test_camera_streaming,
         test_utils_and_constants,
         test_device_fingerprinting,
+        test_keyboard_teleop,
+        test_edge_controller,
         test_version,
+        test_all_exports,
     ]
 
     results = []
