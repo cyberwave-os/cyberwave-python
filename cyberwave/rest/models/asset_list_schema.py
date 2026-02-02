@@ -33,11 +33,12 @@ class AssetListSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     public: StrictBool
+    visibility: Optional[StrictStr] = None
     registry_id: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
     thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "public", "registry_id", "metadata", "capabilities", "thumbnail"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "public", "visibility", "registry_id", "metadata", "capabilities", "thumbnail"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -78,6 +79,11 @@ class AssetListSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if visibility (nullable) is None
+        # and model_fields_set contains the field
+        if self.visibility is None and "visibility" in self.model_fields_set:
+            _dict['visibility'] = None
+
         # set to None if registry_id (nullable) is None
         # and model_fields_set contains the field
         if self.registry_id is None and "registry_id" in self.model_fields_set:
@@ -116,6 +122,7 @@ class AssetListSchema(BaseModel):
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "public": obj.get("public"),
+            "visibility": obj.get("visibility"),
             "registry_id": obj.get("registry_id"),
             "metadata": obj.get("metadata"),
             "capabilities": obj.get("capabilities"),

@@ -547,10 +547,10 @@ class RtNetsciurus17Twin(Twin):
         """Controller for robot joints"""
         ...
 
-class GepettofingerEduGepettoTwin(Twin):
+class GepettofingerEduGepettosTwin(Twin):
     """
     Digital twin for Finger EDU Gepetto
-    Registry ID: gepetto/finger-edu-gepetto
+    Registry ID: gepetto/finger-edu-gepettos
     """
     @property
     def joints(self) -> JointController:
@@ -909,10 +909,10 @@ class Enacticopenarm01Twin(Twin):
         """Controller for robot joints"""
         ...
 
-class WaveshareugvBestTwin(Twin):
+class WaveshareugvBeastTwin(Twin):
     """
     Digital twin for UGV Beast
-    Registry ID: waveshare/ugv-best
+    Registry ID: waveshare/ugv-beast
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -940,6 +940,41 @@ class AltoRoboticsnodeTwin(Twin):
     def joints(self) -> JointController:
         """Controller for robot joints"""
         ...
+
+class AgiloxagiloxOflTwin(Twin):
+    """
+    Digital twin for Agilox OFL
+    Registry ID: agilox/agilox-ofl
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class OttoMotorsotto1500Twin(Twin):
+    """
+    Digital twin for Otto1500
+    Registry ID: otto-motors/otto-1500
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class CyberwavewarehouseTwin(Twin):
+    """
+    Digital twin for Warehouse
+    Registry ID: cyberwave/warehouse
+    """
+    pass
 
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
@@ -984,7 +1019,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "fourier/fftai-gr1t2": FourierfftaiGr1t2Twin,
     "unitree/unitree-h1": UnitreeunitreeH1Twin,
     "rt-net/sciurus17": RtNetsciurus17Twin,
-    "gepetto/finger-edu-gepetto": GepettofingerEduGepettoTwin,
+    "gepetto/finger-edu-gepettos": GepettofingerEduGepettosTwin,
     "dexsuite/leap-hand-leap": DexsuiteleapHandLeapTwin,
     "timqian/bambot-b0": TimqianbambotB0Twin,
     "timqian/bambot-b0-base": TimqianbambotB0BaseTwin,
@@ -1020,6 +1055,9 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101-with-camera": TheRobotStudioso101WithCameraTwin,
     "universal_robots/UR7": UniversalRobotsur7Twin,
     "enactic/openarm01": Enacticopenarm01Twin,
-    "waveshare/ugv-best": WaveshareugvBestTwin,
+    "waveshare/ugv-beast": WaveshareugvBeastTwin,
     "alto-robotics/node": AltoRoboticsnodeTwin,
+    "agilox/agilox-ofl": AgiloxagiloxOflTwin,
+    "otto-motors/otto-1500": OttoMotorsotto1500Twin,
+    "cyberwave/warehouse": CyberwavewarehouseTwin,
 }

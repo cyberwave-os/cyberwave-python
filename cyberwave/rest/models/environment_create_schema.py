@@ -31,7 +31,8 @@ class EnvironmentCreateSchema(BaseModel):
     settings: Optional[Dict[str, Any]] = None
     asset_uuid: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "settings", "asset_uuid", "project_uuid"]
+    visibility: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "settings", "asset_uuid", "project_uuid", "visibility"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,6 +88,11 @@ class EnvironmentCreateSchema(BaseModel):
         if self.project_uuid is None and "project_uuid" in self.model_fields_set:
             _dict['project_uuid'] = None
 
+        # set to None if visibility (nullable) is None
+        # and model_fields_set contains the field
+        if self.visibility is None and "visibility" in self.model_fields_set:
+            _dict['visibility'] = None
+
         return _dict
 
     @classmethod
@@ -103,7 +109,8 @@ class EnvironmentCreateSchema(BaseModel):
             "description": obj.get("description"),
             "settings": obj.get("settings"),
             "asset_uuid": obj.get("asset_uuid"),
-            "project_uuid": obj.get("project_uuid")
+            "project_uuid": obj.get("project_uuid"),
+            "visibility": obj.get("visibility")
         })
         return _obj
 

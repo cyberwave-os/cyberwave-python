@@ -446,29 +446,59 @@ class Twin:
     def _get_current_position(self) -> Dict[str, float]:
         """Get current position from cache or server"""
         if self._position is None:
-            self.refresh()
+            # First try to use existing data without making an API call
             if hasattr(self._data, "position_x"):
                 self._position = {
                     "x": self._data.position_x,
                     "y": self._data.position_y,
                     "z": self._data.position_z,
                 }
+            elif isinstance(self._data, dict) and "position_x" in self._data:
+                self._position = {
+                    "x": self._data.get("position_x", 0),
+                    "y": self._data.get("position_y", 0),
+                    "z": self._data.get("position_z", 0),
+                }
             else:
-                self._position = {"x": 0, "y": 0, "z": 0}
+                # Only refresh from server if we don't have the data
+                self.refresh()
+                if hasattr(self._data, "position_x"):
+                    self._position = {
+                        "x": self._data.position_x,
+                        "y": self._data.position_y,
+                        "z": self._data.position_z,
+                    }
+                else:
+                    self._position = {"x": 0, "y": 0, "z": 0}
         return self._position
 
     def _get_current_scale(self) -> Dict[str, float]:
         """Get current scale from cache or server"""
         if self._scale is None:
-            self.refresh()
+            # First try to use existing data without making an API call
             if hasattr(self._data, "scale_x"):
                 self._scale = {
                     "x": self._data.scale_x,
                     "y": self._data.scale_y,
                     "z": self._data.scale_z,
                 }
+            elif isinstance(self._data, dict) and "scale_x" in self._data:
+                self._scale = {
+                    "x": self._data.get("scale_x", 1),
+                    "y": self._data.get("scale_y", 1),
+                    "z": self._data.get("scale_z", 1),
+                }
             else:
-                self._scale = {"x": 1, "y": 1, "z": 1}
+                # Only refresh from server if we don't have the data
+                self.refresh()
+                if hasattr(self._data, "scale_x"):
+                    self._scale = {
+                        "x": self._data.scale_x,
+                        "y": self._data.scale_y,
+                        "z": self._data.scale_z,
+                    }
+                else:
+                    self._scale = {"x": 1, "y": 1, "z": 1}
         return self._scale
 
     @staticmethod

@@ -24,27 +24,29 @@ from typing_extensions import Self
 
 class TwinCreateSchema(BaseModel):
     """
-    TwinCreateSchema
+    Schema for creating and updating a twin.
     """ # noqa: E501
     name: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
     asset_uuid: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
-    position_x: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    position_y: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    position_z: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    rotation_w: Optional[Union[StrictFloat, StrictInt]] = 1.0
-    rotation_x: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    rotation_y: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    rotation_z: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    scale_x: Optional[Union[StrictFloat, StrictInt]] = 1.0
-    scale_y: Optional[Union[StrictFloat, StrictInt]] = 1.0
-    scale_z: Optional[Union[StrictFloat, StrictInt]] = 1.0
+    position_x: Optional[Union[StrictFloat, StrictInt]] = None
+    position_y: Optional[Union[StrictFloat, StrictInt]] = None
+    position_z: Optional[Union[StrictFloat, StrictInt]] = None
+    rotation_w: Optional[Union[StrictFloat, StrictInt]] = None
+    rotation_x: Optional[Union[StrictFloat, StrictInt]] = None
+    rotation_y: Optional[Union[StrictFloat, StrictInt]] = None
+    rotation_z: Optional[Union[StrictFloat, StrictInt]] = None
+    scale_x: Optional[Union[StrictFloat, StrictInt]] = None
+    scale_y: Optional[Union[StrictFloat, StrictInt]] = None
+    scale_z: Optional[Union[StrictFloat, StrictInt]] = None
     joint_calibration: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
     controller_policy_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid"]
+    attach_to_twin_uuid: Optional[StrictStr] = None
+    attach_to_link: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "attach_to_twin_uuid", "attach_to_link"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -105,6 +107,56 @@ class TwinCreateSchema(BaseModel):
         if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
             _dict['environment_uuid'] = None
 
+        # set to None if position_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.position_x is None and "position_x" in self.model_fields_set:
+            _dict['position_x'] = None
+
+        # set to None if position_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.position_y is None and "position_y" in self.model_fields_set:
+            _dict['position_y'] = None
+
+        # set to None if position_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.position_z is None and "position_z" in self.model_fields_set:
+            _dict['position_z'] = None
+
+        # set to None if rotation_w (nullable) is None
+        # and model_fields_set contains the field
+        if self.rotation_w is None and "rotation_w" in self.model_fields_set:
+            _dict['rotation_w'] = None
+
+        # set to None if rotation_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.rotation_x is None and "rotation_x" in self.model_fields_set:
+            _dict['rotation_x'] = None
+
+        # set to None if rotation_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.rotation_y is None and "rotation_y" in self.model_fields_set:
+            _dict['rotation_y'] = None
+
+        # set to None if rotation_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.rotation_z is None and "rotation_z" in self.model_fields_set:
+            _dict['rotation_z'] = None
+
+        # set to None if scale_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.scale_x is None and "scale_x" in self.model_fields_set:
+            _dict['scale_x'] = None
+
+        # set to None if scale_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.scale_y is None and "scale_y" in self.model_fields_set:
+            _dict['scale_y'] = None
+
+        # set to None if scale_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.scale_z is None and "scale_z" in self.model_fields_set:
+            _dict['scale_z'] = None
+
         # set to None if joint_calibration (nullable) is None
         # and model_fields_set contains the field
         if self.joint_calibration is None and "joint_calibration" in self.model_fields_set:
@@ -125,6 +177,16 @@ class TwinCreateSchema(BaseModel):
         if self.controller_policy_uuid is None and "controller_policy_uuid" in self.model_fields_set:
             _dict['controller_policy_uuid'] = None
 
+        # set to None if attach_to_twin_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_to_twin_uuid is None and "attach_to_twin_uuid" in self.model_fields_set:
+            _dict['attach_to_twin_uuid'] = None
+
+        # set to None if attach_to_link (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_to_link is None and "attach_to_link" in self.model_fields_set:
+            _dict['attach_to_link'] = None
+
         return _dict
 
     @classmethod
@@ -141,20 +203,22 @@ class TwinCreateSchema(BaseModel):
             "description": obj.get("description"),
             "asset_uuid": obj.get("asset_uuid"),
             "environment_uuid": obj.get("environment_uuid"),
-            "position_x": obj.get("position_x") if obj.get("position_x") is not None else 0.0,
-            "position_y": obj.get("position_y") if obj.get("position_y") is not None else 0.0,
-            "position_z": obj.get("position_z") if obj.get("position_z") is not None else 0.0,
-            "rotation_w": obj.get("rotation_w") if obj.get("rotation_w") is not None else 1.0,
-            "rotation_x": obj.get("rotation_x") if obj.get("rotation_x") is not None else 0.0,
-            "rotation_y": obj.get("rotation_y") if obj.get("rotation_y") is not None else 0.0,
-            "rotation_z": obj.get("rotation_z") if obj.get("rotation_z") is not None else 0.0,
-            "scale_x": obj.get("scale_x") if obj.get("scale_x") is not None else 1.0,
-            "scale_y": obj.get("scale_y") if obj.get("scale_y") is not None else 1.0,
-            "scale_z": obj.get("scale_z") if obj.get("scale_z") is not None else 1.0,
+            "position_x": obj.get("position_x"),
+            "position_y": obj.get("position_y"),
+            "position_z": obj.get("position_z"),
+            "rotation_w": obj.get("rotation_w"),
+            "rotation_x": obj.get("rotation_x"),
+            "rotation_y": obj.get("rotation_y"),
+            "rotation_z": obj.get("rotation_z"),
+            "scale_x": obj.get("scale_x"),
+            "scale_y": obj.get("scale_y"),
+            "scale_z": obj.get("scale_z"),
             "joint_calibration": obj.get("joint_calibration"),
             "metadata": obj.get("metadata"),
             "capabilities": obj.get("capabilities"),
-            "controller_policy_uuid": obj.get("controller_policy_uuid")
+            "controller_policy_uuid": obj.get("controller_policy_uuid"),
+            "attach_to_twin_uuid": obj.get("attach_to_twin_uuid"),
+            "attach_to_link": obj.get("attach_to_link")
         })
         return _obj
 

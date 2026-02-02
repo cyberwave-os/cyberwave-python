@@ -34,7 +34,8 @@ class EnvironmentSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     settings: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "project_uuid", "created_at", "updated_at", "settings"]
+    visibility: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "project_uuid", "created_at", "updated_at", "settings", "visibility"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -85,6 +86,11 @@ class EnvironmentSchema(BaseModel):
         if self.settings is None and "settings" in self.model_fields_set:
             _dict['settings'] = None
 
+        # set to None if visibility (nullable) is None
+        # and model_fields_set contains the field
+        if self.visibility is None and "visibility" in self.model_fields_set:
+            _dict['visibility'] = None
+
         return _dict
 
     @classmethod
@@ -103,7 +109,8 @@ class EnvironmentSchema(BaseModel):
             "project_uuid": obj.get("project_uuid"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
-            "settings": obj.get("settings")
+            "settings": obj.get("settings"),
+            "visibility": obj.get("visibility")
         })
         return _obj
 

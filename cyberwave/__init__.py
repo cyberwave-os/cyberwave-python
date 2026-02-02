@@ -79,8 +79,8 @@ try:
     from .sensor import (
         CV2VideoTrack,
         CV2CameraStreamer,
-        CallbackVideoTrack,
-        CallbackCameraStreamer,
+        VirtualVideoTrack,
+        VirtualCameraStreamer,
         RealSenseVideoTrack,
         RealSenseStreamer,
         BaseVideoTrack,
@@ -95,6 +95,8 @@ except ImportError:
     CameraStreamer = None  # type: ignore
     CV2VideoTrack = None  # type: ignore
     CV2CameraStreamer = None  # type: ignore
+    VirtualVideoTrack = None  # type: ignore
+    VirtualCameraStreamer = None  # type: ignore
     CallbackVideoTrack = None  # type: ignore
     CallbackCameraStreamer = None  # type: ignore
     RealSenseVideoTrack = None  # type: ignore
@@ -125,7 +127,7 @@ from .constants import (
 )
 
 # Version information
-__version__ = "0.0.29"
+__version__ = "0.3.6"
 
 # Define public API
 __all__ = [
@@ -176,8 +178,8 @@ __all__ = [
     "CameraStreamer",  # Legacy alias for CV2CameraStreamer
     "CV2VideoTrack",
     "CV2CameraStreamer",
-    "CallbackVideoTrack",
-    "CallbackCameraStreamer",
+    "VirtualVideoTrack",
+    "VirtualCameraStreamer",
     "RealSenseVideoTrack",
     "RealSenseStreamer",
     "BaseVideoTrack",

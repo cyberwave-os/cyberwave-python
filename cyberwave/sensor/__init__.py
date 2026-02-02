@@ -529,12 +529,37 @@ class BaseVideoStreamer(abc.ABC):
                         self._answer_received = True
                     else:
                         logger.debug("Skipping answer message not targeted at edge")
+                elif payload.get("type") == "candidate":
+                    # Handle ICE candidates if they are sent on the answer topic
+                    if payload.get("target") == "edge":
+                        self._handle_candidate(payload)
                 else:
-                    raise ValueError(f"Unknown message type: {payload.get('type')}")
+                    logger.debug(f"Ignoring message type: {payload.get('type')}")
             except Exception as e:
-                raise e
+                logger.error(f"Error in on_answer: {e}")
 
         self.client.subscribe(answer_topic, on_answer)
+        # Also subscribe to candidate topic
+        candidate_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-candidate"
+        self.client.subscribe(candidate_topic, on_answer)
+
+    def _handle_candidate(self, payload: Dict[str, Any]):
+        """Handle incoming ICE candidate."""
+        if not self.pc or not payload.get("candidate"):
+            return
+        
+        try:
+            from aiortc import RTCIceCandidate
+            cand_data = payload["candidate"]
+            candidate = RTCIceCandidate(
+                candidate=cand_data["candidate"],
+                sdpMid=cand_data.get("sdpMid"),
+                sdpMLineIndex=cand_data.get("sdpMLineIndex")
+            )
+            asyncio.create_task(self.pc.addIceCandidate(candidate))
+            logger.info("Added remote ICE candidate")
+        except Exception as e:
+            logger.warning(f"Failed to add remote ICE candidate: {e}")
 
     def _subscribe_to_commands(self, command_callback: Optional[Callable] = None):
         """Subscribe to start/stop command messages via MQTT."""
@@ -765,7 +790,7 @@ from .config import (  # noqa: E402
 # Import concrete implementations for convenience
 from .camera_cv2 import CV2VideoTrack, CV2CameraStreamer  # noqa: E402
 from .camera_rs import RealSenseVideoTrack, RealSenseStreamer  # noqa: E402
-from .camera_callback import CallbackVideoTrack, CallbackCameraStreamer  # noqa: E402
+from .camera_virtual import VirtualVideoTrack, VirtualCameraStreamer  # noqa: E402
 
 __all__ = [
     # Base classes
@@ -788,9 +813,9 @@ __all__ = [
     # CV2 implementations
     "CV2VideoTrack",
     "CV2CameraStreamer",
-    # Callback implementations
-    "CallbackVideoTrack",
-    "CallbackCameraStreamer",
+    # Virtual camera implementations
+    "VirtualCameraStreamer",
+    "VirtualVideoTrack",
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",

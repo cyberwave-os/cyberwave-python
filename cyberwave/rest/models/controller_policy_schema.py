@@ -38,8 +38,8 @@ class ControllerPolicySchema(BaseModel):
     created_by: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
-    can_edit: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_edit"]
+    can_write: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -113,7 +113,7 @@ class ControllerPolicySchema(BaseModel):
             "created_by": obj.get("created_by"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "asset_uuids": obj.get("asset_uuids"),
-            "can_edit": obj.get("can_edit") if obj.get("can_edit") is not None else False
+            "can_write": obj.get("can_write") if obj.get("can_write") is not None else False
         })
         return _obj
 

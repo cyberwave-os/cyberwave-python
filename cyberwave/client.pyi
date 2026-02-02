@@ -137,7 +137,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["gepetto/finger-edu-gepetto"],
+        asset_key: Literal["gepetto/finger-edu-gepettos"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -308,7 +308,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["waveshare/ugv-best"],
+        asset_key: Literal["waveshare/ugv-beast"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -336,6 +336,15 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["alto-robotics/node"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteDepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["otto-motors/otto-1500"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -489,6 +498,15 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["timqian/bambot-b0-base"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["agilox/agilox-ofl"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

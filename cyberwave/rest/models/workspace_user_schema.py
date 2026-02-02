@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List
 from cyberwave.rest.models.public_user_schema import PublicUserSchema
 from typing import Optional, Set
@@ -29,7 +29,8 @@ class WorkspaceUserSchema(BaseModel):
     """ # noqa: E501
     user: PublicUserSchema
     owner: StrictBool
-    __properties: ClassVar[List[str]] = ["user", "owner"]
+    role: StrictStr
+    __properties: ClassVar[List[str]] = ["user", "owner", "role"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,7 +87,8 @@ class WorkspaceUserSchema(BaseModel):
 
         _obj = cls.model_validate({
             "user": PublicUserSchema.from_dict(obj["user"]) if obj.get("user") is not None else None,
-            "owner": obj.get("owner")
+            "owner": obj.get("owner"),
+            "role": obj.get("role")
         })
         return _obj
 

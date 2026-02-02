@@ -52,7 +52,10 @@ class TwinSchema(BaseModel):
     metadata: Dict[str, Any]
     capabilities: Dict[str, Any]
     controller_policy_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid"]
+    visibility: Optional[StrictStr] = None
+    attach_to_twin_uuid: Optional[StrictStr] = None
+    attach_to_link: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -123,6 +126,21 @@ class TwinSchema(BaseModel):
         if self.controller_policy_uuid is None and "controller_policy_uuid" in self.model_fields_set:
             _dict['controller_policy_uuid'] = None
 
+        # set to None if visibility (nullable) is None
+        # and model_fields_set contains the field
+        if self.visibility is None and "visibility" in self.model_fields_set:
+            _dict['visibility'] = None
+
+        # set to None if attach_to_twin_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_to_twin_uuid is None and "attach_to_twin_uuid" in self.model_fields_set:
+            _dict['attach_to_twin_uuid'] = None
+
+        # set to None if attach_to_link (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_to_link is None and "attach_to_link" in self.model_fields_set:
+            _dict['attach_to_link'] = None
+
         return _dict
 
     @classmethod
@@ -159,7 +177,10 @@ class TwinSchema(BaseModel):
             "joint_calibration": obj.get("joint_calibration"),
             "metadata": obj.get("metadata"),
             "capabilities": obj.get("capabilities"),
-            "controller_policy_uuid": obj.get("controller_policy_uuid")
+            "controller_policy_uuid": obj.get("controller_policy_uuid"),
+            "visibility": obj.get("visibility"),
+            "attach_to_twin_uuid": obj.get("attach_to_twin_uuid"),
+            "attach_to_link": obj.get("attach_to_link")
         })
         return _obj
 

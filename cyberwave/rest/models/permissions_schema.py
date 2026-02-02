@@ -27,11 +27,10 @@ class PermissionsSchema(BaseModel):
     PermissionsSchema
     """ # noqa: E501
     role: Optional[StrictStr] = None
-    can_view: StrictBool
-    can_edit: StrictBool
+    can_read: StrictBool
+    can_write: StrictBool
     can_admin: StrictBool
-    can_delete: StrictBool
-    __properties: ClassVar[List[str]] = ["role", "can_view", "can_edit", "can_admin", "can_delete"]
+    __properties: ClassVar[List[str]] = ["role", "can_read", "can_write", "can_admin"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -90,10 +89,9 @@ class PermissionsSchema(BaseModel):
 
         _obj = cls.model_validate({
             "role": obj.get("role"),
-            "can_view": obj.get("can_view"),
-            "can_edit": obj.get("can_edit"),
-            "can_admin": obj.get("can_admin"),
-            "can_delete": obj.get("can_delete")
+            "can_read": obj.get("can_read"),
+            "can_write": obj.get("can_write"),
+            "can_admin": obj.get("can_admin")
         })
         return _obj
 

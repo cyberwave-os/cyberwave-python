@@ -681,16 +681,26 @@ class CyberwaveMQTTClient:
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):
         """Publish WebRTC signaling message via MQTT."""
         self._handle_twin_update_with_telemetry(twin_uuid)
-        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc"
+        msg_type = webrtc_data.get("type")
+        if msg_type == "offer":
+            topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-offer"
+        elif msg_type == "answer":
+            topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-answer"
+        elif msg_type == "candidate":
+            topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-candidate"
+        else:
+            topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc"
         self.publish(topic, webrtc_data)
 
     def subscribe_webrtc_messages(
         self, twin_uuid: str, on_message: Optional[Callable] = None
     ):
         """Subscribe to WebRTC signaling messages via MQTT."""
-        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc"
         self._handle_twin_update_with_telemetry(twin_uuid)
-        self.subscribe(topic, on_message)
+        # Subscribe to specialized topics
+        self.subscribe(f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-offer", on_message)
+        self.subscribe(f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-answer", on_message)
+        self.subscribe(f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-candidate", on_message)
 
     def publish_command_message(self, twin_uuid: str, status):
         """Publish command response message via MQTT.

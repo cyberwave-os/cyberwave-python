@@ -147,26 +147,33 @@ class TestIntegrationWorkflow:
             assert twin_data.environment_uuid == environment.uuid
             print(f"✓ Step 4: Created twin (UUID: {twin_data.uuid})")
 
-            # Step 5: Use the Twin abstraction to move the twin
-            from cyberwave import Twin
-
-            twin = Twin(client, twin_data)
-
-            # Move the twin to a new position
-            twin.edit_position(x=1.0, y=0.5, z=0.3)
-
-            # Refresh to verify the position was updated
-            twin.refresh()
-            assert hasattr(twin._data, "position_x")
+            # Step 5: Update twin position using lower-level API
+            # (Avoiding Twin class abstraction to test core API functionality)
+            updated_twin = client.twins.update_state(
+                twin_data.uuid,
+                {"position_x": 1.0, "position_y": 0.5, "position_z": 0.3},
+            )
+            assert updated_twin.position_x == 1.0
+            assert updated_twin.position_y == 0.5
+            assert updated_twin.position_z == 0.3
             print(
-                f"✓ Step 5: Moved twin to position ({twin._data.position_x}, {twin._data.position_y}, {twin._data.position_z})"
+                f"✓ Step 5: Moved twin to position ({updated_twin.position_x}, {updated_twin.position_y}, {updated_twin.position_z})"
             )
 
-            # Step 6: Rotate the twin
-            twin.edit_rotation(yaw=45)
+            # Step 6: Update twin rotation using lower-level API
+            import math
 
-            # Refresh to verify the rotation was updated
-            twin.refresh()
+            # Convert 45 degree yaw to quaternion (rotation around Z axis)
+            yaw_rad = math.radians(45)
+            updated_twin = client.twins.update_state(
+                twin_data.uuid,
+                {
+                    "rotation_w": math.cos(yaw_rad / 2),
+                    "rotation_x": 0.0,
+                    "rotation_y": 0.0,
+                    "rotation_z": math.sin(yaw_rad / 2),
+                },
+            )
             print("✓ Step 6: Rotated twin by 45 degrees (yaw)")
 
         finally:

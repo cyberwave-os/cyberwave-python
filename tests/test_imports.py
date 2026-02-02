@@ -251,8 +251,10 @@ def test_camera_streaming():
             CameraStreamer,
             CV2VideoTrack,
             CV2CameraStreamer,
-            CallbackVideoTrack,
-            CallbackCameraStreamer,
+            VirtualVideoTrack,
+            VirtualCameraStreamer,
+            CallbackVideoTrack,  # Backwards compatibility
+            CallbackCameraStreamer,  # Backwards compatibility
             RealSenseVideoTrack,
             RealSenseStreamer,
             BaseVideoTrack,
@@ -266,8 +268,8 @@ def test_camera_streaming():
             classes_available = all([
                 CV2VideoTrack is not None,
                 CV2CameraStreamer is not None,
-                CallbackVideoTrack is not None,
-                CallbackCameraStreamer is not None,
+                VirtualVideoTrack is not None,
+                VirtualCameraStreamer is not None,
                 RealSenseVideoTrack is not None,
                 RealSenseStreamer is not None,
                 BaseVideoTrack is not None,
