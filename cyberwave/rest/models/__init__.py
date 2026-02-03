@@ -72,6 +72,7 @@ from cyberwave.rest.models.create_task_schema import CreateTaskSchema
 from cyberwave.rest.models.dataset_create_schema import DatasetCreateSchema
 from cyberwave.rest.models.dataset_schema import DatasetSchema
 from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema
+from cyberwave.rest.models.dataset_zip_url_schema import DatasetZipUrlSchema
 from cyberwave.rest.models.device_heartbeat_schema import DeviceHeartbeatSchema
 from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema

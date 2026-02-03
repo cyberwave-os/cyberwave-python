@@ -95,6 +95,7 @@ __all__ = [
     "DatasetCreateSchema",
     "DatasetSchema",
     "DatasetUpdateSchema",
+    "DatasetZipUrlSchema",
     "DeviceHeartbeatSchema",
     "DiscoveryResponseSchema",
     "EdgeCreateSchema",
@@ -321,6 +322,7 @@ from cyberwave.rest.models.create_task_schema import CreateTaskSchema as CreateT
 from cyberwave.rest.models.dataset_create_schema import DatasetCreateSchema as DatasetCreateSchema
 from cyberwave.rest.models.dataset_schema import DatasetSchema as DatasetSchema
 from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema as DatasetUpdateSchema
+from cyberwave.rest.models.dataset_zip_url_schema import DatasetZipUrlSchema as DatasetZipUrlSchema
 from cyberwave.rest.models.device_heartbeat_schema import DeviceHeartbeatSchema as DeviceHeartbeatSchema
 from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema as DiscoveryResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema as EdgeCreateSchema

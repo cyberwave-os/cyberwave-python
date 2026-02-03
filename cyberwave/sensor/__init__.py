@@ -31,6 +31,9 @@ from aiortc import (
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
     from ..utils import TimeReference
+else:
+    # Lazy import to avoid circular dependencies
+    EdgeHealthCheck = None
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +152,7 @@ class BaseVideoStreamer(abc.ABC):
         twin_uuid: Optional[str] = None,
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
+        enable_health_check: bool = True,
     ):
         """Initialize the video streamer.
 
@@ -158,6 +162,7 @@ class BaseVideoStreamer(abc.ABC):
             twin_uuid: Optional UUID of the digital twin
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
+            enable_health_check: Whether to enable automatic health check reporting (default: True)
         """
         self.client = client
         self.twin_uuid: Optional[str] = twin_uuid
@@ -165,6 +170,7 @@ class BaseVideoStreamer(abc.ABC):
         # Use explicit None check so empty list [] disables TURN servers
         self.turn_servers = turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
         self.time_reference = time_reference
+        self.enable_health_check = enable_health_check
 
         # WebRTC state
         self.pc: Optional[RTCPeerConnection] = None
@@ -183,6 +189,11 @@ class BaseVideoStreamer(abc.ABC):
 
         # Recording state
         self._should_record = True
+
+        # Health check state
+        self._health_check: Optional[Any] = None
+        self._health_monitor_task: Optional[asyncio.Task] = None
+        self._last_frame_count = 0
 
     @abc.abstractmethod
     def initialize_track(self) -> BaseVideoTrack:
@@ -259,9 +270,16 @@ class BaseVideoStreamer(abc.ABC):
 
         logger.debug("WebRTC connection established")
         asyncio.create_task(self._wait_and_publish_frame_0_timestamp())
+        
+        # Start health check if enabled
+        if self.enable_health_check:
+            self._start_health_check()
 
     async def stop(self):
         """Stop streaming and cleanup resources."""
+        # Stop health check
+        self._stop_health_check()
+        
         if self.streamer:
             try:
                 self.streamer.close()
@@ -759,11 +777,87 @@ class BaseVideoStreamer(abc.ABC):
             except asyncio.CancelledError:
                 pass
 
+        # Stop health check and await its task
+        if self._health_monitor_task:
+            self._health_monitor_task.cancel()
+            try:
+                await self._health_monitor_task
+            except asyncio.CancelledError:
+                pass
+        self._stop_health_check()
+
         if self.pc is not None:
             try:
                 await self.stop()
             except Exception as e:
                 logger.error(f"Error stopping streamer during cleanup: {e}")
+
+    # -------------------------------------------------------------------------
+    # Health Check
+    # -------------------------------------------------------------------------
+
+    def _start_health_check(self):
+        """Start health check monitoring."""
+        if not self.enable_health_check or not self.twin_uuid:
+            return
+
+        try:
+            # Lazy import to avoid circular dependencies
+            global EdgeHealthCheck
+            if EdgeHealthCheck is None:
+                from ..edge.health import EdgeHealthCheck
+
+            self._health_check = EdgeHealthCheck(
+                mqtt_client=self.client,
+                twin_uuids=[self.twin_uuid],
+                edge_id=self.twin_uuid,
+                stale_timeout=30,
+                interval=5,
+            )
+            self._health_check.start()
+            self._last_frame_count = 0
+
+            # Start frame count monitoring task
+            self._health_monitor_task = asyncio.create_task(self._monitor_frame_count())
+            logger.debug("Health check started")
+        except Exception as e:
+            logger.warning(f"Failed to start health check: {e}")
+
+    def _stop_health_check(self):
+        """Stop health check monitoring."""
+        if self._health_monitor_task:
+            self._health_monitor_task.cancel()
+            # Note: Task will be awaited in async cleanup if needed
+            self._health_monitor_task = None
+
+        if self._health_check:
+            try:
+                self._health_check.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping health check: {e}")
+            self._health_check = None
+
+        self._last_frame_count = 0
+
+    async def _monitor_frame_count(self):
+        """Monitor streamer frame count and update health check."""
+        while self._is_running or self.pc is not None:
+            try:
+                if self.streamer and self._health_check:
+                    current_frame_count = getattr(self.streamer, "frame_count", 0)
+                    # Handle reconnection: if frame count resets, update last_frame_count
+                    if current_frame_count < self._last_frame_count:
+                        self._last_frame_count = current_frame_count
+                    # Update health check for each new frame
+                    if current_frame_count > self._last_frame_count:
+                        frames_delta = current_frame_count - self._last_frame_count
+                        for _ in range(frames_delta):
+                            self._health_check.update_frame_count()
+                        self._last_frame_count = current_frame_count
+            except Exception as e:
+                # Ignore errors in monitoring
+                logger.debug(f"Health check monitoring error: {e}")
+            await asyncio.sleep(0.1)  # Check every 100ms
 
 
 # =============================================================================

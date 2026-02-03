@@ -61,8 +61,8 @@
       "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
       },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
