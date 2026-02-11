@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -32,7 +32,6 @@ class AssetSchema(BaseModel):
     description: StrictStr
     created_at: datetime
     updated_at: datetime
-    public: StrictBool
     visibility: Optional[StrictStr] = None
     owner_uuid: Optional[StrictStr] = None
     registry_id: Optional[StrictStr] = None
@@ -43,7 +42,7 @@ class AssetSchema(BaseModel):
     kinematics: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
     thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "public", "visibility", "owner_uuid", "registry_id", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -151,7 +150,6 @@ class AssetSchema(BaseModel):
             "description": obj.get("description"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
-            "public": obj.get("public"),
             "visibility": obj.get("visibility"),
             "owner_uuid": obj.get("owner_uuid"),
             "registry_id": obj.get("registry_id"),

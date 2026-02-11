@@ -18,22 +18,16 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class AssetCreateSchema(BaseModel):
+class CloudNodeWorkloadAttachmentSchema(BaseModel):
     """
-    AssetCreateSchema
+    Request schema for a Cloud Node workload attachment.
     """ # noqa: E501
-    name: StrictStr
-    description: StrictStr
-    visibility: Optional[StrictStr] = 'private'
-    workspace_uuid: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    capabilities: Optional[Dict[str, Any]] = None
-    registry_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "visibility", "workspace_uuid", "metadata", "capabilities", "registry_id"]
+    filename: StrictStr
+    __properties: ClassVar[List[str]] = ["filename"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -53,7 +47,7 @@ class AssetCreateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of AssetCreateSchema from a JSON string"""
+        """Create an instance of CloudNodeWorkloadAttachmentSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,31 +68,11 @@ class AssetCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if workspace_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
-
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
-        # set to None if capabilities (nullable) is None
-        # and model_fields_set contains the field
-        if self.capabilities is None and "capabilities" in self.model_fields_set:
-            _dict['capabilities'] = None
-
-        # set to None if registry_id (nullable) is None
-        # and model_fields_set contains the field
-        if self.registry_id is None and "registry_id" in self.model_fields_set:
-            _dict['registry_id'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of AssetCreateSchema from a dict"""
+        """Create an instance of CloudNodeWorkloadAttachmentSchema from a dict"""
         if obj is None:
             return None
 
@@ -106,13 +80,7 @@ class AssetCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata"),
-            "capabilities": obj.get("capabilities"),
-            "registry_id": obj.get("registry_id")
+            "filename": obj.get("filename")
         })
         return _obj
 

@@ -2585,7 +2585,7 @@
   },
   "enactic/openarm01": {
     "uuid": "789690dd-163f-461d-a9d5-96cac7ca59ce",
-    "name": "OpenARM",
+    "name": "OpenARM:z",
     "capabilities": {
       "can_fly": false,
       "sensors": [],
@@ -2596,8 +2596,15 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 6,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -2777,6 +2784,35 @@
   "cyberwave/warehouse": {
     "uuid": "5d538c14-fc95-4e3c-935e-6c1c851ac6f8",
     "name": "Warehouse",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "power_source": "none",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
+      },
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "edge_config_schema": [],
+      "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "open/openarm02": {
+    "uuid": "85624fa1-0b9f-4288-8271-f73a29e4beef",
+    "name": "OpenArm2",
     "capabilities": {
       "can_fly": false,
       "sensors": [],

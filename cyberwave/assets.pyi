@@ -901,7 +901,7 @@ class UniversalRobotsur7Twin(Twin):
 
 class Enacticopenarm01Twin(Twin):
     """
-    Digital twin for OpenARM
+    Digital twin for OpenARM:z
     Registry ID: enactic/openarm01
     """
     @property
@@ -973,6 +973,13 @@ class CyberwavewarehouseTwin(Twin):
     """
     Digital twin for Warehouse
     Registry ID: cyberwave/warehouse
+    """
+    pass
+
+class Openopenarm02Twin(Twin):
+    """
+    Digital twin for OpenArm2
+    Registry ID: open/openarm02
     """
     pass
 
@@ -1060,4 +1067,5 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "agilox/agilox-ofl": AgiloxagiloxOflTwin,
     "otto-motors/otto-1500": OttoMotorsotto1500Twin,
     "cyberwave/warehouse": CyberwavewarehouseTwin,
+    "open/openarm02": Openopenarm02Twin,
 }

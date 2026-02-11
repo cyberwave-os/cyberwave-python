@@ -73,7 +73,10 @@ __all__ = [
     "CloudNodeTerminatedRequest",
     "CloudNodeTerminatedResponse",
     "CloudNodeWorkloadAssignSchema",
+    "CloudNodeWorkloadAttachmentResponseSchema",
+    "CloudNodeWorkloadAttachmentSchema",
     "CloudNodeWorkloadCreateSchema",
+    "CloudNodeWorkloadResultSchema",
     "CloudNodeWorkloadSchema",
     "CloudNodeWorkloadUpdateSchema",
     "CloudeNodeHeartbeatResponse",
@@ -89,6 +92,7 @@ __all__ = [
     "ControllerPolicyExecuteSchema",
     "ControllerPolicySchema",
     "ControllerPolicyUpdateSchema",
+    "CreateAssetFromPromptOrImageRequestSchema",
     "CreateMissionExecutionSchema",
     "CreateMissionSchema",
     "CreateTaskSchema",
@@ -96,6 +100,7 @@ __all__ = [
     "DatasetSchema",
     "DatasetUpdateSchema",
     "DatasetZipUrlSchema",
+    "DeferredTaskExecutionResponseSchema",
     "DeviceHeartbeatSchema",
     "DiscoveryResponseSchema",
     "EdgeCreateSchema",
@@ -114,6 +119,8 @@ __all__ = [
     "FeatureMetadataSchema",
     "FeatureStatusSchema",
     "GrantUserFeatureRequest",
+    "ImageBytes",
+    "ImageBytes1",
     "InitiateLargeUploadResponse",
     "InitiateLargeUploadSchema",
     "JointSchema",
@@ -139,13 +146,13 @@ __all__ = [
     "MapCreateSchema",
     "MapDataSchema",
     "MapStreamStartSchema",
-    "MeshFromPromptSchema",
     "Metadata",
     "MissionExecutionSchema",
     "MissionSchema",
     "MotionPlanSchema",
     "MotionPlanStepSchema",
     "MyFeaturesResponseSchema",
+    "NavigationRotationSchema",
     "NavigationWaypointSchema",
     "OpportunityCreateSchema",
     "OpportunitySchema",
@@ -159,6 +166,7 @@ __all__ = [
     "OrganizationUpdateSchema",
     "PairDeviceSchema",
     "PairTwinSchema",
+    "PasswordChangeSchema",
     "Payload",
     "PermissionsSchema",
     "PipelineConfigSchema",
@@ -300,7 +308,10 @@ from cyberwave.rest.models.cloud_node_log_response import CloudNodeLogResponse a
 from cyberwave.rest.models.cloud_node_terminated_request import CloudNodeTerminatedRequest as CloudNodeTerminatedRequest
 from cyberwave.rest.models.cloud_node_terminated_response import CloudNodeTerminatedResponse as CloudNodeTerminatedResponse
 from cyberwave.rest.models.cloud_node_workload_assign_schema import CloudNodeWorkloadAssignSchema as CloudNodeWorkloadAssignSchema
+from cyberwave.rest.models.cloud_node_workload_attachment_response_schema import CloudNodeWorkloadAttachmentResponseSchema as CloudNodeWorkloadAttachmentResponseSchema
+from cyberwave.rest.models.cloud_node_workload_attachment_schema import CloudNodeWorkloadAttachmentSchema as CloudNodeWorkloadAttachmentSchema
 from cyberwave.rest.models.cloud_node_workload_create_schema import CloudNodeWorkloadCreateSchema as CloudNodeWorkloadCreateSchema
+from cyberwave.rest.models.cloud_node_workload_result_schema import CloudNodeWorkloadResultSchema as CloudNodeWorkloadResultSchema
 from cyberwave.rest.models.cloud_node_workload_schema import CloudNodeWorkloadSchema as CloudNodeWorkloadSchema
 from cyberwave.rest.models.cloud_node_workload_update_schema import CloudNodeWorkloadUpdateSchema as CloudNodeWorkloadUpdateSchema
 from cyberwave.rest.models.cloude_node_heartbeat_response import CloudeNodeHeartbeatResponse as CloudeNodeHeartbeatResponse
@@ -316,6 +327,7 @@ from cyberwave.rest.models.controller_policy_execute_response_schema import Cont
 from cyberwave.rest.models.controller_policy_execute_schema import ControllerPolicyExecuteSchema as ControllerPolicyExecuteSchema
 from cyberwave.rest.models.controller_policy_schema import ControllerPolicySchema as ControllerPolicySchema
 from cyberwave.rest.models.controller_policy_update_schema import ControllerPolicyUpdateSchema as ControllerPolicyUpdateSchema
+from cyberwave.rest.models.create_asset_from_prompt_or_image_request_schema import CreateAssetFromPromptOrImageRequestSchema as CreateAssetFromPromptOrImageRequestSchema
 from cyberwave.rest.models.create_mission_execution_schema import CreateMissionExecutionSchema as CreateMissionExecutionSchema
 from cyberwave.rest.models.create_mission_schema import CreateMissionSchema as CreateMissionSchema
 from cyberwave.rest.models.create_task_schema import CreateTaskSchema as CreateTaskSchema
@@ -323,6 +335,7 @@ from cyberwave.rest.models.dataset_create_schema import DatasetCreateSchema as D
 from cyberwave.rest.models.dataset_schema import DatasetSchema as DatasetSchema
 from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema as DatasetUpdateSchema
 from cyberwave.rest.models.dataset_zip_url_schema import DatasetZipUrlSchema as DatasetZipUrlSchema
+from cyberwave.rest.models.deferred_task_execution_response_schema import DeferredTaskExecutionResponseSchema as DeferredTaskExecutionResponseSchema
 from cyberwave.rest.models.device_heartbeat_schema import DeviceHeartbeatSchema as DeviceHeartbeatSchema
 from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema as DiscoveryResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema as EdgeCreateSchema
@@ -341,6 +354,8 @@ from cyberwave.rest.models.execute_task_schema import ExecuteTaskSchema as Execu
 from cyberwave.rest.models.feature_metadata_schema import FeatureMetadataSchema as FeatureMetadataSchema
 from cyberwave.rest.models.feature_status_schema import FeatureStatusSchema as FeatureStatusSchema
 from cyberwave.rest.models.grant_user_feature_request import GrantUserFeatureRequest as GrantUserFeatureRequest
+from cyberwave.rest.models.image_bytes import ImageBytes as ImageBytes
+from cyberwave.rest.models.image_bytes1 import ImageBytes1 as ImageBytes1
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse as InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema as InitiateLargeUploadSchema
 from cyberwave.rest.models.joint_schema import JointSchema as JointSchema
@@ -366,13 +381,13 @@ from cyberwave.rest.models.ml_training_update_schema import MLTrainingUpdateSche
 from cyberwave.rest.models.map_create_schema import MapCreateSchema as MapCreateSchema
 from cyberwave.rest.models.map_data_schema import MapDataSchema as MapDataSchema
 from cyberwave.rest.models.map_stream_start_schema import MapStreamStartSchema as MapStreamStartSchema
-from cyberwave.rest.models.mesh_from_prompt_schema import MeshFromPromptSchema as MeshFromPromptSchema
 from cyberwave.rest.models.metadata import Metadata as Metadata
 from cyberwave.rest.models.mission_execution_schema import MissionExecutionSchema as MissionExecutionSchema
 from cyberwave.rest.models.mission_schema import MissionSchema as MissionSchema
 from cyberwave.rest.models.motion_plan_schema import MotionPlanSchema as MotionPlanSchema
 from cyberwave.rest.models.motion_plan_step_schema import MotionPlanStepSchema as MotionPlanStepSchema
 from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponseSchema as MyFeaturesResponseSchema
+from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema as NavigationRotationSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema as NavigationWaypointSchema
 from cyberwave.rest.models.opportunity_create_schema import OpportunityCreateSchema as OpportunityCreateSchema
 from cyberwave.rest.models.opportunity_schema import OpportunitySchema as OpportunitySchema
@@ -386,6 +401,7 @@ from cyberwave.rest.models.organization_schema import OrganizationSchema as Orga
 from cyberwave.rest.models.organization_update_schema import OrganizationUpdateSchema as OrganizationUpdateSchema
 from cyberwave.rest.models.pair_device_schema import PairDeviceSchema as PairDeviceSchema
 from cyberwave.rest.models.pair_twin_schema import PairTwinSchema as PairTwinSchema
+from cyberwave.rest.models.password_change_schema import PasswordChangeSchema as PasswordChangeSchema
 from cyberwave.rest.models.payload import Payload as Payload
 from cyberwave.rest.models.permissions_schema import PermissionsSchema as PermissionsSchema
 from cyberwave.rest.models.pipeline_config_schema import PipelineConfigSchema as PipelineConfigSchema

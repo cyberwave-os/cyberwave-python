@@ -4,6 +4,7 @@ Navigation planning utilities for waypoint-based navigation.
 
 from __future__ import annotations
 
+import math
 import time
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -54,6 +55,8 @@ class NavigationPlan:
         z: Optional[float] = None,
         *,
         position: Optional[Sequence[float] | Dict[str, Any]] = None,
+        rotation: Optional[Sequence[float] | Dict[str, Any]] = None,
+        yaw: Optional[float] = None,
         waypoint_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "NavigationPlan":
@@ -65,6 +68,8 @@ class NavigationPlan:
         waypoint = _normalize_waypoint({
             "id": waypoint_id,
             "position": position,
+            "rotation": rotation,
+            "yaw": yaw,
             "metadata": metadata or {},
         })
         self._append_waypoint(waypoint)
@@ -136,11 +141,15 @@ def _normalize_waypoint(item: Any) -> Dict[str, Any]:
             position = {"x": item.get("x"), "y": item.get("y"), "z": item.get("z")}
         else:
             raise ValueError("waypoint dict requires position or x,y,z")
-        return {
+        rotation = _normalize_rotation(item.get("rotation"), item.get("yaw"))
+        waypoint = {
             "id": item.get("id"),
             "position": _normalize_position(position),
             "metadata": item.get("metadata") or {},
         }
+        if rotation is not None:
+            waypoint["rotation"] = rotation
+        return waypoint
 
     if isinstance(item, (list, tuple)):
         return {
@@ -165,6 +174,31 @@ def _normalize_position(position: Sequence[float] | Dict[str, Any]) -> Dict[str,
     if x is None or y is None or z is None:
         raise ValueError("position requires x,y,z values")
     return {"x": float(x), "y": float(y), "z": float(z)}
+
+
+def _normalize_rotation(
+    rotation: Optional[Sequence[float] | Dict[str, Any]],
+    yaw: Optional[float],
+) -> Optional[List[float]]:
+    if rotation is not None and yaw is not None:
+        raise ValueError("waypoint rotation and yaw are mutually exclusive")
+    if rotation is None and yaw is None:
+        return None
+    if rotation is not None:
+        if isinstance(rotation, dict):
+            w = rotation.get("w")
+            x = rotation.get("x")
+            y = rotation.get("y")
+            z = rotation.get("z")
+        else:
+            if len(rotation) != 4:
+                raise ValueError("rotation must be [w, x, y, z]")
+            w, x, y, z = rotation
+        if w is None or x is None or y is None or z is None:
+            raise ValueError("rotation requires w, x, y, z values")
+        return [float(w), float(x), float(y), float(z)]
+    half = float(yaw) * 0.5
+    return [math.cos(half), 0.0, 0.0, math.sin(half)]
 
 
 def _make_id(prefix: str, suffix: Optional[int] = None) -> str:

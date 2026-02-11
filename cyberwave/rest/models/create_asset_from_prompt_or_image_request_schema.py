@@ -17,27 +17,24 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.image_bytes1 import ImageBytes1
 from typing import Optional, Set
 from typing_extensions import Self
 
-class AssetListSchema(BaseModel):
+class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
     """
-    AssetListSchema
+    CreateAssetFromPromptOrImageRequestSchema
     """ # noqa: E501
-    uuid: StrictStr
-    name: StrictStr
-    description: StrictStr
-    created_at: datetime
-    updated_at: datetime
-    visibility: Optional[StrictStr] = None
-    registry_id: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    capabilities: Optional[Dict[str, Any]] = None
-    thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "registry_id", "metadata", "capabilities", "thumbnail"]
+    prompt: StrictStr
+    image_url: Optional[StrictStr] = None
+    image_bytes: Optional[ImageBytes1] = None
+    asset_name: Optional[StrictStr] = None
+    description: Optional[StrictStr] = None
+    workspace_uuid: Optional[StrictStr] = None
+    visibility: Optional[StrictStr] = 'private'
+    __properties: ClassVar[List[str]] = ["prompt", "image_url", "image_bytes", "asset_name", "description", "workspace_uuid", "visibility"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -57,7 +54,7 @@ class AssetListSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of AssetListSchema from a JSON string"""
+        """Create an instance of CreateAssetFromPromptOrImageRequestSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -78,36 +75,39 @@ class AssetListSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if visibility (nullable) is None
+        # override the default output from pydantic by calling `to_dict()` of image_bytes
+        if self.image_bytes:
+            _dict['image_bytes'] = self.image_bytes.to_dict()
+        # set to None if image_url (nullable) is None
         # and model_fields_set contains the field
-        if self.visibility is None and "visibility" in self.model_fields_set:
-            _dict['visibility'] = None
+        if self.image_url is None and "image_url" in self.model_fields_set:
+            _dict['image_url'] = None
 
-        # set to None if registry_id (nullable) is None
+        # set to None if image_bytes (nullable) is None
         # and model_fields_set contains the field
-        if self.registry_id is None and "registry_id" in self.model_fields_set:
-            _dict['registry_id'] = None
+        if self.image_bytes is None and "image_bytes" in self.model_fields_set:
+            _dict['image_bytes'] = None
 
-        # set to None if metadata (nullable) is None
+        # set to None if asset_name (nullable) is None
         # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
+        if self.asset_name is None and "asset_name" in self.model_fields_set:
+            _dict['asset_name'] = None
 
-        # set to None if capabilities (nullable) is None
+        # set to None if description (nullable) is None
         # and model_fields_set contains the field
-        if self.capabilities is None and "capabilities" in self.model_fields_set:
-            _dict['capabilities'] = None
+        if self.description is None and "description" in self.model_fields_set:
+            _dict['description'] = None
 
-        # set to None if thumbnail (nullable) is None
+        # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.thumbnail is None and "thumbnail" in self.model_fields_set:
-            _dict['thumbnail'] = None
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of AssetListSchema from a dict"""
+        """Create an instance of CreateAssetFromPromptOrImageRequestSchema from a dict"""
         if obj is None:
             return None
 
@@ -115,16 +115,13 @@ class AssetListSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "name": obj.get("name"),
+            "prompt": obj.get("prompt"),
+            "image_url": obj.get("image_url"),
+            "image_bytes": ImageBytes1.from_dict(obj["image_bytes"]) if obj.get("image_bytes") is not None else None,
+            "asset_name": obj.get("asset_name"),
             "description": obj.get("description"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "visibility": obj.get("visibility"),
-            "registry_id": obj.get("registry_id"),
-            "metadata": obj.get("metadata"),
-            "capabilities": obj.get("capabilities"),
-            "thumbnail": obj.get("thumbnail")
+            "workspace_uuid": obj.get("workspace_uuid"),
+            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private'
         })
         return _obj
 

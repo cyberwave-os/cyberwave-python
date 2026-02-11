@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -28,7 +29,7 @@ class NavigationWaypointSchema(BaseModel):
     """ # noqa: E501
     id: Optional[StrictStr] = None
     position: Dict[str, Union[StrictFloat, StrictInt]]
-    rotation: Optional[List[Union[StrictFloat, StrictInt]]] = None
+    rotation: Optional[NavigationRotationSchema] = None
     yaw: Optional[Union[StrictFloat, StrictInt]] = None
     metadata: Optional[Dict[str, Any]] = None
     __properties: ClassVar[List[str]] = ["id", "position", "rotation", "yaw", "metadata"]
@@ -72,6 +73,9 @@ class NavigationWaypointSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of rotation
+        if self.rotation:
+            _dict['rotation'] = self.rotation.to_dict()
         # set to None if id (nullable) is None
         # and model_fields_set contains the field
         if self.id is None and "id" in self.model_fields_set:
@@ -106,7 +110,7 @@ class NavigationWaypointSchema(BaseModel):
         _obj = cls.model_validate({
             "id": obj.get("id"),
             "position": obj.get("position"),
-            "rotation": obj.get("rotation"),
+            "rotation": NavigationRotationSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
             "yaw": obj.get("yaw"),
             "metadata": obj.get("metadata")
         })

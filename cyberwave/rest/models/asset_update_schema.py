@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,13 +28,12 @@ class AssetUpdateSchema(BaseModel):
     """ # noqa: E501
     name: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
-    public: Optional[StrictBool] = None
     visibility: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
     registry_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "public", "visibility", "workspace_uuid", "metadata", "capabilities", "registry_id"]
+    __properties: ClassVar[List[str]] = ["name", "description", "visibility", "workspace_uuid", "metadata", "capabilities", "registry_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -85,11 +84,6 @@ class AssetUpdateSchema(BaseModel):
         if self.description is None and "description" in self.model_fields_set:
             _dict['description'] = None
 
-        # set to None if public (nullable) is None
-        # and model_fields_set contains the field
-        if self.public is None and "public" in self.model_fields_set:
-            _dict['public'] = None
-
         # set to None if visibility (nullable) is None
         # and model_fields_set contains the field
         if self.visibility is None and "visibility" in self.model_fields_set:
@@ -129,7 +123,6 @@ class AssetUpdateSchema(BaseModel):
         _obj = cls.model_validate({
             "name": obj.get("name"),
             "description": obj.get("description"),
-            "public": obj.get("public"),
             "visibility": obj.get("visibility"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
