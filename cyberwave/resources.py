@@ -41,8 +41,11 @@ from cyberwave.rest import (
     JointStatesSchema,
     JointStateUpdateSchema,
     JointStateSchema,
+    EdgeSchema,
     EdgeDeviceSchema,
 )
+from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
+from cyberwave.rest.models.joint_calibration import JointCalibration
 
 from .exceptions import CyberwaveAPIError
 
@@ -440,6 +443,123 @@ class AssetManager(BaseResourceManager):
             return None
 
 
+class EdgeManager(BaseResourceManager):
+    """Manager for edge operations."""
+
+    def list(self) -> List[EdgeSchema]:
+        """List all edges available to the authenticated user."""
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/edges",
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "List[EdgeSchema]"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, "list edges")
+            raise
+
+    def get(self, edge_id: str) -> EdgeSchema:
+        """Get edge by ID."""
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/edges/{uuid}",
+                path_params={"uuid": edge_id},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "EdgeSchema"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"get edge {edge_id}")
+            raise
+
+    def create(
+        self,
+        fingerprint: str,
+        name: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> EdgeSchema:
+        """Create a new edge."""
+        try:
+            payload: Dict[str, Any] = {"fingerprint": fingerprint}
+            if name is not None:
+                payload["name"] = name
+            if workspace_id is not None:
+                payload["workspace_uuid"] = workspace_id
+            if metadata is not None:
+                payload["metadata"] = metadata
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/edges",
+                body=payload,
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "EdgeSchema"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, "create edge")
+            raise
+
+    def update(self, edge_id: str, data: Dict[str, Any]) -> EdgeSchema:
+        """Update edge metadata and name."""
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="PUT",
+                resource_path="/api/v1/edges/{uuid}",
+                path_params={"uuid": edge_id},
+                body=data,
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "EdgeSchema"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"update edge {edge_id}")
+            raise
+
+    def delete(self, edge_id: str) -> Dict[str, bool]:
+        """Delete an edge."""
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="DELETE",
+                resource_path="/api/v1/edges/{uuid}",
+                path_params={"uuid": edge_id},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "Dict[str, bool]"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"delete edge {edge_id}")
+            raise
+
+
 class TwinManager(BaseResourceManager):
     """Manager for digital twin operations"""
 
@@ -684,4 +804,118 @@ class TwinManager(BaseResourceManager):
             return self.api.src_app_api_twins_device_heartbeat(twin_id, payload)
         except Exception as e:
             self._handle_error(e, f"device heartbeat for twin {twin_id}")
+            raise
+
+    # =========================================================================
+    # Calibration Management
+    # =========================================================================
+
+    def get_calibration(
+        self,
+        twin_id: str,
+        robot_type: Optional[str] = None,
+    ) -> TwinJointCalibrationSchema:
+        """
+        Get calibration data for a twin.
+
+        Args:
+            twin_id: UUID of the twin
+            robot_type: Optional robot type filter ("leader" or "follower").
+                       If None, returns all calibration data.
+
+        Returns:
+            TwinJointCalibrationSchema containing calibration data
+
+        Note:
+            Query parameters for filtering by robot_type are not in the OpenAPI spec,
+            so we use manual API calls to support them.
+        """
+        try:
+            # Use auto-generated method if no query params needed
+            if robot_type is None:
+                return self.api.src_app_api_twins_get_twin_calibration(uuid=twin_id)
+
+            # For query params, use manual API call since they're not in the spec
+            query_params = []
+            if robot_type == "leader":
+                query_params = [("is_leader", True)]
+            elif robot_type == "follower":
+                query_params = [("is_follower", True)]
+
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/twins/{uuid}/calibration",
+                path_params={"uuid": twin_id},
+                query_params=query_params,
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "TwinJointCalibrationSchema"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"get calibration for twin {twin_id}")
+            raise
+
+    def update_calibration(
+        self,
+        twin_id: str,
+        joint_calibration: Dict[str, Dict[str, Any]],
+        robot_type: str,
+    ) -> TwinJointCalibrationSchema:
+        """
+        Update calibration data for a twin.
+
+        Args:
+            twin_id: UUID of the twin
+            joint_calibration: Dictionary mapping joint names to calibration data.
+                             Each calibration dict should contain:
+                             - range_min: float
+                             - range_max: float
+                             - homing_offset: float
+                             - drive_mode: int or str
+                             - id: int or str (motor ID)
+            robot_type: Robot type ("leader" or "follower")
+
+        Returns:
+            Updated TwinJointCalibrationSchema
+
+        Example:
+            >>> calibration = {
+            ...     "shoulder_pan": {
+            ...         "range_min": 0.0,
+            ...         "range_max": 4095.0,
+            ...         "homing_offset": 2047.5,
+            ...         "drive_mode": 0,
+            ...         "id": 1
+            ...     },
+            ...     # ... more joints
+            ... }
+            >>> manager.update_calibration(twin_id, calibration, "leader")
+        """
+        if robot_type not in ["leader", "follower"]:
+            raise ValueError(f"robot_type must be 'leader' or 'follower', got '{robot_type}'")
+
+        try:
+            # Convert dict calibration data to JointCalibration objects
+            joint_calibration_objects = {}
+            for joint_name, calib_dict in joint_calibration.items():
+                joint_calibration_objects[joint_name] = JointCalibration.from_dict(calib_dict)
+
+            # Create TwinJointCalibrationSchema
+            schema = TwinJointCalibrationSchema(
+                joint_calibration=joint_calibration_objects,
+                robot_type=robot_type,
+            )
+
+            # Use auto-generated REST API method
+            return self.api.src_app_api_twins_update_twin_calibration(
+                uuid=twin_id,
+                twin_joint_calibration_schema=schema,
+            )
+        except Exception as e:
+            self._handle_error(e, f"update calibration for twin {twin_id}")
             raise

@@ -17,24 +17,32 @@ import pprint
 import re  # noqa: F401
 import json
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from cyberwave.rest.models.image_bytes1 import ImageBytes1
 from typing import Optional, Set
 from typing_extensions import Self
 
-class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
+class AlertSchema(BaseModel):
     """
-    CreateAssetFromPromptOrImageRequestSchema
+    Schema for Alert response.
     """ # noqa: E501
-    asset_name: StrictStr
-    prompt: Optional[StrictStr] = None
-    image_url: Optional[StrictStr] = None
-    image_bytes: Optional[ImageBytes1] = None
-    description: Optional[StrictStr] = None
-    workspace_uuid: Optional[StrictStr] = None
-    visibility: Optional[StrictStr] = 'private'
-    __properties: ClassVar[List[str]] = ["asset_name", "prompt", "image_url", "image_bytes", "description", "workspace_uuid", "visibility"]
+    uuid: StrictStr
+    name: StrictStr
+    description: StrictStr
+    alert_type: StrictStr
+    severity: StrictStr
+    status: StrictStr
+    source_type: StrictStr
+    twin_uuid: Optional[StrictStr] = None
+    environment_uuid: Optional[StrictStr] = None
+    workflow_uuid: Optional[StrictStr] = None
+    workspace_uuid: StrictStr
+    created_by_uuid: Optional[StrictStr] = None
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: Optional[datetime] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "alert_type", "severity", "status", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "created_by_uuid", "created_at", "updated_at", "resolved_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -54,7 +62,7 @@ class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of CreateAssetFromPromptOrImageRequestSchema from a JSON string"""
+        """Create an instance of AlertSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -75,39 +83,36 @@ class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of image_bytes
-        if self.image_bytes:
-            _dict['image_bytes'] = self.image_bytes.to_dict()
-        # set to None if prompt (nullable) is None
+        # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.prompt is None and "prompt" in self.model_fields_set:
-            _dict['prompt'] = None
+        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
+            _dict['twin_uuid'] = None
 
-        # set to None if image_url (nullable) is None
+        # set to None if environment_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.image_url is None and "image_url" in self.model_fields_set:
-            _dict['image_url'] = None
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
 
-        # set to None if image_bytes (nullable) is None
+        # set to None if workflow_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.image_bytes is None and "image_bytes" in self.model_fields_set:
-            _dict['image_bytes'] = None
+        if self.workflow_uuid is None and "workflow_uuid" in self.model_fields_set:
+            _dict['workflow_uuid'] = None
 
-        # set to None if description (nullable) is None
+        # set to None if created_by_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
+        if self.created_by_uuid is None and "created_by_uuid" in self.model_fields_set:
+            _dict['created_by_uuid'] = None
 
-        # set to None if workspace_uuid (nullable) is None
+        # set to None if resolved_at (nullable) is None
         # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
+        if self.resolved_at is None and "resolved_at" in self.model_fields_set:
+            _dict['resolved_at'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of CreateAssetFromPromptOrImageRequestSchema from a dict"""
+        """Create an instance of AlertSchema from a dict"""
         if obj is None:
             return None
 
@@ -115,13 +120,21 @@ class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "asset_name": obj.get("asset_name"),
-            "prompt": obj.get("prompt"),
-            "image_url": obj.get("image_url"),
-            "image_bytes": ImageBytes1.from_dict(obj["image_bytes"]) if obj.get("image_bytes") is not None else None,
+            "uuid": obj.get("uuid"),
+            "name": obj.get("name"),
             "description": obj.get("description"),
+            "alert_type": obj.get("alert_type"),
+            "severity": obj.get("severity"),
+            "status": obj.get("status"),
+            "source_type": obj.get("source_type"),
+            "twin_uuid": obj.get("twin_uuid"),
+            "environment_uuid": obj.get("environment_uuid"),
+            "workflow_uuid": obj.get("workflow_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
-            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private'
+            "created_by_uuid": obj.get("created_by_uuid"),
+            "created_at": obj.get("created_at"),
+            "updated_at": obj.get("updated_at"),
+            "resolved_at": obj.get("resolved_at")
         })
         return _obj
 

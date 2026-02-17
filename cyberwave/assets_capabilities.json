@@ -15,11 +15,12 @@
       "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
       },
       "manipulator_count": 1,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0.4,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -371,8 +372,15 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 2,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -436,6 +444,7 @@
       },
       "manipulator_count": 0,
       "power_capacity_wh": 237,
+      "edge_config_schema": [],
       "payload_capacity_kg": 7,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -456,9 +465,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 7,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -476,9 +494,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 1,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 6,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -537,11 +564,12 @@
       "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
       },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 5,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -562,9 +590,18 @@
       "can_actuate": false,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0.015,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "semi_autonomous",
       "navigation_obstacle_avoidance": false
     }
@@ -617,9 +654,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 5,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "fully_autonomous",
       "navigation_obstacle_avoidance": true
     }
@@ -655,9 +701,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 14,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "fully_autonomous",
       "navigation_obstacle_avoidance": true
     }
@@ -735,9 +790,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 1,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 70,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -804,9 +868,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -842,9 +915,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -862,9 +944,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -882,9 +973,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "path_following",
       "navigation_obstacle_avoidance": false
     }
@@ -902,9 +1002,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -998,8 +1107,15 @@
       "can_actuate": false,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 3,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -1058,9 +1174,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0.5,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1078,9 +1203,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 1,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0.25,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1154,9 +1288,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 1,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 4,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1174,9 +1317,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 1,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 4,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1212,9 +1364,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 10,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "fully_autonomous",
       "navigation_obstacle_avoidance": true
     }
@@ -1232,9 +1393,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 1,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 6,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1308,9 +1478,18 @@
       "can_actuate": false,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0.015,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1346,8 +1525,15 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 3,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -1386,8 +1572,15 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -1426,8 +1619,15 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 7,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
@@ -1489,8 +1689,8 @@
       "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
       },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
@@ -1515,9 +1715,18 @@
       "can_actuate": true,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 4,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 2,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1535,9 +1744,18 @@
       "can_actuate": true,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 2,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1555,9 +1773,18 @@
       "can_actuate": false,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -1881,9 +2108,18 @@
       "can_actuate": false,
       "can_locomote": false,
       "power_source": "tethered",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false
     }
@@ -2445,9 +2681,18 @@
       "can_actuate": false,
       "can_locomote": true,
       "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "manipulator_count": 0,
       "power_capacity_wh": -1,
+      "edge_config_schema": [],
       "payload_capacity_kg": 0,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "fully_autonomous",
       "navigation_obstacle_avoidance": true
     }
@@ -2577,35 +2822,6 @@
       "manipulator_count": 0,
       "power_capacity_wh": -1,
       "payload_capacity_kg": 0,
-      "maximum_frequency_hz": 0,
-      "minimum_frequency_hz": 0,
-      "navigation_autonomy_level": "none",
-      "navigation_obstacle_avoidance": false
-    }
-  },
-  "enactic/openarm01": {
-    "uuid": "789690dd-163f-461d-a9d5-96cac7ca59ce",
-    "name": "OpenARM:z",
-    "capabilities": {
-      "can_fly": false,
-      "sensors": [],
-      "can_grip": true,
-      "has_legs": false,
-      "has_joints": true,
-      "has_wheels": false,
-      "can_actuate": true,
-      "can_locomote": false,
-      "power_source": "tethered",
-      "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
-      "manipulator_count": 2,
-      "power_capacity_wh": -1,
-      "edge_config_schema": [],
-      "payload_capacity_kg": 6,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
@@ -2810,9 +3026,9 @@
       "navigation_obstacle_avoidance": false
     }
   },
-  "open/openarm02": {
+  "open/openarm": {
     "uuid": "85624fa1-0b9f-4288-8271-f73a29e4beef",
-    "name": "OpenArm2",
+    "name": "OpenARM",
     "capabilities": {
       "can_fly": false,
       "sensors": [],
@@ -2836,6 +3052,64 @@
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
       "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false
+    }
+  },
+  "up/mir-250": {
+    "uuid": "7280ed31-308c-4312-b90d-0b9bbce6b127",
+    "name": "MiR250",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": true,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
+      },
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "edge_config_schema": [],
+      "payload_capacity_kg": 250,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "fully_autonomous",
+      "navigation_obstacle_avoidance": true
+    }
+  },
+  "agile-x-robotics/tracer-20": {
+    "uuid": "eecab636-986b-4566-a248-f90f69d259c9",
+    "name": "Tracer 2.0",
+    "capabilities": {
+      "can_fly": false,
+      "sensors": [],
+      "can_grip": false,
+      "has_legs": false,
+      "has_joints": false,
+      "has_wheels": true,
+      "can_actuate": false,
+      "can_locomote": true,
+      "power_source": "battery",
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0,
+        "max_angular_velocity": 0
+      },
+      "manipulator_count": 0,
+      "power_capacity_wh": -1,
+      "edge_config_schema": [],
+      "payload_capacity_kg": 150,
+      "maximum_frequency_hz": 0,
+      "minimum_frequency_hz": 0,
+      "navigation_autonomy_level": "semi_autonomous",
       "navigation_obstacle_avoidance": false
     }
   }

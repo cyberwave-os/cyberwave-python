@@ -171,7 +171,7 @@ class CyberwaveMQTTClient:
         """
         return self._client.update_twin_scale(twin_uuid, scale)
 
-    def publish_initial_observation(self, twin_uuid: str, observations: Dict[str, Any]):
+    def publish_initial_observation(self, twin_uuid: str, observations: Dict[str, Any], fps: float = 30.0):
         """
         Send initial observations to the leader twin.
 
@@ -179,7 +179,7 @@ class CyberwaveMQTTClient:
             twin_uuid: UUID of the twin
             observations: Dictionary of observations
         """
-        return self._client.publish_initial_observation(twin_uuid, observations)
+        return self._client.publish_initial_observation(twin_uuid, observations, fps)
 
     def update_joint_state(
         self,

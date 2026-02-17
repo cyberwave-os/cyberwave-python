@@ -1180,6 +1180,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_mark_instance_failed(
         self,
+        uuid: StrictStr,
         cloud_node_failed_request: CloudNodeFailedRequest,
         _request_timeout: Union[
             None,
@@ -1198,6 +1199,8 @@ class CloudNodeApi:
 
         Mark a Cloud Node (GPU) instance as failed.  Called by the GitHub Actions workflow when provisioning fails or the instance crashes unexpectedly. Any associated workloads will be re-queued.
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_failed_request: (required)
         :type cloud_node_failed_request: CloudNodeFailedRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -1223,6 +1226,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_mark_instance_failed_serialize(
+            uuid=uuid,
             cloud_node_failed_request=cloud_node_failed_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -1247,6 +1251,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_mark_instance_failed_with_http_info(
         self,
+        uuid: StrictStr,
         cloud_node_failed_request: CloudNodeFailedRequest,
         _request_timeout: Union[
             None,
@@ -1265,6 +1270,8 @@ class CloudNodeApi:
 
         Mark a Cloud Node (GPU) instance as failed.  Called by the GitHub Actions workflow when provisioning fails or the instance crashes unexpectedly. Any associated workloads will be re-queued.
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_failed_request: (required)
         :type cloud_node_failed_request: CloudNodeFailedRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -1290,6 +1297,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_mark_instance_failed_serialize(
+            uuid=uuid,
             cloud_node_failed_request=cloud_node_failed_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -1314,6 +1322,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_mark_instance_failed_without_preload_content(
         self,
+        uuid: StrictStr,
         cloud_node_failed_request: CloudNodeFailedRequest,
         _request_timeout: Union[
             None,
@@ -1332,6 +1341,8 @@ class CloudNodeApi:
 
         Mark a Cloud Node (GPU) instance as failed.  Called by the GitHub Actions workflow when provisioning fails or the instance crashes unexpectedly. Any associated workloads will be re-queued.
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_failed_request: (required)
         :type cloud_node_failed_request: CloudNodeFailedRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -1357,6 +1368,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_mark_instance_failed_serialize(
+            uuid=uuid,
             cloud_node_failed_request=cloud_node_failed_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -1376,6 +1388,7 @@ class CloudNodeApi:
 
     def _src_app_api_cloud_nodes_mark_instance_failed_serialize(
         self,
+        uuid,
         cloud_node_failed_request,
         _request_auth,
         _content_type,
@@ -1398,6 +1411,8 @@ class CloudNodeApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -1435,7 +1450,7 @@ class CloudNodeApi:
 
         return self.api_client.param_serialize(
             method='POST',
-            resource_path='/api/v1/cloud-node/failed',
+            resource_path='/api/v1/cloud-node/{uuid}/failed',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1454,6 +1469,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_mark_instance_terminated(
         self,
+        uuid: StrictStr,
         cloud_node_terminated_request: CloudNodeTerminatedRequest,
         _request_timeout: Union[
             None,
@@ -1472,6 +1488,8 @@ class CloudNodeApi:
 
         Mark a Cloud Node (GPU) instance as terminated.  Called by the package (cyberwave-cloud-node) once a termination is triggered OR by the GitHub Actions workflow after Terraform has successfully (when used by us)
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_terminated_request: (required)
         :type cloud_node_terminated_request: CloudNodeTerminatedRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -1497,6 +1515,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_mark_instance_terminated_serialize(
+            uuid=uuid,
             cloud_node_terminated_request=cloud_node_terminated_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -1521,6 +1540,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_mark_instance_terminated_with_http_info(
         self,
+        uuid: StrictStr,
         cloud_node_terminated_request: CloudNodeTerminatedRequest,
         _request_timeout: Union[
             None,
@@ -1539,6 +1559,8 @@ class CloudNodeApi:
 
         Mark a Cloud Node (GPU) instance as terminated.  Called by the package (cyberwave-cloud-node) once a termination is triggered OR by the GitHub Actions workflow after Terraform has successfully (when used by us)
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_terminated_request: (required)
         :type cloud_node_terminated_request: CloudNodeTerminatedRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -1564,6 +1586,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_mark_instance_terminated_serialize(
+            uuid=uuid,
             cloud_node_terminated_request=cloud_node_terminated_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -1588,6 +1611,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_mark_instance_terminated_without_preload_content(
         self,
+        uuid: StrictStr,
         cloud_node_terminated_request: CloudNodeTerminatedRequest,
         _request_timeout: Union[
             None,
@@ -1606,6 +1630,8 @@ class CloudNodeApi:
 
         Mark a Cloud Node (GPU) instance as terminated.  Called by the package (cyberwave-cloud-node) once a termination is triggered OR by the GitHub Actions workflow after Terraform has successfully (when used by us)
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_terminated_request: (required)
         :type cloud_node_terminated_request: CloudNodeTerminatedRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -1631,6 +1657,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_mark_instance_terminated_serialize(
+            uuid=uuid,
             cloud_node_terminated_request=cloud_node_terminated_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -1650,6 +1677,7 @@ class CloudNodeApi:
 
     def _src_app_api_cloud_nodes_mark_instance_terminated_serialize(
         self,
+        uuid,
         cloud_node_terminated_request,
         _request_auth,
         _content_type,
@@ -1672,6 +1700,8 @@ class CloudNodeApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -1709,7 +1739,7 @@ class CloudNodeApi:
 
         return self.api_client.param_serialize(
             method='POST',
-            resource_path='/api/v1/cloud-node/terminated',
+            resource_path='/api/v1/cloud-node/{uuid}/terminated',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -2278,6 +2308,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_save_cloud_node_instance_log(
         self,
+        uuid: StrictStr,
         cloud_node_log_request: CloudNodeLogRequest,
         _request_timeout: Union[
             None,
@@ -2296,6 +2327,8 @@ class CloudNodeApi:
 
         Save a log entry for a Cloud Node (GPU) instance.  Logs are stored asynchronously in GCS with metadata in the database. This allows Cloud Node instances to stream logs without blocking.
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_log_request: (required)
         :type cloud_node_log_request: CloudNodeLogRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -2321,6 +2354,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_save_cloud_node_instance_log_serialize(
+            uuid=uuid,
             cloud_node_log_request=cloud_node_log_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -2345,6 +2379,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_save_cloud_node_instance_log_with_http_info(
         self,
+        uuid: StrictStr,
         cloud_node_log_request: CloudNodeLogRequest,
         _request_timeout: Union[
             None,
@@ -2363,6 +2398,8 @@ class CloudNodeApi:
 
         Save a log entry for a Cloud Node (GPU) instance.  Logs are stored asynchronously in GCS with metadata in the database. This allows Cloud Node instances to stream logs without blocking.
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_log_request: (required)
         :type cloud_node_log_request: CloudNodeLogRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -2388,6 +2425,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_save_cloud_node_instance_log_serialize(
+            uuid=uuid,
             cloud_node_log_request=cloud_node_log_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -2412,6 +2450,7 @@ class CloudNodeApi:
     @validate_call
     def src_app_api_cloud_nodes_save_cloud_node_instance_log_without_preload_content(
         self,
+        uuid: StrictStr,
         cloud_node_log_request: CloudNodeLogRequest,
         _request_timeout: Union[
             None,
@@ -2430,6 +2469,8 @@ class CloudNodeApi:
 
         Save a log entry for a Cloud Node (GPU) instance.  Logs are stored asynchronously in GCS with metadata in the database. This allows Cloud Node instances to stream logs without blocking.
 
+        :param uuid: (required)
+        :type uuid: str
         :param cloud_node_log_request: (required)
         :type cloud_node_log_request: CloudNodeLogRequest
         :param _request_timeout: timeout setting for this request. If one
@@ -2455,6 +2496,7 @@ class CloudNodeApi:
         """ # noqa: E501
 
         _param = self._src_app_api_cloud_nodes_save_cloud_node_instance_log_serialize(
+            uuid=uuid,
             cloud_node_log_request=cloud_node_log_request,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -2474,6 +2516,7 @@ class CloudNodeApi:
 
     def _src_app_api_cloud_nodes_save_cloud_node_instance_log_serialize(
         self,
+        uuid,
         cloud_node_log_request,
         _request_auth,
         _content_type,
@@ -2496,6 +2539,8 @@ class CloudNodeApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -2533,7 +2578,7 @@ class CloudNodeApi:
 
         return self.api_client.param_serialize(
             method='POST',
-            resource_path='/api/v1/cloud-node/log',
+            resource_path='/api/v1/cloud-node/{uuid}/log',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

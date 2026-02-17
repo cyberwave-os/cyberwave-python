@@ -22,15 +22,20 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class EdgeCreateSchema(BaseModel):
+class CreateAlertSchema(BaseModel):
     """
-    EdgeCreateSchema
+    Schema for creating an Alert.
     """ # noqa: E501
-    fingerprint: StrictStr
-    name: Optional[StrictStr] = None
+    name: StrictStr
+    description: Optional[StrictStr] = ''
+    alert_type: Optional[StrictStr] = ''
+    severity: Optional[StrictStr] = 'warning'
+    source_type: Optional[StrictStr] = 'edge'
+    twin_uuid: Optional[StrictStr] = None
+    environment_uuid: Optional[StrictStr] = None
+    workflow_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["fingerprint", "name", "workspace_uuid", "metadata"]
+    __properties: ClassVar[List[str]] = ["name", "description", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +55,7 @@ class EdgeCreateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a JSON string"""
+        """Create an instance of CreateAlertSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +76,31 @@ class EdgeCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if name (nullable) is None
+        # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.name is None and "name" in self.model_fields_set:
-            _dict['name'] = None
+        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
+            _dict['twin_uuid'] = None
+
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
+        # set to None if workflow_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workflow_uuid is None and "workflow_uuid" in self.model_fields_set:
+            _dict['workflow_uuid'] = None
 
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
 
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a dict"""
+        """Create an instance of CreateAlertSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +108,15 @@ class EdgeCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "fingerprint": obj.get("fingerprint"),
             "name": obj.get("name"),
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata")
+            "description": obj.get("description") if obj.get("description") is not None else '',
+            "alert_type": obj.get("alert_type") if obj.get("alert_type") is not None else '',
+            "severity": obj.get("severity") if obj.get("severity") is not None else 'warning',
+            "source_type": obj.get("source_type") if obj.get("source_type") is not None else 'edge',
+            "twin_uuid": obj.get("twin_uuid"),
+            "environment_uuid": obj.get("environment_uuid"),
+            "workflow_uuid": obj.get("workflow_uuid"),
+            "workspace_uuid": obj.get("workspace_uuid")
         })
         return _obj
 

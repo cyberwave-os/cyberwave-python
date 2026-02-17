@@ -22,15 +22,16 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class EdgeCreateSchema(BaseModel):
+class UpdateAlertSchema(BaseModel):
     """
-    EdgeCreateSchema
+    Schema for updating an Alert.
     """ # noqa: E501
-    fingerprint: StrictStr
     name: Optional[StrictStr] = None
-    workspace_uuid: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["fingerprint", "name", "workspace_uuid", "metadata"]
+    description: Optional[StrictStr] = None
+    alert_type: Optional[StrictStr] = None
+    severity: Optional[StrictStr] = None
+    status: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "alert_type", "severity", "status"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +51,7 @@ class EdgeCreateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a JSON string"""
+        """Create an instance of UpdateAlertSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,21 +77,31 @@ class EdgeCreateSchema(BaseModel):
         if self.name is None and "name" in self.model_fields_set:
             _dict['name'] = None
 
-        # set to None if workspace_uuid (nullable) is None
+        # set to None if description (nullable) is None
         # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
+        if self.description is None and "description" in self.model_fields_set:
+            _dict['description'] = None
 
-        # set to None if metadata (nullable) is None
+        # set to None if alert_type (nullable) is None
         # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
+        if self.alert_type is None and "alert_type" in self.model_fields_set:
+            _dict['alert_type'] = None
+
+        # set to None if severity (nullable) is None
+        # and model_fields_set contains the field
+        if self.severity is None and "severity" in self.model_fields_set:
+            _dict['severity'] = None
+
+        # set to None if status (nullable) is None
+        # and model_fields_set contains the field
+        if self.status is None and "status" in self.model_fields_set:
+            _dict['status'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a dict"""
+        """Create an instance of UpdateAlertSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +109,11 @@ class EdgeCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "fingerprint": obj.get("fingerprint"),
             "name": obj.get("name"),
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata")
+            "description": obj.get("description"),
+            "alert_type": obj.get("alert_type"),
+            "severity": obj.get("severity"),
+            "status": obj.get("status")
         })
         return _obj
 

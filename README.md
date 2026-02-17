@@ -362,6 +362,36 @@ for sensor_name, options in info.sensor_options.items():
         print(f"  {opt.name}: {opt.value} (range: {opt.min_value}-{opt.max_value})")
 ```
 
+### Alerts
+
+Create, list, and manage alerts directly from a twin. Alerts notify operators that action is needed (e.g. a robot needs calibration or a sensor reading is out of range).
+
+```python
+twin = cw.twin(twin_id="your_twin_uuid")
+
+# Create an alert
+alert = twin.alerts.create(
+    name="Calibration needed",
+    description="Joint 3 is drifting beyond tolerance",
+    severity="warning",          # info | warning | error | critical
+    alert_type="calibration_needed",
+    source_type="edge",          # edge | cloud | workflow
+)
+
+# List active alerts for this twin
+for a in twin.alerts.list(status="active"):
+    print(a.name, a.severity, a.status)
+
+# Lifecycle actions
+alert.acknowledge()   # operator has seen it
+alert.resolve()       # root cause addressed
+
+# Other operations
+alert.silence()       # suppress without resolving
+alert.update(severity="critical")
+alert.delete()
+```
+
 ## Testing
 
 ### Unit Tests

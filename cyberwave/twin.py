@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from .camera import CameraStreamer
     from .motion import TwinMotionHandle, TwinNavigationHandle
     from .keyboard import KeyboardTeleop
+    from .alerts import TwinAlertManager
+    from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
 
 from .exceptions import CyberwaveError
 
@@ -211,9 +213,10 @@ class Twin:
         self._position: Optional[Dict[str, float]] = None
         self._rotation: Optional[Dict[str, float]] = None
 
-        # Lazy-initialized motion and navigation handles
+        # Lazy-initialized motion, navigation, and alerts handles
         self._motion: Optional["TwinMotionHandle"] = None
         self._navigation: Optional["TwinNavigationHandle"] = None
+        self._alerts: Optional["TwinAlertManager"] = None
         self._scale: Optional[Dict[str, float]] = None
 
     @property
@@ -289,6 +292,26 @@ class Twin:
 
             self._navigation = TwinNavigationHandle(self)
         return self._navigation
+
+    @property
+    def alerts(self) -> "TwinAlertManager":
+        """
+        Access alert management for this twin.
+
+        Example:
+            >>> alert = twin.alerts.create(name="Calibration needed")
+            >>> for a in twin.alerts.list():
+            ...     print(a.name, a.status)
+            >>> alert.resolve()
+
+        Returns:
+            TwinAlertManager for creating / listing / managing alerts
+        """
+        if self._alerts is None:
+            from .alerts import TwinAlertManager
+
+            self._alerts = TwinAlertManager(self)
+        return self._alerts
 
     @property
     def controller(self) -> "TwinControllerHandle":
@@ -584,6 +607,60 @@ class Twin:
             return True
         return any(s.get("type") == sensor_type for s in sensors)
 
+    def get_calibration(self, robot_type: Optional[str] = None) -> "TwinJointCalibrationSchema":
+        """
+        Get calibration data for this twin.
+
+        Args:
+            robot_type: Optional robot type filter ("leader" or "follower").
+                       If None, returns all calibration data.
+
+        Returns:
+            TwinJointCalibrationSchema containing calibration data
+
+        Example:
+            >>> calibration = twin.get_calibration(robot_type="leader")
+            >>> print(calibration.joint_calibration["shoulder_pan"].range_min)
+        """
+        return self.client.twins.get_calibration(self.uuid, robot_type=robot_type)
+
+    def update_calibration(
+        self,
+        joint_calibration: Dict[str, Dict[str, Any]],
+        robot_type: str,
+    ) -> "TwinJointCalibrationSchema":
+        """
+        Update calibration data for this twin.
+
+        Args:
+            joint_calibration: Dictionary mapping joint names to calibration data.
+                             Each calibration dict should contain:
+                             - range_min: float
+                             - range_max: float
+                             - homing_offset: float
+                             - drive_mode: int or str
+                             - id: int or str (motor ID)
+            robot_type: Robot type ("leader" or "follower")
+
+        Returns:
+            Updated TwinJointCalibrationSchema
+
+        Example:
+            >>> calibration = {
+            ...     "shoulder_pan": {
+            ...         "range_min": 0.0,
+            ...         "range_max": 4095.0,
+            ...         "homing_offset": 2047.5,
+            ...         "drive_mode": 0,
+            ...         "id": 1
+            ...     },
+            ... }
+            >>> result = twin.update_calibration(calibration, "leader")
+            >>> print(result.joint_calibration["shoulder_pan"].range_min)
+        """
+        return self.client.twins.update_calibration(
+            self.uuid, joint_calibration, robot_type
+        )
 
 class CameraTwin(Twin):
     """

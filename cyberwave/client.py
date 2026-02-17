@@ -18,6 +18,7 @@ from cyberwave.resources import (
     ProjectManager,
     EnvironmentManager,
     AssetManager,
+    EdgeManager,
     TwinManager,
 )
 from cyberwave.twin import Twin, create_twin
@@ -118,6 +119,7 @@ class Cyberwave:
         self.projects = ProjectManager(self.api)
         self.environments = EnvironmentManager(self.api)
         self.assets = AssetManager(self.api)
+        self.edges = EdgeManager(self.api)
         self.twins = TwinManager(self.api, client=self)
 
     def _setup_rest_client(self):

@@ -19,7 +19,7 @@ import json
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -27,13 +27,14 @@ class DeferredTaskExecutionResponseSchema(BaseModel):
     """
     Schema for a Deferred Execution.
     """ # noqa: E501
-    uuid: StrictStr
+    execution_uuid: StrictStr
     status: StrictStr
     result: Dict[str, Any]
     started_at: datetime
     completed_at: datetime
     message: StrictStr
-    __properties: ClassVar[List[str]] = ["uuid", "status", "result", "started_at", "completed_at", "message"]
+    workload_uuid: Optional[StrictStr]
+    __properties: ClassVar[List[str]] = ["execution_uuid", "status", "result", "started_at", "completed_at", "message", "workload_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -74,6 +75,11 @@ class DeferredTaskExecutionResponseSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if workload_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workload_uuid is None and "workload_uuid" in self.model_fields_set:
+            _dict['workload_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -86,12 +92,13 @@ class DeferredTaskExecutionResponseSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
+            "execution_uuid": obj.get("execution_uuid"),
             "status": obj.get("status"),
             "result": obj.get("result"),
             "started_at": obj.get("started_at"),
             "completed_at": obj.get("completed_at"),
-            "message": obj.get("message")
+            "message": obj.get("message"),
+            "workload_uuid": obj.get("workload_uuid")
         })
         return _obj
 

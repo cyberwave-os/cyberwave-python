@@ -31,6 +31,7 @@ from .resources import (
     ProjectManager,
     EnvironmentManager,
     AssetManager,
+    EdgeManager,
     TwinManager,
 )
 from .config import CyberwaveConfig
@@ -45,6 +46,7 @@ class Cyberwave:
     projects: ProjectManager
     environments: EnvironmentManager
     assets: AssetManager
+    edges: EdgeManager
     twins: TwinManager
     
     def __init__(
@@ -165,15 +167,6 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["universal_robots/UR7"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["enactic/openarm01"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -507,6 +500,24 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["agilox/agilox-ofl"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["up/mir-250"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["agile-x-robotics/tracer-20"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

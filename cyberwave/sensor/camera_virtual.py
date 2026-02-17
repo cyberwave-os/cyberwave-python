@@ -105,9 +105,11 @@ class VirtualVideoTrack(BaseVideoTrack):
                 await asyncio.sleep(wait)
         self._last_time = time.time()
 
-        # Get timestamps before fetching frame
+        # Update time reference to capture current timestamp at frame capture moment.
+        # This ensures video frame timestamps reflect actual capture time, not
+        # a potentially stale timestamp from the teleop loop.
         if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.read()
+            timestamp, timestamp_monotonic = self.time_reference.update()
         else:
             timestamp = time.time()
             timestamp_monotonic = time.monotonic()

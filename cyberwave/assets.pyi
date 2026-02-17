@@ -899,16 +899,6 @@ class UniversalRobotsur7Twin(Twin):
         """Controller for robot joints"""
         ...
 
-class Enacticopenarm01Twin(Twin):
-    """
-    Digital twin for OpenARM:z
-    Registry ID: enactic/openarm01
-    """
-    @property
-    def joints(self) -> JointController:
-        """Controller for robot joints"""
-        ...
-
 class WaveshareugvBeastTwin(Twin):
     """
     Digital twin for UGV Beast
@@ -976,12 +966,36 @@ class CyberwavewarehouseTwin(Twin):
     """
     pass
 
-class Openopenarm02Twin(Twin):
+class OpenopenarmTwin(Twin):
     """
-    Digital twin for OpenArm2
-    Registry ID: open/openarm02
+    Digital twin for OpenARM
+    Registry ID: open/openarm
     """
     pass
+
+class Upmir250Twin(Twin):
+    """
+    Digital twin for MiR250
+    Registry ID: up/mir-250
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class AgileXRoboticstracer20Twin(Twin):
+    """
+    Digital twin for Tracer 2.0
+    Registry ID: agile-x-robotics/tracer-20
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
@@ -1061,11 +1075,12 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "logitech/c920": Logitechc920Twin,
     "the-robot-studio/so101-with-camera": TheRobotStudioso101WithCameraTwin,
     "universal_robots/UR7": UniversalRobotsur7Twin,
-    "enactic/openarm01": Enacticopenarm01Twin,
     "waveshare/ugv-beast": WaveshareugvBeastTwin,
     "alto-robotics/node": AltoRoboticsnodeTwin,
     "agilox/agilox-ofl": AgiloxagiloxOflTwin,
     "otto-motors/otto-1500": OttoMotorsotto1500Twin,
     "cyberwave/warehouse": CyberwavewarehouseTwin,
-    "open/openarm02": Openopenarm02Twin,
+    "open/openarm": OpenopenarmTwin,
+    "up/mir-250": Upmir250Twin,
+    "agile-x-robotics/tracer-20": AgileXRoboticstracer20Twin,
 }

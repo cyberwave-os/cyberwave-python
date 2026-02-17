@@ -74,6 +74,11 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
         self.frame_0_timestamp: Optional[float] = None
         self.frame_0_timestamp_monotonic: Optional[float] = None
         self.channel_queue: list[dict[str, Any]] = []
+        # Sync frame data captured at the exact moment the sync frame is produced
+        self.sync_frame_target: int = 30  # Frame number to capture sync data for
+        self.sync_frame_pts: Optional[int] = None
+        self.sync_frame_timestamp: Optional[float] = None
+        self.sync_frame_timestamp_monotonic: Optional[float] = None
 
     def set_data_channel(self, data_channel: RTCDataChannel):
         """Set the data channel for sending metadata."""
@@ -114,6 +119,13 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
             )
         else:
             self._queue_sync_frame(timestamp, timestamp_monotonic, pts)
+
+        # Capture sync frame data at the exact moment of frame capture
+        # This is used for the MQTT camera_sync_frame message
+        if pts == self.sync_frame_target and self.sync_frame_pts is None:
+            self.sync_frame_pts = pts
+            self.sync_frame_timestamp = timestamp
+            self.sync_frame_timestamp_monotonic = timestamp_monotonic
 
     def get_stream_attributes(self) -> Dict[str, Any]:
         """Get streaming attributes for the offer payload.
@@ -208,38 +220,73 @@ class BaseVideoStreamer(abc.ABC):
         self._answer_received = False
         self._answer_data = None
 
-    def _publish_frame_0_timestamp(self, timestamp: float, timestamp_monotonic: float):
-        """Publish the frame_0_timestamp via MQTT."""
+    def _publish_camera_sync_frame(
+        self, pts: int, timestamp: float, timestamp_monotonic: float
+    ):
+        """Publish a camera sync frame via MQTT.
+        
+        This sync frame is sent after ~1 second of streaming when the connection
+        has stabilized. It provides an anchor point for video/robot synchronization:
+        - pts: The edge frame counter at this sync point
+        - timestamp: Wall-clock time when this frame was captured
+        
+        During recording processing, the video is trimmed to start at this sync frame,
+        and the timestamp becomes the video's start time. No interpolation needed.
+        """
         prefix = self.client.topic_prefix
         topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/telemetry"
         payload = {
-            "type": "video_start_timestamp",
+            "type": "camera_sync_frame",
             "sender": "edge",
+            "pts": pts,
             "timestamp": timestamp,
             "timestamp_monotonic": timestamp_monotonic,
             "track_id": self.streamer.id if self.streamer else None,
         }
         self._publish_message(topic, payload)
-        logger.info(f"Published frame_0_timestamp: {timestamp}")
+        logger.info(
+            f"Published camera_sync_frame: pts={pts}, timestamp={timestamp:.3f}"
+        )
 
-    async def _wait_and_publish_frame_0_timestamp(self, timeout: float = 10.0):
-        """Wait for the first frame to be sent and publish its timestamp."""
-        start_time = time.time()
-        while self.streamer and self.streamer.frame_count == 0:
-            if time.time() - start_time > timeout:
-                logger.warning("Timeout waiting for first frame")
-                return
-            await asyncio.sleep(0.1)
-
+    async def _wait_and_publish_camera_sync_frame(
+        self, sync_frame: int = 30, timeout: float = 10.0
+    ):
+        """Wait for the sync frame to be captured and publish it via MQTT.
+        
+        Args:
+            sync_frame: Frame number to use as sync point (default: 30 = ~1sec at 30fps)
+            timeout: Maximum time to wait for the sync frame
+        
+        The sync frame data (pts + timestamp) is captured at the exact moment 
+        the frame is produced in the camera track's recv() method. This ensures
+        the timestamp precisely matches when the frame was captured, providing
+        accurate video/robot synchronization.
+        """
+        # Set the target sync frame on the streamer
         if self.streamer:
-            frame_0_timestamp = getattr(self.streamer, "frame_0_timestamp", None)
-            frame_0_timestamp_monotonic = getattr(
-                self.streamer, "frame_0_timestamp_monotonic", None
-            )
+            self.streamer.sync_frame_target = sync_frame
+        
+        start_time = time.time()
+        
+        # Wait until the sync frame data has been captured
+        while self.streamer and self.streamer.sync_frame_pts is None:
+            if time.time() - start_time > timeout:
+                logger.warning(
+                    f"Timeout waiting for sync frame {sync_frame}, "
+                    f"current frame: {self.streamer.frame_count if self.streamer else 0}"
+                )
+                return
+            await asyncio.sleep(0.05)
 
-            if frame_0_timestamp is not None:
-                self._publish_frame_0_timestamp(
-                    frame_0_timestamp, frame_0_timestamp_monotonic or 0.0
+        if self.streamer and self.streamer.sync_frame_pts is not None:
+            # Use the timestamp captured at the exact moment of frame capture
+            pts = self.streamer.sync_frame_pts
+            timestamp = self.streamer.sync_frame_timestamp
+            timestamp_monotonic = self.streamer.sync_frame_timestamp_monotonic
+            
+            if timestamp is not None:
+                self._publish_camera_sync_frame(
+                    pts, timestamp, timestamp_monotonic or 0.0
                 )
 
     # -------------------------------------------------------------------------
@@ -269,7 +316,7 @@ class BaseVideoStreamer(abc.ABC):
         await self._perform_signaling()
 
         logger.debug("WebRTC connection established")
-        asyncio.create_task(self._wait_and_publish_frame_0_timestamp())
+        asyncio.create_task(self._wait_and_publish_camera_sync_frame())
         
         # Start health check if enabled
         if self.enable_health_check:

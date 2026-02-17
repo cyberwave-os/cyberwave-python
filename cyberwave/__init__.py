@@ -35,6 +35,9 @@ from .twin import (
     create_twin,
 )
 
+# Alerts
+from .alerts import Alert, TwinAlertManager
+
 # Motion and navigation
 from .motion import (
     TwinMotionHandle,
@@ -68,6 +71,7 @@ from .resources import (
     ProjectManager,
     EnvironmentManager,
     AssetManager,
+    EdgeManager,
     TwinManager,
 )
 
@@ -86,6 +90,7 @@ try:
         BaseVideoTrack,
         BaseVideoStreamer,
     )
+
     # Legacy alias for backwards compatibility
     CameraStreamer = CV2CameraStreamer
 
@@ -127,7 +132,7 @@ from .constants import (
 )
 
 # Version information
-__version__ = "0.3.6"
+__version__ = "0.3.9"
 
 # Define public API
 __all__ = [
@@ -148,6 +153,9 @@ __all__ = [
     "FlyingCameraTwin",
     "GripperCameraTwin",
     "create_twin",
+    # Alerts
+    "Alert",
+    "TwinAlertManager",
     # Motion and navigation
     "TwinMotionHandle",
     "ScopedMotionHandle",
@@ -171,6 +179,7 @@ __all__ = [
     "ProjectManager",
     "EnvironmentManager",
     "AssetManager",
+    "EdgeManager",
     "TwinManager",
     # MQTT client
     "CyberwaveMQTTClient",

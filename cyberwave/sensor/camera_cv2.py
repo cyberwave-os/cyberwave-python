@@ -433,7 +433,9 @@ class CV2VideoTrack(BaseVideoTrack):
             logger.error("Failed to read frame from camera")
             return None
 
-        timestamp, timestamp_monotonic = self.time_reference.read()
+        # Update time reference to capture current timestamp at frame capture moment.
+        # This ensures video frame timestamps reflect actual capture time.
+        timestamp, timestamp_monotonic = self.time_reference.update()
 
         # Store frame 0 timestamp for publishing
         if self.frame_count == 0:

@@ -17,20 +17,21 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
-class EdgeCreateSchema(BaseModel):
+class JointCalibration(BaseModel):
     """
-    EdgeCreateSchema
+    JointCalibration
     """ # noqa: E501
-    fingerprint: StrictStr
-    name: Optional[StrictStr] = None
-    workspace_uuid: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["fingerprint", "name", "workspace_uuid", "metadata"]
+    range_min: Union[StrictFloat, StrictInt]
+    range_max: Union[StrictFloat, StrictInt]
+    homing_offset: Union[StrictFloat, StrictInt]
+    drive_mode: StrictStr
+    id: StrictStr
+    __properties: ClassVar[List[str]] = ["range_min", "range_max", "homing_offset", "drive_mode", "id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +51,7 @@ class EdgeCreateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a JSON string"""
+        """Create an instance of JointCalibration from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +72,11 @@ class EdgeCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if name (nullable) is None
-        # and model_fields_set contains the field
-        if self.name is None and "name" in self.model_fields_set:
-            _dict['name'] = None
-
-        # set to None if workspace_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
-
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a dict"""
+        """Create an instance of JointCalibration from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +84,11 @@ class EdgeCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "fingerprint": obj.get("fingerprint"),
-            "name": obj.get("name"),
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata")
+            "range_min": obj.get("range_min"),
+            "range_max": obj.get("range_max"),
+            "homing_offset": obj.get("homing_offset"),
+            "drive_mode": obj.get("drive_mode"),
+            "id": obj.get("id")
         })
         return _obj
 

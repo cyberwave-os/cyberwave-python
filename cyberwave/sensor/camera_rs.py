@@ -101,6 +101,10 @@ class RealSenseVideoTrack(BaseVideoTrack):
         self.config: Optional["rs.config"] = None
         self.align: Optional["rs.align"] = None
 
+        # Cached frame for fallback when reading fails
+        self._cached_color_image: Optional[np.ndarray] = None
+        self._cached_depth_image: Optional[np.ndarray] = None
+
         # Validate depth requirements
         if self.enable_depth and (not self.client or not self.twin_uuid):
             raise ValueError(
@@ -191,7 +195,10 @@ class RealSenseVideoTrack(BaseVideoTrack):
         Returns:
             Tuple of (success, (color_frame, depth_frame)) or (False, None) if failed
         """
-        timeout = 1000 // self.color_fps
+        # Use a more generous timeout to handle occasional delays (at least 100ms, or 2x frame time)
+        frame_time_ms = 1000 // self.color_fps
+        timeout = max(100, frame_time_ms * 2)  # At least 100ms, or 2x frame time
+        
         try:
             if not self.pipeline:
                 logger.error("Pipeline not initialized")
@@ -210,6 +217,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
                 logger.warning("Could not get color frame")
                 return False, None
 
+            # Only require depth frame if depth is enabled
             if self.enable_depth and not depth_frame:
                 logger.warning("Could not get depth frame")
                 return False, None
@@ -220,16 +228,29 @@ class RealSenseVideoTrack(BaseVideoTrack):
                 np.asanyarray(depth_frame.get_data()) if depth_frame else None
             )
 
+            # Cache frames for fallback
+            self._cached_color_image = color_image.copy()
+            if depth_image is not None:
+                self._cached_depth_image = depth_image.copy()
+            elif not self.enable_depth:
+                # Clear cached depth if depth is disabled
+                self._cached_depth_image = None
+
             return True, (color_image, depth_image)
 
         except RuntimeError as e:
-            if "Frame didn't arrive" in str(e):
-                logger.warning(f"Frame timeout after {timeout}ms")
+            error_msg = str(e)
+            if "Frame didn't arrive" in error_msg:
+                logger.warning(f"Frame timeout after {timeout}ms (expected frame time: {frame_time_ms}ms)")
+            elif "device is disconnected" in error_msg.lower() or "device not found" in error_msg.lower():
+                logger.error(f"RealSense device disconnected: {e}")
+                # Don't return None immediately - let retry logic in recv() handle it
+                return False, None
             else:
                 logger.error(f"RealSense runtime error: {e}")
             return False, None
         except Exception as e:
-            logger.error(f"Error getting frames: {e}")
+            logger.error(f"Error getting frames: {e}", exc_info=True)
             return False, None
 
     def _publish_depth_frame(self, depth_image: np.ndarray, timestamp: float):
@@ -255,12 +276,24 @@ class RealSenseVideoTrack(BaseVideoTrack):
     async def recv(self):
         """Receive and encode the next video frame."""
         ret, frames = self._get_frames()
+        
+        # If reading failed, use cached frame
         if not ret or frames is None:
-            logger.error("Failed to read frames from RealSense camera")
-            return None
+            if self._cached_color_image is not None:
+                logger.debug("Failed to read frames from RealSense camera, using cached frame")
+                color_image = self._cached_color_image
+                depth_image = self._cached_depth_image if self.enable_depth else None
+            else:
+                # No cached frame available - return None
+                logger.error("Failed to read frames and no cached frame available")
+                return None
+        else:
+            color_image, depth_image = frames
 
-        timestamp, timestamp_monotonic = self.time_reference.read()
-        color_image, depth_image = frames
+        # Update time reference to capture current timestamp at frame capture moment.
+        # This ensures video frame timestamps reflect actual capture time, not
+        # a potentially stale timestamp from the teleop loop.
+        timestamp, timestamp_monotonic = self.time_reference.update()
 
         # Store frame 0 timestamp for publishing
         if self.frame_count == 0:

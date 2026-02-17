@@ -19,18 +19,17 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.joint_calibration import JointCalibration
 from typing import Optional, Set
 from typing_extensions import Self
 
-class EdgeCreateSchema(BaseModel):
+class TwinJointCalibrationSchema(BaseModel):
     """
-    EdgeCreateSchema
+    TwinJointCalibrationSchema
     """ # noqa: E501
-    fingerprint: StrictStr
-    name: Optional[StrictStr] = None
-    workspace_uuid: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["fingerprint", "name", "workspace_uuid", "metadata"]
+    joint_calibration: Dict[str, JointCalibration]
+    robot_type: Optional[StrictStr] = 'follower'
+    __properties: ClassVar[List[str]] = ["joint_calibration", "robot_type"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +49,7 @@ class EdgeCreateSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a JSON string"""
+        """Create an instance of TwinJointCalibrationSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +70,18 @@ class EdgeCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if name (nullable) is None
-        # and model_fields_set contains the field
-        if self.name is None and "name" in self.model_fields_set:
-            _dict['name'] = None
-
-        # set to None if workspace_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
-            _dict['workspace_uuid'] = None
-
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each value in joint_calibration (dict)
+        _field_dict = {}
+        if self.joint_calibration:
+            for _key_joint_calibration in self.joint_calibration:
+                if self.joint_calibration[_key_joint_calibration]:
+                    _field_dict[_key_joint_calibration] = self.joint_calibration[_key_joint_calibration].to_dict()
+            _dict['joint_calibration'] = _field_dict
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of EdgeCreateSchema from a dict"""
+        """Create an instance of TwinJointCalibrationSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +89,13 @@ class EdgeCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "fingerprint": obj.get("fingerprint"),
-            "name": obj.get("name"),
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata")
+            "joint_calibration": dict(
+                (_k, JointCalibration.from_dict(_v))
+                for _k, _v in obj["joint_calibration"].items()
+            )
+            if obj.get("joint_calibration") is not None
+            else None,
+            "robot_type": obj.get("robot_type") if obj.get("robot_type") is not None else 'follower'
         })
         return _obj
 
