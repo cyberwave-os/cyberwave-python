@@ -246,6 +246,127 @@ class EnvironmentManager(BaseResourceManager):
         except Exception:
             return None
 
+    # =========================================================================
+    # Universal Schema Export APIs
+    # =========================================================================
+
+    def get_universal_schema_json(self, environment_id: str) -> Dict[str, Any]:
+        """Get the composed universal schema JSON for an environment (direct download).
+        
+        Composes schema from all twins' universal_schemas in the environment.
+        
+        Args:
+            environment_id: UUID of the environment
+            
+        Returns:
+            Dict containing the composed CommonSchema as JSON.
+            
+        Example:
+            schema = cw.environments.get_universal_schema_json(env_id)
+            print(schema['links'])  # Access links in the schema
+        """
+        import json
+        try:
+            # The OpenAPI generator doesn't handle generic dict responses well
+            # Use the with_http_info variant to get the raw response
+            response = self.api.src_app_api_environments_get_environment_universal_schema_json_with_http_info(
+                environment_id
+            )
+            # Parse the response body as JSON
+            if response and hasattr(response, 'data') and response.data:
+                # If data is bytes, decode it
+                if isinstance(response.data, bytes):
+                    return json.loads(response.data.decode('utf-8'))
+                # If it's already parsed, return it
+                return response.data
+            # Fallback: try to get raw response
+            if response and hasattr(response, 'raw_data'):
+                return json.loads(response.raw_data.decode('utf-8'))
+            return None
+        except Exception as e:
+            self._handle_error(e, f"Get universal schema for environment {environment_id}")
+            raise
+
+    def export_urdf_scene(self, environment_id: str, output_path: Optional[str] = None) -> bytes:
+        """
+        Export environment as URDF project ZIP file.
+        
+        Downloads a ZIP containing:
+        - scene.urdf: The complete URDF scene
+        - meshes/: Directory with all required mesh files
+        
+        Args:
+            environment_id: UUID of the environment
+            output_path: Optional path to save the ZIP file. If None, returns bytes.
+            
+        Returns:
+            ZIP file contents as bytes (if output_path is None)
+            
+        Example:
+            # Save to file
+            cw.environments.export_urdf_scene(env_id, "urdf_project.zip")
+            
+            # Get bytes
+            zip_data = cw.environments.export_urdf_scene(env_id)
+        """
+        try:
+            # Use with_http_info to get raw response data
+            response = self.api.src_app_api_environments_get_environment_urdf_scene_zip_direct_with_http_info(
+                environment_id
+            )
+            
+            # Extract bytes from response - use raw_data for binary content
+            zip_bytes = response.raw_data
+            
+            if output_path:
+                with open(output_path, 'wb') as f:
+                    f.write(zip_bytes)
+                return zip_bytes
+            return zip_bytes
+        except Exception as e:
+            self._handle_error(e, f"export URDF scene for environment {environment_id}")
+            raise
+
+    def export_mujoco_scene(self, environment_id: str, output_path: Optional[str] = None) -> bytes:
+        """
+        Export environment as MuJoCo scene ZIP file.
+        
+        Downloads a ZIP containing:
+        - scene.xml: The complete MuJoCo scene
+        - meshes/: Directory with all required mesh files
+        
+        Args:
+            environment_id: UUID of the environment
+            output_path: Optional path to save the ZIP file. If None, returns bytes.
+            
+        Returns:
+            ZIP file contents as bytes (if output_path is None)
+            
+        Example:
+            # Save to file
+            cw.environments.export_mujoco_scene(env_id, "mujoco_scene.zip")
+            
+            # Get bytes
+            zip_data = cw.environments.export_mujoco_scene(env_id)
+        """
+        try:
+            # Use with_http_info to get raw response data
+            response = self.api.src_app_api_environments_get_environment_mujoco_scene_zip_direct_with_http_info(
+                environment_id
+            )
+            
+            # Extract bytes from response - use raw_data for binary content
+            zip_bytes = response.raw_data
+            
+            if output_path:
+                with open(output_path, 'wb') as f:
+                    f.write(zip_bytes)
+                return zip_bytes
+            return zip_bytes
+        except Exception as e:
+            self._handle_error(e, f"export MuJoCo scene for environment {environment_id}")
+            raise
+
 
 class AssetManager(BaseResourceManager):
     """Manager for asset operations"""
@@ -320,6 +441,92 @@ class AssetManager(BaseResourceManager):
             self.api.src_app_api_assets_delete_asset(asset_id)
         except Exception as e:
             self._handle_error(e, f"delete asset {asset_id}")
+
+    # =========================================================================
+    # Universal Schema APIs
+    # =========================================================================
+
+    def get_universal_schema(self, asset_id: str) -> Dict[str, Any]:
+        """
+        Get the asset's universal schema as JSON.
+        
+        Args:
+            asset_id: UUID of the asset
+            
+        Returns:
+            Dict containing the CommonSchema as JSON
+            
+        Example:
+            schema = cw.assets.get_universal_schema(asset_id)
+            print(schema['links'])  # Access links in the schema
+            print(schema['extensions']['cyberwave']['capabilities'])
+        """
+        try:
+            return self.api.src_app_api_assets_get_asset_universal_schema(asset_id)
+        except Exception as e:
+            self._handle_error(e, f"get universal schema for asset {asset_id}")
+            raise
+
+    def patch_universal_schema(
+        self, 
+        asset_id: str, 
+        path: str, 
+        value: Any, 
+        op: str = "replace"
+    ) -> Dict[str, Any]:
+        """
+        Update the asset's universal schema using JSON Pointer operations.
+        
+        This updates the authoritative schema and increments the schema hash.
+        All twins created from this asset after the update will use the new schema.
+        
+        Args:
+            asset_id: UUID of the asset
+            path: JSON Pointer path to update (e.g., "/links/0/name")
+            value: Value to set at the path
+            op: Operation type - "add" or "replace" (default: "replace")
+            
+        Returns:
+            Dict with keys:
+                - schema: The updated full schema
+                - hash: The new schema hash
+                - updated: Dict with op and path that were applied
+                
+        Example:
+            # Update a link name
+            result = cw.assets.patch_universal_schema(
+                asset_id,
+                path="/links/0/name",
+                value="base_link_v2",
+                op="replace"
+            )
+            
+            # Add a new capability
+            result = cw.assets.patch_universal_schema(
+                asset_id,
+                path="/extensions/cyberwave/capabilities/can_swim",
+                value=True,
+                op="add"
+            )
+            
+            print(f"New schema hash: {result['hash']}")
+        """
+        from cyberwave.rest.models.universal_schema_patch_schema import (
+            UniversalSchemaPatchSchema
+        )
+        
+        try:
+            payload = UniversalSchemaPatchSchema(
+                op=op,
+                path=path,
+                value=value
+            )
+            return self.api.src_app_api_assets_patch_asset_universal_schema(
+                asset_id, payload
+            )
+        except Exception as e:
+            self._handle_error(e, f"patch universal schema for asset {asset_id}")
+            raise
 
     def search(self, query: str) -> List[AssetSchema]:
         """Search for assets by name or tags"""
@@ -678,6 +885,107 @@ class TwinManager(BaseResourceManager):
             raise  # For type checker
 
     # =========================================================================
+    # Universal Schema APIs
+    # =========================================================================
+
+    def get_universal_schema_at_path(self, twin_id: str, path: str = "") -> Dict[str, Any]:
+        """
+        Get value at a specific JSON Pointer path in the twin's universal schema.
+        
+        Args:
+            twin_id: UUID of the twin
+            path: JSON Pointer path (e.g., "/sensors/0", "/extensions/cyberwave/capabilities")
+                 Empty string returns the entire schema
+            
+        Returns:
+            Dict with keys:
+                - path: The JSON Pointer path
+                - value: The value at that path (can be any JSON type)
+                
+        Example:
+            # Get entire schema
+            result = cw.twins.get_universal_schema_at_path(twin_id)
+            schema = result['value']
+            
+            # Get specific path
+            result = cw.twins.get_universal_schema_at_path(twin_id, "/sensors/0")
+            sensor = result['value']
+            
+            # Get capabilities
+            result = cw.twins.get_universal_schema_at_path(
+                twin_id, 
+                "/extensions/cyberwave/capabilities"
+            )
+            capabilities = result['value']
+        """
+        try:
+            return self.api.src_app_api_twins_get_twin_universal_schema_at_path(
+                twin_id, path=path
+            )
+        except Exception as e:
+            self._handle_error(e, f"get universal schema at path for twin {twin_id}")
+            raise
+
+    def patch_universal_schema(
+        self, 
+        twin_id: str, 
+        path: str, 
+        value: Any, 
+        op: str = "replace"
+    ) -> Dict[str, Any]:
+        """
+        Update the twin's universal schema using JSON Pointer operations.
+        
+        This allows editing twin-specific schema overrides, such as:
+        - /sensors (array of sensor objects)
+        - /extensions/cyberwave/capabilities
+        
+        Args:
+            twin_id: UUID of the twin
+            path: JSON Pointer path to update (e.g., "/sensors/0/parameters/id")
+            value: Value to set at the path
+            op: Operation type - "add" or "replace" (default: "replace")
+            
+        Returns:
+            Dict with keys:
+                - schema: The updated full schema
+                - updated: Dict with op and path that were applied
+                
+        Example:
+            # Update a sensor ID
+            result = cw.twins.patch_universal_schema(
+                twin_id,
+                path="/sensors/0/parameters/id",
+                value="my_camera",
+                op="replace"
+            )
+            
+            # Add a new capability
+            result = cw.twins.patch_universal_schema(
+                twin_id,
+                path="/extensions/cyberwave/capabilities/can_fly",
+                value=True,
+                op="add"
+            )
+        """
+        from cyberwave.rest.models.twin_universal_schema_patch_schema import (
+            TwinUniversalSchemaPatchSchema
+        )
+        
+        try:
+            payload = TwinUniversalSchemaPatchSchema(
+                op=op,
+                path=path,
+                value=value
+            )
+            return self.api.src_app_api_twins_patch_twin_universal_schema(
+                twin_id, payload
+            )
+        except Exception as e:
+            self._handle_error(e, f"patch universal schema for twin {twin_id}")
+            raise
+
+    # =========================================================================
     # Edge Device Pairing
     # =========================================================================
 
@@ -703,7 +1011,7 @@ class TwinManager(BaseResourceManager):
             edge_config: Device configuration (cameras, models, etc.)
 
         Returns:
-            EdgeDeviceSchema with device details
+            Dict with device details
 
         Raises:
             ApiException: If device is already paired to a different twin (409)
@@ -730,7 +1038,7 @@ class TwinManager(BaseResourceManager):
             twin_id: UUID of the twin
 
         Returns:
-            List of EdgeDeviceSchema objects
+            List of device dicts
         """
         try:
             return self.api.src_app_api_twins_list_twin_devices(twin_id)

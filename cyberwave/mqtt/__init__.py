@@ -7,6 +7,7 @@ It uses paho-mqtt (2.1.0+) for reliable MQTT connectivity.
 
 import json
 import logging
+import threading
 import time
 import uuid
 import re
@@ -111,6 +112,7 @@ class CyberwaveMQTTClient:
 
         self.twin_uuids = twin_uuids
         self.twin_uuids_with_telemetry_start: List[str] = []
+        self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
         self.source_type = source_type
 
     def _positions_equal(
@@ -264,13 +266,20 @@ class CyberwaveMQTTClient:
     def _handle_twin_update_with_telemetry(
         self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
     ):
-        if twin_uuid not in self.twin_uuids:
-            self.twin_uuids.append(twin_uuid)
+        """
+        Handle telemetry start for a twin, ensuring it's only sent once.
+        
+        Thread-safe: Uses a lock to prevent duplicate telemetry_start messages
+        when called from multiple threads (e.g., main loop + camera worker).
+        """
+        with self._telemetry_lock:
+            if twin_uuid not in self.twin_uuids:
+                self.twin_uuids.append(twin_uuid)
 
-        if twin_uuid not in self.twin_uuids_with_telemetry_start:
-            self.twin_uuids_with_telemetry_start.append(twin_uuid)
-            self._publish_connect_message(twin_uuid)
-            self.publish_telemetry_start(twin_uuid, metadata)
+            if twin_uuid not in self.twin_uuids_with_telemetry_start:
+                self.twin_uuids_with_telemetry_start.append(twin_uuid)
+                self._publish_connect_message(twin_uuid)
+                self.publish_telemetry_start(twin_uuid, metadata)
 
     def _publish_connect_message(self, twin_uuid: str):
         """Publish connect message to MQTT broker."""
@@ -310,10 +319,15 @@ class CyberwaveMQTTClient:
 
             logger.debug("Successfully connected to MQTT broker")
 
-            # send the telemetry start message
-            for twin_uuid in self.twin_uuids:
-                self._publish_connect_message(twin_uuid)
-                self.publish_telemetry_start(twin_uuid)
+            # Send telemetry start message only for twins that haven't received one yet
+            # This prevents duplicate telemetry_start messages on reconnection
+            # Thread-safe: Uses lock to coordinate with _handle_twin_update_with_telemetry
+            with self._telemetry_lock:
+                for twin_uuid in self.twin_uuids:
+                    if twin_uuid not in self.twin_uuids_with_telemetry_start:
+                        self.twin_uuids_with_telemetry_start.append(twin_uuid)
+                        self._publish_connect_message(twin_uuid)
+                        self.publish_telemetry_start(twin_uuid)
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
             raise

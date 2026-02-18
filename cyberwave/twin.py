@@ -524,6 +524,38 @@ class Twin:
                     self._scale = {"x": 1, "y": 1, "z": 1}
         return self._scale
 
+    def _get_current_rotation(self) -> Dict[str, float]:
+        """Get current rotation from cache or server"""
+        if self._rotation is None:
+            # First try to use existing data without making an API call
+            if hasattr(self._data, "rotation_w"):
+                self._rotation = {
+                    "w": self._data.rotation_w,
+                    "x": self._data.rotation_x,
+                    "y": self._data.rotation_y,
+                    "z": self._data.rotation_z,
+                }
+            elif isinstance(self._data, dict) and "rotation_w" in self._data:
+                self._rotation = {
+                    "w": self._data.get("rotation_w", 1.0),
+                    "x": self._data.get("rotation_x", 0.0),
+                    "y": self._data.get("rotation_y", 0.0),
+                    "z": self._data.get("rotation_z", 0.0),
+                }
+            else:
+                # Only refresh from server if we don't have the data
+                self.refresh()
+                if hasattr(self._data, "rotation_w"):
+                    self._rotation = {
+                        "w": self._data.rotation_w,
+                        "x": self._data.rotation_x,
+                        "y": self._data.rotation_y,
+                        "z": self._data.rotation_z,
+                    }
+                else:
+                    self._rotation = {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+        return self._rotation
+
     @staticmethod
     def _euler_to_quaternion(roll: float, pitch: float, yaw: float) -> List[float]:
         """
@@ -606,6 +638,62 @@ class Twin:
         if sensor_type is None:
             return True
         return any(s.get("type") == sensor_type for s in sensors)
+
+    # =========================================================================
+    # Universal Schema APIs
+    # =========================================================================
+
+    def get_schema(self, path: str = "") -> Any:
+        """Get value at a specific JSON Pointer path in the twin's universal schema.
+        
+        Args:
+            path: JSON Pointer path (e.g., "/sensors/0", "/extensions/cyberwave/capabilities")
+                 Empty string returns the entire schema
+            
+        Returns:
+            The value at the specified path (can be dict, list, string, etc.)
+            
+        Example:
+            # Get entire schema
+            schema = twin.get_schema()
+            
+            # Get specific path
+            sensor = twin.get_schema("/sensors/0")
+            
+            # Get capabilities
+            capabilities = twin.get_schema("/extensions/cyberwave/capabilities")
+        """
+        result = self.client.twins.get_universal_schema_at_path(self.uuid, path)
+        return result.get("value")
+
+    def update_schema(self, path: str, value: Any, op: str = "replace") -> Dict[str, Any]:
+        """Update the twin's universal schema using JSON Pointer operations.
+        
+        Args:
+            path: JSON Pointer path to update (e.g., "/sensors/0/parameters/id")
+            value: Value to set at the path
+            op: Operation type - "add" or "replace" (default: "replace")
+            
+        Returns:
+            Dict with the updated schema and operation details
+            
+        Example:
+            # Update a sensor ID
+            twin.update_schema(
+                path="/sensors/0/parameters/id",
+                value="my_camera"
+            )
+            
+            # Add a new capability
+            twin.update_schema(
+                path="/extensions/cyberwave/capabilities/can_fly",
+                value=True,
+                op="add"
+            )
+        """
+        return self.client.twins.patch_universal_schema(
+            self.uuid, path, value, op
+        )
 
     def get_calibration(self, robot_type: Optional[str] = None) -> "TwinJointCalibrationSchema":
         """
@@ -814,9 +902,11 @@ class LocomoteTwin(Twin):
 
     def move(self, position: List[float]):
         """
-        Move the twin to a specific position, relative to the zero of the environment.
+        Move the digital twin to a specific position in the environment.
 
-        NOTE: This does move the real-world robot
+        NOTE: This updates the digital twin's position in the simulator/viewer,
+        not the physical robot. To command the physical robot to navigate,
+        use twin.navigation.goto() instead.
 
         Args:
             position: [x, y, z] coordinates
@@ -831,15 +921,42 @@ class LocomoteTwin(Twin):
 
     def move_forward(self, distance: float):
         """
-        Move in the direction the twin is facing.
+        Move the digital twin forward in the direction it is facing.
 
-        NOTE: This does move the real-world robot
+        NOTE: This updates the digital twin's position in the simulator/viewer,
+        not the physical robot. To command the physical robot to navigate,
+        use twin.navigation.goto() instead.
 
         Args:
-            distance: Distance to move
+            distance: Distance to move in meters
         """
-        # TODO: Implement this. First we should figure the direction the twin is facing, then the relative position to move and move it.
-        raise NotImplementedError("move_forward() is not implemented")
+        # Get current position and rotation
+        current_pos = self._get_current_position()
+        current_rot = self._get_current_rotation()
+        
+        # Extract quaternion components
+        w = current_rot["w"]
+        x = current_rot["x"]
+        y = current_rot["y"]
+        z = current_rot["z"]
+        
+        # Transform the forward vector [1, 0, 0] by the quaternion
+        # Using quaternion rotation formula: v' = q * v * q^(-1)
+        # For forward vector [1, 0, 0], this gives us:
+        forward_x = 1 - 2 * (y*y + z*z)
+        forward_y = 2 * (x*y + w*z)
+        forward_z = 2 * (x*z - w*y)
+        
+        # Calculate new position
+        new_x = current_pos["x"] + forward_x * distance
+        new_y = current_pos["y"] + forward_y * distance
+        new_z = current_pos["z"] + forward_z * distance
+        
+        # Update position via MQTT
+        self._connect_to_mqtt_if_not_connected()
+        self.client.mqtt.update_twin_position(
+            self.uuid, {"x": new_x, "y": new_y, "z": new_z}
+        )
 
     def rotate(
         self,
@@ -853,9 +970,11 @@ class LocomoteTwin(Twin):
         roll: Optional[float] = None,
     ) -> None:
         """
-        Rotate the twin using either a quaternion or Euler angles.
+        Rotate the digital twin using either a quaternion or Euler angles.
 
-        NOTE: This does rotate the real-world robot
+        NOTE: This updates the digital twin's rotation in the simulator/viewer,
+        not the physical robot. To command the physical robot to rotate,
+        use twin.navigation.goto() with a yaw parameter instead.
 
         You can provide either:
         - Quaternion values (w, x, y, z)

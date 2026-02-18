@@ -157,12 +157,13 @@ class Cyberwave:
             body=None,
             post_params=None,
             _request_timeout=None,
+            **kwargs,
         ):
             last_request_headers.clear()
             if header_params:
                 last_request_headers.update(header_params)
             return original_call_api(
-                method, url, header_params, body, post_params, _request_timeout
+                method, url, header_params, body, post_params, _request_timeout, **kwargs
             )
 
         api_client.response_deserialize = response_deserialize_with_headers
@@ -574,6 +575,11 @@ class Cyberwave:
             client=self.mqtt,
             twin_uuid=twin_uuid,
         )
+
+    def get_scene(self, environment_id: str) -> "Scene":
+        """Get a scene builder for the specified environment."""
+        from cyberwave.scene import Scene
+        return Scene(self, environment_id)
 
     def disconnect(self):
         """Disconnect all connections (REST and MQTT)"""

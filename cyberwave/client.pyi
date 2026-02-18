@@ -175,6 +175,15 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["open/openarm"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["berkeley/berkeley-humanoid"],
         environment_id: str | None = None,
         twin_id: str | None = None,

@@ -971,7 +971,10 @@ class OpenopenarmTwin(Twin):
     Digital twin for OpenARM
     Registry ID: open/openarm
     """
-    pass
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Upmir250Twin(Twin):
     """

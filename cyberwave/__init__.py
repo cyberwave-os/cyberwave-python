@@ -131,6 +131,9 @@ from .constants import (
     SOURCE_TYPES,
 )
 
+# Scene Composition
+from .scene import Scene
+
 # Version information
 __version__ = "0.3.9"
 
@@ -138,6 +141,8 @@ __version__ = "0.3.9"
 __all__ = [
     # Core client
     "Cyberwave",
+    # Scene
+    "Scene",
     # Configuration
     "CyberwaveConfig",
     "get_config",

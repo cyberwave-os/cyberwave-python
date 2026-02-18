@@ -362,6 +362,40 @@ for sensor_name, options in info.sensor_options.items():
         print(f"  {opt.name}: {opt.value} (range: {opt.min_value}-{opt.max_value})")
 ```
 
+### Edge Management
+
+Edges are physical devices (e.g. Raspberry Pi, Jetson) that run the Cyberwave Edge Core. You can manage them programmatically via `cw.edges`.
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave()
+
+# List all edges registered to your account
+edges = cw.edges.list()
+for edge in edges:
+    print(edge.uuid, edge.name, edge.fingerprint)
+
+# Get a specific edge
+edge = cw.edges.get("your-edge-uuid")
+
+# Register a new edge with a hardware fingerprint
+edge = cw.edges.create(
+    fingerprint="linux-a1b2c3d4e5f60000",   # stable hardware identifier
+    name="lab-rpi-001",                       # optional human-readable name
+    workspace_id="your-workspace-uuid",       # optional, scopes the edge to a workspace
+    metadata={"location": "lab-shelf-2"},     # optional arbitrary metadata
+)
+
+# Update edge name or metadata
+edge = cw.edges.update(edge.uuid, {"name": "lab-rpi-001-renamed"})
+
+# Delete an edge
+cw.edges.delete(edge.uuid)
+```
+
+The fingerprint is a stable identifier derived from the host hardware (hostname, OS, architecture, and MAC address). The Edge Core generates and persists it automatically on first boot at `/etc/cyberwave/fingerprint.json`. When a twin has `metadata.edge_fingerprint` set to the same value, the Edge Core will automatically pull and start its driver container on boot.
+
 ### Alerts
 
 Create, list, and manage alerts directly from a twin. Alerts notify operators that action is needed (e.g. a robot needs calibration or a sensor reading is out of range).
