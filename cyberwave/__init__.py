@@ -137,7 +137,7 @@ from .constants import (
 from .scene import Scene
 
 # Version information
-__version__ = "0.3.9"
+__version__ = "0.3.18"
 
 # Define public API
 __all__ = [
