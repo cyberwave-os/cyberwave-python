@@ -20,7 +20,7 @@ class EdgeNodeConfig:
         MQTT_HOST: MQTT broker hostname
         MQTT_PORT: MQTT broker port
         MQTT_USERNAME: MQTT username
-        MQTT_PASSWORD: MQTT password
+        MQTT_API_TOKEN: Optional explicit API token for MQTT auth
         EDGE_UUID: UUID of this edge device
         TWIN_UUID: UUID of the default twin
         TOPIC_PREFIX: MQTT topic prefix (environment-specific)
@@ -48,8 +48,13 @@ class EdgeNodeConfig:
     mqtt_username: Optional[str] = field(
         default_factory=lambda: os.getenv("MQTT_USERNAME")
     )
+    mqtt_api_token: Optional[str] = field(
+        default_factory=lambda: os.getenv("MQTT_API_TOKEN")
+        or os.getenv("CYBERWAVE_API_KEY")
+    )
+    # Deprecated alias kept for backwards compatibility when passed explicitly.
     mqtt_password: Optional[str] = field(
-        default_factory=lambda: os.getenv("MQTT_PASSWORD")
+        default=None
     )
 
     # Topic prefix for MQTT (environment-specific)
@@ -91,8 +96,7 @@ class EdgeNodeConfig:
         """
         if not self.cyberwave_token:
             raise ValueError(
-                "CYBERWAVE_API_KEY is required. "
-                "Get yours at https://cyberwave.com/profile"
+                "CYBERWAVE_API_KEY is required. Get yours at https://cyberwave.com/profile"
             )
         if not self.edge_uuid:
             raise ValueError(

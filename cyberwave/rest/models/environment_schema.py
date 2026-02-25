@@ -31,11 +31,12 @@ class EnvironmentSchema(BaseModel):
     name: StrictStr
     description: StrictStr
     project_uuid: Optional[StrictStr]
+    workspace_uuid: Optional[StrictStr] = None
     created_at: datetime
     updated_at: datetime
     settings: Optional[Dict[str, Any]] = None
     visibility: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "project_uuid", "created_at", "updated_at", "settings", "visibility"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "visibility"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,6 +82,11 @@ class EnvironmentSchema(BaseModel):
         if self.project_uuid is None and "project_uuid" in self.model_fields_set:
             _dict['project_uuid'] = None
 
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
         # set to None if settings (nullable) is None
         # and model_fields_set contains the field
         if self.settings is None and "settings" in self.model_fields_set:
@@ -107,6 +113,7 @@ class EnvironmentSchema(BaseModel):
             "name": obj.get("name"),
             "description": obj.get("description"),
             "project_uuid": obj.get("project_uuid"),
+            "workspace_uuid": obj.get("workspace_uuid"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "settings": obj.get("settings"),

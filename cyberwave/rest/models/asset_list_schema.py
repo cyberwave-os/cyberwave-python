@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -37,7 +37,10 @@ class AssetListSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
     thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "registry_id", "metadata", "capabilities", "thumbnail"]
+    urdf_file: Optional[StrictStr] = None
+    glb_file: Optional[StrictStr] = None
+    has_universal_schema: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "registry_id", "metadata", "capabilities", "thumbnail", "urdf_file", "glb_file", "has_universal_schema"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -103,6 +106,16 @@ class AssetListSchema(BaseModel):
         if self.thumbnail is None and "thumbnail" in self.model_fields_set:
             _dict['thumbnail'] = None
 
+        # set to None if urdf_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.urdf_file is None and "urdf_file" in self.model_fields_set:
+            _dict['urdf_file'] = None
+
+        # set to None if glb_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.glb_file is None and "glb_file" in self.model_fields_set:
+            _dict['glb_file'] = None
+
         return _dict
 
     @classmethod
@@ -124,7 +137,10 @@ class AssetListSchema(BaseModel):
             "registry_id": obj.get("registry_id"),
             "metadata": obj.get("metadata"),
             "capabilities": obj.get("capabilities"),
-            "thumbnail": obj.get("thumbnail")
+            "thumbnail": obj.get("thumbnail"),
+            "urdf_file": obj.get("urdf_file"),
+            "glb_file": obj.get("glb_file"),
+            "has_universal_schema": obj.get("has_universal_schema") if obj.get("has_universal_schema") is not None else False
         })
         return _obj
 

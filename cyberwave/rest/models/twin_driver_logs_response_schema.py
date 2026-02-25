@@ -17,26 +17,22 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt
+from typing import Any, ClassVar, Dict, List
+from cyberwave.rest.models.twin_driver_log_schema import TwinDriverLogSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
-class PermissionsSchema(BaseModel):
+class TwinDriverLogsResponseSchema(BaseModel):
     """
-    PermissionsSchema
+    Paginated response for twin driver logs.
     """ # noqa: E501
-    role: Optional[StrictStr] = None
-    can_view: StrictBool
-    can_write: StrictBool
-    can_admin: StrictBool
-    can_delete: StrictBool
-    can_create_environment: Optional[StrictBool] = False
-    can_rename_environment: Optional[StrictBool] = False
-    can_delete_environment: Optional[StrictBool] = False
-    can_create_twin: Optional[StrictBool] = False
-    can_delete_twin: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["role", "can_view", "can_write", "can_admin", "can_delete", "can_create_environment", "can_rename_environment", "can_delete_environment", "can_create_twin", "can_delete_twin"]
+    items: List[TwinDriverLogSchema]
+    total: StrictInt
+    limit: StrictInt
+    offset: StrictInt
+    has_more: StrictBool
+    __properties: ClassVar[List[str]] = ["items", "total", "limit", "offset", "has_more"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -56,7 +52,7 @@ class PermissionsSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of PermissionsSchema from a JSON string"""
+        """Create an instance of TwinDriverLogsResponseSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -77,16 +73,18 @@ class PermissionsSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if role (nullable) is None
-        # and model_fields_set contains the field
-        if self.role is None and "role" in self.model_fields_set:
-            _dict['role'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each item in items (list)
+        _items = []
+        if self.items:
+            for _item_items in self.items:
+                if _item_items:
+                    _items.append(_item_items.to_dict())
+            _dict['items'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of PermissionsSchema from a dict"""
+        """Create an instance of TwinDriverLogsResponseSchema from a dict"""
         if obj is None:
             return None
 
@@ -94,16 +92,11 @@ class PermissionsSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "role": obj.get("role"),
-            "can_view": obj.get("can_view"),
-            "can_write": obj.get("can_write"),
-            "can_admin": obj.get("can_admin"),
-            "can_delete": obj.get("can_delete"),
-            "can_create_environment": obj.get("can_create_environment") if obj.get("can_create_environment") is not None else False,
-            "can_rename_environment": obj.get("can_rename_environment") if obj.get("can_rename_environment") is not None else False,
-            "can_delete_environment": obj.get("can_delete_environment") if obj.get("can_delete_environment") is not None else False,
-            "can_create_twin": obj.get("can_create_twin") if obj.get("can_create_twin") is not None else False,
-            "can_delete_twin": obj.get("can_delete_twin") if obj.get("can_delete_twin") is not None else False
+            "items": [TwinDriverLogSchema.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
+            "total": obj.get("total"),
+            "limit": obj.get("limit"),
+            "offset": obj.get("offset"),
+            "has_more": obj.get("has_more")
         })
         return _obj
 

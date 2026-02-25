@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -35,14 +35,16 @@ class AssetSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     owner_uuid: Optional[StrictStr] = None
     registry_id: Optional[StrictStr] = None
-    glb_file: Optional[StrictStr]
-    urdf_file: Optional[StrictStr]
+    glb_file: Optional[StrictStr] = None
+    urdf_file: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     kinematics: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
     thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail"]
+    has_universal_schema: Optional[StrictBool] = False
+    universal_schema: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -133,6 +135,11 @@ class AssetSchema(BaseModel):
         if self.thumbnail is None and "thumbnail" in self.model_fields_set:
             _dict['thumbnail'] = None
 
+        # set to None if universal_schema (nullable) is None
+        # and model_fields_set contains the field
+        if self.universal_schema is None and "universal_schema" in self.model_fields_set:
+            _dict['universal_schema'] = None
+
         return _dict
 
     @classmethod
@@ -159,7 +166,9 @@ class AssetSchema(BaseModel):
             "metadata": obj.get("metadata"),
             "kinematics": obj.get("kinematics"),
             "capabilities": obj.get("capabilities"),
-            "thumbnail": obj.get("thumbnail")
+            "thumbnail": obj.get("thumbnail"),
+            "has_universal_schema": obj.get("has_universal_schema") if obj.get("has_universal_schema") is not None else False,
+            "universal_schema": obj.get("universal_schema")
         })
         return _obj
 

@@ -70,7 +70,6 @@ async def main():
     host = os.getenv("CYBERWAVE_MQTT_HOST")
     port_str = os.getenv("CYBERWAVE_MQTT_PORT")
     mqtt_username = os.getenv("CYBERWAVE_MQTT_USERNAME")
-    mqtt_password = os.getenv("CYBERWAVE_MQTT_PASSWORD")
     
     # Convert port to int if provided
     port = int(port_str) if port_str else None
@@ -80,7 +79,7 @@ async def main():
         mqtt_host=host,
         mqtt_port=port,
         mqtt_username=mqtt_username,
-        mqtt_password=mqtt_password,
+        mqtt_api_token=token,
     )
 
     twin_uuid = os.getenv("TWIN_UUID")

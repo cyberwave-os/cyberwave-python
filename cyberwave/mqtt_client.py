@@ -36,11 +36,16 @@ class CyberwaveMQTTClient:
         """
         self.config = config
 
-        # Determine the broker, port, username, and password from config
+        # Determine broker, port, username, and API token from config.
         mqtt_broker = config.mqtt_host or "mqtt.cyberwave.com"
         mqtt_port = config.mqtt_port or 1883
         mqtt_username = config.mqtt_username or "mqttcyb"
-        mqtt_password = config.mqtt_password or "mqttcyb231"
+        mqtt_api_token = config.mqtt_api_token or config.token or config.api_key
+        if not mqtt_api_token:
+            raise ValueError(
+                "MQTT API token is required. Set token/CYBERWAVE_API_KEY "
+                "or pass mqtt_api_token when creating the client."
+            )
 
         # Determine topic prefix from config (which handles env vars)
         topic_prefix = config.topic_prefix or ""
@@ -52,7 +57,9 @@ class CyberwaveMQTTClient:
             mqtt_broker=mqtt_broker,
             mqtt_port=mqtt_port,
             mqtt_username=mqtt_username,
-            mqtt_password=mqtt_password,
+            api_token=mqtt_api_token,
+            use_tls=config.mqtt_use_tls,
+            tls_ca_cert=config.mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,
         )
 

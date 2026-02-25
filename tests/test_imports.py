@@ -130,13 +130,13 @@ def test_mqtt_client():
         client = BaseMQTTClient(
             mqtt_broker="localhost",
             mqtt_port=1883,
-            mqtt_password="test_token",
+            api_token="test_token",
             auto_connect=False,  # Don't actually connect
         )
 
         assert client.mqtt_broker == "localhost"
         assert client.mqtt_port == 1883
-        assert client.mqtt_password == "test_token"
+        assert client.api_token == "test_token"
         assert client.topic_prefix == ""
 
         # Test the wrapper with a config object
@@ -145,7 +145,7 @@ def test_mqtt_client():
             api_key="test_key",
             mqtt_host="localhost",
             mqtt_port=1883,
-            mqtt_password="test_token",
+            mqtt_api_token="test_token",
         )
         wrapper_client = CyberwaveMQTTClient(config)
         assert wrapper_client.topic_prefix == ""

@@ -65,6 +65,11 @@ class Cyberwave:
         api_key: API key for authentication (alternative to token)
         mqtt_host: MQTT broker host (optional, defaults to base_url host)
         mqtt_port: MQTT broker port (default: 1883)
+        mqtt_username: MQTT username placeholder (default: "mqttcyb")
+        mqtt_api_token: API token used as MQTT secret
+        mqtt_password: Deprecated alias for mqtt_api_token
+        mqtt_use_tls: Enable TLS for MQTT connection
+        mqtt_tls_ca_cert: Path to CA cert bundle for MQTT TLS
         environment_id: Default environment ID
         workspace_id: Default workspace ID
         **config_kwargs: Additional configuration options
@@ -78,7 +83,10 @@ class Cyberwave:
         mqtt_host: Optional[str] = None,
         mqtt_port: int | None = None,
         mqtt_username: Optional[str] = None,
+        mqtt_api_token: Optional[str] = None,
         mqtt_password: Optional[str] = None,
+        mqtt_use_tls: bool = False,
+        mqtt_tls_ca_cert: Optional[str] = None,
         topic_prefix: Optional[str] = None,
         source_type: Optional[str] = SOURCE_TYPE_EDGE,
         **config_kwargs,
@@ -87,10 +95,16 @@ class Cyberwave:
             base_url = os.getenv("CYBERWAVE_BASE_URL", DEFAULT_BASE_URL)
 
         if token is None:
-            token = os.getenv("CYBERWAVE_API_KEY", None)
+            token = os.getenv("CYBERWAVE_API_KEY")
+
+        if api_key is None:
+            api_key = os.getenv("CYBERWAVE_API_KEY", None)
 
         if api_key is None and token is None:
-            raise ValueError("No CYBERWAVE_API_KEY found! Get yours at https://cyberwave.com/profile")
+            raise ValueError(
+                "No API token found! Set CYBERWAVE_API_KEY. "
+                "Get yours at https://cyberwave.com/profile"
+            )
 
         self.config = CyberwaveConfig(
             base_url=base_url,
@@ -99,7 +113,10 @@ class Cyberwave:
             mqtt_host=mqtt_host,
             mqtt_port=mqtt_port or DEFAULT_MQTT_PORT,
             mqtt_username=mqtt_username,
+            mqtt_api_token=mqtt_api_token,
             mqtt_password=mqtt_password,
+            mqtt_use_tls=mqtt_use_tls,
+            mqtt_tls_ca_cert=mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,
             environment_id=os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
             workspace_id=os.getenv("CYBERWAVE_WORKSPACE_ID", None),
@@ -389,6 +406,7 @@ class Cyberwave:
         keyframe_interval: Optional[int] = None,
         frame_callback: Optional[callable] = None,
         camera_name: Optional[str] = None,
+        fourcc: Optional[str] = None,
     ):
         """
         Create a camera streamer for the specified twin.
@@ -421,6 +439,9 @@ class Cyberwave:
             frame_callback: Optional callback for each frame (ML inference, etc.).
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
             camera_name: Optional sensor identifier for multi-stream twins.
+            fourcc: Optional FOURCC code for V4L2/USB cameras (e.g. ``'MJPG'``).
+                Forces the pixel format before resolution is negotiated.
+                Ignored for RealSense and IP/RTSP cameras.
 
         Returns:
             Camera streamer instance (CV2CameraStreamer or RealSenseStreamer)
@@ -494,6 +515,7 @@ class Cyberwave:
                 keyframe_interval=keyframe_interval,
                 frame_callback=frame_callback,
                 camera_name=camera_name,
+                fourcc=fourcc,
             )
         elif camera_type_lower == "realsense":
             if not _has_realsense:

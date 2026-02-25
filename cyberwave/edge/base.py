@@ -133,6 +133,7 @@ class BaseEdgeNode(ABC):
             mqtt_host=self.config.mqtt_host,
             mqtt_port=self.config.mqtt_port,
             mqtt_username=self.config.mqtt_username,
+            mqtt_api_token=self.config.mqtt_api_token or self.config.cyberwave_token,
             mqtt_password=self.config.mqtt_password,
             topic_prefix=self.config.topic_prefix,
             source_type=self.config.source_type,

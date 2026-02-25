@@ -109,16 +109,18 @@ client.disconnect()
 
 ## Configuration Options
 
-| Parameter       | Type   | Default        | Description                                                     |
-| --------------- | ------ | -------------- | --------------------------------------------------------------- |
-| `mqtt_broker`   | `str`  | Required       | MQTT broker hostname or IP                                      |
-| `mqtt_port`     | `int`  | `1883`         | MQTT broker port                                                |
-| `mqtt_username` | `str`  | `"cyberwave"`  | MQTT username                                                   |
-| `mqtt_password` | `str`  | `None`         | MQTT password                                                   |
-| `api_token`     | `str`  | `None`         | Cyberwave API token (used as password if mqtt_password not set) |
-| `client_id`     | `str`  | Auto-generated | Custom MQTT client ID                                           |
-| `topic_prefix`  | `str`  | `""`           | Prefix for all MQTT topics                                      |
-| `auto_connect`  | `bool` | `True`         | Automatically connect on initialization                         |
+| Parameter       | Type   | Default        | Description                               |
+| --------------- | ------ | -------------- | ----------------------------------------- |
+| `mqtt_broker`   | `str`  | Required       | MQTT broker hostname or IP                |
+| `mqtt_port`     | `int`  | `1883`         | MQTT broker port                          |
+| `mqtt_username` | `str`  | `"mqttcyb"`    | MQTT username placeholder                 |
+| `api_token`     | `str`  | Required       | Cyberwave API token (used as MQTT secret) |
+| `mqtt_password` | `str`  | `None`         | Deprecated alias for `api_token`          |
+| `use_tls`       | `bool` | `False`        | Enable TLS transport for MQTT             |
+| `tls_ca_cert`   | `str`  | `None`         | CA bundle path for broker cert validation |
+| `client_id`     | `str`  | Auto-generated | Custom MQTT client ID                     |
+| `topic_prefix`  | `str`  | `""`           | Prefix for all MQTT topics                |
+| `auto_connect`  | `bool` | `True`         | Automatically connect on initialization   |
 
 ## Advanced Features
 

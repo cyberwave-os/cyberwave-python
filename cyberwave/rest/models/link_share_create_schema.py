@@ -26,7 +26,7 @@ class LinkShareCreateSchema(BaseModel):
     """
     LinkShareCreateSchema
     """ # noqa: E501
-    role_cap: Optional[StrictStr] = 'viewer'
+    role_cap: Optional[StrictStr] = 'reader'
     expires_at: Optional[StrictStr] = None
     __properties: ClassVar[List[str]] = ["role_cap", "expires_at"]
 
@@ -86,7 +86,7 @@ class LinkShareCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "role_cap": obj.get("role_cap") if obj.get("role_cap") is not None else 'viewer',
+            "role_cap": obj.get("role_cap") if obj.get("role_cap") is not None else 'reader',
             "expires_at": obj.get("expires_at")
         })
         return _obj

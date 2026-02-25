@@ -3,8 +3,8 @@ Configuration management for the Cyberwave SDK
 """
 
 import os
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
 
 from cyberwave.constants import SOURCE_TYPE_EDGE
 
@@ -13,8 +13,14 @@ DEFAULT_BASE_URL = "https://api.cyberwave.com"
 DEFAULT_MQTT_HOST = "mqtt.cyberwave.com"
 DEFAULT_MQTT_PORT = 1883
 DEFAULT_MQTT_USERNAME = "mqttcyb"
-DEFAULT_MQTT_PASSWORD = "mqttcyb231"
 DEFAULT_TIMEOUT = 30
+
+
+def _parse_bool_env(value: Optional[str], default: bool = False) -> bool:
+    """Parse common boolean env var representations."""
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -29,7 +35,10 @@ class CyberwaveConfig:
         mqtt_host: MQTT broker host (defaults to base_url host)
         mqtt_port: MQTT broker port (defaults to 1883)
         mqtt_username: MQTT username (optional)
-        mqtt_password: MQTT password (optional)
+        mqtt_api_token: API token used for MQTT authN/authZ (optional)
+        mqtt_password: Deprecated alias for mqtt_api_token
+        mqtt_use_tls: Whether to enable MQTT TLS transport
+        mqtt_tls_ca_cert: Path to CA certificate bundle for MQTT TLS
         environment_id: Default environment ID to use
         workspace_id: Default workspace ID to use
         timeout: Request timeout in seconds
@@ -42,7 +51,10 @@ class CyberwaveConfig:
     mqtt_host: Optional[str] = None
     mqtt_port: int = DEFAULT_MQTT_PORT
     mqtt_username: Optional[str] = None
+    mqtt_api_token: Optional[str] = None
     mqtt_password: Optional[str] = None
+    mqtt_use_tls: bool = False
+    mqtt_tls_ca_cert: Optional[str] = None
     environment_id: Optional[str] = None
     workspace_id: Optional[str] = None
     timeout: int = DEFAULT_TIMEOUT
@@ -52,8 +64,11 @@ class CyberwaveConfig:
 
     def __post_init__(self):
         """Load configuration from environment variables if not provided"""
-        if not self.api_key and not self.token:
+        if not self.token:
             self.token = os.getenv("CYBERWAVE_API_KEY")
+
+        if not self.api_key:
+            self.api_key = os.getenv("CYBERWAVE_API_KEY")
 
         if self.base_url == DEFAULT_BASE_URL:
             self.base_url = os.getenv("CYBERWAVE_BASE_URL", DEFAULT_BASE_URL)
@@ -71,10 +86,29 @@ class CyberwaveConfig:
                 "CYBERWAVE_MQTT_USERNAME", DEFAULT_MQTT_USERNAME
             )
 
-        if not self.mqtt_password:
-            self.mqtt_password = os.getenv(
-                "CYBERWAVE_MQTT_PASSWORD", DEFAULT_MQTT_PASSWORD
+        if not self.mqtt_api_token:
+            self.mqtt_api_token = (
+                os.getenv("CYBERWAVE_MQTT_API_TOKEN")
+                or os.getenv("CYBERWAVE_API_KEY")
+                or self.token
+                or self.api_key
             )
+
+        if not self.mqtt_api_token and self.mqtt_password:
+            self.mqtt_api_token = self.mqtt_password
+
+        # Keep legacy alias in sync for backwards compatibility.
+        if not self.mqtt_password:
+            self.mqtt_password = self.mqtt_api_token
+
+        self.mqtt_use_tls = _parse_bool_env(
+            os.getenv("CYBERWAVE_MQTT_USE_TLS"), default=self.mqtt_use_tls
+        )
+        if self.mqtt_port == 8883 and not self.mqtt_use_tls:
+            # Port 8883 is the conventional MQTT-over-TLS port.
+            self.mqtt_use_tls = True
+        if not self.mqtt_tls_ca_cert:
+            self.mqtt_tls_ca_cert = os.getenv("CYBERWAVE_MQTT_TLS_CA_CERT")
 
         if not self.environment_id:
             self.environment_id = os.getenv("CYBERWAVE_ENVIRONMENT_ID")

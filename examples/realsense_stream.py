@@ -12,4 +12,4 @@ from cyberwave import Cyberwave
 
 cw = Cyberwave(token=os.getenv("CYBERWAVE_API_KEY"))
 camera = cw.twin("intel/realsensed455")
-camera.stream_video()
+camera.start_streaming()

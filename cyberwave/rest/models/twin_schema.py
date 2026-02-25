@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -55,7 +55,15 @@ class TwinSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     attach_to_twin_uuid: Optional[StrictStr] = None
     attach_to_link: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link"]
+    attach_offset_x: Union[StrictFloat, StrictInt]
+    attach_offset_y: Union[StrictFloat, StrictInt]
+    attach_offset_z: Union[StrictFloat, StrictInt]
+    attach_offset_rotation_w: Union[StrictFloat, StrictInt]
+    attach_offset_rotation_x: Union[StrictFloat, StrictInt]
+    attach_offset_rotation_y: Union[StrictFloat, StrictInt]
+    attach_offset_rotation_z: Union[StrictFloat, StrictInt]
+    fixed_base: StrictBool
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -180,7 +188,15 @@ class TwinSchema(BaseModel):
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "visibility": obj.get("visibility"),
             "attach_to_twin_uuid": obj.get("attach_to_twin_uuid"),
-            "attach_to_link": obj.get("attach_to_link")
+            "attach_to_link": obj.get("attach_to_link"),
+            "attach_offset_x": obj.get("attach_offset_x"),
+            "attach_offset_y": obj.get("attach_offset_y"),
+            "attach_offset_z": obj.get("attach_offset_z"),
+            "attach_offset_rotation_w": obj.get("attach_offset_rotation_w"),
+            "attach_offset_rotation_x": obj.get("attach_offset_rotation_x"),
+            "attach_offset_rotation_y": obj.get("attach_offset_rotation_y"),
+            "attach_offset_rotation_z": obj.get("attach_offset_rotation_z"),
+            "fixed_base": obj.get("fixed_base")
         })
         return _obj
 

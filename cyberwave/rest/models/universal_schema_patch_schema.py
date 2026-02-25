@@ -17,26 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class PermissionsSchema(BaseModel):
+class UniversalSchemaPatchSchema(BaseModel):
     """
-    PermissionsSchema
+    UniversalSchemaPatchSchema
     """ # noqa: E501
-    role: Optional[StrictStr] = None
-    can_view: StrictBool
-    can_write: StrictBool
-    can_admin: StrictBool
-    can_delete: StrictBool
-    can_create_environment: Optional[StrictBool] = False
-    can_rename_environment: Optional[StrictBool] = False
-    can_delete_environment: Optional[StrictBool] = False
-    can_create_twin: Optional[StrictBool] = False
-    can_delete_twin: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["role", "can_view", "can_write", "can_admin", "can_delete", "can_create_environment", "can_rename_environment", "can_delete_environment", "can_create_twin", "can_delete_twin"]
+    op: StrictStr
+    path: StrictStr
+    value: Optional[Any]
+    __properties: ClassVar[List[str]] = ["op", "path", "value"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -56,7 +49,7 @@ class PermissionsSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of PermissionsSchema from a JSON string"""
+        """Create an instance of UniversalSchemaPatchSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -77,16 +70,16 @@ class PermissionsSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if role (nullable) is None
+        # set to None if value (nullable) is None
         # and model_fields_set contains the field
-        if self.role is None and "role" in self.model_fields_set:
-            _dict['role'] = None
+        if self.value is None and "value" in self.model_fields_set:
+            _dict['value'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of PermissionsSchema from a dict"""
+        """Create an instance of UniversalSchemaPatchSchema from a dict"""
         if obj is None:
             return None
 
@@ -94,16 +87,9 @@ class PermissionsSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "role": obj.get("role"),
-            "can_view": obj.get("can_view"),
-            "can_write": obj.get("can_write"),
-            "can_admin": obj.get("can_admin"),
-            "can_delete": obj.get("can_delete"),
-            "can_create_environment": obj.get("can_create_environment") if obj.get("can_create_environment") is not None else False,
-            "can_rename_environment": obj.get("can_rename_environment") if obj.get("can_rename_environment") is not None else False,
-            "can_delete_environment": obj.get("can_delete_environment") if obj.get("can_delete_environment") is not None else False,
-            "can_create_twin": obj.get("can_create_twin") if obj.get("can_create_twin") is not None else False,
-            "can_delete_twin": obj.get("can_delete_twin") if obj.get("can_delete_twin") is not None else False
+            "op": obj.get("op"),
+            "path": obj.get("path"),
+            "value": obj.get("value")
         })
         return _obj
 

@@ -87,6 +87,7 @@ from cyberwave.rest.models.edge_device_schema import EdgeDeviceSchema
 from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest
+from cyberwave.rest.models.end_session_response_schema import EndSessionResponseSchema
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema
 from cyberwave.rest.models.environment_schema import EnvironmentSchema
 from cyberwave.rest.models.environment_snapshot_create_schema import EnvironmentSnapshotCreateSchema
@@ -112,6 +113,8 @@ from cyberwave.rest.models.keybinding_schema import KeybindingSchema
 from cyberwave.rest.models.keybinding_update_schema import KeybindingUpdateSchema
 from cyberwave.rest.models.llm_generation_schema import LLMGenerationSchema
 from cyberwave.rest.models.llm_response_schema import LLMResponseSchema
+from cyberwave.rest.models.lab_access_response_schema import LabAccessResponseSchema
+from cyberwave.rest.models.lab_status_response_schema import LabStatusResponseSchema
 from cyberwave.rest.models.link_share_create_schema import LinkShareCreateSchema
 from cyberwave.rest.models.link_share_revoke_schema import LinkShareRevokeSchema
 from cyberwave.rest.models.link_share_schema import LinkShareSchema
@@ -134,6 +137,8 @@ from cyberwave.rest.models.motion_plan_step_schema import MotionPlanStepSchema
 from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponseSchema
 from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema
+from cyberwave.rest.models.occupancy_map_create_schema import OccupancyMapCreateSchema
+from cyberwave.rest.models.onboarding_completion_schema import OnboardingCompletionSchema
 from cyberwave.rest.models.opportunity_create_schema import OpportunityCreateSchema
 from cyberwave.rest.models.opportunity_schema import OpportunitySchema
 from cyberwave.rest.models.opportunity_update_schema import OpportunityUpdateSchema
@@ -163,6 +168,7 @@ from cyberwave.rest.models.public_user_schema import PublicUserSchema
 from cyberwave.rest.models.recording_generation_request_schema import RecordingGenerationRequestSchema
 from cyberwave.rest.models.recording_generation_request_schema_by_date import RecordingGenerationRequestSchemaByDate
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema
+from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse
 from cyberwave.rest.models.response import Response
 from cyberwave.rest.models.revoke_user_feature_request import RevokeUserFeatureRequest
@@ -186,6 +192,8 @@ from cyberwave.rest.models.twin_action_status_schema import TwinActionStatusSche
 from cyberwave.rest.models.twin_binding_schema import TwinBindingSchema
 from cyberwave.rest.models.twin_connection_event_schema import TwinConnectionEventSchema
 from cyberwave.rest.models.twin_create_schema import TwinCreateSchema
+from cyberwave.rest.models.twin_driver_log_schema import TwinDriverLogSchema
+from cyberwave.rest.models.twin_driver_logs_response_schema import TwinDriverLogsResponseSchema
 from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
 from cyberwave.rest.models.twin_metrics_query_schema import TwinMetricsQuerySchema
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema
@@ -194,8 +202,10 @@ from cyberwave.rest.models.twin_relationship_schema import TwinRelationshipSchem
 from cyberwave.rest.models.twin_schema import TwinSchema
 from cyberwave.rest.models.twin_state_update_schema import TwinStateUpdateSchema
 from cyberwave.rest.models.twin_telemetry_metadata_schema import TwinTelemetryMetadataSchema
+from cyberwave.rest.models.twin_universal_schema_patch_schema import TwinUniversalSchemaPatchSchema
 from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSchema
 from cyberwave.rest.models.urdf_project_schema import URDFProjectSchema
+from cyberwave.rest.models.universal_schema_patch_schema import UniversalSchemaPatchSchema
 from cyberwave.rest.models.update_alert_schema import UpdateAlertSchema
 from cyberwave.rest.models.update_edge_device_schema import UpdateEdgeDeviceSchema
 from cyberwave.rest.models.update_member_role_request import UpdateMemberRoleRequest

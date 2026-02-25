@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from .motion import TwinMotionHandle, TwinNavigationHandle
     from .keyboard import KeyboardTeleop
     from .alerts import TwinAlertManager
-    from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
+    from cyberwave.rest.models.twin_joint_calibration_schema import (
+        TwinJointCalibrationSchema,
+    )
 
 from .exceptions import CyberwaveError
 
@@ -677,45 +679,47 @@ class Twin:
 
     def get_schema(self, path: str = "") -> Any:
         """Get value at a specific JSON Pointer path in the twin's universal schema.
-        
+
         Args:
             path: JSON Pointer path (e.g., "/sensors/0", "/extensions/cyberwave/capabilities")
                  Empty string returns the entire schema
-            
+
         Returns:
             The value at the specified path (can be dict, list, string, etc.)
-            
+
         Example:
             # Get entire schema
             schema = twin.get_schema()
-            
+
             # Get specific path
             sensor = twin.get_schema("/sensors/0")
-            
+
             # Get capabilities
             capabilities = twin.get_schema("/extensions/cyberwave/capabilities")
         """
         result = self.client.twins.get_universal_schema_at_path(self.uuid, path)
         return result.get("value")
 
-    def update_schema(self, path: str, value: Any, op: str = "replace") -> Dict[str, Any]:
+    def update_schema(
+        self, path: str, value: Any, op: str = "replace"
+    ) -> Dict[str, Any]:
         """Update the twin's universal schema using JSON Pointer operations.
-        
+
         Args:
             path: JSON Pointer path to update (e.g., "/sensors/0/parameters/id")
             value: Value to set at the path
             op: Operation type - "add" or "replace" (default: "replace")
-            
+
         Returns:
             Dict with the updated schema and operation details
-            
+
         Example:
             # Update a sensor ID
             twin.update_schema(
                 path="/sensors/0/parameters/id",
                 value="my_camera"
             )
-            
+
             # Add a new capability
             twin.update_schema(
                 path="/extensions/cyberwave/capabilities/can_fly",
@@ -723,11 +727,11 @@ class Twin:
                 op="add"
             )
         """
-        return self.client.twins.patch_universal_schema(
-            self.uuid, path, value, op
-        )
+        return self.client.twins.patch_universal_schema(self.uuid, path, value, op)
 
-    def get_calibration(self, robot_type: Optional[str] = None) -> "TwinJointCalibrationSchema":
+    def get_calibration(
+        self, robot_type: Optional[str] = None
+    ) -> "TwinJointCalibrationSchema":
         """
         Get calibration data for this twin.
 
@@ -782,6 +786,7 @@ class Twin:
             self.uuid, joint_calibration, robot_type
         )
 
+
 class CameraTwin(Twin):
     """
     Twin with camera/sensor capabilities.
@@ -803,18 +808,20 @@ class CameraTwin(Twin):
             raise CyberwaveError("Camera streamer not initialized")
         return self._camera_streamer
 
-    async def stream_video_background(
-        self, fps: int = 30, camera_id: int | str = 0
+    async def start_streaming(
+        self, fps: int = 30, camera_id: int | str = 0, fourcc: Optional[str] = None
     ) -> "CameraStreamer":
         """
         Start video streaming in the background. Non-blocking.
 
         Returns immediately with the streamer so you can run other code.
-        Use stream_video() for simple blocking scripts.
+        Use start_streaming() for simple blocking scripts.
 
         Args:
             fps: Frames per second (default: 30)
             camera_id: Camera device ID or stream URL (default: 0)
+            fourcc: Optional FOURCC code for V4L2/USB cameras (e.g. ``'MJPG'``).
+                Forces the pixel format before resolution is negotiated.
 
         Returns:
             CameraStreamer instance for managing the stream
@@ -823,6 +830,7 @@ class CameraTwin(Twin):
             twin_uuid=self.uuid,
             camera_id=camera_id,
             fps=fps,
+            fourcc=fourcc,
         )
         await self._camera_streamer.start()
         return self._camera_streamer
@@ -834,13 +842,11 @@ class CameraTwin(Twin):
             await self._camera_streamer.stop()
             self._camera_streamer = None
 
-    def stream_video(
-        self, fps: int = 30, camera_id: int | str = 0
-    ) -> None:
+    def start_streaming(self, fps: int = 30, camera_id: int | str = 0) -> None:
         """Stream video until Ctrl+C. Blocking.
 
         Starts video streaming and blocks until KeyboardInterrupt (Ctrl+C).
-        Ideal for 2-line scripts: twin = cw.twin(...); twin.stream_video()
+        Ideal for 2-line scripts: twin = cw.twin(...); twin.start_streaming()
 
         Args:
             fps: Frames per second (default: 30)
@@ -925,7 +931,7 @@ class DepthCameraTwin(CameraTwin):
         Start video streaming in the background. Non-blocking.
 
         Returns immediately with the streamer so you can run other code.
-        Use stream_video() for simple blocking scripts.
+        Use start_streaming() for simple blocking scripts.
 
         Args:
             fps: Frames per second (default: 10)
@@ -943,13 +949,11 @@ class DepthCameraTwin(CameraTwin):
         await self._camera_streamer.start()
         return self._camera_streamer
 
-    def stream_video(
-        self, fps: int = 10, camera_id: int | str = 0
-    ) -> None:
+    def start_streaming(self, fps: int = 10, camera_id: int | str = 0) -> None:
         """Stream video until Ctrl+C. Blocking.
 
         Starts video streaming and blocks until KeyboardInterrupt (Ctrl+C).
-        Ideal for 2-line scripts: twin = cw.twin(...); twin.stream_video()
+        Ideal for 2-line scripts: twin = cw.twin(...); twin.start_streaming()
 
         Args:
             fps: Frames per second (default: 10)
@@ -1055,25 +1059,25 @@ class LocomoteTwin(Twin):
         # Get current position and rotation
         current_pos = self._get_current_position()
         current_rot = self._get_current_rotation()
-        
+
         # Extract quaternion components
         w = current_rot["w"]
         x = current_rot["x"]
         y = current_rot["y"]
         z = current_rot["z"]
-        
+
         # Transform the forward vector [1, 0, 0] by the quaternion
         # Using quaternion rotation formula: v' = q * v * q^(-1)
         # For forward vector [1, 0, 0], this gives us:
-        forward_x = 1 - 2 * (y*y + z*z)
-        forward_y = 2 * (x*y + w*z)
-        forward_z = 2 * (x*z - w*y)
-        
+        forward_x = 1 - 2 * (y * y + z * z)
+        forward_y = 2 * (x * y + w * z)
+        forward_z = 2 * (x * z - w * y)
+
         # Calculate new position
         new_x = current_pos["x"] + forward_x * distance
         new_y = current_pos["y"] + forward_y * distance
         new_z = current_pos["z"] + forward_z * distance
-        
+
         # Update position via MQTT
         self._connect_to_mqtt_if_not_connected()
         self.client.mqtt.update_twin_position(

@@ -11,6 +11,7 @@ import threading
 import time
 import uuid
 import re
+import ssl
 from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
@@ -37,10 +38,12 @@ class CyberwaveMQTTClient:
     Args:
         mqtt_broker: MQTT broker hostname or IP address
         mqtt_port: MQTT broker port (default: 1883)
-        mqtt_username: MQTT username (default: "cyberwave")
-        mqtt_password: MQTT password (API token)
-        api_token: Cyberwave API token (used as MQTT password if mqtt_password not provided)
+        mqtt_username: MQTT username placeholder (default: "mqttcyb")
+        api_token: Cyberwave API token used for MQTT authN/authZ
+        mqtt_password: Deprecated alias for api_token
         client_id: Custom MQTT client ID (auto-generated if not provided)
+        use_tls: Enable TLS transport for MQTT
+        tls_ca_cert: Path to CA certificate bundle for broker verification
         topic_prefix: Prefix for MQTT topics (default: "")
         auto_connect: Automatically connect on initialization (default: True)
     """
@@ -50,23 +53,29 @@ class CyberwaveMQTTClient:
         mqtt_broker: str = "mqtt.cyberwave.com",
         mqtt_port: int = 1883,
         mqtt_username: str = "mqttcyb",
-        mqtt_password: str = "mqttcyb231",
         api_token: Optional[str] = None,
+        mqtt_password: Optional[str] = None,
         client_id: Optional[str] = None,
+        use_tls: bool = False,
+        tls_ca_cert: Optional[str] = None,
         topic_prefix: str = "",
         auto_connect: bool = False,
-        twin_uuids: List[str] = [],
+        twin_uuids: Optional[List[str]] = None,
         source_type: Optional[str] = SOURCE_TYPE_EDGE,
     ):
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
         self.mqtt_username = mqtt_username
 
-        # Use mqtt_password if provided, otherwise use api_token
-        self.mqtt_password = mqtt_password
+        # mqtt_password is a legacy alias kept for backwards compatibility.
+        self.api_token = api_token or mqtt_password
+        self.mqtt_password = self.api_token
 
-        if not self.mqtt_password:
-            raise ValueError("Either mqtt_password or api_token is required")
+        if not self.api_token:
+            raise ValueError(
+                "api_token is required for MQTT authentication. "
+                "Pass api_token (preferred) or mqtt_password (legacy alias)."
+            )
 
         # Topic prefix (empty by default, can be set for custom deployments)
         self.topic_prefix = topic_prefix
@@ -82,6 +91,14 @@ class CyberwaveMQTTClient:
         self.client.username_pw_set(
             username=self.mqtt_username, password=self.mqtt_password
         )
+        # Port 8883 is the conventional MQTT-over-TLS port.
+        self.use_tls = use_tls or self.mqtt_port == 8883
+        self.tls_ca_cert = tls_ca_cert
+        if self.use_tls:
+            self.client.tls_set(
+                ca_certs=tls_ca_cert,
+                cert_reqs=ssl.CERT_REQUIRED,
+            )
 
         # Connection state
         self.connected = False
@@ -110,7 +127,7 @@ class CyberwaveMQTTClient:
         if auto_connect:
             self.connect()
 
-        self.twin_uuids = twin_uuids
+        self.twin_uuids = twin_uuids or []
         self.twin_uuids_with_telemetry_start: List[str] = []
         self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
         self.source_type = source_type
@@ -302,6 +319,13 @@ class CyberwaveMQTTClient:
     def connect(self):
         """Connect to MQTT broker."""
         try:
+            logger.warning(
+                "MQTT connection settings: tls=%s, broker=%s, port=%s, custom_ca=%s",
+                self.use_tls,
+                self.mqtt_broker,
+                self.mqtt_port,
+                bool(self.tls_ca_cert),
+            )
             logger.debug(
                 f"Connecting to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}"
             )
