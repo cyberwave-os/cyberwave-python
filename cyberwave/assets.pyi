@@ -966,16 +966,6 @@ class CyberwavewarehouseTwin(Twin):
     """
     pass
 
-class OpenopenarmTwin(Twin):
-    """
-    Digital twin for OpenARM
-    Registry ID: open/openarm
-    """
-    @property
-    def joints(self) -> JointController:
-        """Controller for robot joints"""
-        ...
-
 class Upmir250Twin(Twin):
     """
     Digital twin for MiR250
@@ -998,6 +988,16 @@ class AgileXRoboticstracer20Twin(Twin):
         ...
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
+        ...
+
+class OpenopenarmTwin(Twin):
+    """
+    Digital twin for OpenArm
+    Registry ID: open/openarm
+    """
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
         ...
 
 # Asset registry mapping registry_id to Twin class
@@ -1083,7 +1083,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "agilox/agilox-ofl": AgiloxagiloxOflTwin,
     "otto-motors/otto-1500": OttoMotorsotto1500Twin,
     "cyberwave/warehouse": CyberwavewarehouseTwin,
-    "open/openarm": OpenopenarmTwin,
     "up/mir-250": Upmir250Twin,
     "agile-x-robotics/tracer-20": AgileXRoboticstracer20Twin,
+    "open/openarm": OpenopenarmTwin,
 }

@@ -2,6 +2,7 @@
 High-level Twin abstraction for intuitive digital twin control
 """
 
+import asyncio
 import json
 import math
 from pathlib import Path
@@ -643,6 +644,37 @@ class Twin:
     # Universal Schema APIs
     # =========================================================================
 
+    def get_controllable_joint_names(self) -> List[str]:
+        """
+        Get controllable joint names from the twin's universal schema.
+
+        Returns joint names for revolute, prismatic, and continuous joints,
+        sorted by name for consistent ordering (e.g. _1, _2, _3 for SO101).
+
+        Matches the logic used by the backend (get_controllable_joints) and
+        recording tasks. Use these names for joint updates and initial observations.
+
+        Returns:
+            List of joint names (e.g. ["_1", "_2", "_3", "_4", "_5", "_6"] for SO101)
+
+        Example:
+            >>> joint_names = twin.get_controllable_joint_names()
+            >>> twin.joints.set(joint_names[0], 0.5, degrees=False)
+        """
+        CONTROLLABLE_JOINT_TYPES = frozenset({"revolute", "prismatic", "continuous"})
+        schema = self.get_schema()
+        if not schema:
+            return []
+        joints = schema.get("joints", [])
+        controllable = [
+            j["name"]
+            for j in joints
+            if isinstance(j, dict)
+            and j.get("name")
+            and j.get("type") in CONTROLLABLE_JOINT_TYPES
+        ]
+        return sorted(controllable)
+
     def get_schema(self, path: str = "") -> Any:
         """Get value at a specific JSON Pointer path in the twin's universal schema.
         
@@ -771,14 +803,17 @@ class CameraTwin(Twin):
             raise CyberwaveError("Camera streamer not initialized")
         return self._camera_streamer
 
-    async def start_streaming(
+    async def stream_video_background(
         self, fps: int = 30, camera_id: int | str = 0
     ) -> "CameraStreamer":
         """
-        Start RGB camera streaming.
+        Start video streaming in the background. Non-blocking.
+
+        Returns immediately with the streamer so you can run other code.
+        Use stream_video() for simple blocking scripts.
 
         Args:
-            fps: Frames per second (default: 10)
+            fps: Frames per second (default: 30)
             camera_id: Camera device ID or stream URL (default: 0)
 
         Returns:
@@ -799,6 +834,47 @@ class CameraTwin(Twin):
             await self._camera_streamer.stop()
             self._camera_streamer = None
 
+    def stream_video(
+        self, fps: int = 30, camera_id: int | str = 0
+    ) -> None:
+        """Stream video until Ctrl+C. Blocking.
+
+        Starts video streaming and blocks until KeyboardInterrupt (Ctrl+C).
+        Ideal for 2-line scripts: twin = cw.twin(...); twin.stream_video()
+
+        Args:
+            fps: Frames per second (default: 30)
+            camera_id: Camera device ID or stream URL (default: 0)
+        """
+        self._camera_streamer = self.client.video_stream(
+            twin_uuid=self.uuid,
+            camera_id=camera_id,
+            fps=fps,
+        )
+
+        async def _run():
+            await self._camera_streamer.start()
+            try:
+                while True:
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                pass
+            finally:
+                await self._camera_streamer.stop()
+                self._camera_streamer = None
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if self._camera_streamer is not None:
+                try:
+                    asyncio.run(self._camera_streamer.stop())
+                except Exception:
+                    pass
+                self._camera_streamer = None
+
     def capture_frame(self) -> bytes:
         """
         Capture a single frame from the RGB camera.
@@ -810,7 +886,7 @@ class CameraTwin(Twin):
         """
         raise NotImplementedError(
             "capture_frame() requires an active stream. "
-            "Use start_streaming() first to begin capturing frames."
+            "Use stream_video_background() first to begin capturing frames."
         )
 
     def __repr__(self) -> str:
@@ -842,14 +918,18 @@ class DepthCameraTwin(CameraTwin):
             await self._camera_streamer.stop()
             self._camera_streamer = None
 
-    async def start_streaming(
+    async def stream_video_background(
         self, fps: int = 10, camera_id: int | str = 0
     ) -> "CameraStreamer":
         """
-        Start depth camera streaming.
+        Start video streaming in the background. Non-blocking.
+
+        Returns immediately with the streamer so you can run other code.
+        Use stream_video() for simple blocking scripts.
 
         Args:
             fps: Frames per second (default: 10)
+            camera_id: Camera device ID (default: 0)
 
         Returns:
             CameraStreamer instance for managing the stream
@@ -863,6 +943,48 @@ class DepthCameraTwin(CameraTwin):
         await self._camera_streamer.start()
         return self._camera_streamer
 
+    def stream_video(
+        self, fps: int = 10, camera_id: int | str = 0
+    ) -> None:
+        """Stream video until Ctrl+C. Blocking.
+
+        Starts video streaming and blocks until KeyboardInterrupt (Ctrl+C).
+        Ideal for 2-line scripts: twin = cw.twin(...); twin.stream_video()
+
+        Args:
+            fps: Frames per second (default: 10)
+            camera_id: Camera device ID (default: 0)
+        """
+        self._camera_streamer = self.client.video_stream(
+            twin_uuid=self.uuid,
+            camera_type="realsense",
+            camera_id=camera_id,
+            fps=fps,
+        )
+
+        async def _run():
+            await self._camera_streamer.start()
+            try:
+                while True:
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                pass
+            finally:
+                await self._camera_streamer.stop()
+                self._camera_streamer = None
+
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if self._camera_streamer is not None:
+                try:
+                    asyncio.run(self._camera_streamer.stop())
+                except Exception:
+                    pass
+                self._camera_streamer = None
+
     def capture_depth_frame(self) -> bytes:
         """
         Capture a single depth frame.
@@ -872,7 +994,7 @@ class DepthCameraTwin(CameraTwin):
         """
         raise NotImplementedError(
             "capture_depth_frame() requires an active depth stream. "
-            "Use start_depth_streaming() first."
+            "Use stream_video_background() first."
         )
 
     def get_point_cloud(self) -> List[tuple]:

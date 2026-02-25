@@ -145,6 +145,11 @@ class Resolution(Enum):
         return min(cls, key=lambda r: abs(r.pixel_count - target_pixels))
 
 
+# =============================================================================
+# Basic Camera Config
+# =============================================================================
+
+
 @dataclass
 class CameraConfig:
     """Basic configuration for camera capture settings.
@@ -156,11 +161,14 @@ class CameraConfig:
         resolution: Video resolution (default: VGA 640x480)
         fps: Frames per second (default: 30)
         camera_id: Camera device ID (default: 0)
+        fourcc: Optional FOURCC for USB cameras (e.g. 'MJPG'). Set in setup
+            for known cameras (e.g. SO101 wrist camera); otherwise OpenCV uses default.
     """
 
     resolution: Resolution = Resolution.VGA
     fps: int = 30
     camera_id: int = 0
+    fourcc: Optional[str] = None
 
     @property
     def width(self) -> int:
@@ -220,6 +228,7 @@ class EdgeCameraConfig:
     resolution: Resolution = Resolution.VGA
     fps: int = 30
     enabled: bool = True
+    fourcc: Optional[str] = None  # FOURCC for USB cameras (e.g. 'MJPG', 'YUYV')
 
     # Twin association (for multi-camera setups)
     twin_uuid: Optional[str] = None
@@ -295,6 +304,8 @@ class EdgeCameraConfig:
 
         if self.keyframe_interval:
             kwargs["keyframe_interval"] = self.keyframe_interval
+        if self.fourcc:
+            kwargs["fourcc"] = self.fourcc
 
         if self.is_realsense:
             kwargs["enable_depth"] = self.enable_depth
@@ -400,6 +411,7 @@ class EdgeCameraConfig:
             resolution=resolution,
             fps=data.get("fps", 30),
             enabled=data.get("enabled", True),
+            fourcc=data.get("fourcc"),
             twin_uuid=data.get("twin_uuid"),
             username=data.get("username"),
             password=data.get("password"),

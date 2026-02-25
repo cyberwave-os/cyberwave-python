@@ -3,7 +3,7 @@ UR7 Santa's Little Helper - MQTT coordinated multi-joint control example
 
 Configuration:
     Required: CYBERWAVE_TWIN_UUID
-    Optional: CYBERWAVE_TOKEN, CYBERWAVE_API_KEY, CYBERWAVE_MQTT_HOST, CYBERWAVE_MQTT_PORT
+    Optional: CYBERWAVE_API_KEY, CYBERWAVE_MQTT_HOST, CYBERWAVE_MQTT_PORT
     
     Set via .env file in SDK root or export as environment variables.
 """
@@ -325,8 +325,7 @@ def main():
     print("=" * 60)
     print()
     
-    api_key = os.getenv("CYBERWAVE_API_KEY")
-    token = os.getenv("CYBERWAVE_TOKEN")
+    token = os.getenv("CYBERWAVE_API_KEY")
     mqtt_host = os.getenv("CYBERWAVE_MQTT_HOST", "mqtt.cyberwave.com")
     mqtt_port = int(os.getenv("CYBERWAVE_MQTT_PORT", "1883"))
     twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
@@ -336,7 +335,7 @@ def main():
         return
     
     if not token:
-        print("WARNING: CYBERWAVE_TOKEN not set")
+        print("WARNING: CYBERWAVE_API_KEY not set")
     
     print(f"MQTT: {mqtt_host}:{mqtt_port}")
     print(f"Twin: {twin_uuid}")
@@ -344,7 +343,6 @@ def main():
     print()
     
     client = Cyberwave(
-        api_key=api_key,
         token=token,
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,

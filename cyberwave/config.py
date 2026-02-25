@@ -53,8 +53,7 @@ class CyberwaveConfig:
     def __post_init__(self):
         """Load configuration from environment variables if not provided"""
         if not self.api_key and not self.token:
-            self.api_key = os.getenv("CYBERWAVE_API_KEY")
-            self.token = os.getenv("CYBERWAVE_TOKEN")
+            self.token = os.getenv("CYBERWAVE_API_KEY")
 
         if self.base_url == DEFAULT_BASE_URL:
             self.base_url = os.getenv("CYBERWAVE_BASE_URL", DEFAULT_BASE_URL)

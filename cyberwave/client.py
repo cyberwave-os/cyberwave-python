@@ -87,15 +87,10 @@ class Cyberwave:
             base_url = os.getenv("CYBERWAVE_BASE_URL", DEFAULT_BASE_URL)
 
         if token is None:
-            token = os.getenv("CYBERWAVE_TOKEN", None)
-
-        if api_key is None:
-            api_key = os.getenv("CYBERWAVE_API_KEY", None)
+            token = os.getenv("CYBERWAVE_API_KEY", None)
 
         if api_key is None and token is None:
-            raise ValueError(
-                "No CYBERWAVE_API_KEY found! Get yours at https://cyberwave.com/profile"
-            )
+            raise ValueError("No CYBERWAVE_API_KEY found! Get yours at https://cyberwave.com/profile")
 
         self.config = CyberwaveConfig(
             base_url=base_url,
@@ -203,7 +198,7 @@ class Cyberwave:
 
                 error_msg += "  1. Add a token at https://cyberwave.com/profile\n"
                 error_msg += "  2. Copy it to your clipboard\n"
-                error_msg += "  3. Set the environment variable:\n\nexport CYBERWAVE_TOKEN=your_token\n"
+                error_msg += "  3. Set the environment variable:\n\nexport CYBERWAVE_API_KEY=your_token\n"
                 error_msg += "  4. Run your script again!\n"
 
                 if hasattr(e, "request_headers") and e.request_headers:
@@ -393,6 +388,7 @@ class Cyberwave:
         time_reference: Optional[TimeReference] = None,
         keyframe_interval: Optional[int] = None,
         frame_callback: Optional[callable] = None,
+        camera_name: Optional[str] = None,
     ):
         """
         Create a camera streamer for the specified twin.
@@ -424,6 +420,7 @@ class Cyberwave:
                 Recommended: fps * 2 (e.g., 60 for 30fps = keyframe every 2 seconds)
             frame_callback: Optional callback for each frame (ML inference, etc.).
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
+            camera_name: Optional sensor identifier for multi-stream twins.
 
         Returns:
             Camera streamer instance (CV2CameraStreamer or RealSenseStreamer)
@@ -496,6 +493,7 @@ class Cyberwave:
                 time_reference=time_reference,
                 keyframe_interval=keyframe_interval,
                 frame_callback=frame_callback,
+                camera_name=camera_name,
             )
         elif camera_type_lower == "realsense":
             if not _has_realsense:
@@ -526,6 +524,7 @@ class Cyberwave:
                     turn_servers=turn_servers,
                     twin_uuid=twin_uuid,
                     time_reference=time_reference,
+                    camera_name=camera_name,
                 )
             else:
                 return RealSenseStreamer(
@@ -538,6 +537,7 @@ class Cyberwave:
                     turn_servers=turn_servers,
                     twin_uuid=twin_uuid,
                     time_reference=time_reference,
+                    camera_name=camera_name,
                 )
         else:
             raise CyberwaveError(

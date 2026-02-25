@@ -15,7 +15,7 @@ class EdgeNodeConfig:
     This configuration can be loaded from environment variables or passed directly.
 
     Environment Variables:
-        CYBERWAVE_TOKEN: API token for authentication
+        CYBERWAVE_API_KEY: API token for authentication
         CYBERWAVE_BASE_URL: Base URL of the Cyberwave backend
         MQTT_HOST: MQTT broker hostname
         MQTT_PORT: MQTT broker port
@@ -30,7 +30,7 @@ class EdgeNodeConfig:
 
     # Cyberwave connection
     cyberwave_token: Optional[str] = field(
-        default_factory=lambda: os.getenv("CYBERWAVE_TOKEN")
+        default_factory=lambda: os.getenv("CYBERWAVE_API_KEY")
     )
     cyberwave_base_url: str = field(
         default_factory=lambda: os.getenv(
@@ -91,7 +91,7 @@ class EdgeNodeConfig:
         """
         if not self.cyberwave_token:
             raise ValueError(
-                "CYBERWAVE_TOKEN is required. "
+                "CYBERWAVE_API_KEY is required. "
                 "Get yours at https://cyberwave.com/profile"
             )
         if not self.edge_uuid:

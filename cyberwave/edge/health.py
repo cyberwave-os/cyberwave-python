@@ -1,6 +1,5 @@
 """Lightweight health check for edge data streaming."""
 
-import json
 import logging
 import threading
 import time
@@ -134,19 +133,19 @@ class EdgeHealthCheck:
                 }
                 
                 # Publish to each twin UUID
-                prefix = getattr(self.mqtt_client, "topic_prefix", "")
+                prefix = getattr(self.mqtt_client, "topic_prefix", None) or ""
                 for twin_uuid in self.twin_uuids:
                     if not twin_uuid:
                         continue
-                    
-                    payload = dict(base_payload, twin_uuid=twin_uuid)
-                    topic = f"{prefix}cyberwave/twin/{twin_uuid}/edge_health"
+                    twin_uuid_str = str(twin_uuid)
+                    payload = dict(base_payload, twin_uuid=twin_uuid_str)
+                    topic = f"{prefix}cyberwave/twin/{twin_uuid_str}/edge_health"
                     
                     try:
-                        self.mqtt_client.publish(topic, json.dumps(payload))
+                        # Pass dict so MQTT client can add session_id (matches other messages)
+                        self.mqtt_client.publish(topic, payload, qos=0)
                     except Exception as e:
-                        # Silently ignore publish errors to avoid spam
-                        pass
+                        logger.debug("Edge health publish failed: %s", e)
             
             except Exception as e:
                 logger.warning(f"⚠️ Health publish error: {e}")

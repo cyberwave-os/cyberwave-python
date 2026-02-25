@@ -1,33 +1,15 @@
 """
 Depth Camera Streaming Example
 
-Stream camera feed to a digital twin. Press Ctrl+C to stop.
+Stream RealSense camera feed to a digital twin. Press Ctrl+C to stop.
 
 Requirements:
-    pip install cyberwave[camera]
+    pip install cyberwave[realsense]
 """
 
-import asyncio
 import os
 from cyberwave import Cyberwave
 
-
-async def main():
-    cw = Cyberwave(token=os.getenv("CYBERWAVE_TOKEN"))
-    camera = cw.twin("intel/realsensed455")
-
-    try:
-        print(f"Streaming to twin {camera.uuid}... (Ctrl+C to stop)")
-        await camera.start_streaming()
-
-        while True:
-            await asyncio.sleep(1)
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        print("\nStopping...")
-    finally:
-        await camera.stop_streaming()
-        cw.disconnect()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+cw = Cyberwave(token=os.getenv("CYBERWAVE_API_KEY"))
+camera = cw.twin("intel/realsensed455")
+camera.stream_video()

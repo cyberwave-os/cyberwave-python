@@ -64,7 +64,7 @@ cw = Cyberwave(
     token="your_token_here"
 )
 
-# You can also set your token as an environment variable: export CYBERWAVE_TOKEN=your_token_here
+# You can also set your token as an environment variable: export CYBERWAVE_API_KEY=your_token_here
 # in that case, you can simply do:
 cw = Cyberwave()
 
@@ -115,7 +115,7 @@ If you are always using the same environment, you can set it as a default with t
 
 ```bash
 export CYBERWAVE_ENVIRONMENT_ID="YOUR_ENVIRONMENT_ID"
-export CYBERWAVE_TOKEN="YOUR_TOKEN"
+export CYBERWAVE_API_KEY="YOUR_TOKEN"
 python your_script.py
 ```
 

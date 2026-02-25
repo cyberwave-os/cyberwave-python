@@ -153,8 +153,8 @@ class VirtualVideoTrack(BaseVideoTrack):
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, self.fps)
 
-        # Send sync frame via inherited method
-        self._send_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        # Capture sync frame data for MQTT camera_sync_frame message
+        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
         self.frame_count += 1
 
         return video_frame
@@ -197,6 +197,8 @@ class VirtualCameraStreamer(BaseVideoStreamer):
         twin_uuid: Optional[str] = None,
         auto_reconnect: bool = True,
         placeholder_image: Optional[np.ndarray] = None,
+        camera_name: Optional[str] = None,
+        enable_health_check: bool = True,
     ) -> None:
         """Initialize virtual camera streamer.
 
@@ -208,22 +210,18 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             fps: Target frames per second (default: 15)
             time_reference: Time reference for synchronization
             twin_uuid: UUID of the digital twin
-            turn_servers: Optional list of TURN server configurations
             auto_reconnect: Whether to automatically reconnect on disconnection
             placeholder_image: Optional placeholder image when get_frame returns None
+            camera_name: Optional sensor identifier for multi-stream twins
+            enable_health_check: Whether to enable automatic health check reporting
         """
         super().__init__(
             client=client,
-            turn_servers=[
-                {
-                    "urls": "turn:turn.cyberwave.com:3478",
-                    "username": "cyberwave-user",
-                    "credential": "cyberwave-admin",
-                    }
-            ],
             twin_uuid=twin_uuid,
             time_reference=time_reference,
             auto_reconnect=auto_reconnect,
+            camera_name=camera_name,
+            enable_health_check=enable_health_check,
         )
 
         # Store virtual camera-specific parameters

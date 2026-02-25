@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from aiortc import (
     RTCConfiguration,
-    RTCDataChannel,
     RTCIceServer,
     RTCPeerConnection,
     RTCSessionDescription,
@@ -68,60 +67,23 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
     @abc.abstractmethod
     def __init__(self):
         super().__init__()
-        self.data_channel: Optional[RTCDataChannel] = None
-        self.should_sync: bool = True
         self.frame_count: int = 0
         self.frame_0_timestamp: Optional[float] = None
         self.frame_0_timestamp_monotonic: Optional[float] = None
-        self.channel_queue: list[dict[str, Any]] = []
         # Sync frame data captured at the exact moment the sync frame is produced
         self.sync_frame_target: int = 30  # Frame number to capture sync data for
         self.sync_frame_pts: Optional[int] = None
         self.sync_frame_timestamp: Optional[float] = None
         self.sync_frame_timestamp_monotonic: Optional[float] = None
 
-    def set_data_channel(self, data_channel: RTCDataChannel):
-        """Set the data channel for sending metadata."""
-        self.data_channel = data_channel
+    def _capture_sync_frame(
+        self, timestamp: float, timestamp_monotonic: float, pts: int
+    ):
+        """Capture sync frame data at the exact moment of frame capture.
 
-    def set_should_sync(self, should_sync: bool):
-        """Set whether to sync frames."""
-        self.should_sync = should_sync
-
-    def _queue_sync_frame(self, timestamp: float, timestamp_monotonic: float, pts: int):
-        """Queue a sync frame to be sent later."""
-        self.channel_queue.append(
-            {
-                "timestamp": timestamp,
-                "timestamp_monotonic": timestamp_monotonic,
-                "pts": pts,
-                "track_id": self.id,
-                "type": "sync_frame",
-            }
-        )
-
-    def _send_sync_frame(self, timestamp: float, timestamp_monotonic: float, pts: int):
-        """Send a sync frame to the data channel."""
-        if self.data_channel and self.should_sync:
-            if len(self.channel_queue) > 0:
-                self.data_channel.send(json.dumps(self.channel_queue[0]))
-                self.channel_queue = []
-            self.data_channel.send(
-                json.dumps(
-                    {
-                        "type": "sync_frame",
-                        "read_timestamp": timestamp,
-                        "read_timestamp_monotonic": timestamp_monotonic,
-                        "pts": pts,
-                        "track_id": self.id,
-                    }
-                )
-            )
-        else:
-            self._queue_sync_frame(timestamp, timestamp_monotonic, pts)
-
-        # Capture sync frame data at the exact moment of frame capture
-        # This is used for the MQTT camera_sync_frame message
+        This is used for the MQTT camera_sync_frame message which provides
+        the anchor point for video/robot synchronization.
+        """
         if pts == self.sync_frame_target and self.sync_frame_pts is None:
             self.sync_frame_pts = pts
             self.sync_frame_timestamp = timestamp
@@ -165,6 +127,7 @@ class BaseVideoStreamer(abc.ABC):
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
         enable_health_check: bool = True,
+        camera_name: Optional[str] = None,
     ):
         """Initialize the video streamer.
 
@@ -175,19 +138,24 @@ class BaseVideoStreamer(abc.ABC):
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
             enable_health_check: Whether to enable automatic health check reporting (default: True)
+            camera_name: Optional sensor/camera identifier. When a twin has multiple sensors
+                (e.g. from capabilities.sensors), each stream uses a distinct camera_name.
+                Included in WebRTC offer/datachannel/camera_sync payloads for backend routing.
         """
         self.client = client
         self.twin_uuid: Optional[str] = twin_uuid
+        self.camera_name: Optional[str] = camera_name
         self.auto_reconnect = auto_reconnect
         # Use explicit None check so empty list [] disables TURN servers
-        self.turn_servers = turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
+        self.turn_servers = (
+            turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
+        )
         self.time_reference = time_reference
         self.enable_health_check = enable_health_check
 
         # WebRTC state
         self.pc: Optional[RTCPeerConnection] = None
         self.streamer: Optional[BaseVideoTrack] = None
-        self.channel: Optional[RTCDataChannel] = None
 
         # Answer handling state
         self._answer_received = False
@@ -224,17 +192,20 @@ class BaseVideoStreamer(abc.ABC):
         self, pts: int, timestamp: float, timestamp_monotonic: float
     ):
         """Publish a camera sync frame via MQTT.
-        
+
         This sync frame is sent after ~1 second of streaming when the connection
         has stabilized. It provides an anchor point for video/robot synchronization:
         - pts: The edge frame counter at this sync point
         - timestamp: Wall-clock time when this frame was captured
-        
+
         During recording processing, the video is trimmed to start at this sync frame,
         and the timestamp becomes the video's start time. No interpolation needed.
         """
         prefix = self.client.topic_prefix
         topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/telemetry"
+        # Always include sensor - same as webrtc-offer for consistency
+        sensor = self.camera_name if self.camera_name is not None else "default"
+
         payload = {
             "type": "camera_sync_frame",
             "sender": "edge",
@@ -242,6 +213,8 @@ class BaseVideoStreamer(abc.ABC):
             "timestamp": timestamp,
             "timestamp_monotonic": timestamp_monotonic,
             "track_id": self.streamer.id if self.streamer else None,
+            "twin_uuid": self.twin_uuid,
+            "sensor": sensor,
         }
         self._publish_message(topic, payload)
         logger.info(
@@ -252,12 +225,12 @@ class BaseVideoStreamer(abc.ABC):
         self, sync_frame: int = 30, timeout: float = 10.0
     ):
         """Wait for the sync frame to be captured and publish it via MQTT.
-        
+
         Args:
             sync_frame: Frame number to use as sync point (default: 30 = ~1sec at 30fps)
             timeout: Maximum time to wait for the sync frame
-        
-        The sync frame data (pts + timestamp) is captured at the exact moment 
+
+        The sync frame data (pts + timestamp) is captured at the exact moment
         the frame is produced in the camera track's recv() method. This ensures
         the timestamp precisely matches when the frame was captured, providing
         accurate video/robot synchronization.
@@ -265,9 +238,9 @@ class BaseVideoStreamer(abc.ABC):
         # Set the target sync frame on the streamer
         if self.streamer:
             self.streamer.sync_frame_target = sync_frame
-        
+
         start_time = time.time()
-        
+
         # Wait until the sync frame data has been captured
         while self.streamer and self.streamer.sync_frame_pts is None:
             if time.time() - start_time > timeout:
@@ -283,7 +256,7 @@ class BaseVideoStreamer(abc.ABC):
             pts = self.streamer.sync_frame_pts
             timestamp = self.streamer.sync_frame_timestamp
             timestamp_monotonic = self.streamer.sync_frame_timestamp_monotonic
-            
+
             if timestamp is not None:
                 self._publish_camera_sync_frame(
                     pts, timestamp, timestamp_monotonic or 0.0
@@ -317,24 +290,21 @@ class BaseVideoStreamer(abc.ABC):
 
         logger.debug("WebRTC connection established")
         asyncio.create_task(self._wait_and_publish_camera_sync_frame())
-        
+
         # Start health check if enabled
         if self.enable_health_check:
             self._start_health_check()
 
     async def stop(self):
-        """Stop streaming and cleanup resources."""
+        """Stop streaming and cleanup resources.
+
+        IMPORTANT: Close peer connection BEFORE stopping tracks. aiortc can segfault
+        if tracks are stopped before pc.close() (see aiortc/aiortc#283).
+        """
         # Stop health check
         self._stop_health_check()
-        
-        if self.streamer:
-            try:
-                self.streamer.close()
-                await asyncio.sleep(0.5)
-            except Exception as e:
-                logger.error(f"Error closing streamer: {e}")
-            finally:
-                self.streamer = None
+
+        # Close peer connection first, then tracks (aiortc requires this order)
         if self.pc:
             try:
                 await self.pc.close()
@@ -343,6 +313,14 @@ class BaseVideoStreamer(abc.ABC):
                 logger.error(f"Error closing peer connection: {e}")
             finally:
                 self.pc = None
+        if self.streamer:
+            try:
+                self.streamer.close()
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.error(f"Error closing streamer: {e}")
+            finally:
+                self.streamer = None
         self._reset_state()
         logger.info("Camera streaming stopped")
 
@@ -352,6 +330,9 @@ class BaseVideoStreamer(abc.ABC):
         command_callback: Optional[Callable] = None,
     ):
         """Run camera streaming with automatic reconnection and MQTT command handling.
+
+        Auto-starts the stream immediately so the camera is ready when the frontend
+        connects. Also responds to start_video/stop_video commands for manual control.
 
         Args:
             stop_event: Optional asyncio.Event to signal when to stop
@@ -365,6 +346,26 @@ class BaseVideoStreamer(abc.ABC):
         stop = stop_event or asyncio.Event()
 
         self._subscribe_to_commands(command_callback)
+
+        # Auto-start stream so camera is ready when frontend connects
+        if self.pc is None:
+            try:
+                if command_callback:
+                    try:
+                        command_callback("connecting", "Starting camera stream")
+                    except TypeError:
+                        pass
+                await self.start()
+                self._should_reconnect = self.auto_reconnect
+                if command_callback:
+                    command_callback("ok", "Camera streaming started")
+            except Exception as e:
+                logger.error(f"Auto-start camera stream failed: {e}", exc_info=True)
+                if command_callback:
+                    try:
+                        command_callback("error", str(e))
+                    except TypeError:
+                        pass
 
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
@@ -387,12 +388,7 @@ class BaseVideoStreamer(abc.ABC):
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
 
         self._setup_pc_handlers()
-
-        self.channel = self.pc.createDataChannel("track_info", negotiated=True, id=1)
-        logger.info(f"Data channel created: {self.channel}, id={self.channel.id}")
         self.pc.addTrack(self.streamer)
-
-        self._setup_channel_handlers()
 
     def _setup_pc_handlers(self):
         """Set up peer connection event handlers."""
@@ -406,36 +402,6 @@ class BaseVideoStreamer(abc.ABC):
         def on_iceconnectionstatechange():
             state = self.pc.iceConnectionState
             logger.info(f"WebRTC ICE connection state changed: {state}")
-
-    def _setup_channel_handlers(self):
-        """Set up data channel event handlers."""
-        color_track = self.streamer
-
-        @self.channel.on("open")
-        def on_open():
-            self.streamer.set_data_channel(self.channel)
-            msg = {"type": "track_info", "color_track_id": color_track.id}
-            logger.info(f"Data channel opened, sending track info: {msg}")
-            self.channel.send(json.dumps(msg))
-
-        @self.channel.on("message")
-        def on_message(msg):
-            logger.info(f"Received message: {msg}")
-            parsed = json.loads(msg)
-
-            if self.channel.readyState != "open":
-                return
-
-            if parsed["type"] == "ping":
-                self.channel.send(
-                    json.dumps({"type": "pong", "timestamp": time.time()})
-                )
-            elif parsed["type"] == "pong":
-                self.channel.send(
-                    json.dumps({"type": "ping", "timestamp": time.time()})
-                )
-            elif parsed["type"] == "sync_frame_command":
-                self.streamer.set_should_sync(True)
 
     # -------------------------------------------------------------------------
     # WebRTC Signaling
@@ -464,6 +430,9 @@ class BaseVideoStreamer(abc.ABC):
         if self.streamer:
             stream_attributes = self.streamer.get_stream_attributes()
 
+        # Always include sensor for consistency with sync frame and backend routing
+        sensor = self.camera_name if self.camera_name is not None else "default"
+
         offer_payload = {
             "target": "backend",
             "sender": "edge",
@@ -472,12 +441,11 @@ class BaseVideoStreamer(abc.ABC):
             "timestamp": time.time(),
             "recording": self._should_record,
             "stream_attributes": stream_attributes,
+            "sensor": sensor,
         }
 
         self._publish_message(offer_topic, offer_payload)
         logger.debug(f"WebRTC offer sent to {offer_topic}")
-
-        self._signal_datachannel_info()
 
     async def _wait_for_answer(self, timeout: float = 60.0):
         """Wait for WebRTC answer from backend."""
@@ -534,37 +502,6 @@ class BaseVideoStreamer(abc.ABC):
 
         return "\r\n".join(final_sdp_lines)
 
-    def _signal_datachannel_info(self):
-        """Signal DataChannel SCTP parameters to mediasoup via MQTT."""
-        if not self.channel or not self.twin_uuid:
-            return
-
-        stream_id = getattr(self.channel, "id", None)
-        ordered = getattr(self.channel, "ordered", True)
-
-        if stream_id is None:
-            logger.warning("DataChannel stream_id is None, using default of 1")
-            stream_id = 1
-
-        prefix = self.client.topic_prefix
-        topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/datachannel-info"
-
-        payload = {
-            "type": "datachannel_ready",
-            "sender": "edge",
-            "stream_id": stream_id,
-            "ordered": ordered,
-            "label": self.channel.label
-            if hasattr(self.channel, "label")
-            else "track_info",
-            "timestamp": time.time(),
-        }
-
-        self._publish_message(topic, payload)
-        logger.info(
-            f"Signaled DataChannel info to mediasoup: stream_id={stream_id}, ordered={ordered}"
-        )
-
     # -------------------------------------------------------------------------
     # MQTT Communication
     # -------------------------------------------------------------------------
@@ -589,9 +526,31 @@ class BaseVideoStreamer(abc.ABC):
                     return
                 elif payload.get("type") == "answer":
                     if payload.get("target") == "edge":
-                        logger.info("Processing answer targeted at edge")
-                        self._answer_data = payload
-                        self._answer_received = True
+                        # When multiple streams per twin, answer includes "sensor" (or "camera")
+                        # to target a specific stream. Accept only when sensor matches.
+                        answer_sensor = payload.get("sensor") or payload.get("camera")
+                        expected = (
+                            self.camera_name
+                            if self.camera_name is not None
+                            else "default"
+                        )
+                        if answer_sensor is None or answer_sensor == expected:
+                            # Accept answer if sensor matches OR if no sensor specified (backwards compat)
+                            logger.info(
+                                "Processing answer targeted at edge"
+                                + (
+                                    f" (sensor={expected}, answer_sensor={answer_sensor})"
+                                    if expected != "default"
+                                    else ""
+                                )
+                            )
+                            self._answer_data = payload
+                            self._answer_received = True
+                        else:
+                            logger.debug(
+                                f"Ignoring answer with mismatched sensor: "
+                                f"expected={expected}, got={answer_sensor}"
+                            )
                     else:
                         logger.debug("Skipping answer message not targeted at edge")
                 elif payload.get("type") == "candidate":
@@ -612,14 +571,15 @@ class BaseVideoStreamer(abc.ABC):
         """Handle incoming ICE candidate."""
         if not self.pc or not payload.get("candidate"):
             return
-        
+
         try:
             from aiortc import RTCIceCandidate
+
             cand_data = payload["candidate"]
             candidate = RTCIceCandidate(
                 candidate=cand_data["candidate"],
                 sdpMid=cand_data.get("sdpMid"),
-                sdpMLineIndex=cand_data.get("sdpMLineIndex")
+                sdpMLineIndex=cand_data.get("sdpMLineIndex"),
             )
             asyncio.create_task(self.pc.addIceCandidate(candidate))
             logger.info("Added remote ICE candidate")
@@ -932,6 +892,7 @@ from .config import (  # noqa: E402
 from .camera_cv2 import CV2VideoTrack, CV2CameraStreamer  # noqa: E402
 from .camera_rs import RealSenseVideoTrack, RealSenseStreamer  # noqa: E402
 from .camera_virtual import VirtualVideoTrack, VirtualCameraStreamer  # noqa: E402
+from .manager import CameraStreamManager  # noqa: E402
 
 __all__ = [
     # Base classes
@@ -960,6 +921,8 @@ __all__ = [
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",
+    # Manager
+    "CameraStreamManager",
     # Constants
     "DEFAULT_TURN_SERVERS",
 ]

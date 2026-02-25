@@ -73,6 +73,7 @@ class CV2VideoTrack(BaseVideoTrack):
         time_reference: Optional["TimeReference"] = None,
         keyframe_interval: Optional[int] = None,
         frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        fourcc: Optional[str] = None,
     ):
         """Initialize the CV2 video stream track.
 
@@ -90,12 +91,15 @@ class CV2VideoTrack(BaseVideoTrack):
             frame_callback: Optional callback called for each frame.
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
                 Called after frame normalization, before encoding.
+            fourcc: Optional FOURCC for USB cameras (e.g. 'MJPG'). Set in setup
+                for known cameras (e.g. SO101 wrist camera); otherwise OpenCV uses default.
         """
         super().__init__()
         self.camera_id = camera_id
         self.fps = fps
         self.time_reference = time_reference
         self.frame_callback = frame_callback
+        self.fourcc = fourcc
 
         # Keyframe interval: use provided value, env var, or None (disabled)
         self.keyframe_interval = (
@@ -128,7 +132,9 @@ class CV2VideoTrack(BaseVideoTrack):
         self._configure_camera()
 
         # Get actual values after configuration
-        self.actual_width, self.actual_height, self.actual_fps = self._get_actual_settings()
+        self.actual_width, self.actual_height, self.actual_fps = (
+            self._get_actual_settings()
+        )
 
         log_msg = (
             f"Initialized CV2 camera {camera_id}: "
@@ -222,6 +228,21 @@ class CV2VideoTrack(BaseVideoTrack):
 
     def _configure_camera(self):
         """Configure camera capture settings."""
+        # For local USB cameras, set FOURCC before resolution if specified.
+        # MJPG enables high FPS on many cameras; YUYV is common fallback.
+        # Skip for IP/RTSP streams (they use their own codec).
+        is_local_usb = not (
+            isinstance(self.camera_id, str)
+            and self.camera_id.startswith(("rtsp://", "http://", "https://"))
+        )
+        if self.fourcc and is_local_usb:
+            try:
+                fourcc_code = cv2.VideoWriter_fourcc(*self.fourcc[:4])
+                self.cap.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+                logger.debug("Set camera FOURCC to %s", self.fourcc)
+            except Exception as e:
+                logger.warning("Failed to set FOURCC %s: %s", self.fourcc, e)
+
         # Set resolution
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.requested_width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.requested_height)
@@ -230,11 +251,12 @@ class CV2VideoTrack(BaseVideoTrack):
         # Enable RGB conversion
         self.cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
 
-        # For RTSP/HTTP streams, minimize buffer to reduce latency
-        if isinstance(self.camera_id, str) and self.camera_id.startswith(
-            ("rtsp://", "http://", "https://")
-        ):
+        # Minimize buffer to reduce latency (V4L2/USB cameras queue 4-5 frames by default)
+        # RTSP/HTTP streams and local USB cameras both benefit from buffer=1
+        try:
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass  # Some backends don't support BUFFERSIZE
 
     def _get_actual_settings(self) -> tuple[int, int, float]:
         """Get actual camera settings after configuration.
@@ -273,7 +295,7 @@ class CV2VideoTrack(BaseVideoTrack):
                 rest = parts[1].split("@", 1)[-1]  # Get part after @
                 camera_id_display = f"{protocol}://***@{rest}"
 
-        return {
+        attrs: dict = {
             "camera_type": "cv2",
             "camera_id": camera_id_display,
             "is_ip_camera": isinstance(self.camera_id, str),
@@ -286,6 +308,9 @@ class CV2VideoTrack(BaseVideoTrack):
             "resolution": str(self.resolution) if self.resolution else None,
             "keyframe_interval": self.keyframe_interval,
         }
+        if self.fourcc:
+            attrs["fourcc"] = self.fourcc
+        return attrs
 
     def _normalize_frame(self, frame: np.ndarray) -> np.ndarray:
         """Normalize frame to BGR24 format for encoding.
@@ -484,7 +509,7 @@ class CV2VideoTrack(BaseVideoTrack):
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, int(self.actual_fps or self.fps))
 
-        self._send_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
         self.frame_count += 1
 
         return video_frame
@@ -547,6 +572,8 @@ class CV2CameraStreamer(BaseVideoStreamer):
         auto_reconnect: bool = True,
         keyframe_interval: Optional[int] = None,
         frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        camera_name: Optional[str] = None,
+        fourcc: Optional[str] = None,
     ):
         """Initialize the CV2 camera streamer.
 
@@ -567,6 +594,10 @@ class CV2CameraStreamer(BaseVideoStreamer):
                 Recommended: fps * 2 (e.g., 60 for 30fps = keyframe every 2 seconds)
             frame_callback: Optional callback for each frame (ML inference, etc.).
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
+            camera_name: Optional sensor identifier for multi-stream twins. Use the sensor
+                id from twin capabilities (e.g. "head_camera") when the twin has multiple cameras.
+            fourcc: Optional FOURCC for USB cameras (e.g. 'MJPG'). Set in setup
+                for known cameras; otherwise OpenCV uses default.
         """
         super().__init__(
             client=client,
@@ -574,12 +605,14 @@ class CV2CameraStreamer(BaseVideoStreamer):
             twin_uuid=twin_uuid,
             time_reference=time_reference,
             auto_reconnect=auto_reconnect,
+            camera_name=camera_name,
         )
         self.camera_id = camera_id
         self.fps = fps
         self.resolution = resolution
         self.keyframe_interval = keyframe_interval
         self.frame_callback = frame_callback
+        self.fourcc = fourcc
 
     @classmethod
     def from_config(
@@ -592,6 +625,7 @@ class CV2CameraStreamer(BaseVideoStreamer):
         auto_reconnect: bool = True,
         keyframe_interval: Optional[int] = None,
         frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        camera_name: Optional[str] = None,
     ) -> "CV2CameraStreamer":
         """Create streamer from CameraConfig.
 
@@ -604,6 +638,7 @@ class CV2CameraStreamer(BaseVideoStreamer):
             auto_reconnect: Whether to automatically reconnect on disconnection
             keyframe_interval: Force a keyframe every N frames
             frame_callback: Optional callback for each frame
+            camera_name: Optional sensor identifier for multi-stream twins
 
         Returns:
             Configured CV2CameraStreamer instance
@@ -619,6 +654,8 @@ class CV2CameraStreamer(BaseVideoStreamer):
             auto_reconnect=auto_reconnect,
             keyframe_interval=keyframe_interval,
             frame_callback=frame_callback,
+            camera_name=camera_name,
+            fourcc=getattr(config, "fourcc", None),
         )
 
     def initialize_track(self) -> CV2VideoTrack:
@@ -630,6 +667,7 @@ class CV2CameraStreamer(BaseVideoStreamer):
             time_reference=self.time_reference,
             keyframe_interval=self.keyframe_interval,
             frame_callback=self.frame_callback,
+            fourcc=self.fourcc,
         )
         return self.streamer
 

@@ -306,7 +306,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, int(self.color_fps))
 
-        self._send_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
 
         # Publish depth frame at configured interval
         if (
@@ -389,6 +389,7 @@ class RealSenseStreamer(BaseVideoStreamer):
         twin_uuid: Optional[str] = None,
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
+        camera_name: Optional[str] = None,
     ):
         """Initialize the RealSense camera streamer.
 
@@ -404,6 +405,7 @@ class RealSenseStreamer(BaseVideoStreamer):
             twin_uuid: Optional UUID of the digital twin
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
+            camera_name: Optional sensor identifier for multi-stream twins
         """
         require_realsense()
         super().__init__(
@@ -412,6 +414,7 @@ class RealSenseStreamer(BaseVideoStreamer):
             twin_uuid=twin_uuid,
             time_reference=time_reference,
             auto_reconnect=auto_reconnect,
+            camera_name=camera_name,
         )
 
         # RealSense specific configuration
@@ -432,6 +435,7 @@ class RealSenseStreamer(BaseVideoStreamer):
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
         validate: bool = True,
+        camera_name: Optional[str] = None,
     ) -> "RealSenseStreamer":
         """Create streamer from RealSenseConfig.
 
@@ -467,6 +471,7 @@ class RealSenseStreamer(BaseVideoStreamer):
             twin_uuid=twin_uuid,
             time_reference=time_reference,
             auto_reconnect=auto_reconnect,
+            camera_name=camera_name,
         )
 
     @classmethod
@@ -481,6 +486,7 @@ class RealSenseStreamer(BaseVideoStreamer):
         twin_uuid: Optional[str] = None,
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
+        camera_name: Optional[str] = None,
     ) -> "RealSenseStreamer":
         """Create streamer with auto-detected device configuration.
 
@@ -516,6 +522,7 @@ class RealSenseStreamer(BaseVideoStreamer):
             time_reference=time_reference,
             auto_reconnect=auto_reconnect,
             validate=False,  # Already validated during from_device
+            camera_name=camera_name,
         )
 
     def initialize_track(self) -> RealSenseVideoTrack:

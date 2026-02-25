@@ -20,7 +20,7 @@ Prerequisites:
 
 To run this test:
     cd cyberwave-sdks/cyberwave-python
-    export CYBERWAVE_API_KEY="your_api_key_here"
+    export CYBERWAVE_API_KEY="your_token_here"
     poetry install
     poetry run pytest tests/test_integration.py -v -s
 """
@@ -40,16 +40,16 @@ def cyberwave_client():
     Create a Cyberwave client connected to the Cyberwave API.
 
     Requires environment variable:
-    - CYBERWAVE_API_KEY: Your API key from https://app.cyberwave.com/settings/api-keys
+    - CYBERWAVE_API_KEY: Your API token from https://app.cyberwave.com/settings/api-keys
     """
-    api_key = os.getenv("CYBERWAVE_API_KEY")
+    token = os.getenv("CYBERWAVE_API_KEY")
 
-    if not api_key:
+    if not token:
         pytest.skip(
-            "CYBERWAVE_API_KEY environment variable not set. Get your API key from https://app.cyberwave.com/settings/api-keys"
+            "CYBERWAVE_API_KEY environment variable not set. Get your API token from https://app.cyberwave.com/settings/api-keys"
         )
 
-    client = Cyberwave(api_key=api_key)
+    client = Cyberwave(token=token)
 
     # Test connection
     try:

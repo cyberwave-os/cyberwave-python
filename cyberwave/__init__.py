@@ -89,6 +89,7 @@ try:
         RealSenseStreamer,
         BaseVideoTrack,
         BaseVideoStreamer,
+        CameraStreamManager,
     )
 
     # Legacy alias for backwards compatibility
@@ -108,6 +109,7 @@ except ImportError:
     RealSenseStreamer = None  # type: ignore
     BaseVideoTrack = None  # type: ignore
     BaseVideoStreamer = None  # type: ignore
+    CameraStreamManager = None  # type: ignore
 
 # Edge controller
 from .controller import EdgeController
@@ -198,6 +200,7 @@ __all__ = [
     "RealSenseStreamer",
     "BaseVideoTrack",
     "BaseVideoStreamer",
+    "CameraStreamManager",
     # Edge controller
     "EdgeController",
     # Constants

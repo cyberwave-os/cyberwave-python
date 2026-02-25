@@ -1,7 +1,7 @@
 from cyberwave import Cyberwave
 
 # Configure using environment variables or explicitly
-# Option 1: Set CYBERWAVE_API_KEY or CYBERWAVE_TOKEN environment variable
+# Option 1: Set CYBERWAVE_API_KEY environment variable
 # Option 2: Configure explicitly:
 # cw.configure(api_key="your-token-here", base_url="http://localhost:8000")
 
