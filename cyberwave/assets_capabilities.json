@@ -33,11 +33,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -114,7 +114,7 @@
       "has_wheels": false,
       "locomotion_mode": "legged",
       "locomotion_config": {
-        "dof": 0,
+        "dof": 12,
         "max_linear_velocity": 0.0,
         "max_angular_velocity": 0.0
       },
@@ -364,11 +364,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -436,7 +436,7 @@
       "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 12,
-        "max_linear_velocity": 2.5,
+        "max_linear_velocity": 5.0,
         "max_angular_velocity": 2.0
       },
       "can_grip": false,
@@ -494,11 +494,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -653,11 +653,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -718,14 +718,14 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
-        "max_linear_velocity": 0.0,
+        "max_linear_velocity": 1.6,
         "max_angular_velocity": 0.0
       },
       "can_grip": false,
@@ -999,11 +999,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -2837,8 +2837,8 @@
           "offset": {
             "position": {
               "x": 0,
-              "y": 0.0495,
-              "z": -0.0772
+              "y": 0.0543,
+              "z": -0.0813
             },
             "rotation": {
               "w": 0.7104,

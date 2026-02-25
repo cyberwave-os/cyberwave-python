@@ -24,6 +24,12 @@ class BerkeleyberkeleyHumanoidTwin(Twin):
     Digital twin for Berkeley Humanoid Lite
     Registry ID: berkeley/berkeley-humanoid
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
@@ -67,6 +73,12 @@ class UnitreeunitreeG1Twin(Twin):
     Digital twin for Unitree G1
     Registry ID: unitree/unitree-g1
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
@@ -93,6 +105,12 @@ class UnitreelaikagoTwin(Twin):
     Digital twin for Unitree Laikago
     Registry ID: unitree/laikago
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
@@ -140,6 +158,12 @@ class BoosterRoboticst1Twin(Twin):
     Digital twin for Booster Robotics T1
     Registry ID: booster-robotics/t1
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
@@ -150,6 +174,12 @@ class BostonDynamicsspotTwin(Twin):
     Digital twin for Boston Dynamics Spot 
     Registry ID: boston-dynamics/spot
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
@@ -236,6 +266,12 @@ class AgilityRoboticscassieTwin(Twin):
     Digital twin for Cassie
     Registry ID: agility-robotics/cassie
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""

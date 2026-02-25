@@ -21,8 +21,8 @@ def test_basic_imports():
         from cyberwave import Cyberwave
 
         # Check that the class exists and has the twin method
-        assert hasattr(Cyberwave, 'twin')
-        assert callable(getattr(Cyberwave, 'twin'))
+        assert hasattr(Cyberwave, "twin")
+        assert callable(getattr(Cyberwave, "twin"))
         print("✓ Basic imports successful")
     except ImportError as e:
         print(f"✗ Import error: {e}")
@@ -60,13 +60,13 @@ def test_client_creation():
         client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
         assert client.config.base_url == "http://localhost:8000"
         assert client.config.api_key == "test_key"
-        
+
         # Check that instance attributes are set
-        assert hasattr(client, 'workspaces')
-        assert hasattr(client, 'projects')
-        assert hasattr(client, 'environments')
-        assert hasattr(client, 'assets')
-        assert hasattr(client, 'twins')
+        assert hasattr(client, "workspaces")
+        assert hasattr(client, "projects")
+        assert hasattr(client, "environments")
+        assert hasattr(client, "assets")
+        assert hasattr(client, "twins")
         print("✓ Client creation successful")
     except Exception as e:
         print(f"✗ Client creation error: {e}")
@@ -82,19 +82,19 @@ def test_config():
 
         # Test direct import
         assert CyberwaveConfig is DirectConfig
-        
+
         config = CyberwaveConfig(base_url="http://test:8000", api_key="test")
         assert config.base_url == "http://test:8000"
         assert config.api_key == "test"
-        
+
         # Test get_config and set_config functions
         assert callable(get_config)
         assert callable(set_config)
-        
+
         # Test that get_config returns a config object
         current_config = get_config()
         assert current_config is not None
-        
+
         print("✓ Config module successful")
     except Exception as e:
         print(f"✗ Config error: {e}")
@@ -123,9 +123,7 @@ def test_mqtt_client():
     try:
         from cyberwave import CyberwaveMQTTClient
         from cyberwave.mqtt import CyberwaveMQTTClient as BaseMQTTClient
-        from cyberwave.config import CyberwaveConfig
 
-        # The exported CyberwaveMQTTClient is a wrapper that takes a config
         # Test the base client directly
         client = BaseMQTTClient(
             mqtt_broker="localhost",
@@ -139,15 +137,14 @@ def test_mqtt_client():
         assert client.api_token == "test_token"
         assert client.topic_prefix == ""
 
-        # Test the wrapper with a config object
-        config = CyberwaveConfig(
-            base_url="http://localhost:8000",
-            api_key="test_key",
-            mqtt_host="localhost",
+        # The top-level export should support the same constructor contract.
+        wrapper_client = CyberwaveMQTTClient(
+            mqtt_broker="localhost",
             mqtt_port=1883,
-            mqtt_api_token="test_token",
+            api_token="test_token",
+            auto_connect=False,
         )
-        wrapper_client = CyberwaveMQTTClient(config)
+        assert wrapper_client.api_token == "test_token"
         assert wrapper_client.topic_prefix == ""
 
         print("✓ MQTT client import successful")
@@ -265,31 +262,44 @@ def test_camera_streaming():
         if CameraStreamer is not None and CV2CameraStreamer is not None:
             assert CameraStreamer is CV2CameraStreamer  # Legacy alias
             # Check all classes are available
-            classes_available = all([
-                CV2VideoTrack is not None,
-                CV2CameraStreamer is not None,
-                VirtualVideoTrack is not None,
-                VirtualCameraStreamer is not None,
-                RealSenseVideoTrack is not None,
-                RealSenseStreamer is not None,
-                BaseVideoTrack is not None,
-                BaseVideoStreamer is not None,
-            ])
+            classes_available = all(
+                [
+                    CV2VideoTrack is not None,
+                    CV2CameraStreamer is not None,
+                    VirtualVideoTrack is not None,
+                    VirtualCameraStreamer is not None,
+                    RealSenseVideoTrack is not None,
+                    RealSenseStreamer is not None,
+                    BaseVideoTrack is not None,
+                    BaseVideoStreamer is not None,
+                ]
+            )
             if classes_available:
-                print("✓ Camera streaming imports successful (all dependencies installed)")
+                print(
+                    "✓ Camera streaming imports successful (all dependencies installed)"
+                )
             else:
-                print("✓ Camera streaming imports successful (partial dependencies installed)")
+                print(
+                    "✓ Camera streaming imports successful (partial dependencies installed)"
+                )
         elif CameraStreamer is None and CV2CameraStreamer is None:
-            print("✓ Camera streaming imports handled gracefully (dependencies not installed)")
+            print(
+                "✓ Camera streaming imports handled gracefully (dependencies not installed)"
+            )
         else:
             # Partial import - still OK
-            print("✓ Camera streaming imports handled gracefully (partial dependencies)")
+            print(
+                "✓ Camera streaming imports handled gracefully (partial dependencies)"
+            )
     except ImportError:
         # ImportError is expected if dependencies aren't installed
-        print("✓ Camera streaming imports handled gracefully (dependencies not installed)")
+        print(
+            "✓ Camera streaming imports handled gracefully (dependencies not installed)"
+        )
     except Exception as e:
         print(f"✗ Camera streaming import error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     return True
@@ -300,7 +310,7 @@ def test_utils_and_constants():
     try:
         # Import TimeReference directly from utils module (more reliable)
         from cyberwave.utils import TimeReference
-        
+
         from cyberwave import (
             SOURCE_TYPE_EDGE,
             SOURCE_TYPE_TELE,
@@ -313,9 +323,9 @@ def test_utils_and_constants():
         assert TimeReference is not None
         # Verify we can instantiate it
         tr = TimeReference()
-        assert hasattr(tr, 'update')
-        assert hasattr(tr, 'read')
-        
+        assert hasattr(tr, "update")
+        assert hasattr(tr, "read")
+
         # Test constants
         assert SOURCE_TYPE_EDGE in SOURCE_TYPES
         assert isinstance(SOURCE_TYPES, (list, tuple))
@@ -327,6 +337,7 @@ def test_utils_and_constants():
     except Exception as e:
         print(f"✗ Utils/constants import error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     return True
@@ -399,24 +410,25 @@ def test_all_exports():
     """Test that all items in __all__ can be imported"""
     try:
         from cyberwave import __all__
-        
+
         # Import everything from __all__
         import cyberwave
-        
+
         failed_imports = []
         for item_name in __all__:
             if not hasattr(cyberwave, item_name):
                 failed_imports.append(item_name)
-        
+
         if failed_imports:
             print(f"✗ Some exports not available: {failed_imports}")
             return False
-        
+
         print(f"✓ All {len(__all__)} exports are available")
         return True
     except Exception as e:
         print(f"✗ All exports test error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -455,17 +467,17 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("TEST SUMMARY")
     print("=" * 50)
-    
+
     passed = sum(results)
     total = len(results)
     failed = total - passed
-    
+
     # Show individual test results
     print("\nTest Results:")
     for i, (name, result) in enumerate(zip(test_names, results), 1):
         status = "✓ PASS" if result else "✗ FAIL"
         print(f"  {i:2d}. {status} - {name}")
-    
+
     print("\n" + "=" * 50)
     print(f"Total: {total} tests")
     print(f"Passed: {passed} tests")
