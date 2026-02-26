@@ -46,7 +46,6 @@ from cyberwave.rest import (
     EdgeSchema,
 )
 from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
-from cyberwave.rest.models.joint_calibration import JointCalibration
 
 from .exceptions import CyberwaveAPIError
 
@@ -203,14 +202,15 @@ class EnvironmentManager(BaseResourceManager):
     ) -> EnvironmentSchema:
         """Create a new environment"""
         try:
-            # if no project is speficied, grab the first project from the user. If the user has no projects, create a default project.
+            # If no project is specified, use the first one. If none exist, create
+            # a default folder-backed project.
             if not project_id:
                 project_id = self.api.src_app_api_projects_list_projects()[0].uuid
             if not project_id:
                 project = self.api.src_app_api_projects_create_project(
                     ProjectCreateSchema(
-                        name="Default Project",
-                        description="Default Project Description",
+                        name="Default Folder",
+                        description="Default Folder Description",
                     )
                 )
                 project_id = project.uuid
@@ -1430,18 +1430,32 @@ class TwinManager(BaseResourceManager):
             raise ValueError(f"robot_type must be 'leader' or 'follower', got '{robot_type}'")
 
         try:
-            # Convert dict calibration data to JointCalibration objects
-            joint_calibration_objects = {}
+            # Build calibration dicts (not model objects) for robustness across SDK versions
+            joint_calibration_dicts = {}
             for joint_name, calib_dict in joint_calibration.items():
-                joint_calibration_objects[joint_name] = JointCalibration.from_dict(calib_dict)
+                # Only include lower/upper if they are valid numbers (avoids validation errors)
+                base = {
+                    "range_min": calib_dict["range_min"],
+                    "range_max": calib_dict["range_max"],
+                    "homing_offset": calib_dict["homing_offset"],
+                    "drive_mode": str(calib_dict["drive_mode"]),
+                    "id": str(calib_dict["id"]),
+                }
+                for key in ("lower", "upper"):
+                    val = calib_dict.get(key)
+                    if val is not None and isinstance(val, (int, float)):
+                        try:
+                            float(val)
+                            base[key] = float(val)
+                        except (TypeError, ValueError):
+                            pass
+                joint_calibration_dicts[joint_name] = base
 
-            # Create TwinJointCalibrationSchema
-            schema = TwinJointCalibrationSchema(
-                joint_calibration=joint_calibration_objects,
-                robot_type=robot_type,
-            )
+            schema = TwinJointCalibrationSchema.model_validate({
+                "joint_calibration": joint_calibration_dicts,
+                "robot_type": robot_type,
+            })
 
-            # Use auto-generated REST API method
             return self.api.src_app_api_twins_update_twin_calibration(
                 uuid=twin_id,
                 twin_joint_calibration_schema=schema,

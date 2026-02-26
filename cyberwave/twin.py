@@ -82,6 +82,7 @@ class JointController:
         position: float,
         degrees: bool = True,
         timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
     ):
         """
         Set position of a joint
@@ -90,6 +91,8 @@ class JointController:
             joint_name: Name of the joint
             position: Target position
             degrees: If True, position is in degrees; otherwise radians
+            timestamp: Unix timestamp for the update
+            source_type: Source type (e.g. SOURCE_TYPE_EDGE_LEADER, SOURCE_TYPE_EDGE_FOLLOWER)
         """
         if degrees:
             position = math.radians(position)
@@ -100,7 +103,11 @@ class JointController:
 
             # Update joint state via MQTT
             self.twin.client.mqtt.update_joint_state(
-                self.twin.uuid, joint_name, position=position, timestamp=timestamp
+                self.twin.uuid,
+                joint_name,
+                position=position,
+                timestamp=timestamp,
+                source_type=source_type,
             )
 
             # Update cached state

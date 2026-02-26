@@ -39,6 +39,8 @@ __all__ = [
     "AddMemberByEmailRequest",
     "AddMemberByEmailResponse",
     "AddMemberUserSchema",
+    "AdminLabOverviewSchema",
+    "AdminSessionSchema",
     "AlertSchema",
     "AssetCatalogImportSchema",
     "AssetCreateSchema",
@@ -103,10 +105,8 @@ __all__ = [
     "DatasetUpdateSchema",
     "DatasetZipUrlSchema",
     "DeferredTaskExecutionResponseSchema",
-    "DeviceHeartbeatSchema",
     "DiscoveryResponseSchema",
     "EdgeCreateSchema",
-    "EdgeDeviceSchema",
     "EdgeRegisterSchema",
     "EdgeSchema",
     "EnableOrgFeatureRequest",
@@ -126,7 +126,7 @@ __all__ = [
     "ImageBytes1",
     "InitiateLargeUploadResponse",
     "InitiateLargeUploadSchema",
-    "JointCalibration",
+    "JointCalibrationSchema",
     "JointSchema",
     "JointStateSchema",
     "JointStateUpdateSchema",
@@ -151,7 +151,9 @@ __all__ = [
     "MLTrainingUpdateSchema",
     "MapCreateSchema",
     "MapDataSchema",
+    "MapStreamFinalizeSchema",
     "MapStreamStartSchema",
+    "MapStreamStopSchema",
     "Metadata",
     "MissionExecutionSchema",
     "MissionSchema",
@@ -172,7 +174,6 @@ __all__ = [
     "OrganizationCreateSchema",
     "OrganizationSchema",
     "OrganizationUpdateSchema",
-    "PairDeviceSchema",
     "PairTwinSchema",
     "PasswordChangeSchema",
     "Payload",
@@ -230,7 +231,6 @@ __all__ = [
     "URDFProjectSchema",
     "UniversalSchemaPatchSchema",
     "UpdateAlertSchema",
-    "UpdateEdgeDeviceSchema",
     "UpdateMemberRoleRequest",
     "UpdateMemberRoleResponse",
     "UpdateRecordingMetadataSchema",
@@ -289,6 +289,8 @@ from cyberwave.rest.exceptions import ApiException as ApiException
 from cyberwave.rest.models.add_member_by_email_request import AddMemberByEmailRequest as AddMemberByEmailRequest
 from cyberwave.rest.models.add_member_by_email_response import AddMemberByEmailResponse as AddMemberByEmailResponse
 from cyberwave.rest.models.add_member_user_schema import AddMemberUserSchema as AddMemberUserSchema
+from cyberwave.rest.models.admin_lab_overview_schema import AdminLabOverviewSchema as AdminLabOverviewSchema
+from cyberwave.rest.models.admin_session_schema import AdminSessionSchema as AdminSessionSchema
 from cyberwave.rest.models.alert_schema import AlertSchema as AlertSchema
 from cyberwave.rest.models.asset_catalog_import_schema import AssetCatalogImportSchema as AssetCatalogImportSchema
 from cyberwave.rest.models.asset_create_schema import AssetCreateSchema as AssetCreateSchema
@@ -353,10 +355,8 @@ from cyberwave.rest.models.dataset_schema import DatasetSchema as DatasetSchema
 from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema as DatasetUpdateSchema
 from cyberwave.rest.models.dataset_zip_url_schema import DatasetZipUrlSchema as DatasetZipUrlSchema
 from cyberwave.rest.models.deferred_task_execution_response_schema import DeferredTaskExecutionResponseSchema as DeferredTaskExecutionResponseSchema
-from cyberwave.rest.models.device_heartbeat_schema import DeviceHeartbeatSchema as DeviceHeartbeatSchema
 from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema as DiscoveryResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema as EdgeCreateSchema
-from cyberwave.rest.models.edge_device_schema import EdgeDeviceSchema as EdgeDeviceSchema
 from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema as EdgeRegisterSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema as EdgeSchema
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest as EnableOrgFeatureRequest
@@ -376,7 +376,7 @@ from cyberwave.rest.models.image_bytes import ImageBytes as ImageBytes
 from cyberwave.rest.models.image_bytes1 import ImageBytes1 as ImageBytes1
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse as InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema as InitiateLargeUploadSchema
-from cyberwave.rest.models.joint_calibration import JointCalibration as JointCalibration
+from cyberwave.rest.models.joint_calibration_schema import JointCalibrationSchema as JointCalibrationSchema
 from cyberwave.rest.models.joint_schema import JointSchema as JointSchema
 from cyberwave.rest.models.joint_state_schema import JointStateSchema as JointStateSchema
 from cyberwave.rest.models.joint_state_update_schema import JointStateUpdateSchema as JointStateUpdateSchema
@@ -401,7 +401,9 @@ from cyberwave.rest.models.ml_training_schema import MLTrainingSchema as MLTrain
 from cyberwave.rest.models.ml_training_update_schema import MLTrainingUpdateSchema as MLTrainingUpdateSchema
 from cyberwave.rest.models.map_create_schema import MapCreateSchema as MapCreateSchema
 from cyberwave.rest.models.map_data_schema import MapDataSchema as MapDataSchema
+from cyberwave.rest.models.map_stream_finalize_schema import MapStreamFinalizeSchema as MapStreamFinalizeSchema
 from cyberwave.rest.models.map_stream_start_schema import MapStreamStartSchema as MapStreamStartSchema
+from cyberwave.rest.models.map_stream_stop_schema import MapStreamStopSchema as MapStreamStopSchema
 from cyberwave.rest.models.metadata import Metadata as Metadata
 from cyberwave.rest.models.mission_execution_schema import MissionExecutionSchema as MissionExecutionSchema
 from cyberwave.rest.models.mission_schema import MissionSchema as MissionSchema
@@ -422,7 +424,6 @@ from cyberwave.rest.models.org_members_response import OrgMembersResponse as Org
 from cyberwave.rest.models.organization_create_schema import OrganizationCreateSchema as OrganizationCreateSchema
 from cyberwave.rest.models.organization_schema import OrganizationSchema as OrganizationSchema
 from cyberwave.rest.models.organization_update_schema import OrganizationUpdateSchema as OrganizationUpdateSchema
-from cyberwave.rest.models.pair_device_schema import PairDeviceSchema as PairDeviceSchema
 from cyberwave.rest.models.pair_twin_schema import PairTwinSchema as PairTwinSchema
 from cyberwave.rest.models.password_change_schema import PasswordChangeSchema as PasswordChangeSchema
 from cyberwave.rest.models.payload import Payload as Payload
@@ -480,7 +481,6 @@ from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSc
 from cyberwave.rest.models.urdf_project_schema import URDFProjectSchema as URDFProjectSchema
 from cyberwave.rest.models.universal_schema_patch_schema import UniversalSchemaPatchSchema as UniversalSchemaPatchSchema
 from cyberwave.rest.models.update_alert_schema import UpdateAlertSchema as UpdateAlertSchema
-from cyberwave.rest.models.update_edge_device_schema import UpdateEdgeDeviceSchema as UpdateEdgeDeviceSchema
 from cyberwave.rest.models.update_member_role_request import UpdateMemberRoleRequest as UpdateMemberRoleRequest
 from cyberwave.rest.models.update_member_role_response import UpdateMemberRoleResponse as UpdateMemberRoleResponse
 from cyberwave.rest.models.update_recording_metadata_schema import UpdateRecordingMetadataSchema as UpdateRecordingMetadataSchema

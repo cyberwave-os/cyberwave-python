@@ -17,27 +17,23 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
-class MapStreamStartSchema(BaseModel):
+class JointCalibrationSchema(BaseModel):
     """
-    Schema for starting a map from a live stream.
+    Schema for a single joint's calibration (request/response).
     """ # noqa: E501
-    twin_uuid: StrictStr
-    map_type: StrictStr
-    resolution: Optional[Union[StrictFloat, StrictInt]] = None
-    map_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "map_type", "resolution", "map_name"]
-
-    @field_validator('map_type')
-    def map_type_validate_enum(cls, value):
-        """Validates the enum"""
-        if value not in set(['occupancy_grid', 'point_cloud']):
-            raise ValueError("must be one of enum values ('occupancy_grid', 'point_cloud')")
-        return value
+    range_min: Union[StrictFloat, StrictInt]
+    range_max: Union[StrictFloat, StrictInt]
+    homing_offset: Union[StrictFloat, StrictInt]
+    drive_mode: StrictStr
+    id: StrictStr
+    lower: Optional[Union[StrictFloat, StrictInt]] = None
+    upper: Optional[Union[StrictFloat, StrictInt]] = None
+    __properties: ClassVar[List[str]] = ["range_min", "range_max", "homing_offset", "drive_mode", "id", "lower", "upper"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -57,7 +53,7 @@ class MapStreamStartSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of MapStreamStartSchema from a JSON string"""
+        """Create an instance of JointCalibrationSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -78,21 +74,21 @@ class MapStreamStartSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if resolution (nullable) is None
+        # set to None if lower (nullable) is None
         # and model_fields_set contains the field
-        if self.resolution is None and "resolution" in self.model_fields_set:
-            _dict['resolution'] = None
+        if self.lower is None and "lower" in self.model_fields_set:
+            _dict['lower'] = None
 
-        # set to None if map_name (nullable) is None
+        # set to None if upper (nullable) is None
         # and model_fields_set contains the field
-        if self.map_name is None and "map_name" in self.model_fields_set:
-            _dict['map_name'] = None
+        if self.upper is None and "upper" in self.model_fields_set:
+            _dict['upper'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of MapStreamStartSchema from a dict"""
+        """Create an instance of JointCalibrationSchema from a dict"""
         if obj is None:
             return None
 
@@ -100,10 +96,13 @@ class MapStreamStartSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "twin_uuid": obj.get("twin_uuid"),
-            "map_type": obj.get("map_type"),
-            "resolution": obj.get("resolution"),
-            "map_name": obj.get("map_name")
+            "range_min": obj.get("range_min"),
+            "range_max": obj.get("range_max"),
+            "homing_offset": obj.get("homing_offset"),
+            "drive_mode": obj.get("drive_mode"),
+            "id": obj.get("id"),
+            "lower": obj.get("lower"),
+            "upper": obj.get("upper")
         })
         return _obj
 

@@ -17,27 +17,17 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from pydantic import BaseModel, ConfigDict, StrictStr
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class MapStreamStartSchema(BaseModel):
+class MapStreamStopSchema(BaseModel):
     """
-    Schema for starting a map from a live stream.
+    Schema for requesting map finalization from a running edge node.
     """ # noqa: E501
     twin_uuid: StrictStr
-    map_type: StrictStr
-    resolution: Optional[Union[StrictFloat, StrictInt]] = None
-    map_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "map_type", "resolution", "map_name"]
-
-    @field_validator('map_type')
-    def map_type_validate_enum(cls, value):
-        """Validates the enum"""
-        if value not in set(['occupancy_grid', 'point_cloud']):
-            raise ValueError("must be one of enum values ('occupancy_grid', 'point_cloud')")
-        return value
+    __properties: ClassVar[List[str]] = ["twin_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -57,7 +47,7 @@ class MapStreamStartSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of MapStreamStartSchema from a JSON string"""
+        """Create an instance of MapStreamStopSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -78,21 +68,11 @@ class MapStreamStartSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if resolution (nullable) is None
-        # and model_fields_set contains the field
-        if self.resolution is None and "resolution" in self.model_fields_set:
-            _dict['resolution'] = None
-
-        # set to None if map_name (nullable) is None
-        # and model_fields_set contains the field
-        if self.map_name is None and "map_name" in self.model_fields_set:
-            _dict['map_name'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of MapStreamStartSchema from a dict"""
+        """Create an instance of MapStreamStopSchema from a dict"""
         if obj is None:
             return None
 
@@ -100,10 +80,7 @@ class MapStreamStartSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "twin_uuid": obj.get("twin_uuid"),
-            "map_type": obj.get("map_type"),
-            "resolution": obj.get("resolution"),
-            "map_name": obj.get("map_name")
+            "twin_uuid": obj.get("twin_uuid")
         })
         return _obj
 
