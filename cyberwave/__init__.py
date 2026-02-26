@@ -12,7 +12,7 @@ Quick Start:
     Video Streaming (requires: pip install cyberwave[camera]):
     >>> cw = Cyberwave(token="your_token")
     >>> twin = cw.twin("cyberwave/generic-camera")
-    >>> twin.start_streaming()
+    >>> twin.start_streaming()  # blocking; use stream_video_background() in async code
 """
 
 # Core client
@@ -137,7 +137,7 @@ from .constants import (
 from .scene import Scene
 
 # Version information
-__version__ = "0.3.18"
+__version__ = "0.3.20"
 
 # Define public API
 __all__ = [

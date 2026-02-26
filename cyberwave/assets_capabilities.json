@@ -45,33 +45,14 @@
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
+      "payload_capacity_kg": 0,
       "power_source": "tethered",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
-      "sensors": [
-        {
-          "id": "53a5dc59-eac2-44b5-b934-98370efa591c",
-          "type": "rgb",
-          "model": null,
-          "offset": {
-            "position": {
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
-            },
-            "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
-            }
-          }
-        }
-      ]
+      "sensors": []
     }
   },
   "agile-x-robotics/piper": {
@@ -114,15 +95,15 @@
       "has_wheels": false,
       "locomotion_mode": "legged",
       "locomotion_config": {
-        "dof": 12,
+        "dof": 0,
         "max_linear_velocity": 0.0,
         "max_angular_velocity": 0.0
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
+      "payload_capacity_kg": 0,
       "power_source": "tethered",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "fully_autonomous",
       "navigation_obstacle_avoidance": true,
       "maximum_frequency_hz": 0,
@@ -136,13 +117,13 @@
             "position": {
               "x": 0.2453,
               "y": 0.7728,
-              "z": 0.0
+              "z": 0
             },
             "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
             }
           }
         },
@@ -190,12 +171,12 @@
             "position": {
               "x": 0.2849,
               "y": 0.6411,
-              "z": 0.0
+              "z": 0
             },
             "rotation": {
               "w": 0.9823,
-              "x": 0.0,
-              "y": 0.0,
+              "x": 0,
+              "y": 0,
               "z": -0.1872
             }
           }
@@ -208,7 +189,7 @@
             "position": {
               "x": -0.2628,
               "y": 0.5952,
-              "z": 0.0
+              "z": 0
             },
             "rotation": {
               "w": -0.0032,
@@ -227,11 +208,11 @@
     "capabilities": {
       "has_joints": false,
       "can_actuate": false,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": true,
       "has_legs": false,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "aerial",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -259,9 +240,9 @@
             },
             "rotation": {
               "w": -0.142,
-              "x": 0.0,
+              "x": 0,
               "y": 0.9899,
-              "z": 0.0
+              "z": 0
             }
           }
         },
@@ -277,9 +258,9 @@
             },
             "rotation": {
               "w": 0.2055,
-              "x": 0.0,
+              "x": 0,
               "y": 0.9787,
-              "z": 0.0
+              "z": 0
             }
           }
         },
@@ -295,9 +276,9 @@
             },
             "rotation": {
               "w": 0.9853,
-              "x": 0.0,
+              "x": 0,
               "y": -0.1708,
-              "z": 0.0
+              "z": 0
             }
           }
         },
@@ -313,9 +294,9 @@
             },
             "rotation": {
               "w": 0.9893,
-              "x": 0.0,
+              "x": 0,
               "y": 0.146,
-              "z": 0.0
+              "z": 0
             }
           }
         },
@@ -578,11 +559,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": false,
       "has_wheels": true,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "wheeled",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -590,33 +571,14 @@
       },
       "can_grip": true,
       "manipulator_count": 2,
-      "payload_capacity_kg": 5.0,
+      "payload_capacity_kg": 5,
       "power_source": "tethered",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
-      "sensors": [
-        {
-          "id": "c68b54d4-a2a2-4b3a-9109-d981a0fb9439",
-          "type": "rgb",
-          "model": null,
-          "offset": {
-            "position": {
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
-            },
-            "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
-            }
-          }
-        }
-      ]
+      "sensors": []
     }
   },
   "bitcraze/crazyflie": {
@@ -625,11 +587,11 @@
     "capabilities": {
       "has_joints": false,
       "can_actuate": false,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": true,
       "has_legs": false,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "aerial",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -679,15 +641,15 @@
           "model": null,
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.1386,
+              "y": 1.1031,
+              "z": -0.0006
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
           }
         },
@@ -697,15 +659,15 @@
           "model": null,
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.1166,
+              "y": 1.0949,
+              "z": -0.0229
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
           }
         }
@@ -924,11 +886,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -936,9 +898,9 @@
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
+      "payload_capacity_kg": 0,
       "power_source": "tethered",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
@@ -952,11 +914,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -964,9 +926,9 @@
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
+      "payload_capacity_kg": 0,
       "power_source": "battery",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
@@ -1011,9 +973,9 @@
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
+      "payload_capacity_kg": 0,
       "power_source": "battery",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
@@ -1027,11 +989,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": true,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "hybrid",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -1039,9 +1001,9 @@
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
+      "payload_capacity_kg": 0,
       "power_source": "battery",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "path_following",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
@@ -1055,11 +1017,11 @@
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
-      "can_locomote": false,
+      "can_locomote": true,
       "can_fly": false,
       "has_legs": true,
       "has_wheels": false,
-      "locomotion_mode": "stationary",
+      "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -1067,9 +1029,9 @@
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
+      "payload_capacity_kg": 0,
       "power_source": "battery",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,

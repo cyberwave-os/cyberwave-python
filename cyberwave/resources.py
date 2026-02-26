@@ -20,7 +20,9 @@ Usage:
     >>> twin = client.twins.get("uuid")
 """
 
-from typing import List, Optional, Dict, Any
+import uuid as uuid_lib
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from cyberwave.rest import (
     DefaultApi,
@@ -42,12 +44,21 @@ from cyberwave.rest import (
     JointStateUpdateSchema,
     JointStateSchema,
     EdgeSchema,
-    EdgeDeviceSchema,
 )
 from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
 from cyberwave.rest.models.joint_calibration import JointCalibration
 
 from .exceptions import CyberwaveAPIError
+
+EDGE_CONFIGS_KEY = "edge_configs"
+EDGE_CONFIG_INTERNAL_KEYS = {
+    "device_info",
+    "registered_at",
+    "last_sync",
+    "edge_uuid",
+    "edge_fingerprint",
+}
+EDGE_DEVICE_UUID_NAMESPACE = uuid_lib.UUID("7f09e16f-ef6f-410d-9d5d-c071d8fbd1ad")
 
 
 class BaseResourceManager:
@@ -989,6 +1000,123 @@ class TwinManager(BaseResourceManager):
     # Edge Device Pairing
     # =========================================================================
 
+    @staticmethod
+    def _extract_camera_config_from_binding(binding: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(binding, dict):
+            return {}
+
+        camera_config = binding.get("camera_config")
+        if isinstance(camera_config, dict):
+            return dict(camera_config)
+
+        cameras = binding.get("cameras")
+        if isinstance(cameras, list):
+            for camera in cameras:
+                if isinstance(camera, dict):
+                    return dict(camera)
+
+        # Legacy shape: top-level config fields stored directly under fingerprint key.
+        return {
+            key: value
+            for key, value in binding.items()
+            if key not in EDGE_CONFIG_INTERNAL_KEYS
+        }
+
+    @staticmethod
+    def _device_uuid_for_fingerprint(twin_id: str, fingerprint: str) -> str:
+        key = f"{twin_id}:{fingerprint}"
+        return str(uuid_lib.uuid5(EDGE_DEVICE_UUID_NAMESPACE, key))
+
+    def _get_twin_edge_configs(
+        self, twin_id: str
+    ) -> tuple[TwinSchema, Dict[str, Any], Dict[str, Any]]:
+        twin = self.api.src_app_api_twins_get_twin(twin_id)
+        metadata = getattr(twin, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        edge_configs = metadata.get(EDGE_CONFIGS_KEY, {})
+        if not isinstance(edge_configs, dict):
+            edge_configs = {}
+        return twin, metadata, edge_configs
+
+    @staticmethod
+    def _is_legacy_edge_configs_map(edge_configs: Dict[str, Any]) -> bool:
+        if not isinstance(edge_configs, dict) or not edge_configs:
+            return False
+        if "edge_fingerprint" in edge_configs or "camera_config" in edge_configs:
+            return False
+        return all(isinstance(value, dict) for value in edge_configs.values())
+
+    def _resolve_binding_for_fingerprint(
+        self, edge_configs: Dict[str, Any], fingerprint: str
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(edge_configs, dict) or not fingerprint:
+            return None
+
+        if self._is_legacy_edge_configs_map(edge_configs):
+            binding = edge_configs.get(fingerprint)
+            return binding if isinstance(binding, dict) else None
+
+        candidate_fingerprint = edge_configs.get("edge_fingerprint")
+        if isinstance(candidate_fingerprint, str):
+            if candidate_fingerprint != fingerprint:
+                return None
+            return edge_configs
+        return None
+
+    def _iter_edge_bindings(
+        self, edge_configs: Dict[str, Any]
+    ) -> List[tuple[str, Dict[str, Any]]]:
+        if not isinstance(edge_configs, dict) or not edge_configs:
+            return []
+
+        if self._is_legacy_edge_configs_map(edge_configs):
+            bindings: List[tuple[str, Dict[str, Any]]] = []
+            for fingerprint, binding in edge_configs.items():
+                if isinstance(fingerprint, str) and isinstance(binding, dict):
+                    bindings.append((fingerprint, binding))
+            return bindings
+
+        fingerprint = edge_configs.get("edge_fingerprint")
+        if isinstance(fingerprint, str) and fingerprint:
+            return [(fingerprint, edge_configs)]
+        return []
+
+    def _build_device_dict(
+        self, twin_id: str, fingerprint: str, binding: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        binding = binding if isinstance(binding, dict) else {}
+        device_info = binding.get("device_info")
+        if not isinstance(device_info, dict):
+            device_info = {}
+
+        last_sync = binding.get("last_sync")
+        last_ip_address = binding.get("last_ip_address")
+
+        status_data = binding.get("status_data")
+        status = "online" if isinstance(status_data, dict) else "offline"
+
+        return {
+            "uuid": self._device_uuid_for_fingerprint(twin_id, fingerprint),
+            "fingerprint": fingerprint,
+            "twin_uuid": twin_id,
+            "hostname": device_info.get("hostname", ""),
+            "platform": device_info.get("platform", ""),
+            "status": status,
+            "last_heartbeat": last_sync,
+            "last_ip_address": last_ip_address,
+            "edge_config": self._extract_camera_config_from_binding(binding),
+            "paired_at": binding.get("registered_at") or last_sync,
+            "paired_by_uuid": None,
+            "updated_at": last_sync,
+        }
+
+    def _update_twin_edge_configs(
+        self, twin_id: str, metadata: Dict[str, Any], edge_configs: Dict[str, Any]
+    ) -> TwinSchema:
+        metadata[EDGE_CONFIGS_KEY] = edge_configs
+        return self.update(twin_id, metadata=metadata)
+
     def pair_device(
         self,
         twin_id: str,
@@ -996,12 +1124,13 @@ class TwinManager(BaseResourceManager):
         hostname: str = "",
         platform: str = "",
         edge_config: Optional[Dict[str, Any]] = None,
-    ) -> "EdgeDeviceSchema":
+    ) -> Dict[str, Any]:
         """
         Pair an edge device to this twin.
 
-        Registers the device with the backend using its fingerprint.
-        A device can only be paired to one twin at a time.
+        Persists the pairing in twin.metadata["edge_configs"] as a single
+        binding object.
+        This method no longer calls legacy /twins/{uuid}/devices endpoints.
 
         Args:
             twin_id: UUID of the twin to pair with
@@ -1014,23 +1143,60 @@ class TwinManager(BaseResourceManager):
             Dict with device details
 
         Raises:
-            ApiException: If device is already paired to a different twin (409)
+            CyberwaveAPIError: If fingerprint is paired to a different twin
         """
-        from cyberwave.rest.models.pair_device_schema import PairDeviceSchema
-
         try:
-            payload = PairDeviceSchema(
-                fingerprint=fingerprint,
-                hostname=hostname,
-                platform=platform,
-                edge_config=edge_config or {},
-            )
-            return self.api.src_app_api_twins_pair_device(twin_id, payload)
+            if not fingerprint:
+                raise CyberwaveAPIError("Fingerprint is required", status_code=400)
+
+            # Preserve old one-device-to-one-twin behavior.
+            all_twins = self.api.src_app_api_twins_list_all_twins()
+            for twin in all_twins:
+                candidate_uuid = str(getattr(twin, "uuid", ""))
+                if candidate_uuid == str(twin_id):
+                    continue
+
+                candidate_metadata = getattr(twin, "metadata", {}) or {}
+                if not isinstance(candidate_metadata, dict):
+                    continue
+                candidate_edge_configs = candidate_metadata.get(EDGE_CONFIGS_KEY, {})
+                if self._resolve_binding_for_fingerprint(candidate_edge_configs, fingerprint):
+                    raise CyberwaveAPIError(
+                        (
+                            f"Device already paired to twin '{candidate_uuid}'. "
+                            "Unpair it first."
+                        ),
+                        status_code=409,
+                    )
+
+            _, metadata, edge_configs = self._get_twin_edge_configs(twin_id)
+
+            existing = self._resolve_binding_for_fingerprint(edge_configs, fingerprint) or {}
+            if not isinstance(existing, dict):
+                existing = {}
+
+            device_info = existing.get("device_info")
+            if not isinstance(device_info, dict):
+                device_info = {}
+            if hostname:
+                device_info["hostname"] = hostname
+            if platform:
+                device_info["platform"] = platform
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            existing["device_info"] = device_info
+            existing["camera_config"] = edge_config or {}
+            existing["registered_at"] = existing.get("registered_at") or now_iso
+            existing["last_sync"] = now_iso
+            existing["edge_fingerprint"] = fingerprint
+
+            self._update_twin_edge_configs(twin_id, metadata, existing)
+            return self._build_device_dict(twin_id, fingerprint, existing)
         except Exception as e:
             self._handle_error(e, f"pair device to twin {twin_id}")
             raise
 
-    def list_devices(self, twin_id: str) -> List["EdgeDeviceSchema"]:
+    def list_devices(self, twin_id: str) -> List[Dict[str, Any]]:
         """
         List all edge devices paired to this twin.
 
@@ -1041,24 +1207,32 @@ class TwinManager(BaseResourceManager):
             List of device dicts
         """
         try:
-            return self.api.src_app_api_twins_list_twin_devices(twin_id)
+            _, _, edge_configs = self._get_twin_edge_configs(twin_id)
+            devices: List[Dict[str, Any]] = []
+            for fingerprint, binding in self._iter_edge_bindings(edge_configs):
+                devices.append(self._build_device_dict(twin_id, fingerprint, binding))
+            return devices
         except Exception as e:
             self._handle_error(e, f"list devices for twin {twin_id}")
             raise
 
-    def get_device(self, twin_id: str, device_uuid: str) -> "EdgeDeviceSchema":
+    def get_device(self, twin_id: str, device_uuid: str) -> Dict[str, Any]:
         """
-        Get a specific edge device by UUID.
+        Get a specific edge device by UUID (derived from fingerprint).
 
         Args:
             twin_id: UUID of the twin
-            device_uuid: UUID of the EdgeDevice
+            device_uuid: Deterministic UUID derived from (twin_id, fingerprint)
 
         Returns:
-            EdgeDeviceSchema with device details
+            Device details dict
         """
         try:
-            return self.api.src_app_api_twins_get_twin_device(twin_id, device_uuid)
+            devices = self.list_devices(twin_id)
+            for device in devices:
+                if str(device.get("uuid")) == str(device_uuid):
+                    return device
+            raise CyberwaveAPIError("Device not found", status_code=404)
         except Exception as e:
             self._handle_error(e, f"get device {device_uuid} for twin {twin_id}")
             raise
@@ -1075,7 +1249,42 @@ class TwinManager(BaseResourceManager):
             Status message
         """
         try:
-            return self.api.src_app_api_twins_unpair_device(twin_id, device_uuid)
+            _, metadata, edge_configs = self._get_twin_edge_configs(twin_id)
+            if self._is_legacy_edge_configs_map(edge_configs):
+                fingerprint_to_remove = None
+                for fingerprint, _binding in self._iter_edge_bindings(edge_configs):
+                    if (
+                        self._device_uuid_for_fingerprint(twin_id, fingerprint)
+                        == str(device_uuid)
+                    ):
+                        fingerprint_to_remove = fingerprint
+                        break
+
+                if not fingerprint_to_remove:
+                    raise CyberwaveAPIError("Device not found", status_code=404)
+
+                edge_configs.pop(fingerprint_to_remove, None)
+                if edge_configs:
+                    self._update_twin_edge_configs(twin_id, metadata, edge_configs)
+                else:
+                    metadata.pop(EDGE_CONFIGS_KEY, None)
+                    self.update(twin_id, metadata=metadata)
+                return {
+                    "status": "ok",
+                    "message": f"Device {fingerprint_to_remove} unpaired",
+                }
+
+            binding_fingerprint = edge_configs.get("edge_fingerprint")
+            if (
+                not isinstance(binding_fingerprint, str)
+                or self._device_uuid_for_fingerprint(twin_id, binding_fingerprint)
+                != str(device_uuid)
+            ):
+                raise CyberwaveAPIError("Device not found", status_code=404)
+
+            metadata.pop(EDGE_CONFIGS_KEY, None)
+            self.update(twin_id, metadata=metadata)
+            return {"status": "ok", "message": f"Device {binding_fingerprint} unpaired"}
         except Exception as e:
             self._handle_error(e, f"unpair device {device_uuid} from twin {twin_id}")
             raise
@@ -1101,15 +1310,28 @@ class TwinManager(BaseResourceManager):
         Returns:
             Status message
         """
-        from cyberwave.rest.models.device_heartbeat_schema import DeviceHeartbeatSchema
-
         try:
-            payload = DeviceHeartbeatSchema(
-                fingerprint=fingerprint,
-                status_data=status_data,
-                ip_address=ip_address,
-            )
-            return self.api.src_app_api_twins_device_heartbeat(twin_id, payload)
+            _, metadata, edge_configs = self._get_twin_edge_configs(twin_id)
+
+            binding = self._resolve_binding_for_fingerprint(edge_configs, fingerprint)
+            if not isinstance(binding, dict):
+                raise CyberwaveAPIError(
+                    (
+                        f"Device {fingerprint} not paired to this twin. "
+                        "Pair it first with twins.pair_device(...)"
+                    ),
+                    status_code=404,
+                )
+
+            if status_data is not None:
+                binding["status_data"] = status_data
+            if ip_address:
+                binding["last_ip_address"] = ip_address
+            binding["last_sync"] = datetime.now(timezone.utc).isoformat()
+            binding["edge_fingerprint"] = fingerprint
+
+            self._update_twin_edge_configs(twin_id, metadata, binding)
+            return {"status": "ok", "message": "Heartbeat received"}
         except Exception as e:
             self._handle_error(e, f"device heartbeat for twin {twin_id}")
             raise

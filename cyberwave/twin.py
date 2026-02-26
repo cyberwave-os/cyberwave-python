@@ -796,7 +796,7 @@ class CameraTwin(Twin):
 
     Example:
         >>> twin = client.twin("unitree/go2")  # Returns CameraTwin if has sensors
-        >>> await twin.start_streaming(fps=15)
+        >>> await twin.stream_video_background(fps=15)
         >>> frame = twin.capture_frame()
     """
 
@@ -808,14 +808,14 @@ class CameraTwin(Twin):
             raise CyberwaveError("Camera streamer not initialized")
         return self._camera_streamer
 
-    async def start_streaming(
+    async def stream_video_background(
         self, fps: int = 30, camera_id: int | str = 0, fourcc: Optional[str] = None
     ) -> "CameraStreamer":
         """
         Start video streaming in the background. Non-blocking.
 
         Returns immediately with the streamer so you can run other code.
-        Use start_streaming() for simple blocking scripts.
+        Use stream_video_background() for simple blocking scripts.
 
         Args:
             fps: Frames per second (default: 30)
@@ -838,7 +838,6 @@ class CameraTwin(Twin):
     async def stop_streaming(self) -> None:
         """Stop camera streaming."""
         if self._camera_streamer is not None:
-            # The streamer handles cleanup in its stop method
             await self._camera_streamer.stop()
             self._camera_streamer = None
 

@@ -169,7 +169,7 @@ camera = cw.twin("cyberwave/standard-cam")
 
 try:
     print(f"Streaming to twin {camera.uuid}... (Ctrl+C to stop)")
-    await camera.start_streaming()
+    await camera.stream_video_background()
 
     while True:
         await asyncio.sleep(1)
@@ -191,7 +191,7 @@ camera = cw.twin("intel/realsensed455")
 
 try:
     print(f"Streaming to twin {camera.uuid}... (Ctrl+C to stop)")
-    await camera.start_streaming()
+    await camera.stream_video_background()
 
     while True:
         await asyncio.sleep(1)
