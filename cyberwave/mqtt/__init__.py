@@ -23,6 +23,8 @@ from ..constants import (
     SOURCE_TYPE_EDGE,
     SOURCE_TYPE_TELE,
     SOURCE_TYPE_EDIT,
+    SOURCE_TYPE_EDGE_LEADER,
+    SOURCE_TYPE_EDGE_FOLLOWER,
 )
 
 logger = logging.getLogger(__name__)
@@ -296,7 +298,7 @@ class CyberwaveMQTTClient:
             if twin_uuid not in self.twin_uuids_with_telemetry_start:
                 self.twin_uuids_with_telemetry_start.append(twin_uuid)
                 self._publish_connect_message(twin_uuid)
-                self.publish_telemetry_start(twin_uuid, metadata)
+                self._publish_telemetry_start_message(twin_uuid, metadata)
 
     def _publish_connect_message(self, twin_uuid: str):
         """Publish connect message to MQTT broker."""
@@ -351,7 +353,7 @@ class CyberwaveMQTTClient:
                     if twin_uuid not in self.twin_uuids_with_telemetry_start:
                         self.twin_uuids_with_telemetry_start.append(twin_uuid)
                         self._publish_connect_message(twin_uuid)
-                        self.publish_telemetry_start(twin_uuid)
+                        self._publish_telemetry_start_message(twin_uuid, None)
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
             raise
@@ -402,19 +404,12 @@ class CyberwaveMQTTClient:
             logger.warning(f"Cannot subscribe to {topic}: not connected to MQTT broker")
 
     # Telemetry MQTT methods
-    def publish_telemetry_start(
-        self, twin_uuid: str, metadata: Optional[Dict[str, float]] = None
-    ):
-        """
-        Publish telemetry start message via MQTT.
-
-        Args:
-            twin_uuid: UUID of the twin
-            metadata: Optional dictionary of metadata (e.g., {"fps": 30.0, "observations": {"joint1": 0.5, "joint2": 1.0}})
-                        This is used to initialize the recording with the current joint positions and desired frequency.
-        """
+    def _publish_telemetry_start_message(
+        self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Build and publish telemetry_start message to MQTT."""
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
-        message = {
+        message: Dict[str, Any] = {
             "type": "telemetry_start",
             "timestamp": time.time(),
         }
@@ -427,6 +422,21 @@ class CyberwaveMQTTClient:
             f"Publishing telemetry start message for twin {twin_uuid}: {message}"
         )
         self.publish(topic, message)
+
+    def publish_telemetry_start(
+        self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Publish telemetry start message via MQTT.
+
+        Registers the twin so no duplicate telemetry_start is sent when joint
+        updates or other twin updates trigger _handle_twin_update_with_telemetry.
+
+        Args:
+            twin_uuid: UUID of the twin
+            metadata: Optional dict (e.g. {"fps": 100, "observations": {"edge_leader": {...}, "edge_follower": {...}}})
+        """
+        self._handle_twin_update_with_telemetry(twin_uuid, metadata)
 
     def publish_telemetry_end(self, twin_uuid: str):
         """Publish telemetry end message via MQTT."""
@@ -574,6 +584,8 @@ class CyberwaveMQTTClient:
         effective_source_type = source_type or self.source_type or SOURCE_TYPE_EDGE
         
         if effective_source_type not in [
+            SOURCE_TYPE_EDGE_LEADER,
+            SOURCE_TYPE_EDGE_FOLLOWER,
             SOURCE_TYPE_EDGE,
             SOURCE_TYPE_TELE,
             SOURCE_TYPE_EDIT,
@@ -581,7 +593,7 @@ class CyberwaveMQTTClient:
         ]:
             raise ValueError(
                 f"Invalid source_type: {effective_source_type}. Must be one of: "
-                f"{SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
+                f"{SOURCE_TYPE_EDGE_LEADER}, {SOURCE_TYPE_EDGE_FOLLOWER}, {SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
             )
 
         self._handle_twin_update_with_telemetry(twin_uuid)
@@ -631,6 +643,8 @@ class CyberwaveMQTTClient:
         effective_source_type = source_type or self.source_type or SOURCE_TYPE_EDGE
         
         if effective_source_type not in [
+            SOURCE_TYPE_EDGE_LEADER,
+            SOURCE_TYPE_EDGE_FOLLOWER,
             SOURCE_TYPE_EDGE,
             SOURCE_TYPE_TELE,
             SOURCE_TYPE_EDIT,
@@ -638,7 +652,7 @@ class CyberwaveMQTTClient:
         ]:
             raise ValueError(
                 f"Invalid source_type: {effective_source_type}. Must be one of: "
-                f"{SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
+                f"{SOURCE_TYPE_EDGE_LEADER}, {SOURCE_TYPE_EDGE_FOLLOWER}, {SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
             )
 
         if not joint_positions:

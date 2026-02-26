@@ -19,12 +19,31 @@
       "manipulator_count": 1,
       "payload_capacity_kg": 0.4,
       "power_source": "tethered",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
-      "sensors": []
+      "sensors": [
+        {
+          "id": "wrist_camera",
+          "type": "rgb",
+          "model": null,
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ]
     }
   },
   "berkeley/berkeley-humanoid": {

@@ -188,6 +188,21 @@ class CyberwaveMQTTClient:
         """
         return self._client.publish_initial_observation(twin_uuid, observations, fps)
 
+    def publish_telemetry_start(
+        self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Publish telemetry start message via MQTT.
+
+        Registers the twin so no duplicate telemetry_start is sent when joint
+        updates or other twin updates trigger _handle_twin_update_with_telemetry.
+
+        Args:
+            twin_uuid: UUID of the twin
+            metadata: Optional dict (e.g. {"fps": 100, "observations": {"edge_leader": {...}, "edge_follower": {...}}})
+        """
+        return self._client.publish_telemetry_start(twin_uuid, metadata)
+
     def update_joint_state(
         self,
         twin_uuid: str,
