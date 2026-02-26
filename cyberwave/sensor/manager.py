@@ -27,7 +27,8 @@ def _infer_config_from_twin(
     from .config import Resolution
 
     # Infer camera type from twin class (DepthCameraTwin -> realsense, else cv2)
-    camera_type = "realsense" if isinstance(twin, DepthCameraTwin) else "cv2"
+    is_depth = isinstance(twin, DepthCameraTwin)
+    camera_type = "realsense" if is_depth else "cv2"
 
     # Infer camera_name from capabilities.sensors (CameraTwin always has sensors)
     camera_name = None
@@ -42,7 +43,7 @@ def _infer_config_from_twin(
         "camera_resolution": Resolution.VGA,
         "camera_name": camera_name,
         "fps": 30,
-        "enable_depth": False,
+        "enable_depth": is_depth,
         "depth_fps": 30,
         "depth_resolution": None,
         "depth_publish_interval": 30,

@@ -931,7 +931,12 @@ class DepthCameraTwin(CameraTwin):
             self._camera_streamer = None
 
     async def stream_video_background(
-        self, fps: int = 10, camera_id: int | str = 0
+        self,
+        fps: int = 10,
+        camera_id: int | str = 0,
+        fourcc: Optional[str] = None,
+        *,
+        enable_depth: bool = True,
     ) -> "CameraStreamer":
         """
         Start video streaming in the background. Non-blocking.
@@ -942,6 +947,8 @@ class DepthCameraTwin(CameraTwin):
         Args:
             fps: Frames per second (default: 10)
             camera_id: Camera device ID (default: 0)
+            fourcc: Optional FOURCC code (inherited from CameraTwin, unused for RealSense)
+            enable_depth: Enable depth streaming (default: True for DepthCameraTwin)
 
         Returns:
             CameraStreamer instance for managing the stream
@@ -951,11 +958,14 @@ class DepthCameraTwin(CameraTwin):
             camera_type="realsense",
             camera_id=camera_id,
             fps=fps,
+            enable_depth=enable_depth,
         )
         await self._camera_streamer.start()
         return self._camera_streamer
 
-    def start_streaming(self, fps: int = 10, camera_id: int | str = 0) -> None:
+    def start_streaming(
+        self, fps: int = 10, camera_id: int | str = 0, *, enable_depth: bool = True
+    ) -> None:
         """Stream video until Ctrl+C. Blocking.
 
         Starts video streaming and blocks until KeyboardInterrupt (Ctrl+C).
@@ -964,12 +974,14 @@ class DepthCameraTwin(CameraTwin):
         Args:
             fps: Frames per second (default: 10)
             camera_id: Camera device ID (default: 0)
+            enable_depth: Enable depth streaming (default: True for DepthCameraTwin)
         """
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_type="realsense",
             camera_id=camera_id,
             fps=fps,
+            enable_depth=enable_depth,
         )
 
         async def _run():
