@@ -127,6 +127,8 @@ from .fingerprint import (
 # Constants
 from .constants import (
     SOURCE_TYPE_EDGE,
+    SOURCE_TYPE_EDGE_FOLLOWER,
+    SOURCE_TYPE_EDGE_LEADER,
     SOURCE_TYPE_TELE,
     SOURCE_TYPE_EDIT,
     SOURCE_TYPE_SIM,
@@ -205,6 +207,8 @@ __all__ = [
     "EdgeController",
     # Constants
     "SOURCE_TYPE_EDGE",
+    "SOURCE_TYPE_EDGE_FOLLOWER",
+    "SOURCE_TYPE_EDGE_LEADER",
     "SOURCE_TYPE_TELE",
     "SOURCE_TYPE_EDIT",
     "SOURCE_TYPE_SIM",
