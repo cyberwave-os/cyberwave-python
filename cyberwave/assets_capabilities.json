@@ -435,15 +435,15 @@
       "has_wheels": false,
       "locomotion_mode": "legged",
       "locomotion_config": {
-        "dof": 12,
-        "max_linear_velocity": 5.0,
-        "max_angular_velocity": 2.0
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 7.0,
+      "payload_capacity_kg": 7,
       "power_source": "battery",
-      "power_capacity_wh": 237.0,
+      "power_capacity_wh": 237,
       "navigation_autonomy_level": "semi_autonomous",
       "navigation_obstacle_avoidance": true,
       "maximum_frequency_hz": 0,
@@ -457,13 +457,13 @@
             "position": {
               "x": 0.3296,
               "y": 0.5026,
-              "z": 0.0
+              "z": 0
             },
             "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
             }
           }
         },
@@ -475,13 +475,13 @@
             "position": {
               "x": 0.3248,
               "y": 0.4932,
-              "z": 0.0
+              "z": 0
             },
             "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
             }
           }
         }

@@ -83,6 +83,7 @@ from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema
 from cyberwave.rest.models.dataset_zip_url_schema import DatasetZipUrlSchema
 from cyberwave.rest.models.deferred_task_execution_response_schema import DeferredTaskExecutionResponseSchema
 from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema
+from cyberwave.rest.models.edge_core_restart_response_schema import EdgeCoreRestartResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema
 from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema

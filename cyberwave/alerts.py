@@ -123,6 +123,11 @@ class Alert:
         val = _attr(self._data, "resolved_at")
         return str(val) if val else None
 
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        val = _attr(self._data, "metadata")
+        return val if isinstance(val, dict) else {}
+
     # ------------------------------------------------------------------
     # Lifecycle actions
     # ------------------------------------------------------------------
@@ -169,6 +174,7 @@ class Alert:
         alert_type: Optional[str] = None,
         severity: Optional[str] = None,
         status: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> "Alert":
         """Update mutable fields on this alert.
 
@@ -188,6 +194,8 @@ class Alert:
             payload["severity"] = severity
         if status is not None:
             payload["status"] = status
+        if metadata is not None:
+            payload["metadata"] = metadata
 
         data = _put_alert(self._client, self.uuid, payload)
         self._data = data
@@ -239,6 +247,7 @@ class TwinAlertManager:
         environment_uuid: Optional[str] = None,
         workflow_uuid: Optional[str] = None,
         workspace_uuid: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Alert:
         """Create a new **active** alert for this twin.
 
@@ -252,6 +261,7 @@ class TwinAlertManager:
             workflow_uuid: Optionally attach to a workflow.
             workspace_uuid: Workspace to associate the alert with.
                 Defaults to the workspace configured on the client.
+            metadata: Optional metadata dict (e.g. calibration args for calibration_needed).
 
         Returns:
             The newly created :class:`Alert`.
@@ -272,6 +282,8 @@ class TwinAlertManager:
             payload["environment_uuid"] = env_uuid
         if workflow_uuid is not None:
             payload["workflow_uuid"] = workflow_uuid
+        if metadata is not None:
+            payload["metadata"] = metadata
 
         data = _create_alert(self._twin.client, payload)
         return Alert(self._twin.client, data)

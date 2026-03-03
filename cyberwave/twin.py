@@ -266,6 +266,48 @@ class Twin:
         )
 
     @property
+    def parent(self) -> Optional["Twin"]:
+        """Get this twin's parent twin, if docked."""
+        parent_uuid = None
+        if hasattr(self._data, "attach_to_twin_uuid"):
+            parent_uuid = self._data.attach_to_twin_uuid
+        elif isinstance(self._data, dict):
+            parent_uuid = self._data.get("attach_to_twin_uuid")
+
+        if not parent_uuid:
+            return None
+
+        try:
+            return self.client.twins.get(str(parent_uuid))
+        except Exception as e:
+            raise CyberwaveError(f"Failed to fetch parent twin '{parent_uuid}': {e}")
+
+    @property
+    def children(self) -> List["Twin"]:
+        """Get child twins docked to this twin."""
+        child_twin_uuids: Any = []
+        if hasattr(self._data, "child_twin_uuids"):
+            child_twin_uuids = self._data.child_twin_uuids or []
+        elif isinstance(self._data, dict):
+            child_twin_uuids = self._data.get("child_twin_uuids") or []
+
+        if not isinstance(child_twin_uuids, list) or not child_twin_uuids:
+            return []
+
+        children: List["Twin"] = []
+        for child_uuid in child_twin_uuids:
+            if not child_uuid:
+                continue
+            try:
+                child_twin = self.client.twins.get(str(child_uuid))
+                children.append(child_twin)
+            except Exception as e:
+                raise CyberwaveError(
+                    f"Failed to fetch child twin '{child_uuid}': {e}"
+                ) from e
+        return children
+
+    @property
     def motion(self) -> "TwinMotionHandle":
         """
         Access motion control for poses and animations.

@@ -42,7 +42,8 @@ class AlertSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     resolved_at: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "alert_type", "severity", "status", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "created_by_uuid", "created_at", "updated_at", "resolved_at"]
+    metadata: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "alert_type", "severity", "status", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "created_by_uuid", "created_at", "updated_at", "resolved_at", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -108,6 +109,11 @@ class AlertSchema(BaseModel):
         if self.resolved_at is None and "resolved_at" in self.model_fields_set:
             _dict['resolved_at'] = None
 
+        # set to None if metadata (nullable) is None
+        # and model_fields_set contains the field
+        if self.metadata is None and "metadata" in self.model_fields_set:
+            _dict['metadata'] = None
+
         return _dict
 
     @classmethod
@@ -134,7 +140,8 @@ class AlertSchema(BaseModel):
             "created_by_uuid": obj.get("created_by_uuid"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
-            "resolved_at": obj.get("resolved_at")
+            "resolved_at": obj.get("resolved_at"),
+            "metadata": obj.get("metadata")
         })
         return _obj
 

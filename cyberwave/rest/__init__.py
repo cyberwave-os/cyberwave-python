@@ -106,6 +106,7 @@ __all__ = [
     "DatasetZipUrlSchema",
     "DeferredTaskExecutionResponseSchema",
     "DiscoveryResponseSchema",
+    "EdgeCoreRestartResponseSchema",
     "EdgeCreateSchema",
     "EdgeRegisterSchema",
     "EdgeSchema",
@@ -356,6 +357,7 @@ from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema as D
 from cyberwave.rest.models.dataset_zip_url_schema import DatasetZipUrlSchema as DatasetZipUrlSchema
 from cyberwave.rest.models.deferred_task_execution_response_schema import DeferredTaskExecutionResponseSchema as DeferredTaskExecutionResponseSchema
 from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema as DiscoveryResponseSchema
+from cyberwave.rest.models.edge_core_restart_response_schema import EdgeCoreRestartResponseSchema as EdgeCoreRestartResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema as EdgeCreateSchema
 from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema as EdgeRegisterSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema as EdgeSchema
