@@ -203,6 +203,21 @@ class CyberwaveMQTTClient:
         """
         return self._client.publish_telemetry_start(twin_uuid, metadata)
 
+    def publish_telemetry_start_message(
+        self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Publish telemetry_start message unconditionally (no already_started check).
+
+        Registers the twin and publishes connect + telemetry_start. Caller is
+        responsible for ensuring this is only called once.
+
+        Args:
+            twin_uuid: UUID of the twin
+            metadata: Optional dict (e.g. {"fps": 100, "observations": {...}})
+        """
+        return self._client.publish_telemetry_start_message(twin_uuid, metadata)
+
     def update_joint_state(
         self,
         twin_uuid: str,

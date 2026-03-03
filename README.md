@@ -109,6 +109,25 @@ robot.joints.set("shoulder_joint", 45, degrees=True)
  robot = cw.twin("the-robot-studio/so101", environment_id="YOUR_ENVIRONMENT_ID")
 ```
 
+### Uploading Large GLB Assets
+
+The SDK supports large GLB uploads by automatically switching to an attachment + signed URL flow when files exceed the standard upload limit.
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave()
+
+asset = cw.assets.create(
+    name="Warehouse Shelf",
+    description="Large GLB upload example",
+)
+
+# Automatically chooses direct upload (small files) or signed URL flow (large files)
+updated_asset = cw.assets.upload_glb(asset.uuid, "/path/to/warehouse_shelf.glb")
+print(updated_asset.glb_file)
+```
+
 ### Environment Variables
 
 If you are always using the same environment, you can set it as a default with the CYBERWAVE_ENVIRONMENT_ID environment variable:

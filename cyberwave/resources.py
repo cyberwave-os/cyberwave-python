@@ -21,8 +21,12 @@ Usage:
 """
 
 import uuid as uuid_lib
+import mimetypes
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+import urllib3
 
 from cyberwave.rest import (
     DefaultApi,
@@ -36,10 +40,14 @@ from cyberwave.rest import (
     EnvironmentCreateSchema,
     AssetSchema,
     AssetCreateSchema,
+    AssetGLBFromAttachmentSchema,
     AssetUpdateSchema,
+    AttachmentCreateSchema,
+    CompleteLargeUploadSchema,
     TwinSchema,
     TwinCreateSchema,
     TwinStateUpdateSchema,
+    InitiateLargeUploadSchema,
     JointStatesSchema,
     JointStateUpdateSchema,
     JointStateSchema,
@@ -382,6 +390,8 @@ class EnvironmentManager(BaseResourceManager):
 class AssetManager(BaseResourceManager):
     """Manager for asset operations"""
 
+    MAX_STANDARD_UPLOAD_BYTES = 32 * 1024 * 1024
+
     def __init__(self, api_client: DefaultApi):
         super().__init__(api_client)
         # Instance-level cache for full asset data to avoid repeated fetches
@@ -452,6 +462,135 @@ class AssetManager(BaseResourceManager):
             self.api.src_app_api_assets_delete_asset(asset_id)
         except Exception as e:
             self._handle_error(e, f"delete asset {asset_id}")
+
+    @staticmethod
+    def _guess_content_type(file_path: str) -> str:
+        """Infer content type for uploads."""
+        guessed_type, _ = mimetypes.guess_type(file_path)
+        return guessed_type or "application/octet-stream"
+
+    @staticmethod
+    def _is_payload_too_large_error(error: Exception) -> bool:
+        """Best-effort check for 413 / size-limit errors from generated client."""
+        status = getattr(error, "status", None)
+        if status == 413:
+            return True
+
+        details = (
+            str(getattr(error, "body", "") or "")
+            + " "
+            + str(error)
+        ).lower()
+        return bool(
+            status == 400
+            and (
+                "file size exceeds maximum limit" in details
+                or "payload too large" in details
+                or "too large" in details
+            )
+        )
+
+    def _upload_glb_direct(self, asset_id: str, file_path: str) -> AssetSchema:
+        """Upload a GLB through the standard multipart endpoint."""
+        with open(file_path, "rb") as file_obj:
+            try:
+                return self.api.src_app_api_assets_upload_glb(asset_id, file=file_obj)
+            except TypeError:
+                file_obj.seek(0)
+                return self.api.src_app_api_assets_upload_glb(asset_id, file_obj)
+
+    def _upload_glb_via_attachment(self, asset_id: str, file_path: str) -> AssetSchema:
+        """Upload a GLB using attachment signed URLs, then bind it to the asset."""
+        filename = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+        content_type = self._guess_content_type(file_path)
+
+        attachment = self.api.src_app_api_attachments_create_attachment(
+            AttachmentCreateSchema(
+                asset_uuid=asset_id,
+                metadata={
+                    "type": "asset_glb_upload",
+                    "original_filename": filename,
+                },
+            )
+        )
+
+        initiated = self.api.src_app_api_attachments_initiate_large_attachment_upload(
+            str(attachment.uuid),
+            InitiateLargeUploadSchema(
+                filename=filename,
+                content_type=content_type,
+                file_size=file_size,
+            ),
+        )
+        upload_url = getattr(initiated, "upload_url", None)
+        storage_key = getattr(initiated, "storage_key", None)
+        if not upload_url or not storage_key:
+            raise CyberwaveAPIError(
+                "Large upload not available: storage backend did not return a signed upload URL."
+            )
+
+        with open(file_path, "rb") as file_obj:
+            file_bytes = file_obj.read()
+
+        http = urllib3.PoolManager()
+        response = http.request(
+            "PUT",
+            upload_url,
+            body=file_bytes,
+            headers={"Content-Type": content_type},
+            preload_content=False,
+        )
+        status = response.status
+        response.release_conn()
+        if status >= 400:
+            raise CyberwaveAPIError(
+                f"Signed upload failed with status code {status}",
+                status_code=status,
+            )
+
+        self.api.src_app_api_attachments_complete_large_attachment_upload(
+            str(attachment.uuid),
+            CompleteLargeUploadSchema(storage_key=storage_key),
+        )
+
+        return self.api.src_app_api_assets_set_glb_from_attachment(
+            asset_id,
+            AssetGLBFromAttachmentSchema(attachment_uuid=str(attachment.uuid)),
+        )
+
+    def upload_glb(self, asset_id: str, file_path: str) -> AssetSchema:
+        """
+        Upload a GLB for an asset.
+
+        Uses the direct multipart endpoint for files <= 32MB, and automatically
+        switches to attachment + signed URL flow for larger files.
+        """
+        if not os.path.exists(file_path):
+            raise CyberwaveAPIError(f"GLB file not found: {file_path}")
+
+        file_size = os.path.getsize(file_path)
+        if file_size > self.MAX_STANDARD_UPLOAD_BYTES:
+            try:
+                return self._upload_glb_via_attachment(asset_id, file_path)
+            except Exception as e:
+                self._handle_error(e, f"upload large glb for asset {asset_id}")
+                raise
+
+        try:
+            return self._upload_glb_direct(asset_id, file_path)
+        except Exception as e:
+            if self._is_payload_too_large_error(e):
+                try:
+                    return self._upload_glb_via_attachment(asset_id, file_path)
+                except Exception as large_upload_error:
+                    self._handle_error(
+                        large_upload_error,
+                        f"upload glb via attachment for asset {asset_id}",
+                    )
+                    raise
+            self._handle_error(e, f"upload glb for asset {asset_id}")
+            raise
 
     # =========================================================================
     # Universal Schema APIs

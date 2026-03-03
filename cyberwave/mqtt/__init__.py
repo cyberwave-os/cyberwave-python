@@ -295,7 +295,15 @@ class CyberwaveMQTTClient:
             if twin_uuid not in self.twin_uuids:
                 self.twin_uuids.append(twin_uuid)
 
-            if twin_uuid not in self.twin_uuids_with_telemetry_start:
+            already_started = twin_uuid in self.twin_uuids_with_telemetry_start
+            logger.info(
+                "_handle_twin_update_with_telemetry: twin=%s already_started=%s "
+                "current_tracking_list=%s",
+                twin_uuid,
+                already_started,
+                self.twin_uuids_with_telemetry_start,
+            )
+            if not already_started:
                 self.twin_uuids_with_telemetry_start.append(twin_uuid)
                 self._publish_connect_message(twin_uuid)
                 self._publish_telemetry_start_message(twin_uuid, metadata)
@@ -423,6 +431,28 @@ class CyberwaveMQTTClient:
         )
         self.publish(topic, message)
 
+    def publish_telemetry_start_message(
+        self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Publish telemetry_start message unconditionally (no already_started check).
+
+        Registers the twin and publishes connect + telemetry_start. Caller is
+        responsible for ensuring this is only called once (e.g. scripts manage
+        their own "already started" state).
+
+        Args:
+            twin_uuid: UUID of the twin
+            metadata: Optional dict (e.g. {"fps": 100, "observations": {...}})
+        """
+        with self._telemetry_lock:
+            if twin_uuid not in self.twin_uuids:
+                self.twin_uuids.append(twin_uuid)
+            if twin_uuid not in self.twin_uuids_with_telemetry_start:
+                self.twin_uuids_with_telemetry_start.append(twin_uuid)
+            self._publish_connect_message(twin_uuid)
+            self._publish_telemetry_start_message(twin_uuid, metadata)
+
     def publish_telemetry_start(
         self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
     ) -> None:
@@ -439,13 +469,48 @@ class CyberwaveMQTTClient:
         self._handle_twin_update_with_telemetry(twin_uuid, metadata)
 
     def publish_telemetry_end(self, twin_uuid: str):
-        """Publish telemetry end message via MQTT."""
+        """Publish telemetry end message via MQTT.
+
+        Also clears the telemetry tracking state for this twin, allowing
+        subsequent publish_telemetry_start calls to work properly when
+        a new operation (teleoperate/remoteoperate) is started.
+        """
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
         message = {
             "type": "telemetry_end",
             "timestamp": time.time(),
         }
         self.publish(topic, message)
+
+        # Clear tracking state so next publish_telemetry_start will fire
+        # Use lock for thread safety (consistent with _handle_twin_update_with_telemetry)
+        with self._telemetry_lock:
+            was_in_list = twin_uuid in self.twin_uuids_with_telemetry_start
+            if was_in_list:
+                self.twin_uuids_with_telemetry_start.remove(twin_uuid)
+            logger.info(
+                "publish_telemetry_end: twin %s was_in_tracking_list=%s, "
+                "remaining_tracked_twins=%s",
+                twin_uuid,
+                was_in_list,
+                self.twin_uuids_with_telemetry_start,
+            )
+
+    def publish_connected(self, twin_uuid: str):
+        """Publish connected message via MQTT.
+
+        Call this when starting an operation (teleoperate, remoteoperate) to
+        indicate the twin is now connected/online.
+        """
+        self._publish_connect_message(twin_uuid)
+
+    def publish_disconnected(self, twin_uuid: str):
+        """Publish disconnected message via MQTT.
+
+        Call this when stopping an operation to indicate the twin is no longer
+        actively streaming telemetry.
+        """
+        self._publish_disconnect_message(twin_uuid)
 
     # Environment MQTT methods
     def subscribe_environment(

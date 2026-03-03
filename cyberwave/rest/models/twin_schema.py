@@ -55,7 +55,7 @@ class TwinSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     attach_to_twin_uuid: Optional[StrictStr] = None
     attach_to_link: Optional[StrictStr] = None
-    child_twin_uuids: List[StrictStr]
+    child_twin_uuids: Optional[List[StrictStr]] = None
     attach_offset_x: Union[StrictFloat, StrictInt]
     attach_offset_y: Union[StrictFloat, StrictInt]
     attach_offset_z: Union[StrictFloat, StrictInt]
@@ -149,6 +149,11 @@ class TwinSchema(BaseModel):
         # and model_fields_set contains the field
         if self.attach_to_link is None and "attach_to_link" in self.model_fields_set:
             _dict['attach_to_link'] = None
+
+        # set to None if child_twin_uuids (nullable) is None
+        # and model_fields_set contains the field
+        if self.child_twin_uuids is None and "child_twin_uuids" in self.model_fields_set:
+            _dict['child_twin_uuids'] = None
 
         return _dict
 
