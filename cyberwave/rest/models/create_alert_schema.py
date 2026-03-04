@@ -35,8 +35,7 @@ class CreateAlertSchema(BaseModel):
     environment_uuid: Optional[StrictStr] = None
     workflow_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "metadata"]
+    __properties: ClassVar[List[str]] = ["name", "description", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -97,11 +96,6 @@ class CreateAlertSchema(BaseModel):
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
 
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
         return _dict
 
     @classmethod
@@ -122,8 +116,7 @@ class CreateAlertSchema(BaseModel):
             "twin_uuid": obj.get("twin_uuid"),
             "environment_uuid": obj.get("environment_uuid"),
             "workflow_uuid": obj.get("workflow_uuid"),
-            "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata")
+            "workspace_uuid": obj.get("workspace_uuid")
         })
         return _obj
 

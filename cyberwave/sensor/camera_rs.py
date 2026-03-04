@@ -354,7 +354,7 @@ class RealSenseStreamer(BaseVideoStreamer):
         >>> from cyberwave.sensor import RealSenseStreamer, Resolution
         >>> import asyncio
         >>>
-        >>> client = Cyberwave(token="your_token")
+        >>> client = Cyberwave(api_key="your_api_key")
         >>> streamer = RealSenseStreamer(
         ...     client.mqtt,
         ...     twin_uuid="your_twin_uuid",

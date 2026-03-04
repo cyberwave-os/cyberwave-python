@@ -15,7 +15,7 @@ be overwritten by regenerating the SDK.
 Usage:
     These managers are typically accessed via the Cyberwave client:
 
-    >>> client = Cyberwave(token="...")
+    >>> client = Cyberwave(api_key="...")
     >>> workspaces = client.workspaces.list()
     >>> twin = client.twins.get("uuid")
 """

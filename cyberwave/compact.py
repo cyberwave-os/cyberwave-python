@@ -35,7 +35,6 @@ def _get_client() -> Cyberwave:
 
         _global_client = Cyberwave(
             base_url=config.base_url,
-            token=config.token,
             api_key=config.api_key,
             mqtt_host=config.mqtt_host,
             mqtt_port=config.mqtt_port,
@@ -60,7 +59,7 @@ def configure(
     Args:
         base_url: Base URL of the Cyberwave backend
         api_key: API key for authentication
-        token: Bearer token for authentication
+        token: Deprecated alias for api_key
         environment: Default environment ID
         workspace: Default workspace ID
         mqtt_host: MQTT broker host
@@ -83,15 +82,15 @@ def configure(
         config.base_url = base_url
     if api_key:
         config.api_key = api_key
-    if token:
-        config.token = token
+    elif token:
+        config.api_key = token
     if environment:
         config.environment_id = environment
     if workspace:
         config.workspace_id = workspace
     if mqtt_host:
         config.mqtt_host = mqtt_host
-    if mqtt_port:
+    if mqtt_port is not None:
         config.mqtt_port = mqtt_port
 
     for key, value in kwargs.items():

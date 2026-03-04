@@ -19,7 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from cyberwave.rest.models.joint_calibration_schema import JointCalibrationSchema
+from cyberwave.rest.models.joint_calibration import JointCalibration
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -27,7 +27,7 @@ class TwinJointCalibrationSchema(BaseModel):
     """
     TwinJointCalibrationSchema
     """ # noqa: E501
-    joint_calibration: Dict[str, JointCalibrationSchema]
+    joint_calibration: Dict[str, JointCalibration]
     robot_type: Optional[StrictStr] = 'follower'
     __properties: ClassVar[List[str]] = ["joint_calibration", "robot_type"]
 
@@ -90,7 +90,7 @@ class TwinJointCalibrationSchema(BaseModel):
 
         _obj = cls.model_validate({
             "joint_calibration": dict(
-                (_k, JointCalibrationSchema.from_dict(_v))
+                (_k, JointCalibration.from_dict(_v))
                 for _k, _v in obj["joint_calibration"].items()
             )
             if obj.get("joint_calibration") is not None

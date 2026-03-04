@@ -31,9 +31,9 @@ class EdgeSchema(BaseModel):
     name: StrictStr
     created_at: datetime
     updated_at: datetime
-    organization_uuid: Optional[StrictStr]
+    workspace_uuid: Optional[StrictStr]
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "name", "created_at", "updated_at", "organization_uuid", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "created_at", "updated_at", "workspace_uuid", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -74,10 +74,10 @@ class EdgeSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if organization_uuid (nullable) is None
+        # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
 
         return _dict
 
@@ -95,7 +95,7 @@ class EdgeSchema(BaseModel):
             "name": obj.get("name"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
-            "organization_uuid": obj.get("organization_uuid"),
+            "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata")
         })
         return _obj

@@ -3,13 +3,13 @@ Main Cyberwave client that integrates REST and MQTT APIs
 """
 
 import os
+import warnings
 from typing import Optional
 
 from cyberwave.rest import DefaultApi, ApiClient, Configuration
 from cyberwave.config import (
     CyberwaveConfig,
     DEFAULT_BASE_URL,
-    DEFAULT_MQTT_PORT,
 )
 from cyberwave.controller import EdgeController
 from cyberwave.mqtt_client import CyberwaveMQTTClient
@@ -55,19 +55,17 @@ class Cyberwave:
     high-level abstractions for working with digital twins.
 
     Example:
-        >>> client = Cyberwave(base_url="http://localhost:8000", token="your_token")
+        >>> client = Cyberwave(base_url="http://localhost:8000", api_key="your_api_key")
         >>> workspaces = client.workspaces.list()
         >>> twin = client.twin("the-robot-studio/so101")
 
     Args:
         base_url: Base URL of the Cyberwave backend
-        token: Bearer token for authentication
-        api_key: API key for authentication (alternative to token)
+        api_key: API key for authentication
+        token: Deprecated alias for api_key (kept for backwards compatibility)
         mqtt_host: MQTT broker host (optional, defaults to base_url host)
         mqtt_port: MQTT broker port (default: 1883)
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
-        mqtt_api_token: API token used as MQTT secret
-        mqtt_password: Deprecated alias for mqtt_api_token
         mqtt_use_tls: Enable TLS for MQTT connection
         mqtt_tls_ca_cert: Path to CA cert bundle for MQTT TLS
         environment_id: Default environment ID
@@ -78,13 +76,11 @@ class Cyberwave:
     def __init__(
         self,
         base_url: str | None = None,
-        token: Optional[str] = None,
         api_key: Optional[str] = None,
+        token: Optional[str] = None,
         mqtt_host: Optional[str] = None,
         mqtt_port: int | None = None,
         mqtt_username: Optional[str] = None,
-        mqtt_api_token: Optional[str] = None,
-        mqtt_password: Optional[str] = None,
         mqtt_use_tls: bool = False,
         mqtt_tls_ca_cert: Optional[str] = None,
         topic_prefix: Optional[str] = None,
@@ -94,27 +90,31 @@ class Cyberwave:
         if not base_url:
             base_url = os.getenv("CYBERWAVE_BASE_URL", DEFAULT_BASE_URL)
 
-        if token is None:
-            token = os.getenv("CYBERWAVE_API_KEY")
+        if api_key is None and token is not None:
+            warnings.warn(
+                "'token' is deprecated and will be removed in a future release. "
+                "Use 'api_key' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            api_key = token
 
         if api_key is None:
             api_key = os.getenv("CYBERWAVE_API_KEY", None)
 
-        if api_key is None and token is None:
+        if api_key is None:
             raise ValueError(
-                "No API token found! Set CYBERWAVE_API_KEY. "
+                "No API key found! Set CYBERWAVE_API_KEY. "
                 "Get yours at https://cyberwave.com/profile"
             )
 
         self.config = CyberwaveConfig(
             base_url=base_url,
-            token=token,
             api_key=api_key,
+            token=token,
             mqtt_host=mqtt_host,
-            mqtt_port=mqtt_port or DEFAULT_MQTT_PORT,
+            mqtt_port=mqtt_port,
             mqtt_username=mqtt_username,
-            mqtt_api_token=mqtt_api_token,
-            mqtt_password=mqtt_password,
             mqtt_use_tls=mqtt_use_tls,
             mqtt_tls_ca_cert=mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,
@@ -138,10 +138,7 @@ class Cyberwave:
         """Setup the REST API client with authentication"""
         configuration = Configuration(host=self.config.base_url)
 
-        if self.config.token:
-            configuration.api_key["CustomTokenAuthentication"] = self.config.token
-            configuration.api_key_prefix["CustomTokenAuthentication"] = "Bearer"
-        elif self.config.api_key:
+        if self.config.api_key:
             configuration.api_key["CustomTokenAuthentication"] = self.config.api_key
             configuration.api_key_prefix["CustomTokenAuthentication"] = "Bearer"
 
@@ -206,16 +203,14 @@ class Cyberwave:
             except UnauthorizedException as e:
                 error_msg = "Authentication failed: Invalid or missing credentials.\n\n"
 
-                if self.config.token:
-                    error_msg += "Your token appears to be invalid or expired.\n"
-                elif self.config.api_key:
+                if self.config.api_key:
                     error_msg += "Your API key appears to be invalid or expired.\n"
                 else:
                     error_msg += "No authentication credentials were provided.\n"
 
-                error_msg += "  1. Add a token at https://cyberwave.com/profile\n"
+                error_msg += "  1. Add an API key at https://cyberwave.com/profile\n"
                 error_msg += "  2. Copy it to your clipboard\n"
-                error_msg += "  3. Set the environment variable:\n\nexport CYBERWAVE_API_KEY=your_token\n"
+                error_msg += "  3. Set the environment variable:\n\nexport CYBERWAVE_API_KEY=your_api_key\n"
                 error_msg += "  4. Run your script again!\n"
 
                 if hasattr(e, "request_headers") and e.request_headers:
@@ -345,8 +340,8 @@ class Cyberwave:
     def configure(
         self,
         base_url: Optional[str] = None,
-        token: Optional[str] = None,
         api_key: Optional[str] = None,
+        token: Optional[str] = None,
         environment_id: Optional[str] = None,
         workspace_id: Optional[str] = None,
         **kwargs,
@@ -356,18 +351,24 @@ class Cyberwave:
 
         Args:
             base_url: Base URL of the Cyberwave backend
-            token: Bearer token for authentication
             api_key: API key for authentication
+            token: Deprecated alias for api_key
             environment_id: Default environment ID
             workspace_id: Default workspace ID
             **kwargs: Additional configuration options
         """
         if base_url:
             self.config.base_url = base_url
-        if token:
-            self.config.token = token
         if api_key:
             self.config.api_key = api_key
+        elif token:
+            warnings.warn(
+                "'token' is deprecated and will be removed in a future release. "
+                "Use 'api_key' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.config.api_key = token
         if environment_id:
             self.config.environment_id = environment_id
         if workspace_id:
@@ -447,7 +448,7 @@ class Cyberwave:
             Camera streamer instance (CV2CameraStreamer or RealSenseStreamer)
 
         Example:
-            >>> client = Cyberwave(token="your_token")
+            >>> client = Cyberwave(api_key="your_api_key")
             >>>
             >>> # Local USB camera
             >>> streamer = client.video_stream(
@@ -585,7 +586,7 @@ class Cyberwave:
             EdgeController instance ready to start
 
         Example:
-            >>> client = Cyberwave(token="your_token")
+            >>> client = Cyberwave(api_key="your_api_key")
             >>> controller = client.controller(twin_uuid="your_twin_uuid")
             >>> await controller.start()
 

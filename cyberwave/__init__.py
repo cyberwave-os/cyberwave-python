@@ -10,7 +10,7 @@ Quick Start:
     >>> workspaces = cw.workspaces.list()
 
     Video Streaming (requires: pip install cyberwave[camera]):
-    >>> cw = Cyberwave(token="your_token")
+    >>> cw = Cyberwave(api_key="your_api_key")
     >>> twin = cw.twin("cyberwave/generic-camera")
     >>> twin.start_streaming()  # blocking; use stream_video_background() in async code
 """
@@ -139,7 +139,7 @@ from .constants import (
 from .scene import Scene
 
 # Version information
-__version__ = "0.3.25"
+__version__ = "0.3.29"
 
 # Define public API
 __all__ = [

@@ -33,7 +33,7 @@ from cyberwave.mqtt import CyberwaveMQTTClient
 client = CyberwaveMQTTClient(
     mqtt_broker="mqtt.cyberwave.com",
     mqtt_port=1883,
-    api_token="your_api_token"
+    api_key="your_api_key"
 )
 
 # The client auto-connects by default
@@ -95,7 +95,7 @@ For custom deployments with topic prefixes:
 ```python
 client = CyberwaveMQTTClient(
     mqtt_broker="mqtt.cyberwave.com",
-    api_token="your_api_token",
+    api_key="your_api_key",
     topic_prefix="custom/prefix/"
 )
 ```
@@ -114,8 +114,7 @@ client.disconnect()
 | `mqtt_broker`   | `str`  | Required       | MQTT broker hostname or IP                |
 | `mqtt_port`     | `int`  | `1883`         | MQTT broker port                          |
 | `mqtt_username` | `str`  | `"mqttcyb"`    | MQTT username placeholder                 |
-| `api_token`     | `str`  | Required       | Cyberwave API token (used as MQTT secret) |
-| `mqtt_password` | `str`  | `None`         | Deprecated alias for `api_token`          |
+| `api_key`       | `str`  | Required       | Cyberwave API key (used as MQTT password) |
 | `use_tls`       | `bool` | `False`        | Enable TLS transport for MQTT             |
 | `tls_ca_cert`   | `str`  | `None`         | CA bundle path for broker cert validation |
 | `client_id`     | `str`  | Auto-generated | Custom MQTT client ID                     |

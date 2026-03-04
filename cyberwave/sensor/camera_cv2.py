@@ -531,7 +531,7 @@ class CV2CameraStreamer(BaseVideoStreamer):
         >>> from cyberwave.sensor import CV2CameraStreamer, Resolution
         >>> import asyncio
         >>>
-        >>> client = Cyberwave(token="your_token")
+        >>> client = Cyberwave(api_key="your_api_key")
         >>> streamer = CV2CameraStreamer(
         ...     client.mqtt,
         ...     camera_id=0,

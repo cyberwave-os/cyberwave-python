@@ -15,12 +15,11 @@ class EdgeNodeConfig:
     This configuration can be loaded from environment variables or passed directly.
 
     Environment Variables:
-        CYBERWAVE_API_KEY: API token for authentication
+        CYBERWAVE_API_KEY: API key for authentication
         CYBERWAVE_BASE_URL: Base URL of the Cyberwave backend
         MQTT_HOST: MQTT broker hostname
         MQTT_PORT: MQTT broker port
         MQTT_USERNAME: MQTT username
-        MQTT_API_TOKEN: Optional explicit API token for MQTT auth
         EDGE_UUID: UUID of this edge device
         TWIN_UUID: UUID of the default twin
         TOPIC_PREFIX: MQTT topic prefix (environment-specific)
@@ -29,7 +28,7 @@ class EdgeNodeConfig:
     """
 
     # Cyberwave connection
-    cyberwave_token: Optional[str] = field(
+    cyberwave_api_key: Optional[str] = field(
         default_factory=lambda: os.getenv("CYBERWAVE_API_KEY")
     )
     cyberwave_base_url: str = field(
@@ -48,16 +47,8 @@ class EdgeNodeConfig:
     mqtt_username: Optional[str] = field(
         default_factory=lambda: os.getenv("MQTT_USERNAME")
     )
-    mqtt_api_token: Optional[str] = field(
-        default_factory=lambda: os.getenv("MQTT_API_TOKEN")
-        or os.getenv("CYBERWAVE_API_KEY")
-    )
-    # Deprecated alias kept for backwards compatibility when passed explicitly.
-    mqtt_password: Optional[str] = field(
-        default=None
-    )
 
-    # Topic prefix for MQTT (environment-specific)
+    # Topic prefix for MQTT (environment-specific)  
     topic_prefix: str = field(
         default_factory=lambda: os.getenv("TOPIC_PREFIX", "")
     )
@@ -94,7 +85,7 @@ class EdgeNodeConfig:
         Raises:
             ValueError: If required configuration is missing.
         """
-        if not self.cyberwave_token:
+        if not self.cyberwave_api_key:
             raise ValueError(
                 "CYBERWAVE_API_KEY is required. Get yours at https://cyberwave.com/profile"
             )

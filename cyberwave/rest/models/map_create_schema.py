@@ -34,11 +34,8 @@ class MapCreateSchema(BaseModel):
     origin_x: Optional[Union[StrictFloat, StrictInt]] = 0.0
     origin_y: Optional[Union[StrictFloat, StrictInt]] = 0.0
     origin_z: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_roll: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_pitch: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_yaw: Optional[Union[StrictFloat, StrictInt]] = 0.0
     metadata: Optional[Metadata] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "metadata"]
+    __properties: ClassVar[List[str]] = ["twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "metadata"]
 
     @field_validator('map_type')
     def map_type_validate_enum(cls, value):
@@ -128,9 +125,6 @@ class MapCreateSchema(BaseModel):
             "origin_x": obj.get("origin_x") if obj.get("origin_x") is not None else 0.0,
             "origin_y": obj.get("origin_y") if obj.get("origin_y") is not None else 0.0,
             "origin_z": obj.get("origin_z") if obj.get("origin_z") is not None else 0.0,
-            "origin_roll": obj.get("origin_roll") if obj.get("origin_roll") is not None else 0.0,
-            "origin_pitch": obj.get("origin_pitch") if obj.get("origin_pitch") is not None else 0.0,
-            "origin_yaw": obj.get("origin_yaw") if obj.get("origin_yaw") is not None else 0.0,
             "metadata": Metadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None
         })
         return _obj

@@ -26,14 +26,13 @@ class EpisodeUpdateSchema(BaseModel):
     """
     EpisodeUpdateSchema
     """ # noqa: E501
-    task_name: Optional[StrictStr] = None
     twins: Optional[List[StrictStr]] = None
     started_at: Optional[StrictInt] = None
     finished_at: Optional[StrictInt] = None
     metadata: Optional[Dict[str, Any]] = None
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["task_name", "twins", "started_at", "finished_at", "metadata", "created_by", "updated_by"]
+    __properties: ClassVar[List[str]] = ["twins", "started_at", "finished_at", "metadata", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -74,11 +73,6 @@ class EpisodeUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if task_name (nullable) is None
-        # and model_fields_set contains the field
-        if self.task_name is None and "task_name" in self.model_fields_set:
-            _dict['task_name'] = None
-
         # set to None if twins (nullable) is None
         # and model_fields_set contains the field
         if self.twins is None and "twins" in self.model_fields_set:
@@ -121,7 +115,6 @@ class EpisodeUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "task_name": obj.get("task_name"),
             "twins": obj.get("twins"),
             "started_at": obj.get("started_at"),
             "finished_at": obj.get("finished_at"),

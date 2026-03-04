@@ -41,8 +41,7 @@ class CyberwaveMQTTClient:
         mqtt_broker: MQTT broker hostname or IP address
         mqtt_port: MQTT broker port (default: 1883)
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
-        api_token: Cyberwave API token used for MQTT authN/authZ
-        mqtt_password: Deprecated alias for api_token
+        api_key: Cyberwave API key used for MQTT authN/authZ
         client_id: Custom MQTT client ID (auto-generated if not provided)
         use_tls: Enable TLS transport for MQTT
         tls_ca_cert: Path to CA certificate bundle for broker verification
@@ -55,8 +54,7 @@ class CyberwaveMQTTClient:
         mqtt_broker: str = "mqtt.cyberwave.com",
         mqtt_port: int = 1883,
         mqtt_username: str = "mqttcyb",
-        api_token: Optional[str] = None,
-        mqtt_password: Optional[str] = None,
+        api_key: Optional[str] = None,
         client_id: Optional[str] = None,
         use_tls: bool = False,
         tls_ca_cert: Optional[str] = None,
@@ -69,14 +67,12 @@ class CyberwaveMQTTClient:
         self.mqtt_port = mqtt_port
         self.mqtt_username = mqtt_username
 
-        # mqtt_password is a legacy alias kept for backwards compatibility.
-        self.api_token = api_token or mqtt_password
-        self.mqtt_password = self.api_token
+        self.api_key = api_key
 
-        if not self.api_token:
+        if not self.api_key:
             raise ValueError(
-                "api_token is required for MQTT authentication. "
-                "Pass api_token (preferred) or mqtt_password (legacy alias)."
+                "api_key is required for MQTT authentication. "
+                "Set CYBERWAVE_API_KEY"
             )
 
         # Topic prefix (empty by default, can be set for custom deployments)
@@ -91,7 +87,7 @@ class CyberwaveMQTTClient:
             client_id=self.client_id,  # type: ignore
         )
         self.client.username_pw_set(
-            username=self.mqtt_username, password=self.mqtt_password
+            username=self.mqtt_username, password=self.api_key
         )
         # Port 8883 is the conventional MQTT-over-TLS port.
         self.use_tls = use_tls or self.mqtt_port == 8883

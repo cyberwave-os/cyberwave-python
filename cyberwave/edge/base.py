@@ -128,13 +128,11 @@ class BaseEdgeNode(ABC):
         from cyberwave import Cyberwave
 
         self.client = Cyberwave(
-            token=self.config.cyberwave_token,
             base_url=self.config.cyberwave_base_url,
             mqtt_host=self.config.mqtt_host,
             mqtt_port=self.config.mqtt_port,
             mqtt_username=self.config.mqtt_username,
-            mqtt_api_token=self.config.mqtt_api_token or self.config.cyberwave_token,
-            mqtt_password=self.config.mqtt_password,
+            api_key=self.config.cyberwave_api_key,
             topic_prefix=self.config.topic_prefix,
             source_type=self.config.source_type,
         )

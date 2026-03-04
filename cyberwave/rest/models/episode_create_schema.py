@@ -26,14 +26,13 @@ class EpisodeCreateSchema(BaseModel):
     """
     EpisodeCreateSchema
     """ # noqa: E501
-    task_name: StrictStr
     twins: List[StrictStr]
     started_at: StrictInt
     finished_at: StrictInt
     metadata: Optional[Dict[str, Any]] = None
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["task_name", "twins", "started_at", "finished_at", "metadata", "created_by", "updated_by"]
+    __properties: ClassVar[List[str]] = ["twins", "started_at", "finished_at", "metadata", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -101,7 +100,6 @@ class EpisodeCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "task_name": obj.get("task_name"),
             "twins": obj.get("twins"),
             "started_at": obj.get("started_at"),
             "finished_at": obj.get("finished_at"),

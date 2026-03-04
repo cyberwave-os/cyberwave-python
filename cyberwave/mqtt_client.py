@@ -8,7 +8,7 @@ from the mqtt module to work with the CyberwaveConfig object used by the main cl
 import logging
 from typing import Callable, Optional, Dict, Any
 
-from .config import CyberwaveConfig
+from .config import CyberwaveConfig, DEFAULT_MQTT_PORT
 from .mqtt import CyberwaveMQTTClient as BaseMQTTClient
 
 logger = logging.getLogger(__name__)
@@ -36,15 +36,14 @@ class CyberwaveMQTTClient:
         """
         self.config = config
 
-        # Determine broker, port, username, and API token from config.
+        # Determine broker, port, username, and API key from config.
         mqtt_broker = config.mqtt_host or "mqtt.cyberwave.com"
-        mqtt_port = config.mqtt_port or 1883
+        mqtt_port = config.mqtt_port or DEFAULT_MQTT_PORT
         mqtt_username = config.mqtt_username or "mqttcyb"
-        mqtt_api_token = config.mqtt_api_token or config.token or config.api_key
-        if not mqtt_api_token:
+        api_key = config.api_key
+        if not api_key:
             raise ValueError(
-                "MQTT API token is required. Set token/CYBERWAVE_API_KEY "
-                "or pass mqtt_api_token when creating the client."
+                "API key is required. Set CYBERWAVE_API_KEY"
             )
 
         # Determine topic prefix from config (which handles env vars)
@@ -57,7 +56,7 @@ class CyberwaveMQTTClient:
             mqtt_broker=mqtt_broker,
             mqtt_port=mqtt_port,
             mqtt_username=mqtt_username,
-            api_token=mqtt_api_token,
+            api_key=api_key,
             use_tls=config.mqtt_use_tls,
             tls_ca_cert=config.mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,

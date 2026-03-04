@@ -30,13 +30,11 @@ class CyberwaveConfig:
 
     Args:
         base_url: Base URL of the Cyberwave backend (e.g., "https://api.cyberwave.com")
-        api_key: API key for authentication (sent as Bearer token)
-        token: Bearer token for authentication (takes precedence over api_key)
+        api_key: API key for authentication (sent as Bearer auth value)
+        token: Deprecated alias for api_key (kept for backwards compatibility)
         mqtt_host: MQTT broker host (defaults to base_url host)
         mqtt_port: MQTT broker port (defaults to 1883)
         mqtt_username: MQTT username (optional)
-        mqtt_api_token: API token used for MQTT authN/authZ (optional)
-        mqtt_password: Deprecated alias for mqtt_api_token
         mqtt_use_tls: Whether to enable MQTT TLS transport
         mqtt_tls_ca_cert: Path to CA certificate bundle for MQTT TLS
         environment_id: Default environment ID to use
@@ -49,10 +47,8 @@ class CyberwaveConfig:
     api_key: Optional[str] = None
     token: Optional[str] = None
     mqtt_host: Optional[str] = None
-    mqtt_port: int = DEFAULT_MQTT_PORT
+    mqtt_port: int | None = None
     mqtt_username: Optional[str] = None
-    mqtt_api_token: Optional[str] = None
-    mqtt_password: Optional[str] = None
     mqtt_use_tls: bool = False
     mqtt_tls_ca_cert: Optional[str] = None
     environment_id: Optional[str] = None
@@ -64,8 +60,8 @@ class CyberwaveConfig:
 
     def __post_init__(self):
         """Load configuration from environment variables if not provided"""
-        if not self.token:
-            self.token = os.getenv("CYBERWAVE_API_KEY")
+        if not self.api_key and self.token:
+            self.api_key = self.token
 
         if not self.api_key:
             self.api_key = os.getenv("CYBERWAVE_API_KEY")
@@ -76,30 +72,14 @@ class CyberwaveConfig:
         if not self.mqtt_host:
             self.mqtt_host = os.getenv("CYBERWAVE_MQTT_HOST", DEFAULT_MQTT_HOST)
 
-        if self.mqtt_port == DEFAULT_MQTT_PORT:
+        if self.mqtt_port is None:
             port_str = os.getenv("CYBERWAVE_MQTT_PORT")
-            if port_str:
-                self.mqtt_port = int(port_str)
+            self.mqtt_port = int(port_str) if port_str else DEFAULT_MQTT_PORT
 
         if not self.mqtt_username:
             self.mqtt_username = os.getenv(
                 "CYBERWAVE_MQTT_USERNAME", DEFAULT_MQTT_USERNAME
             )
-
-        if not self.mqtt_api_token:
-            self.mqtt_api_token = (
-                os.getenv("CYBERWAVE_MQTT_API_TOKEN")
-                or os.getenv("CYBERWAVE_API_KEY")
-                or self.token
-                or self.api_key
-            )
-
-        if not self.mqtt_api_token and self.mqtt_password:
-            self.mqtt_api_token = self.mqtt_password
-
-        # Keep legacy alias in sync for backwards compatibility.
-        if not self.mqtt_password:
-            self.mqtt_password = self.mqtt_api_token
 
         self.mqtt_use_tls = _parse_bool_env(
             os.getenv("CYBERWAVE_MQTT_USE_TLS"), default=self.mqtt_use_tls
@@ -134,10 +114,8 @@ class CyberwaveConfig:
     @property
     def auth_header(self) -> dict:
         """Get the authorization header for API requests"""
-        # Use token first, fallback to api_key - both use Bearer
-        auth_value = self.token or self.api_key
-        if auth_value:
-            return {"Authorization": f"Bearer {auth_value}"}
+        if self.api_key:
+            return {"Authorization": f"Bearer {self.api_key}"}
         return {}
 
 
