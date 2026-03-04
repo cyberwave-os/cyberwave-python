@@ -11,7 +11,7 @@ Designed for Linux/Unix devices with enhanced system metrics.
 
 Quick Start:
     1. Set environment variables:
-       export CYBERWAVE_API_KEY="your-token"
+       export CYBERWAVE_API_KEY="your-api-key"
        export TWIN_UUID="your-twin-uuid"
     
     2. Run the receiver:
@@ -62,8 +62,8 @@ IS_LINUX = platform.system() == 'Linux'
 
 
 async def main():
-    token = os.getenv("CYBERWAVE_API_KEY")
-    if not token:
+    api_key = os.getenv("CYBERWAVE_API_KEY")
+    if not api_key:
         print("Please set CYBERWAVE_API_KEY environment variable")
         return
 
@@ -75,11 +75,10 @@ async def main():
     port = int(port_str) if port_str else None
     
     client = Cyberwave(
-        token=token,
+        api_key=api_key,
         mqtt_host=host,
         mqtt_port=port,
         mqtt_username=mqtt_username,
-        mqtt_api_token=token,
     )
 
     twin_uuid = os.getenv("TWIN_UUID")

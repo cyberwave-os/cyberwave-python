@@ -31,7 +31,8 @@ class AssetCreateWithURDFSchema(BaseModel):
     main_file_path: StrictStr
     force_name: StrictStr
     subfolder: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["file_url", "description", "main_file_path", "force_name", "subfolder"]
+    branch: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["file_url", "description", "main_file_path", "force_name", "subfolder", "branch"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,6 +83,11 @@ class AssetCreateWithURDFSchema(BaseModel):
         if self.subfolder is None and "subfolder" in self.model_fields_set:
             _dict['subfolder'] = None
 
+        # set to None if branch (nullable) is None
+        # and model_fields_set contains the field
+        if self.branch is None and "branch" in self.model_fields_set:
+            _dict['branch'] = None
+
         return _dict
 
     @classmethod
@@ -98,7 +104,8 @@ class AssetCreateWithURDFSchema(BaseModel):
             "description": obj.get("description"),
             "main_file_path": obj.get("main_file_path"),
             "force_name": obj.get("force_name"),
-            "subfolder": obj.get("subfolder")
+            "subfolder": obj.get("subfolder"),
+            "branch": obj.get("branch")
         })
         return _obj
 

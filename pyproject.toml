@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.3.29"
+version = "0.3.30"
 description = "Python SDK for Cyberwave"
 authors = ["Simone Di Somma <sdisomma@cyberwave.com>", "Vittorio Banfi <vbanfi@cyberwave.com>", "Cyberwave Team <info@cyberwave.com>"]
 readme = "README.md"

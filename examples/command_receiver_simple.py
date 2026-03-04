@@ -6,7 +6,7 @@ for a digital twin using the subscribe_command_message and publish_command_messa
 
 Quick Start:
     1. Set environment variables:
-       export CYBERWAVE_API_KEY="your-token"
+       export CYBERWAVE_API_KEY="your-api-key"
        export TWIN_UUID="your-twin-uuid"
     
     2. Run the receiver:
@@ -29,8 +29,8 @@ from cyberwave import Cyberwave
 
 
 async def main():
-    token = os.getenv("CYBERWAVE_API_KEY")
-    if not token:
+    api_key = os.getenv("CYBERWAVE_API_KEY")
+    if not api_key:
         print("Please set CYBERWAVE_API_KEY environment variable")
         return
 
@@ -41,11 +41,10 @@ async def main():
     port = int(port_str) if port_str else None
     
     client = Cyberwave(
-        token=token,
+        api_key=api_key,
         mqtt_host=host,
         mqtt_port=port,
-        mqtt_username=mqtt_username,
-        mqtt_api_token=token,
+        mqtt_username=mqtt_username
     )
 
     twin_uuid = os.getenv("TWIN_UUID")

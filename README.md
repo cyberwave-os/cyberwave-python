@@ -21,22 +21,22 @@ pip install cyberwave
 
 ## Quick Start
 
-### 1. Get Your Token
+### 1. Get Your API Key
 
-Get your API token from the Cyberwave platform:
+Get your API key from the Cyberwave platform:
 
 - Log in to your Cyberwave instance
 - Navigate to [Profile](https://cyberwave.com/profile) → API Tokens
-- Create a token and copy it
+- Create an API key and copy it
 
 ### 2. Create Your First Digital Twin
 
 ```python
 from cyberwave import Cyberwave
 
-# Configure with your token
+# Configure with your API key
 cw = Cyberwave(
-    token="your_token_here",
+    api_key="your_api_key_here",
 )
 
 # Create a digital twin from an asset
@@ -61,10 +61,10 @@ print(robot.joints.get_all())
 from cyberwave import Cyberwave
 
 cw = Cyberwave(
-    token="your_token_here"
+    api_key="your_api_key_here"
 )
 
-# You can also set your token as an environment variable: export CYBERWAVE_API_KEY=your_token_here
+# You can also set your API key as an environment variable: export CYBERWAVE_API_KEY=your_api_key_here
 # in that case, you can simply do:
 cw = Cyberwave()
 

@@ -35,11 +35,16 @@ class MapDataSchema(BaseModel):
     origin_x: Union[StrictFloat, StrictInt]
     origin_y: Union[StrictFloat, StrictInt]
     origin_z: Union[StrictFloat, StrictInt]
+    origin_roll: Union[StrictFloat, StrictInt]
+    origin_pitch: Union[StrictFloat, StrictInt]
+    origin_yaw: Union[StrictFloat, StrictInt]
     data_file_uuid: StrictStr
+    image_width: Optional[StrictInt] = None
+    image_height: Optional[StrictInt] = None
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
-    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "data_file_uuid", "metadata", "created_at", "updated_at"]
+    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "data_file_uuid", "image_width", "image_height", "metadata", "created_at", "updated_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -95,6 +100,16 @@ class MapDataSchema(BaseModel):
         if self.resolution is None and "resolution" in self.model_fields_set:
             _dict['resolution'] = None
 
+        # set to None if image_width (nullable) is None
+        # and model_fields_set contains the field
+        if self.image_width is None and "image_width" in self.model_fields_set:
+            _dict['image_width'] = None
+
+        # set to None if image_height (nullable) is None
+        # and model_fields_set contains the field
+        if self.image_height is None and "image_height" in self.model_fields_set:
+            _dict['image_height'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -120,7 +135,12 @@ class MapDataSchema(BaseModel):
             "origin_x": obj.get("origin_x"),
             "origin_y": obj.get("origin_y"),
             "origin_z": obj.get("origin_z"),
+            "origin_roll": obj.get("origin_roll"),
+            "origin_pitch": obj.get("origin_pitch"),
+            "origin_yaw": obj.get("origin_yaw"),
             "data_file_uuid": obj.get("data_file_uuid"),
+            "image_width": obj.get("image_width"),
+            "image_height": obj.get("image_height"),
             "metadata": obj.get("metadata"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at")

@@ -594,6 +594,10 @@ class TimqianbambotB0BaseTwin(Twin):
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
         ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Robotisturtlebot3WaffleTwin(Twin):
     """
@@ -618,6 +622,10 @@ class Robotisturtlebot3WafflePiTwin(Twin):
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
         ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Robotisturtlebot3BurgerTwin(Twin):
     """
@@ -629,6 +637,10 @@ class Robotisturtlebot3BurgerTwin(Twin):
         ...
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
         ...
 
 class UnitreeunitreeGo1Twin(Twin):
@@ -684,6 +696,12 @@ class KukakukaIiwa14Twin(Twin):
     Digital twin for KUKA IIWA 14
     Registry ID: kuka/kuka_iiwa14
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
@@ -709,6 +727,10 @@ class FictionlableoRoverTwin(Twin):
         ...
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
         ...
 
 class CyberwavegenericCubeTwin(Twin):
@@ -782,7 +804,12 @@ class CyberwavestandardCamTwin(Twin):
     Digital twin for Standard Camera
     Registry ID: cyberwave/standard-cam
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class CyberwavegenericIpcameraTwin(Twin):
     """
@@ -808,14 +835,28 @@ class CyberwavegenericAuvTwin(Twin):
     Digital twin for Generic Auv
     Registry ID: cyberwave/generic-auv
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class CyberwavesubstationTwin(Twin):
     """
     Digital twin for Electric Substation
     Registry ID: cyberwave/substation
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class SzDjiTechnologydjiMini3ProTwin(Twin):
     """
@@ -864,6 +905,10 @@ class HoverspectavientoryPlatformTwin(Twin):
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
         ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
 
 class Apeiroonbx100Twin(Twin):
     """
@@ -884,6 +929,12 @@ class TheRobotStudioso101WithCameraTwin(Twin):
     Digital twin for SO-101 with camera
     Registry ID: the-robot-studio/so101-with-camera
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""

@@ -27,10 +27,16 @@ class PermissionsSchema(BaseModel):
     PermissionsSchema
     """ # noqa: E501
     role: Optional[StrictStr] = None
-    can_read: StrictBool
+    can_view: StrictBool
     can_write: StrictBool
     can_admin: StrictBool
-    __properties: ClassVar[List[str]] = ["role", "can_read", "can_write", "can_admin"]
+    can_delete: StrictBool
+    can_create_environment: Optional[StrictBool] = False
+    can_rename_environment: Optional[StrictBool] = False
+    can_delete_environment: Optional[StrictBool] = False
+    can_create_twin: Optional[StrictBool] = False
+    can_delete_twin: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["role", "can_view", "can_write", "can_admin", "can_delete", "can_create_environment", "can_rename_environment", "can_delete_environment", "can_create_twin", "can_delete_twin"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -89,9 +95,15 @@ class PermissionsSchema(BaseModel):
 
         _obj = cls.model_validate({
             "role": obj.get("role"),
-            "can_read": obj.get("can_read"),
+            "can_view": obj.get("can_view"),
             "can_write": obj.get("can_write"),
-            "can_admin": obj.get("can_admin")
+            "can_admin": obj.get("can_admin"),
+            "can_delete": obj.get("can_delete"),
+            "can_create_environment": obj.get("can_create_environment") if obj.get("can_create_environment") is not None else False,
+            "can_rename_environment": obj.get("can_rename_environment") if obj.get("can_rename_environment") is not None else False,
+            "can_delete_environment": obj.get("can_delete_environment") if obj.get("can_delete_environment") is not None else False,
+            "can_create_twin": obj.get("can_create_twin") if obj.get("can_create_twin") is not None else False,
+            "can_delete_twin": obj.get("can_delete_twin") if obj.get("can_delete_twin") is not None else False
         })
         return _obj
 

@@ -28,6 +28,7 @@ class EpisodeSchema(BaseModel):
     EpisodeSchema
     """ # noqa: E501
     uuid: StrictStr
+    task_name: StrictStr
     twins: List[StrictStr]
     started_at: StrictInt
     finished_at: StrictInt
@@ -36,7 +37,7 @@ class EpisodeSchema(BaseModel):
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "twins", "started_at", "finished_at", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    __properties: ClassVar[List[str]] = ["uuid", "task_name", "twins", "started_at", "finished_at", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -100,6 +101,7 @@ class EpisodeSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
+            "task_name": obj.get("task_name"),
             "twins": obj.get("twins"),
             "started_at": obj.get("started_at"),
             "finished_at": obj.get("finished_at"),

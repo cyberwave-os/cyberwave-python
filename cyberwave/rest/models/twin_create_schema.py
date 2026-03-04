@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -40,13 +40,21 @@ class TwinCreateSchema(BaseModel):
     scale_x: Optional[Union[StrictFloat, StrictInt]] = None
     scale_y: Optional[Union[StrictFloat, StrictInt]] = None
     scale_z: Optional[Union[StrictFloat, StrictInt]] = None
+    kinematics_override: Optional[Dict[str, Any]] = None
     joint_calibration: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
-    capabilities: Optional[Dict[str, Any]] = None
     controller_policy_uuid: Optional[StrictStr] = None
     attach_to_twin_uuid: Optional[StrictStr] = None
     attach_to_link: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "attach_to_twin_uuid", "attach_to_link"]
+    attach_offset_x: Optional[Union[StrictFloat, StrictInt]] = None
+    attach_offset_y: Optional[Union[StrictFloat, StrictInt]] = None
+    attach_offset_z: Optional[Union[StrictFloat, StrictInt]] = None
+    attach_offset_rotation_w: Optional[Union[StrictFloat, StrictInt]] = None
+    attach_offset_rotation_x: Optional[Union[StrictFloat, StrictInt]] = None
+    attach_offset_rotation_y: Optional[Union[StrictFloat, StrictInt]] = None
+    attach_offset_rotation_z: Optional[Union[StrictFloat, StrictInt]] = None
+    fixed_base: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "kinematics_override", "joint_calibration", "metadata", "controller_policy_uuid", "attach_to_twin_uuid", "attach_to_link", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -157,6 +165,11 @@ class TwinCreateSchema(BaseModel):
         if self.scale_z is None and "scale_z" in self.model_fields_set:
             _dict['scale_z'] = None
 
+        # set to None if kinematics_override (nullable) is None
+        # and model_fields_set contains the field
+        if self.kinematics_override is None and "kinematics_override" in self.model_fields_set:
+            _dict['kinematics_override'] = None
+
         # set to None if joint_calibration (nullable) is None
         # and model_fields_set contains the field
         if self.joint_calibration is None and "joint_calibration" in self.model_fields_set:
@@ -166,11 +179,6 @@ class TwinCreateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
-
-        # set to None if capabilities (nullable) is None
-        # and model_fields_set contains the field
-        if self.capabilities is None and "capabilities" in self.model_fields_set:
-            _dict['capabilities'] = None
 
         # set to None if controller_policy_uuid (nullable) is None
         # and model_fields_set contains the field
@@ -186,6 +194,46 @@ class TwinCreateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.attach_to_link is None and "attach_to_link" in self.model_fields_set:
             _dict['attach_to_link'] = None
+
+        # set to None if attach_offset_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset_x is None and "attach_offset_x" in self.model_fields_set:
+            _dict['attach_offset_x'] = None
+
+        # set to None if attach_offset_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset_y is None and "attach_offset_y" in self.model_fields_set:
+            _dict['attach_offset_y'] = None
+
+        # set to None if attach_offset_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset_z is None and "attach_offset_z" in self.model_fields_set:
+            _dict['attach_offset_z'] = None
+
+        # set to None if attach_offset_rotation_w (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset_rotation_w is None and "attach_offset_rotation_w" in self.model_fields_set:
+            _dict['attach_offset_rotation_w'] = None
+
+        # set to None if attach_offset_rotation_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset_rotation_x is None and "attach_offset_rotation_x" in self.model_fields_set:
+            _dict['attach_offset_rotation_x'] = None
+
+        # set to None if attach_offset_rotation_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset_rotation_y is None and "attach_offset_rotation_y" in self.model_fields_set:
+            _dict['attach_offset_rotation_y'] = None
+
+        # set to None if attach_offset_rotation_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset_rotation_z is None and "attach_offset_rotation_z" in self.model_fields_set:
+            _dict['attach_offset_rotation_z'] = None
+
+        # set to None if fixed_base (nullable) is None
+        # and model_fields_set contains the field
+        if self.fixed_base is None and "fixed_base" in self.model_fields_set:
+            _dict['fixed_base'] = None
 
         return _dict
 
@@ -213,12 +261,20 @@ class TwinCreateSchema(BaseModel):
             "scale_x": obj.get("scale_x"),
             "scale_y": obj.get("scale_y"),
             "scale_z": obj.get("scale_z"),
+            "kinematics_override": obj.get("kinematics_override"),
             "joint_calibration": obj.get("joint_calibration"),
             "metadata": obj.get("metadata"),
-            "capabilities": obj.get("capabilities"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "attach_to_twin_uuid": obj.get("attach_to_twin_uuid"),
-            "attach_to_link": obj.get("attach_to_link")
+            "attach_to_link": obj.get("attach_to_link"),
+            "attach_offset_x": obj.get("attach_offset_x"),
+            "attach_offset_y": obj.get("attach_offset_y"),
+            "attach_offset_z": obj.get("attach_offset_z"),
+            "attach_offset_rotation_w": obj.get("attach_offset_rotation_w"),
+            "attach_offset_rotation_x": obj.get("attach_offset_rotation_x"),
+            "attach_offset_rotation_y": obj.get("attach_offset_rotation_y"),
+            "attach_offset_rotation_z": obj.get("attach_offset_rotation_z"),
+            "fixed_base": obj.get("fixed_base")
         })
         return _obj
 

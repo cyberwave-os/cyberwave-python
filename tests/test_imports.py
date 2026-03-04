@@ -128,23 +128,23 @@ def test_mqtt_client():
         client = BaseMQTTClient(
             mqtt_broker="localhost",
             mqtt_port=1883,
-            api_token="test_token",
+            api_key="test_api_key",
             auto_connect=False,  # Don't actually connect
         )
 
         assert client.mqtt_broker == "localhost"
         assert client.mqtt_port == 1883
-        assert client.api_token == "test_token"
+        assert client.api_key == "test_api_key"
         assert client.topic_prefix == ""
 
         # The top-level export should support the same constructor contract.
         wrapper_client = CyberwaveMQTTClient(
             mqtt_broker="localhost",
             mqtt_port=1883,
-            api_token="test_token",
+            api_key="test_api_key",
             auto_connect=False,
         )
-        assert wrapper_client.api_token == "test_token"
+        assert wrapper_client.api_key == "test_api_key"
         assert wrapper_client.topic_prefix == ""
 
         print("✓ MQTT client import successful")

@@ -29,7 +29,7 @@ class ShareSchema(BaseModel):
     user_id: Optional[StrictInt] = None
     user_email: Optional[StrictStr] = None
     team_id: Optional[StrictInt] = None
-    role: Optional[StrictStr] = 'viewer'
+    role: Optional[StrictStr] = 'reader'
     __properties: ClassVar[List[str]] = ["user_id", "user_email", "team_id", "role"]
 
     model_config = ConfigDict(
@@ -101,7 +101,7 @@ class ShareSchema(BaseModel):
             "user_id": obj.get("user_id"),
             "user_email": obj.get("user_email"),
             "team_id": obj.get("team_id"),
-            "role": obj.get("role") if obj.get("role") is not None else 'viewer'
+            "role": obj.get("role") if obj.get("role") is not None else 'reader'
         })
         return _obj
 

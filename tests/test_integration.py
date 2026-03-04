@@ -16,11 +16,11 @@ This test demonstrates the complete SDK workflow by making real API calls:
 
 Prerequisites:
 - User must be authenticated (set CYBERWAVE_API_KEY env var)
-- Get your API key from https://app.cyberwave.com/settings/api-keys
+- Get your API key from https://app.cyberwave.com/profile
 
 To run this test:
     cd cyberwave-sdks/cyberwave-python
-    export CYBERWAVE_API_KEY="your_token_here"
+    export CYBERWAVE_API_KEY="your_api_key_here"
     poetry install
     poetry run pytest tests/test_integration.py -v -s
 """
@@ -40,16 +40,16 @@ def cyberwave_client():
     Create a Cyberwave client connected to the Cyberwave API.
 
     Requires environment variable:
-    - CYBERWAVE_API_KEY: Your API token from https://app.cyberwave.com/settings/api-keys
+    - CYBERWAVE_API_KEY: Your API key from https://app.cyberwave.com/profile
     """
-    token = os.getenv("CYBERWAVE_API_KEY")
+    api_key = os.getenv("CYBERWAVE_API_KEY")
 
-    if not token:
+    if not api_key:
         pytest.skip(
-            "CYBERWAVE_API_KEY environment variable not set. Get your API token from https://app.cyberwave.com/settings/api-keys"
+            "CYBERWAVE_API_KEY environment variable not set. Get your API key from https://app.cyberwave.com/profile"
         )
 
-    client = Cyberwave(token=token)
+    client = Cyberwave(api_key=api_key)
 
     # Test connection
     try:

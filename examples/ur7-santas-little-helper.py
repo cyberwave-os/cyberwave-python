@@ -325,7 +325,7 @@ def main():
     print("=" * 60)
     print()
     
-    token = os.getenv("CYBERWAVE_API_KEY")
+    api_key = os.getenv("CYBERWAVE_API_KEY")
     mqtt_host = os.getenv("CYBERWAVE_MQTT_HOST", "mqtt.cyberwave.com")
     mqtt_port = int(os.getenv("CYBERWAVE_MQTT_PORT", "1883"))
     twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
@@ -334,7 +334,7 @@ def main():
         print("ERROR: CYBERWAVE_TWIN_UUID is required")
         return
     
-    if not token:
+    if not api_key:
         print("WARNING: CYBERWAVE_API_KEY not set")
     
     print(f"MQTT: {mqtt_host}:{mqtt_port}")
@@ -343,7 +343,7 @@ def main():
     print()
     
     client = Cyberwave(
-        token=token,
+        api_key=api_key,
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
     )
