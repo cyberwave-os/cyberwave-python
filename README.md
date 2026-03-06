@@ -2,6 +2,10 @@
 
 The official Python SDK for Cyberwave. Create, control, and simulate robotics with ease.
 
+[![License](https://img.shields.io/badge/License-MIT-orange.svg)](https://github.com/cyberwave-os/cyberwave-python/blob/main/LICENSE)
+[![Discord](https://badgen.net/badge/icon/discord?icon=discord&label&color=orange)](https://discord.gg/dfGhNrawyF)
+[![Documentation](https://img.shields.io/badge/Documentation-%F0%9F%93%96-orange)](https://docs.cyberwave.com)
+
 ## Status
 
 [![PyPI version](https://img.shields.io/pypi/v/cyberwave.svg)](https://pypi.org/project/cyberwave/)
