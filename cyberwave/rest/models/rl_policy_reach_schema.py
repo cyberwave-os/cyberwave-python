@@ -17,25 +17,22 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ControllerPolicyExecuteSchema(BaseModel):
+class RLPolicyReachSchema(BaseModel):
     """
-    ControllerPolicyExecuteSchema
+    RLPolicyReachSchema
     """ # noqa: E501
     twin_uuid: StrictStr
-    camera_twin_uuid: Optional[StrictStr] = None
-    instruction: Optional[StrictStr] = None
-    execution: Optional[StrictStr] = 'async'
+    target_left_pos: List[Union[StrictFloat, StrictInt]]
+    target_right_pos: List[Union[StrictFloat, StrictInt]]
     max_steps: Optional[StrictInt] = None
-    target_left_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    target_right_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    current_joint_states: Optional[Dict[str, Dict[str, Union[StrictFloat, StrictInt]]]] = None
-    server_mode: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["twin_uuid", "camera_twin_uuid", "instruction", "execution", "max_steps", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode"]
+    distance_threshold: Optional[Union[StrictFloat, StrictInt]] = None
+    timeout_seconds: Optional[StrictInt] = None
+    __properties: ClassVar[List[str]] = ["twin_uuid", "target_left_pos", "target_right_pos", "max_steps", "distance_threshold", "timeout_seconds"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -55,7 +52,7 @@ class ControllerPolicyExecuteSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ControllerPolicyExecuteSchema from a JSON string"""
+        """Create an instance of RLPolicyReachSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,41 +73,26 @@ class ControllerPolicyExecuteSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if camera_twin_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.camera_twin_uuid is None and "camera_twin_uuid" in self.model_fields_set:
-            _dict['camera_twin_uuid'] = None
-
-        # set to None if instruction (nullable) is None
-        # and model_fields_set contains the field
-        if self.instruction is None and "instruction" in self.model_fields_set:
-            _dict['instruction'] = None
-
         # set to None if max_steps (nullable) is None
         # and model_fields_set contains the field
         if self.max_steps is None and "max_steps" in self.model_fields_set:
             _dict['max_steps'] = None
 
-        # set to None if target_left_pos (nullable) is None
+        # set to None if distance_threshold (nullable) is None
         # and model_fields_set contains the field
-        if self.target_left_pos is None and "target_left_pos" in self.model_fields_set:
-            _dict['target_left_pos'] = None
+        if self.distance_threshold is None and "distance_threshold" in self.model_fields_set:
+            _dict['distance_threshold'] = None
 
-        # set to None if target_right_pos (nullable) is None
+        # set to None if timeout_seconds (nullable) is None
         # and model_fields_set contains the field
-        if self.target_right_pos is None and "target_right_pos" in self.model_fields_set:
-            _dict['target_right_pos'] = None
-
-        # set to None if current_joint_states (nullable) is None
-        # and model_fields_set contains the field
-        if self.current_joint_states is None and "current_joint_states" in self.model_fields_set:
-            _dict['current_joint_states'] = None
+        if self.timeout_seconds is None and "timeout_seconds" in self.model_fields_set:
+            _dict['timeout_seconds'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ControllerPolicyExecuteSchema from a dict"""
+        """Create an instance of RLPolicyReachSchema from a dict"""
         if obj is None:
             return None
 
@@ -119,14 +101,11 @@ class ControllerPolicyExecuteSchema(BaseModel):
 
         _obj = cls.model_validate({
             "twin_uuid": obj.get("twin_uuid"),
-            "camera_twin_uuid": obj.get("camera_twin_uuid"),
-            "instruction": obj.get("instruction"),
-            "execution": obj.get("execution") if obj.get("execution") is not None else 'async',
-            "max_steps": obj.get("max_steps"),
             "target_left_pos": obj.get("target_left_pos"),
             "target_right_pos": obj.get("target_right_pos"),
-            "current_joint_states": obj.get("current_joint_states"),
-            "server_mode": obj.get("server_mode") if obj.get("server_mode") is not None else False
+            "max_steps": obj.get("max_steps"),
+            "distance_threshold": obj.get("distance_threshold"),
+            "timeout_seconds": obj.get("timeout_seconds")
         })
         return _obj
 

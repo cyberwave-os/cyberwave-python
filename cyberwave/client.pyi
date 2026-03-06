@@ -383,6 +383,24 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["intel/realsensed455"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteDepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["cyberwave/rgb-camera-with-depth-estimation"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteDepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["skydio/skydio-x2"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -608,15 +626,6 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["cyberwave/standard-cam"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> LocomoteCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
         asset_key: Literal["cyberwave/generic-auv"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -671,15 +680,6 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["intel/realsensed455"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> DepthCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
         asset_key: Literal["basler/basler_ag_ace_gige"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -699,6 +699,15 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["raspberry/pi-camerav3"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> CameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["cyberwave/standard-cam"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

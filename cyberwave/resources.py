@@ -958,6 +958,54 @@ class TwinManager(BaseResourceManager):
             self._handle_error(e, f"get twin {twin_id}")
             raise  # For type checker
 
+    def get_latest_frame(
+        self, twin_id: str, sensor_id: Optional[str] = None, mock: bool = False
+    ) -> bytes:
+        """Get the latest JPEG frame for a twin.
+
+        Args:
+            twin_id: UUID of the twin.
+            sensor_id: Optional camera sensor id for multi-camera twins.
+            mock: If true, request deterministic mock JPEG bytes from the backend.
+
+        Returns:
+            JPEG bytes.
+        """
+        try:
+            query_params = []
+            if sensor_id:
+                query_params.append(("sensor_id", sensor_id))
+            if mock:
+                query_params.append(("mock", "true"))
+
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/twins/{uuid}/latest-frame",
+                path_params={"uuid": twin_id},
+                query_params=query_params,
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            payload = getattr(response_data, "data", None)
+            if isinstance(payload, (bytes, bytearray)):
+                return bytes(payload)
+            if isinstance(payload, str):
+                return payload.encode("utf-8")
+
+            # Fallback used by some urllib3 response wrappers.
+            raw_payload = getattr(response_data, "raw_data", None)
+            if isinstance(raw_payload, (bytes, bytearray)):
+                return bytes(raw_payload)
+
+            raise CyberwaveAPIError(
+                "Failed to get latest frame: unexpected response payload format"
+            )
+        except Exception as e:
+            self._handle_error(e, f"get latest frame for twin {twin_id}")
+            raise
+
     def create(self, asset_id: str, environment_id: str, **kwargs) -> TwinSchema:
         """Create a new twin instance"""
         try:

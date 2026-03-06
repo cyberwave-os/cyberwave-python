@@ -511,6 +511,27 @@ class Twin:
         except Exception as e:
             raise CyberwaveError(f"Failed to delete twin: {e}")
 
+    def get_latest_frame(
+        self, sensor_id: Optional[str] = None, mock: bool = False
+    ) -> bytes:
+        """Get the latest JPEG frame available for this twin.
+
+        Args:
+            sensor_id: Optional camera sensor id for multi-camera twins.
+            mock: If true, request deterministic mock JPEG bytes.
+
+        Returns:
+            JPEG bytes from the latest frame.
+        """
+        try:
+            return self.client.twins.get_latest_frame(  # type: ignore
+                self.uuid,
+                sensor_id=sensor_id,
+                mock=mock,
+            )
+        except Exception as e:
+            raise CyberwaveError(f"Failed to get latest frame for twin {self.uuid}: {e}")
+
     def _update_state(self, data: Dict[str, Any]):
         """Update twin state via API"""
         try:
@@ -929,19 +950,16 @@ class CameraTwin(Twin):
                     pass
                 self._camera_streamer = None
 
-    def capture_frame(self) -> bytes:
+    def capture_frame(
+        self, sensor_id: Optional[str] = None, mock: bool = False
+    ) -> bytes:
         """
-        Capture a single frame from the RGB camera.
-
-        Note: Requires an active stream or will start one temporarily.
+        Capture a single JPEG frame from the latest twin camera data.
 
         Returns:
-            Raw frame bytes
+            JPEG frame bytes.
         """
-        raise NotImplementedError(
-            "capture_frame() requires an active stream. "
-            "Use stream_video_background() first to begin capturing frames."
-        )
+        return self.get_latest_frame(sensor_id=sensor_id, mock=mock)
 
     def __repr__(self) -> str:
         sensors = self.capabilities.get("sensors", [])

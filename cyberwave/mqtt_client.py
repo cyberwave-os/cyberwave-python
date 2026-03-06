@@ -27,12 +27,13 @@ class CyberwaveMQTTClient:
     TODO: We should just use the BaseMQTTClient and call that CyberwaveMQTTClient
     """
 
-    def __init__(self, config: CyberwaveConfig):
+    def __init__(self, config: CyberwaveConfig, mqtt_password: Optional[str] = None):
         """
         Initialize MQTT client from a CyberwaveConfig object.
 
         Args:
             config: Cyberwave configuration object containing MQTT settings
+            mqtt_password: Optional explicit MQTT password override
         """
         self.config = config
 
@@ -41,9 +42,11 @@ class CyberwaveMQTTClient:
         mqtt_port = config.mqtt_port or DEFAULT_MQTT_PORT
         mqtt_username = config.mqtt_username or "mqttcyb"
         api_key = config.api_key
-        if not api_key:
+        effective_mqtt_password = mqtt_password or api_key
+        if not effective_mqtt_password:
             raise ValueError(
-                "API key is required. Set CYBERWAVE_API_KEY"
+                "API key or mqtt_password is required. "
+                "Set CYBERWAVE_API_KEY or pass mqtt_password explicitly"
             )
 
         # Determine topic prefix from config (which handles env vars)
@@ -57,6 +60,7 @@ class CyberwaveMQTTClient:
             mqtt_port=mqtt_port,
             mqtt_username=mqtt_username,
             api_key=api_key,
+            mqtt_password=effective_mqtt_password,
             use_tls=config.mqtt_use_tls,
             tls_ca_cert=config.mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,

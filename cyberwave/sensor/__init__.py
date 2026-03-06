@@ -49,6 +49,10 @@ DEFAULT_TURN_SERVERS = [
     },
 ]
 
+CONNECTION_LOSS_CONFIRMATION_CHECKS = 3
+SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS = 60
+SDK_EDGE_HEALTH_INTERVAL_SECONDS = 5
+
 
 # =============================================================================
 # Abstract Base Classes
@@ -174,6 +178,7 @@ class BaseVideoStreamer(abc.ABC):
         self._health_check: Optional[Any] = None
         self._health_monitor_task: Optional[asyncio.Task] = None
         self._last_frame_count = 0
+        self._bad_connection_checks = 0
 
     @abc.abstractmethod
     def initialize_track(self) -> BaseVideoTrack:
@@ -187,6 +192,7 @@ class BaseVideoStreamer(abc.ABC):
         """Reset internal state for fresh connection."""
         self._answer_received = False
         self._answer_data = None
+        self._bad_connection_checks = 0
 
     def _publish_camera_sync_frame(
         self, pts: int, timestamp: float, timestamp_monotonic: float
@@ -308,7 +314,8 @@ class BaseVideoStreamer(abc.ABC):
         if self.pc:
             try:
                 await self.pc.close()
-                await asyncio.sleep(0.5)
+                # Allow aioice STUN retry callbacks to settle before continuing
+                await asyncio.sleep(1.5)
             except Exception as e:
                 logger.error(f"Error closing peer connection: {e}")
             finally:
@@ -712,19 +719,39 @@ class BaseVideoStreamer(abc.ABC):
         connection_state = getattr(self.pc, "connectionState", None)
         ice_connection_state = getattr(self.pc, "iceConnectionState", None)
 
-        is_disconnected = connection_state in (
+        is_bad_state = connection_state in (
             "disconnected",
             "failed",
             "closed",
         ) or ice_connection_state in ("disconnected", "failed", "closed")
 
-        if is_disconnected:
+        if is_bad_state:
+            self._bad_connection_checks += 1
+            if self._bad_connection_checks < CONNECTION_LOSS_CONFIRMATION_CHECKS:
+                logger.debug(
+                    "WebRTC in temporary bad state "
+                    f"(check {self._bad_connection_checks}/{CONNECTION_LOSS_CONFIRMATION_CHECKS}): "
+                    f"connectionState={connection_state}, "
+                    f"iceConnectionState={ice_connection_state}"
+                )
+                return False
+
             logger.warning(
-                f"WebRTC connection lost (connectionState={connection_state}, "
+                f"WebRTC connection lost after {self._bad_connection_checks} consecutive checks "
+                f"(connectionState={connection_state}, "
                 f"iceConnectionState={ice_connection_state})"
             )
+            return True
 
-        return is_disconnected
+        # Reset debounce counter when connection recovers.
+        if self._bad_connection_checks > 0:
+            logger.debug(
+                "WebRTC connection recovered before reconnect "
+                f"(connectionState={connection_state}, iceConnectionState={ice_connection_state})"
+            )
+            self._bad_connection_checks = 0
+
+        return False
 
     async def _attempt_reconnect(
         self,
@@ -818,8 +845,8 @@ class BaseVideoStreamer(abc.ABC):
                 mqtt_client=self.client,
                 twin_uuids=[self.twin_uuid],
                 edge_id=self.twin_uuid,
-                stale_timeout=30,
-                interval=5,
+                stale_timeout=SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
+                interval=SDK_EDGE_HEALTH_INTERVAL_SECONDS,
             )
             self._health_check.start()
             self._last_frame_count = 0

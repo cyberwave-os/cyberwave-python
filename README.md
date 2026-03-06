@@ -2,7 +2,9 @@
 
 The official Python SDK for Cyberwave. Create, control, and simulate robotics with ease.
 
-## Status
+[![License](https://img.shields.io/badge/License-MIT-orange.svg)](https://github.com/cyberwave-os/cyberwave-python/blob/main/LICENSE)
+[![Discord](https://badgen.net/badge/icon/discord?icon=discord&label&color=orange)](https://discord.gg/dfGhNrawyF)
+[![Documentation](https://img.shields.io/badge/Documentation-%F0%9F%93%96-orange)](https://docs.cyberwave.com)
 
 [![PyPI version](https://img.shields.io/pypi/v/cyberwave.svg)](https://pypi.org/project/cyberwave/)
 [![PyPI Python versions](https://img.shields.io/pypi/pyversions/cyberwave.svg)](https://pypi.org/project/cyberwave/)
@@ -126,6 +128,26 @@ asset = cw.assets.create(
 # Automatically chooses direct upload (small files) or signed URL flow (large files)
 updated_asset = cw.assets.upload_glb(asset.uuid, "/path/to/warehouse_shelf.glb")
 print(updated_asset.glb_file)
+```
+
+### Fetching the latest camera frame
+
+Use this when you want to build automations that react to the current visual state of a twin.
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave()
+twin = cw.twin(twin_id="your_twin_uuid")
+
+# Get JPEG bytes for the latest frame
+frame_bytes = twin.get_latest_frame()
+
+# For multi-camera twins, target a specific sensor id
+wrist_frame = twin.get_latest_frame(sensor_id="wrist_camera")
+
+# Optional deterministic mock image (useful in tests)
+mock_frame = twin.get_latest_frame(mock=True)
 ```
 
 ### Environment Variables
@@ -429,6 +451,14 @@ alert = twin.alerts.create(
     severity="warning",          # info | warning | error | critical
     alert_type="calibration_needed",
     source_type="edge",          # edge | cloud | workflow
+)
+
+# If you need to bypass backend deduplication and always create a new row:
+forced_alert = twin.alerts.create(
+    name="Calibration needed",
+    description="Joint 3 is drifting beyond tolerance",
+    alert_type="calibration_needed",
+    force=True,
 )
 
 # List active alerts for this twin

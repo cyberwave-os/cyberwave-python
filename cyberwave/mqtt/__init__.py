@@ -42,6 +42,7 @@ class CyberwaveMQTTClient:
         mqtt_port: MQTT broker port (default: 1883)
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
         api_key: Cyberwave API key used for MQTT authN/authZ
+        mqtt_password: Explicit MQTT password (overrides api_key when provided)
         client_id: Custom MQTT client ID (auto-generated if not provided)
         use_tls: Enable TLS transport for MQTT
         tls_ca_cert: Path to CA certificate bundle for broker verification
@@ -55,6 +56,7 @@ class CyberwaveMQTTClient:
         mqtt_port: int = 1883,
         mqtt_username: str = "mqttcyb",
         api_key: Optional[str] = None,
+        mqtt_password: Optional[str] = None,
         client_id: Optional[str] = None,
         use_tls: bool = False,
         tls_ca_cert: Optional[str] = None,
@@ -68,11 +70,13 @@ class CyberwaveMQTTClient:
         self.mqtt_username = mqtt_username
 
         self.api_key = api_key
+        self.mqtt_password = mqtt_password
 
-        if not self.api_key:
+        auth_password = self.mqtt_password or self.api_key
+        if not auth_password:
             raise ValueError(
-                "api_key is required for MQTT authentication. "
-                "Set CYBERWAVE_API_KEY"
+                "api_key or mqtt_password is required for MQTT authentication. "
+                "Set CYBERWAVE_API_KEY or pass mqtt_password explicitly"
             )
 
         # Topic prefix (empty by default, can be set for custom deployments)
@@ -87,7 +91,7 @@ class CyberwaveMQTTClient:
             client_id=self.client_id,  # type: ignore
         )
         self.client.username_pw_set(
-            username=self.mqtt_username, password=self.api_key
+            username=self.mqtt_username, password=auth_password
         )
         # Port 8883 is the conventional MQTT-over-TLS port.
         self.use_tls = use_tls or self.mqtt_port == 8883

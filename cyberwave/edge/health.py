@@ -32,7 +32,7 @@ class EdgeHealthCheck:
         mqtt_client: Any,
         twin_uuids: List[str],
         edge_id: Optional[str] = None,
-        stale_timeout: int = 30,
+        stale_timeout: int = 60,
         interval: int = 5,
     ):
         """Initialize health publisher.

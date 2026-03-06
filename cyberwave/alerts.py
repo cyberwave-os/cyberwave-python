@@ -248,6 +248,7 @@ class TwinAlertManager:
         workflow_uuid: Optional[str] = None,
         workspace_uuid: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        force: bool = False,
     ) -> Alert:
         """Create a new **active** alert for this twin.
 
@@ -262,6 +263,8 @@ class TwinAlertManager:
             workspace_uuid: Workspace to associate the alert with.
                 Defaults to the workspace configured on the client.
             metadata: Optional metadata dict (e.g. calibration args for calibration_needed).
+            force: If True, bypass backend deduplication and always create a
+                new alert even when content matches an existing one.
 
         Returns:
             The newly created :class:`Alert`.
@@ -284,6 +287,8 @@ class TwinAlertManager:
             payload["workflow_uuid"] = workflow_uuid
         if metadata is not None:
             payload["metadata"] = metadata
+        if force:
+            payload["force"] = True
 
         data = _create_alert(self._twin.client, payload)
         return Alert(self._twin.client, data)

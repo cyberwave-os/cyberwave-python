@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -36,7 +36,8 @@ class CreateAlertSchema(BaseModel):
     workflow_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "metadata"]
+    force: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["name", "description", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "metadata", "force"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -123,7 +124,8 @@ class CreateAlertSchema(BaseModel):
             "environment_uuid": obj.get("environment_uuid"),
             "workflow_uuid": obj.get("workflow_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "force": obj.get("force") if obj.get("force") is not None else False
         })
         return _obj
 
