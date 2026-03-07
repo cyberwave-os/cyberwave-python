@@ -66,6 +66,7 @@ from cyberwave.rest.models.episode_schema import EpisodeSchema
 from cyberwave.rest.models.episode_update_schema import EpisodeUpdateSchema
 from cyberwave.rest.models.execute_task_schema import ExecuteTaskSchema
 from cyberwave.rest.models.image_bytes import ImageBytes
+from cyberwave.rest.models.import_result_schema import ImportResultSchema
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema
 from cyberwave.rest.models.joint_schema import JointSchema
@@ -99,6 +100,7 @@ from cyberwave.rest.models.org_members_response import OrgMembersResponse
 from cyberwave.rest.models.organization_create_schema import OrganizationCreateSchema
 from cyberwave.rest.models.organization_schema import OrganizationSchema
 from cyberwave.rest.models.organization_update_schema import OrganizationUpdateSchema
+from cyberwave.rest.models.organization_workspace_schema import OrganizationWorkspaceSchema
 from cyberwave.rest.models.pair_twin_schema import PairTwinSchema
 from cyberwave.rest.models.payload import Payload
 from cyberwave.rest.models.permissions_schema import PermissionsSchema
@@ -107,10 +109,6 @@ from cyberwave.rest.models.popular_tags_response_schema import PopularTagsRespon
 from cyberwave.rest.models.project_create_schema import ProjectCreateSchema
 from cyberwave.rest.models.project_schema import ProjectSchema
 from cyberwave.rest.models.project_share_response_schema import ProjectShareResponseSchema
-from cyberwave.rest.models.rl_policy_deploy_response_schema import RLPolicyDeployResponseSchema
-from cyberwave.rest.models.rl_policy_deploy_schema import RLPolicyDeploySchema
-from cyberwave.rest.models.rl_policy_reach_response_schema import RLPolicyReachResponseSchema
-from cyberwave.rest.models.rl_policy_reach_schema import RLPolicyReachSchema
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse
@@ -12782,295 +12780,6 @@ class DefaultApi:
 
 
     @validate_call
-    def src_app_api_controller_policies_deploy_rl_policy_service(
-        self,
-        uuid: StrictStr,
-        rl_policy_deploy_schema: RLPolicyDeploySchema,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> RLPolicyDeployResponseSchema:
-        """Deploy Rl Policy Service
-
-        Deploy RL policy as persistent Cloud Node service.   This creates a long-running Cloud Node instance that: 1. Loads the policy checkpoint once on startup 2. Subscribes to twin joint states 3. Listens for reach commands 4. Executes reach tasks until success criteria are met
-
-        :param uuid: (required)
-        :type uuid: str
-        :param rl_policy_deploy_schema: (required)
-        :type rl_policy_deploy_schema: RLPolicyDeploySchema
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_controller_policies_deploy_rl_policy_service_serialize(
-            uuid=uuid,
-            rl_policy_deploy_schema=rl_policy_deploy_schema,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "RLPolicyDeployResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        ).data
-
-
-    @validate_call
-    def src_app_api_controller_policies_deploy_rl_policy_service_with_http_info(
-        self,
-        uuid: StrictStr,
-        rl_policy_deploy_schema: RLPolicyDeploySchema,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[RLPolicyDeployResponseSchema]:
-        """Deploy Rl Policy Service
-
-        Deploy RL policy as persistent Cloud Node service.   This creates a long-running Cloud Node instance that: 1. Loads the policy checkpoint once on startup 2. Subscribes to twin joint states 3. Listens for reach commands 4. Executes reach tasks until success criteria are met
-
-        :param uuid: (required)
-        :type uuid: str
-        :param rl_policy_deploy_schema: (required)
-        :type rl_policy_deploy_schema: RLPolicyDeploySchema
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_controller_policies_deploy_rl_policy_service_serialize(
-            uuid=uuid,
-            rl_policy_deploy_schema=rl_policy_deploy_schema,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "RLPolicyDeployResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        )
-
-
-    @validate_call
-    def src_app_api_controller_policies_deploy_rl_policy_service_without_preload_content(
-        self,
-        uuid: StrictStr,
-        rl_policy_deploy_schema: RLPolicyDeploySchema,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> RESTResponseType:
-        """Deploy Rl Policy Service
-
-        Deploy RL policy as persistent Cloud Node service.   This creates a long-running Cloud Node instance that: 1. Loads the policy checkpoint once on startup 2. Subscribes to twin joint states 3. Listens for reach commands 4. Executes reach tasks until success criteria are met
-
-        :param uuid: (required)
-        :type uuid: str
-        :param rl_policy_deploy_schema: (required)
-        :type rl_policy_deploy_schema: RLPolicyDeploySchema
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_controller_policies_deploy_rl_policy_service_serialize(
-            uuid=uuid,
-            rl_policy_deploy_schema=rl_policy_deploy_schema,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "RLPolicyDeployResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        return response_data.response
-
-
-    def _src_app_api_controller_policies_deploy_rl_policy_service_serialize(
-        self,
-        uuid,
-        rl_policy_deploy_schema,
-        _request_auth,
-        _content_type,
-        _headers,
-        _host_index,
-    ) -> RequestSerialized:
-
-        _host = None
-
-        _collection_formats: Dict[str, str] = {
-        }
-
-        _path_params: Dict[str, str] = {}
-        _query_params: List[Tuple[str, str]] = []
-        _header_params: Dict[str, Optional[str]] = _headers or {}
-        _form_params: List[Tuple[str, str]] = []
-        _files: Dict[
-            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
-        ] = {}
-        _body_params: Optional[bytes] = None
-
-        # process the path parameters
-        if uuid is not None:
-            _path_params['uuid'] = uuid
-        # process the query parameters
-        # process the header parameters
-        # process the form parameters
-        # process the body parameter
-        if rl_policy_deploy_schema is not None:
-            _body_params = rl_policy_deploy_schema
-
-
-        # set the HTTP header `Accept`
-        if 'Accept' not in _header_params:
-            _header_params['Accept'] = self.api_client.select_header_accept(
-                [
-                    'application/json'
-                ]
-            )
-
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
-
-        # authentication setting
-        _auth_settings: List[str] = [
-            'CustomTokenAuthentication'
-        ]
-
-        return self.api_client.param_serialize(
-            method='POST',
-            resource_path='/api/v1/controller-policies/{uuid}/deploy-rl-service',
-            path_params=_path_params,
-            query_params=_query_params,
-            header_params=_header_params,
-            body=_body_params,
-            post_params=_form_params,
-            files=_files,
-            auth_settings=_auth_settings,
-            collection_formats=_collection_formats,
-            _host=_host,
-            _request_auth=_request_auth
-        )
-
-
-
-
-    @validate_call
     def src_app_api_controller_policies_execute_controller_policy(
         self,
         uuid: StrictStr,
@@ -13341,295 +13050,6 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='POST',
             resource_path='/api/v1/controller-policies/{uuid}/execute',
-            path_params=_path_params,
-            query_params=_query_params,
-            header_params=_header_params,
-            body=_body_params,
-            post_params=_form_params,
-            files=_files,
-            auth_settings=_auth_settings,
-            collection_formats=_collection_formats,
-            _host=_host,
-            _request_auth=_request_auth
-        )
-
-
-
-
-    @validate_call
-    def src_app_api_controller_policies_execute_reach_command(
-        self,
-        uuid: StrictStr,
-        rl_policy_reach_schema: RLPolicyReachSchema,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> RLPolicyReachResponseSchema:
-        """Execute Reach Command
-
-        Send reach command to running RL policy service.   The service will execute a reach task to move both end-effectors to the specified target positions, running the policy in a loop until success criteria are met.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param rl_policy_reach_schema: (required)
-        :type rl_policy_reach_schema: RLPolicyReachSchema
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_controller_policies_execute_reach_command_serialize(
-            uuid=uuid,
-            rl_policy_reach_schema=rl_policy_reach_schema,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "RLPolicyReachResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        ).data
-
-
-    @validate_call
-    def src_app_api_controller_policies_execute_reach_command_with_http_info(
-        self,
-        uuid: StrictStr,
-        rl_policy_reach_schema: RLPolicyReachSchema,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[RLPolicyReachResponseSchema]:
-        """Execute Reach Command
-
-        Send reach command to running RL policy service.   The service will execute a reach task to move both end-effectors to the specified target positions, running the policy in a loop until success criteria are met.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param rl_policy_reach_schema: (required)
-        :type rl_policy_reach_schema: RLPolicyReachSchema
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_controller_policies_execute_reach_command_serialize(
-            uuid=uuid,
-            rl_policy_reach_schema=rl_policy_reach_schema,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "RLPolicyReachResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        )
-
-
-    @validate_call
-    def src_app_api_controller_policies_execute_reach_command_without_preload_content(
-        self,
-        uuid: StrictStr,
-        rl_policy_reach_schema: RLPolicyReachSchema,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> RESTResponseType:
-        """Execute Reach Command
-
-        Send reach command to running RL policy service.   The service will execute a reach task to move both end-effectors to the specified target positions, running the policy in a loop until success criteria are met.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param rl_policy_reach_schema: (required)
-        :type rl_policy_reach_schema: RLPolicyReachSchema
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_controller_policies_execute_reach_command_serialize(
-            uuid=uuid,
-            rl_policy_reach_schema=rl_policy_reach_schema,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "RLPolicyReachResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        return response_data.response
-
-
-    def _src_app_api_controller_policies_execute_reach_command_serialize(
-        self,
-        uuid,
-        rl_policy_reach_schema,
-        _request_auth,
-        _content_type,
-        _headers,
-        _host_index,
-    ) -> RequestSerialized:
-
-        _host = None
-
-        _collection_formats: Dict[str, str] = {
-        }
-
-        _path_params: Dict[str, str] = {}
-        _query_params: List[Tuple[str, str]] = []
-        _header_params: Dict[str, Optional[str]] = _headers or {}
-        _form_params: List[Tuple[str, str]] = []
-        _files: Dict[
-            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
-        ] = {}
-        _body_params: Optional[bytes] = None
-
-        # process the path parameters
-        if uuid is not None:
-            _path_params['uuid'] = uuid
-        # process the query parameters
-        # process the header parameters
-        # process the form parameters
-        # process the body parameter
-        if rl_policy_reach_schema is not None:
-            _body_params = rl_policy_reach_schema
-
-
-        # set the HTTP header `Accept`
-        if 'Accept' not in _header_params:
-            _header_params['Accept'] = self.api_client.select_header_accept(
-                [
-                    'application/json'
-                ]
-            )
-
-        # set the HTTP header `Content-Type`
-        if _content_type:
-            _header_params['Content-Type'] = _content_type
-        else:
-            _default_content_type = (
-                self.api_client.select_header_content_type(
-                    [
-                        'application/json'
-                    ]
-                )
-            )
-            if _default_content_type is not None:
-                _header_params['Content-Type'] = _default_content_type
-
-        # authentication setting
-        _auth_settings: List[str] = [
-            'CustomTokenAuthentication'
-        ]
-
-        return self.api_client.param_serialize(
-            method='POST',
-            resource_path='/api/v1/controller-policies/{uuid}/reach',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -27820,6 +27240,1077 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/api/v1/environments/{uuid}/recordings/{recording_uuid}/data',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_mujoco_scene(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ImportResultSchema:
+        """Import Environment Mujoco Scene
+
+        Import twins into an environment from a MuJoCo scene file.  Accepts either: - A .xml file (raw MJCF scene) - A .zip file containing mujoco_scene.xml at the root  The scene must have been exported by Cyberwave (must contain the extensions.cyberwave.twins registry in the XML comments/schema metadata).  Multipart form field: file (.xml or .zip) Query param: replace_existing (bool, default false)
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_mujoco_scene_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_mujoco_scene_with_http_info(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[ImportResultSchema]:
+        """Import Environment Mujoco Scene
+
+        Import twins into an environment from a MuJoCo scene file.  Accepts either: - A .xml file (raw MJCF scene) - A .zip file containing mujoco_scene.xml at the root  The scene must have been exported by Cyberwave (must contain the extensions.cyberwave.twins registry in the XML comments/schema metadata).  Multipart form field: file (.xml or .zip) Query param: replace_existing (bool, default false)
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_mujoco_scene_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_mujoco_scene_without_preload_content(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Import Environment Mujoco Scene
+
+        Import twins into an environment from a MuJoCo scene file.  Accepts either: - A .xml file (raw MJCF scene) - A .zip file containing mujoco_scene.xml at the root  The scene must have been exported by Cyberwave (must contain the extensions.cyberwave.twins registry in the XML comments/schema metadata).  Multipart form field: file (.xml or .zip) Query param: replace_existing (bool, default false)
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_mujoco_scene_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_environments_import_environment_mujoco_scene_serialize(
+        self,
+        uuid,
+        file,
+        replace_existing,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        if replace_existing is not None:
+            
+            _query_params.append(('replace_existing', replace_existing))
+            
+        # process the header parameters
+        # process the form parameters
+        if file is not None:
+            _files['file'] = file
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'multipart/form-data'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/environments/{uuid}/import/mujoco-scene',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_universal_schema(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ImportResultSchema:
+        """Import Environment Universal Schema
+
+        Import twins into an environment from a Cyberwave universal schema JSON file.  The JSON must contain an extensions.cyberwave.twins registry (i.e. it must have been exported by Cyberwave via GET /{uuid}/universal-schema.json).  Multipart form field: file (.json) Query param: replace_existing (bool, default false)
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_universal_schema_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_universal_schema_with_http_info(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[ImportResultSchema]:
+        """Import Environment Universal Schema
+
+        Import twins into an environment from a Cyberwave universal schema JSON file.  The JSON must contain an extensions.cyberwave.twins registry (i.e. it must have been exported by Cyberwave via GET /{uuid}/universal-schema.json).  Multipart form field: file (.json) Query param: replace_existing (bool, default false)
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_universal_schema_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_universal_schema_without_preload_content(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Import Environment Universal Schema
+
+        Import twins into an environment from a Cyberwave universal schema JSON file.  The JSON must contain an extensions.cyberwave.twins registry (i.e. it must have been exported by Cyberwave via GET /{uuid}/universal-schema.json).  Multipart form field: file (.json) Query param: replace_existing (bool, default false)
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_universal_schema_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_environments_import_environment_universal_schema_serialize(
+        self,
+        uuid,
+        file,
+        replace_existing,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        if replace_existing is not None:
+            
+            _query_params.append(('replace_existing', replace_existing))
+            
+        # process the header parameters
+        # process the form parameters
+        if file is not None:
+            _files['file'] = file
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'multipart/form-data'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/environments/{uuid}/import/universal-schema',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_urdf(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        asset_uuid: Optional[StrictStr] = None,
+        asset_registry_id: Optional[StrictStr] = None,
+        position_x: Optional[Union[StrictFloat, StrictInt]] = None,
+        position_y: Optional[Union[StrictFloat, StrictInt]] = None,
+        position_z: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_x: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_y: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_z: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_w: Optional[Union[StrictFloat, StrictInt]] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ImportResultSchema:
+        """Import Environment Urdf
+
+        Import a single robot twin into an environment from a URDF file.  The URDF describes one robot; you must identify the matching Cyberwave Asset via asset_uuid or asset_registry_id so the twin can be linked correctly.  Multipart form field: file (.urdf) Query params:   asset_uuid / asset_registry_id - required: identifies the Cyberwave Asset   position_x/y/z - world position for the spawned twin (default 0,0,0)   rotation_x/y/z/w - world orientation quaternion (default identity)   replace_existing - if true, delete existing twins first
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param asset_uuid:
+        :type asset_uuid: str
+        :param asset_registry_id:
+        :type asset_registry_id: str
+        :param position_x:
+        :type position_x: float
+        :param position_y:
+        :type position_y: float
+        :param position_z:
+        :type position_z: float
+        :param rotation_x:
+        :type rotation_x: float
+        :param rotation_y:
+        :type rotation_y: float
+        :param rotation_z:
+        :type rotation_z: float
+        :param rotation_w:
+        :type rotation_w: float
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_urdf_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            asset_uuid=asset_uuid,
+            asset_registry_id=asset_registry_id,
+            position_x=position_x,
+            position_y=position_y,
+            position_z=position_z,
+            rotation_x=rotation_x,
+            rotation_y=rotation_y,
+            rotation_z=rotation_z,
+            rotation_w=rotation_w,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_urdf_with_http_info(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        asset_uuid: Optional[StrictStr] = None,
+        asset_registry_id: Optional[StrictStr] = None,
+        position_x: Optional[Union[StrictFloat, StrictInt]] = None,
+        position_y: Optional[Union[StrictFloat, StrictInt]] = None,
+        position_z: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_x: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_y: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_z: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_w: Optional[Union[StrictFloat, StrictInt]] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[ImportResultSchema]:
+        """Import Environment Urdf
+
+        Import a single robot twin into an environment from a URDF file.  The URDF describes one robot; you must identify the matching Cyberwave Asset via asset_uuid or asset_registry_id so the twin can be linked correctly.  Multipart form field: file (.urdf) Query params:   asset_uuid / asset_registry_id - required: identifies the Cyberwave Asset   position_x/y/z - world position for the spawned twin (default 0,0,0)   rotation_x/y/z/w - world orientation quaternion (default identity)   replace_existing - if true, delete existing twins first
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param asset_uuid:
+        :type asset_uuid: str
+        :param asset_registry_id:
+        :type asset_registry_id: str
+        :param position_x:
+        :type position_x: float
+        :param position_y:
+        :type position_y: float
+        :param position_z:
+        :type position_z: float
+        :param rotation_x:
+        :type rotation_x: float
+        :param rotation_y:
+        :type rotation_y: float
+        :param rotation_z:
+        :type rotation_z: float
+        :param rotation_w:
+        :type rotation_w: float
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_urdf_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            asset_uuid=asset_uuid,
+            asset_registry_id=asset_registry_id,
+            position_x=position_x,
+            position_y=position_y,
+            position_z=position_z,
+            rotation_x=rotation_x,
+            rotation_y=rotation_y,
+            rotation_z=rotation_z,
+            rotation_w=rotation_w,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_environments_import_environment_urdf_without_preload_content(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        replace_existing: Optional[StrictBool] = None,
+        asset_uuid: Optional[StrictStr] = None,
+        asset_registry_id: Optional[StrictStr] = None,
+        position_x: Optional[Union[StrictFloat, StrictInt]] = None,
+        position_y: Optional[Union[StrictFloat, StrictInt]] = None,
+        position_z: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_x: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_y: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_z: Optional[Union[StrictFloat, StrictInt]] = None,
+        rotation_w: Optional[Union[StrictFloat, StrictInt]] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Import Environment Urdf
+
+        Import a single robot twin into an environment from a URDF file.  The URDF describes one robot; you must identify the matching Cyberwave Asset via asset_uuid or asset_registry_id so the twin can be linked correctly.  Multipart form field: file (.urdf) Query params:   asset_uuid / asset_registry_id - required: identifies the Cyberwave Asset   position_x/y/z - world position for the spawned twin (default 0,0,0)   rotation_x/y/z/w - world orientation quaternion (default identity)   replace_existing - if true, delete existing twins first
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytearray
+        :param replace_existing:
+        :type replace_existing: bool
+        :param asset_uuid:
+        :type asset_uuid: str
+        :param asset_registry_id:
+        :type asset_registry_id: str
+        :param position_x:
+        :type position_x: float
+        :param position_y:
+        :type position_y: float
+        :param position_z:
+        :type position_z: float
+        :param rotation_x:
+        :type rotation_x: float
+        :param rotation_y:
+        :type rotation_y: float
+        :param rotation_z:
+        :type rotation_z: float
+        :param rotation_w:
+        :type rotation_w: float
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_import_environment_urdf_serialize(
+            uuid=uuid,
+            file=file,
+            replace_existing=replace_existing,
+            asset_uuid=asset_uuid,
+            asset_registry_id=asset_registry_id,
+            position_x=position_x,
+            position_y=position_y,
+            position_z=position_z,
+            rotation_x=rotation_x,
+            rotation_y=rotation_y,
+            rotation_z=rotation_z,
+            rotation_w=rotation_w,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ImportResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_environments_import_environment_urdf_serialize(
+        self,
+        uuid,
+        file,
+        replace_existing,
+        asset_uuid,
+        asset_registry_id,
+        position_x,
+        position_y,
+        position_z,
+        rotation_x,
+        rotation_y,
+        rotation_z,
+        rotation_w,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        if replace_existing is not None:
+            
+            _query_params.append(('replace_existing', replace_existing))
+            
+        if asset_uuid is not None:
+            
+            _query_params.append(('asset_uuid', asset_uuid))
+            
+        if asset_registry_id is not None:
+            
+            _query_params.append(('asset_registry_id', asset_registry_id))
+            
+        if position_x is not None:
+            
+            _query_params.append(('position_x', position_x))
+            
+        if position_y is not None:
+            
+            _query_params.append(('position_y', position_y))
+            
+        if position_z is not None:
+            
+            _query_params.append(('position_z', position_z))
+            
+        if rotation_x is not None:
+            
+            _query_params.append(('rotation_x', rotation_x))
+            
+        if rotation_y is not None:
+            
+            _query_params.append(('rotation_y', rotation_y))
+            
+        if rotation_z is not None:
+            
+            _query_params.append(('rotation_z', rotation_z))
+            
+        if rotation_w is not None:
+            
+            _query_params.append(('rotation_w', rotation_w))
+            
+        # process the header parameters
+        # process the form parameters
+        if file is not None:
+            _files['file'] = file
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'multipart/form-data'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/environments/{uuid}/import/urdf',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -73834,6 +74325,267 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/api/v1/users/organizations/{uuid}/members',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_users_api_organizations_list_organization_workspaces(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> Dict[str, List[OrganizationWorkspaceSchema]]:
+        """List Organization Workspaces
+
+        List all workspaces in an organization for authorized org users.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_users_api_organizations_list_organization_workspaces_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, List[OrganizationWorkspaceSchema]]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_users_api_organizations_list_organization_workspaces_with_http_info(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[Dict[str, List[OrganizationWorkspaceSchema]]]:
+        """List Organization Workspaces
+
+        List all workspaces in an organization for authorized org users.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_users_api_organizations_list_organization_workspaces_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, List[OrganizationWorkspaceSchema]]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_users_api_organizations_list_organization_workspaces_without_preload_content(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """List Organization Workspaces
+
+        List all workspaces in an organization for authorized org users.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_users_api_organizations_list_organization_workspaces_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, List[OrganizationWorkspaceSchema]]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_users_api_organizations_list_organization_workspaces_serialize(
+        self,
+        uuid,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/users/organizations/{uuid}/workspaces',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

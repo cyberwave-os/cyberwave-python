@@ -54,22 +54,6 @@ def _infer_config_from_twin(
     return config
 
 
-def _handle_aioice_shutdown_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:
-    """Suppress known aioice race when closing WebRTC during ICE negotiation.
-
-    When pc.close() tears down the connection, aioice's STUN Transaction retry
-    callbacks can still fire and try to send on a closed socket, causing
-    AttributeError. We suppress these to avoid noisy shutdown errors.
-    """
-    exc = context.get("exception")
-    if exc is not None and isinstance(exc, AttributeError):
-        msg = str(exc)
-        if "sendto" in msg or "call_exception_handler" in msg:
-            logger.debug("Suppressing aioice shutdown race: %s", msg)
-            return
-    loop.default_exception_handler(context)
-
-
 def _run_streamer_in_thread(
     client: "Cyberwave",
     config: Dict[str, Any],
@@ -80,9 +64,6 @@ def _run_streamer_in_thread(
     """Run a single camera streamer in a thread with run_with_auto_reconnect."""
     from . import CV2CameraStreamer, RealSenseStreamer
     from .config import Resolution
-
-    # Reduce aioice verbosity (ICE candidate checks are noisy)
-    logging.getLogger("aioice").setLevel(logging.WARNING)
 
     twin = config["twin"]
     twin_uuid = twin.uuid
@@ -190,10 +171,7 @@ def _run_streamer_in_thread(
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.set_exception_handler(_handle_aioice_shutdown_exception)
         loop.run_until_complete(_run())
-        # Allow pending aioice STUN retries to fire (and be suppressed) before closing
-        loop.run_until_complete(asyncio.sleep(1.0))
     except Exception as e:
         logger.error(f"Camera stream error (twin={twin_uuid}): {e}")
         raise

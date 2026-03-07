@@ -32,7 +32,7 @@ class CyberwaveConfig:
         base_url: Base URL of the Cyberwave backend (e.g., "https://api.cyberwave.com")
         api_key: API key for authentication (sent as Bearer auth value)
         token: Deprecated alias for api_key (kept for backwards compatibility)
-        mqtt_host: MQTT broker host (defaults to base_url host)
+        mqtt_host: MQTT broker host (defaults to mqtt.cyberwave.com)
         mqtt_port: MQTT broker port (defaults to 1883)
         mqtt_username: MQTT username (optional)
         mqtt_use_tls: Whether to enable MQTT TLS transport
@@ -102,7 +102,7 @@ class CyberwaveConfig:
         if not self.topic_prefix:
             # Check for explicit prefix first
             self.topic_prefix = os.getenv("CYBERWAVE_MQTT_TOPIC_PREFIX")
-            
+
             # If not set, derive from environment (legacy behavior)
             if not self.topic_prefix:
                 env_value = os.getenv("CYBERWAVE_ENVIRONMENT", "").strip()

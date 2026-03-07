@@ -47,6 +47,7 @@ except ImportError:
     _has_realsense = False
     RealSenseStreamer = None
 
+
 class Cyberwave:
     """
     Main client for the Cyberwave Digital Twin Platform.
@@ -63,7 +64,7 @@ class Cyberwave:
         base_url: Base URL of the Cyberwave backend
         api_key: API key for authentication
         token: Deprecated alias for api_key (kept for backwards compatibility)
-        mqtt_host: MQTT broker host (optional, defaults to base_url host)
+        mqtt_host: MQTT broker host (optional, defaults to "mqtt.cyberwave.com")
         mqtt_port: MQTT broker port (default: 1883)
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
         mqtt_use_tls: Enable TLS for MQTT connection
@@ -172,7 +173,13 @@ class Cyberwave:
             if header_params:
                 last_request_headers.update(header_params)
             return original_call_api(
-                method, url, header_params, body, post_params, _request_timeout, **kwargs
+                method,
+                url,
+                header_params,
+                body,
+                post_params,
+                _request_timeout,
+                **kwargs,
             )
 
         api_client.response_deserialize = response_deserialize_with_headers
@@ -283,7 +290,9 @@ class Cyberwave:
 
         # asset_key is required for twin creation
         if not asset_key:
-            raise CyberwaveError("asset_key is required when creating a new twin (twin_id not provided)")
+            raise CyberwaveError(
+                "asset_key is required when creating a new twin (twin_id not provided)"
+            )
 
         twin_name = kwargs.get("name", None)
 
@@ -410,7 +419,7 @@ class Cyberwave:
         fourcc: Optional[str] = None,
     ):
         """
-        Create a camera streamer for the specified twin.
+        Create a camera streamer for the specified twin. DEPRECATED: Use the TwinCamera instead
 
         This method creates a camera streamer instance that's pre-configured with
         the client's MQTT connection, providing a seamless experience for streaming
@@ -531,7 +540,9 @@ class Cyberwave:
             # Convert tuple to Resolution enum for from_device
             def to_resolution(res):
                 if isinstance(res, tuple):
-                    return Resolution.from_size(res[0], res[1]) or Resolution.closest(res[0], res[1])
+                    return Resolution.from_size(res[0], res[1]) or Resolution.closest(
+                        res[0], res[1]
+                    )
                 return res
 
             # Depth resolution defaults to color resolution
@@ -573,7 +584,7 @@ class Cyberwave:
         twin_uuid: str,
     ) -> "EdgeController":
         """
-        Create an edge controller for the specified twin.
+        Create an edge controller for the specified twin. DEPRECATED
 
         This method creates an EdgeController instance that's pre-configured with
         the client's MQTT connection, providing a seamless experience for sending
@@ -602,6 +613,7 @@ class Cyberwave:
     def get_scene(self, environment_id: str) -> "Scene":
         """Get a scene builder for the specified environment."""
         from cyberwave.scene import Scene
+
         return Scene(self, environment_id)
 
     def disconnect(self):

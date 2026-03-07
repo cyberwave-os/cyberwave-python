@@ -314,8 +314,7 @@ class BaseVideoStreamer(abc.ABC):
         if self.pc:
             try:
                 await self.pc.close()
-                # Allow aioice STUN retry callbacks to settle before continuing
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(0.5)
             except Exception as e:
                 logger.error(f"Error closing peer connection: {e}")
             finally:

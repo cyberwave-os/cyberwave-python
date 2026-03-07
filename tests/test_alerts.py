@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from cyberwave.alerts import TwinAlertManager
+from cyberwave.alerts import Alert, TwinAlertManager
 
 
 def _make_twin():
@@ -32,3 +32,29 @@ def test_twin_alert_manager_create_sets_force_when_requested():
 
     _, payload = mock_create.call_args.args
     assert payload["force"] is True
+
+
+def test_twin_alert_manager_create_includes_media_when_provided():
+    twin = _make_twin()
+    manager = TwinAlertManager(twin)
+
+    with patch(
+        "cyberwave.alerts._create_alert", return_value={"uuid": "alert-uuid"}
+    ) as mock_create:
+        manager.create(
+            name="Calibration needed",
+            media="https://cdn.example.com/alerts/calibration.gif",
+        )
+
+    _, payload = mock_create.call_args.args
+    assert payload["media"] == "https://cdn.example.com/alerts/calibration.gif"
+
+
+def test_alert_media_property_reads_payload_value():
+    client = MagicMock()
+    alert = Alert(
+        client,
+        {"uuid": "alert-uuid", "media": "https://cdn.example.com/alerts/help.mp4"},
+    )
+
+    assert alert.media == "https://cdn.example.com/alerts/help.mp4"

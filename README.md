@@ -1,14 +1,21 @@
+<p align="center">
+  <a href="https://cyberwave.com">
+    <img src="https://cyberwave.com/cyberwave-logo-black.svg" alt="Cyberwave logo" width="240" />
+  </a>
+</p>
+
 # Cyberwave Python SDK
+
+This module is part of **Cyberwave: Making the physical world programmable**.
 
 The official Python SDK for Cyberwave. Create, control, and simulate robotics with ease.
 
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)](https://github.com/cyberwave-os/cyberwave-python/blob/main/LICENSE)
+[![Documentation](https://img.shields.io/badge/Documentation-docs.cyberwave.com-orange)](https://docs.cyberwave.com)
 [![Discord](https://badgen.net/badge/icon/discord?icon=discord&label&color=orange)](https://discord.gg/dfGhNrawyF)
-[![Documentation](https://img.shields.io/badge/Documentation-%F0%9F%93%96-orange)](https://docs.cyberwave.com)
-
 [![PyPI version](https://img.shields.io/pypi/v/cyberwave.svg)](https://pypi.org/project/cyberwave/)
 [![PyPI Python versions](https://img.shields.io/pypi/pyversions/cyberwave.svg)](https://pypi.org/project/cyberwave/)
-![Tests](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml/badge.svg)
+[![Build](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml/badge.svg)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
 [![Python 3.10](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.10&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
 [![Python 3.11](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.11&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
 [![Python 3.12](https://img.shields.io/github/actions/workflow/status/cyberwave-os/cyberwave-python/test.yml?label=Python%203.12&logo=python&branch=main)](https://github.com/cyberwave-os/cyberwave-python/actions/workflows/test.yml)
@@ -197,7 +204,7 @@ pip install cyberwave[camera]
 pip install cyberwave[realsense]
 ```
 
-> **📌 Note for ARM64/Raspberry Pi**: The `pip install cyberwave[realsense]` command installs the Python wrapper, but you'll still need the librealsense SDK installed on your system. On x86_64 systems, you can install it via `sudo apt install librealsense2` or use pre-built wheels. **On Raspberry Pi OS (ARM64), you must build librealsense from source** - see our [Raspberry Pi Installation Guide](install_realsense_raspian_os.md).
+> **Note for ARM64/Raspberry Pi**: The `pip install cyberwave[realsense]` command installs the Python wrapper, but you'll still need the librealsense SDK installed on your system. On x86_64 systems, you can install it via `sudo apt install librealsense2` or use pre-built wheels. **On Raspberry Pi OS (ARM64), you must build librealsense from source** - see our [Raspberry Pi Installation Guide](install_realsense_raspian_os.md).
 
 #### Quick Start
 
@@ -330,7 +337,7 @@ streamer = CV2CameraStreamer.from_config(cw.mqtt, config, twin_uuid="...")
 
 You can also discover and set up RGD+D (Depth) cameras.
 
-> **⚠️ Raspberry Pi / ARM64 Users**: If you're running on Raspberry Pi OS or other ARM64 systems, you'll need to manually build librealsense from source, as pre-built packages aren't available. See our [Raspberry Pi Installation Guide](install_realsense_raspian_os.md) for detailed instructions.
+> **Raspberry Pi / ARM64 users**: If you're running on Raspberry Pi OS or other ARM64 systems, you'll need to manually build librealsense from source, as pre-built packages aren't available. See our [Raspberry Pi Installation Guide](install_realsense_raspian_os.md) for detailed instructions.
 
 The SDK supports dynamic discovery of RealSense device capabilities:
 
@@ -486,8 +493,12 @@ poetry install
 poetry run python tests/test_imports.py
 ```
 
+## Contributing
+
+Contributions are welcome. If you have an idea, bug report, or improvement request, please open an issue or submit a pull request.
+
 ## Support
 
 - **Documentation**: [docs.cyberwave.com](https://docs.cyberwave.com)
-- **Issues**: [GitHub Issues](https://github.com/cyberwave/cyberwave-python/issues)
+- **Issues**: [GitHub Issues](https://github.com/cyberwave-os/cyberwave-python/issues)
 - **Community**: [Discord](https://discord.gg/dfGhNrawyF)

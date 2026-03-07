@@ -776,12 +776,7 @@ class Intelrealsensed455Twin(Twin):
     Digital twin for Realsense D455
     Registry ID: intel/realsensed455
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
+    pass
 
 class BaslerbaslerAgAceGigeTwin(Twin):
     """
@@ -1056,12 +1051,7 @@ class CyberwavergbCameraWithDepthEstimationTwin(Twin):
     Digital twin for RGB Camera with Depth Estimation
     Registry ID: cyberwave/rgb-camera-with-depth-estimation
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
+    pass
 
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {

@@ -24,26 +24,7 @@
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
-      "sensors": [
-        {
-          "id": "wrist_camera",
-          "type": "rgb",
-          "model": null,
-          "offset": {
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
-          }
-        }
-      ]
+      "sensors": []
     }
   },
   "berkeley/berkeley-humanoid": {
@@ -2345,11 +2326,11 @@
     "capabilities": {
       "has_joints": false,
       "can_actuate": false,
-      "can_locomote": true,
+      "can_locomote": false,
       "can_fly": false,
       "has_legs": false,
       "has_wheels": false,
-      "locomotion_mode": "wheeled",
+      "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -3399,11 +3380,11 @@
     "capabilities": {
       "has_joints": false,
       "can_actuate": false,
-      "can_locomote": true,
+      "can_locomote": false,
       "can_fly": false,
       "has_legs": false,
       "has_wheels": false,
-      "locomotion_mode": "wheeled",
+      "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,

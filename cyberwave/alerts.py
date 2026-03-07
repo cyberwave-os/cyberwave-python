@@ -74,6 +74,11 @@ class Alert:
         return str(_attr(self._data, "description", ""))
 
     @property
+    def media(self) -> Optional[str]:
+        val = _attr(self._data, "media")
+        return str(val) if val else None
+
+    @property
     def alert_type(self) -> str:
         return str(_attr(self._data, "alert_type", ""))
 
@@ -171,6 +176,7 @@ class Alert:
         *,
         name: Optional[str] = None,
         description: Optional[str] = None,
+        media: Optional[str] = None,
         alert_type: Optional[str] = None,
         severity: Optional[str] = None,
         status: Optional[str] = None,
@@ -188,6 +194,8 @@ class Alert:
             payload["name"] = name
         if description is not None:
             payload["description"] = description
+        if media is not None:
+            payload["media"] = media
         if alert_type is not None:
             payload["alert_type"] = alert_type
         if severity is not None:
@@ -241,6 +249,7 @@ class TwinAlertManager:
         name: str,
         *,
         description: str = "",
+        media: Optional[str] = None,
         alert_type: str = "",
         severity: str = "warning",
         source_type: str = "edge",
@@ -255,6 +264,7 @@ class TwinAlertManager:
         Args:
             name: Human-readable title.
             description: Optional details.
+            media: Optional public URL to supporting media (PNG, GIF, or MP4).
             alert_type: Machine-readable code (e.g. ``calibration_needed``).
             severity: One of ``info``, ``warning``, ``error``, ``critical``.
             source_type: One of ``edge``, ``cloud``, ``workflow``.
@@ -279,6 +289,8 @@ class TwinAlertManager:
             "source_type": source_type,
             "twin_uuid": self._twin.uuid,
         }
+        if media is not None:
+            payload["media"] = media
         if ws_uuid is not None:
             payload["workspace_uuid"] = ws_uuid
         if env_uuid is not None:
