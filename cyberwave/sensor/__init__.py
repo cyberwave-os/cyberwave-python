@@ -972,13 +972,25 @@ from .config import (  # noqa: E402
 from .camera_cv2 import CV2VideoTrack, CV2CameraStreamer  # noqa: E402
 from .camera_rs import RealSenseVideoTrack, RealSenseStreamer  # noqa: E402
 from .camera_virtual import VirtualVideoTrack, VirtualCameraStreamer  # noqa: E402
-from .camera_sim import (  # noqa: E402
-    ThreadSafeFrameBuffer,
-    SimVideoTrack,
-    SimCameraStreamer,
-    MujocoMultiCameraStreamer,
-    CyberwaveSimStreaming,
-)
+# Simulation (MuJoCo) imports are optional — mujoco is not installed on edge devices
+try:
+    from .camera_sim import (  # noqa: E402
+        ThreadSafeFrameBuffer,
+        SimVideoTrack,
+        SimCameraStreamer,
+        MujocoMultiCameraStreamer,
+        CyberwaveSimStreaming,
+    )
+
+    _HAS_MUJOCO = True
+except ImportError:
+    _HAS_MUJOCO = False
+    ThreadSafeFrameBuffer = None  # type: ignore[misc, assignment]
+    SimVideoTrack = None  # type: ignore[misc, assignment]
+    SimCameraStreamer = None  # type: ignore[misc, assignment]
+    MujocoMultiCameraStreamer = None  # type: ignore[misc, assignment]
+    CyberwaveSimStreaming = None  # type: ignore[misc, assignment]
+
 from .manager import CameraStreamManager, run_streamer_in_background  # noqa: E402
 
 __all__ = [
@@ -1010,15 +1022,19 @@ __all__ = [
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",
-    # Simulation (MuJoCo) implementations
-    "ThreadSafeFrameBuffer",
-    "SimVideoTrack",
-    "SimCameraStreamer",
-    "MujocoMultiCameraStreamer",
-    "CyberwaveSimStreaming",
     # Manager
     "CameraStreamManager",
     "run_streamer_in_background",
     # Constants
     "DEFAULT_TURN_SERVERS",
 ]
+
+# Simulation (MuJoCo) exports are only available when mujoco is installed
+if _HAS_MUJOCO:
+    __all__ += [
+        "ThreadSafeFrameBuffer",
+        "SimVideoTrack",
+        "SimCameraStreamer",
+        "MujocoMultiCameraStreamer",
+        "CyberwaveSimStreaming",
+    ]
