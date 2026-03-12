@@ -16,6 +16,7 @@
 from cyberwave.rest.models.add_member_by_email_request import AddMemberByEmailRequest
 from cyberwave.rest.models.add_member_by_email_response import AddMemberByEmailResponse
 from cyberwave.rest.models.add_member_user_schema import AddMemberUserSchema
+from cyberwave.rest.models.admin_lab_info_schema import AdminLabInfoSchema
 from cyberwave.rest.models.admin_lab_overview_schema import AdminLabOverviewSchema
 from cyberwave.rest.models.admin_session_schema import AdminSessionSchema
 from cyberwave.rest.models.alert_schema import AlertSchema
@@ -233,7 +234,9 @@ from cyberwave.rest.models.workflow_node_create_schema import WorkflowNodeCreate
 from cyberwave.rest.models.workflow_node_execution_schema import WorkflowNodeExecutionSchema
 from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema
 from cyberwave.rest.models.workflow_node_update_schema import WorkflowNodeUpdateSchema
+from cyberwave.rest.models.workflow_run_schema import WorkflowRunSchema
 from cyberwave.rest.models.workflow_schema import WorkflowSchema
+from cyberwave.rest.models.workflow_trigger_schema import WorkflowTriggerSchema
 from cyberwave.rest.models.workflow_update_schema import WorkflowUpdateSchema
 from cyberwave.rest.models.workspace_create_schema import WorkspaceCreateSchema
 from cyberwave.rest.models.workspace_response_schema import WorkspaceResponseSchema

@@ -39,6 +39,7 @@ __all__ = [
     "AddMemberByEmailRequest",
     "AddMemberByEmailResponse",
     "AddMemberUserSchema",
+    "AdminLabInfoSchema",
     "AdminLabOverviewSchema",
     "AdminSessionSchema",
     "AlertSchema",
@@ -256,7 +257,9 @@ __all__ = [
     "WorkflowNodeExecutionSchema",
     "WorkflowNodeSchema",
     "WorkflowNodeUpdateSchema",
+    "WorkflowRunSchema",
     "WorkflowSchema",
+    "WorkflowTriggerSchema",
     "WorkflowUpdateSchema",
     "WorkspaceCreateSchema",
     "WorkspaceResponseSchema",
@@ -292,6 +295,7 @@ from cyberwave.rest.exceptions import ApiException as ApiException
 from cyberwave.rest.models.add_member_by_email_request import AddMemberByEmailRequest as AddMemberByEmailRequest
 from cyberwave.rest.models.add_member_by_email_response import AddMemberByEmailResponse as AddMemberByEmailResponse
 from cyberwave.rest.models.add_member_user_schema import AddMemberUserSchema as AddMemberUserSchema
+from cyberwave.rest.models.admin_lab_info_schema import AdminLabInfoSchema as AdminLabInfoSchema
 from cyberwave.rest.models.admin_lab_overview_schema import AdminLabOverviewSchema as AdminLabOverviewSchema
 from cyberwave.rest.models.admin_session_schema import AdminSessionSchema as AdminSessionSchema
 from cyberwave.rest.models.alert_schema import AlertSchema as AlertSchema
@@ -509,7 +513,9 @@ from cyberwave.rest.models.workflow_node_create_schema import WorkflowNodeCreate
 from cyberwave.rest.models.workflow_node_execution_schema import WorkflowNodeExecutionSchema as WorkflowNodeExecutionSchema
 from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema as WorkflowNodeSchema
 from cyberwave.rest.models.workflow_node_update_schema import WorkflowNodeUpdateSchema as WorkflowNodeUpdateSchema
+from cyberwave.rest.models.workflow_run_schema import WorkflowRunSchema as WorkflowRunSchema
 from cyberwave.rest.models.workflow_schema import WorkflowSchema as WorkflowSchema
+from cyberwave.rest.models.workflow_trigger_schema import WorkflowTriggerSchema as WorkflowTriggerSchema
 from cyberwave.rest.models.workflow_update_schema import WorkflowUpdateSchema as WorkflowUpdateSchema
 from cyberwave.rest.models.workspace_create_schema import WorkspaceCreateSchema as WorkspaceCreateSchema
 from cyberwave.rest.models.workspace_response_schema import WorkspaceResponseSchema as WorkspaceResponseSchema

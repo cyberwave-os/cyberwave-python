@@ -17,31 +17,17 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class DatasetSchema(BaseModel):
+class WorkflowTriggerSchema(BaseModel):
     """
-    DatasetSchema
+    Schema for triggering a workflow run from the SDK.
     """ # noqa: E501
-    uuid: StrictStr
-    episodes: List[StrictStr]
-    description: StrictStr
-    metadata: Dict[str, Any]
-    processing_status: StrictStr
-    is_ready: StrictBool
-    total_episodes: StrictInt
-    processed_episodes: StrictInt
-    failed_episodes: StrictInt
-    failed_episode_uuids: List[StrictStr]
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[StrictStr] = None
-    updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "processing_status", "is_ready", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "created_at", "updated_at", "created_by", "updated_by"]
+    inputs: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["inputs"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -61,7 +47,7 @@ class DatasetSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a JSON string"""
+        """Create an instance of WorkflowTriggerSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -82,21 +68,16 @@ class DatasetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if created_by (nullable) is None
+        # set to None if inputs (nullable) is None
         # and model_fields_set contains the field
-        if self.created_by is None and "created_by" in self.model_fields_set:
-            _dict['created_by'] = None
-
-        # set to None if updated_by (nullable) is None
-        # and model_fields_set contains the field
-        if self.updated_by is None and "updated_by" in self.model_fields_set:
-            _dict['updated_by'] = None
+        if self.inputs is None and "inputs" in self.model_fields_set:
+            _dict['inputs'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of DatasetSchema from a dict"""
+        """Create an instance of WorkflowTriggerSchema from a dict"""
         if obj is None:
             return None
 
@@ -104,20 +85,7 @@ class DatasetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "uuid": obj.get("uuid"),
-            "episodes": obj.get("episodes"),
-            "description": obj.get("description"),
-            "metadata": obj.get("metadata"),
-            "processing_status": obj.get("processing_status"),
-            "is_ready": obj.get("is_ready"),
-            "total_episodes": obj.get("total_episodes"),
-            "processed_episodes": obj.get("processed_episodes"),
-            "failed_episodes": obj.get("failed_episodes"),
-            "failed_episode_uuids": obj.get("failed_episode_uuids"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "created_by": obj.get("created_by"),
-            "updated_by": obj.get("updated_by")
+            "inputs": obj.get("inputs")
         })
         return _obj
 

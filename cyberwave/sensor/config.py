@@ -117,8 +117,8 @@ class Resolution(Enum):
         # Try WxH format
         if "X" in value:
             try:
-                w, h = value.split("X")
-                size = (int(w), int(h))
+                width_str, height_str = value.split("X")
+                size = (int(width_str), int(height_str))
                 for res in cls:
                     if res.value == size:
                         return res
@@ -430,6 +430,163 @@ class EdgeCameraConfig:
         return (
             f"EdgeCameraConfig({self.camera_type.value}, source={source_display}, "
             f"{self.resolution.name}@{self.fps}fps)"
+        )
+
+
+# =============================================================================
+# Simulation (MuJoCo) Streaming Config
+# =============================================================================
+
+_DEFAULT_CAM_WIDTH = 320
+_DEFAULT_CAM_HEIGHT = 240
+_DEFAULT_CAM_FPS = 15
+
+
+
+# TODO: `_infer_config_from_twin` and `cameras_from_schema` both solve the same problem 
+# — resolving per-camera resolution, FPS and identity from a robot description
+#  — but through different lenses: this function works from a live Twin object and 
+# its capabilities dict, while `cameras_from_schema` works from a serialised 
+# universal_schema.json sensors list. They should ideally be merged into a single 
+# canonical resolver so that sim-based streaming (MujocoMultiCameraStreamer) and 
+# real-hardware streaming (CameraStreamManager) share the same source of truth. 
+# It is currently unclear whether the Twin-centric approach or the schema-file 
+# approach is the better long-term design.
+def cameras_from_schema(schema_path) -> "List[dict]":
+    """Extract per-camera metadata from a ``universal_schema.json`` file.
+
+    Returns one dict per ``camera`` or ``depth_camera`` sensor::
+
+        {
+            "name":   str,        # full sensor name (e.g. ``"{uuid_hex}__{sensor_id}"``)
+            "type":   str,        # ``"camera"`` | ``"depth_camera"``
+            "width":  int | None, # from ``sensor.parameters["width"]``
+            "height": int | None, # from ``sensor.parameters["height"]``
+            "fps":    int | None, # from ``sensor.update_rate``
+        }
+
+    Returns ``[]`` when the file is absent, unreadable, or contains no camera sensors.
+
+    Args:
+        schema_path: Path to the exported ``universal_schema.json``.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    result: List[dict] = []
+    try:
+        p = _Path(schema_path)
+        if not p.exists():
+            return result
+        schema = _json.loads(p.read_text())
+        for sensor in schema.get("sensors", []):
+            stype = sensor.get("type", "")
+            if stype not in ("camera", "depth_camera"):
+                continue
+            params = sensor.get("parameters", {})
+            width = params.get("width")
+            height = params.get("height")
+            update_rate = sensor.get("update_rate")
+            result.append({
+                "name": sensor.get("name", ""),
+                "type": stype,
+                "width": int(width) if width is not None else None,
+                "height": int(height) if height is not None else None,
+                "fps": int(update_rate) if update_rate is not None else None,
+            })
+    except Exception as _e:
+        logger.debug("Could not read camera sensors from schema: %s", _e)
+    return result
+
+
+@dataclass
+class SimStreamingConfig:
+    """Configuration for opt-in MuJoCo camera streaming.
+
+    Build with :meth:`from_env` rather than constructing directly.
+
+    Camera dimensions (width/height/fps) are resolved per-camera from sensor
+    entries in ``universal_schema.json``.  The global ``width``/``height``/``fps``
+    fields are used as fallbacks for sensors that do not specify explicit
+    dimensions; they default to ``320 × 240 @ 15 fps``.
+
+    Attributes:
+        enabled: Streaming is active (``CYBERWAVE_STREAM_CAMERAS=1``).
+        twin_uuid: Fallback twin UUID for cameras whose exported name does not
+            embed a UUID prefix.  Cameras exported by Cyberwave already encode
+            the owning twin's UUID in the camera name
+            (``{uuid_hex}__{sensor_id}``), so this is only needed for
+            non-standard or hand-written MJCF scenes.
+        cameras: Per-camera metadata extracted from the schema's ``sensors``
+            list (name, type, width, height, fps).
+        width: Global fallback render width in pixels.
+        height: Global fallback render height in pixels.
+        fps: Global fallback target frame rate.
+        show_previews: Open a cv2 preview subprocess per camera.
+
+    Environment variables read by :meth:`from_env`::
+
+        CYBERWAVE_STREAM_CAMERAS   "1" enables streaming (default: disabled)
+        CAMERA_NO_PREVIEW          "1" disables preview windows (default: 0)
+    """
+
+    enabled: bool = False
+    twin_uuid: Optional[str] = None
+    cameras: List[dict] = field(default_factory=list)
+    width: int = _DEFAULT_CAM_WIDTH
+    height: int = _DEFAULT_CAM_HEIGHT
+    fps: int = _DEFAULT_CAM_FPS
+    show_previews: bool = True
+
+    @classmethod
+    def from_env(
+        cls,
+        universal_schema_path=None,
+        fallback_twin_uuid: Optional[str] = None,
+    ) -> "SimStreamingConfig":
+        """Load from environment variables and an optional ``universal_schema.json``.
+
+        Per-camera dimensions and frame rates are taken from the matching
+        ``sensors`` entries in ``universal_schema.json``.  When the file is
+        absent or a sensor omits explicit dimensions, the SDK defaults
+        (``320 × 240 @ 15 fps``) are used.
+
+        Args:
+            universal_schema_path: Path to the ``out/universal_schema.json``
+                written by the scene exporter.
+            fallback_twin_uuid: Twin UUID used for cameras that do not embed a
+                UUID prefix in their name.
+        """
+        enabled = bool(int(os.getenv("CYBERWAVE_STREAM_CAMERAS", "0")))
+
+        cam_list: List[dict] = []
+        if universal_schema_path is not None:
+            cam_list = cameras_from_schema(universal_schema_path)
+            if cam_list:
+                logger.debug(
+                    "Loaded %d camera sensor(s) from schema: %s",
+                    len(cam_list),
+                    [c["name"] for c in cam_list],
+                )
+
+        # Global fallback dimensions: take from the first schema camera if available.
+        default_width = _DEFAULT_CAM_WIDTH
+        default_height = _DEFAULT_CAM_HEIGHT
+        default_fps = _DEFAULT_CAM_FPS
+        if cam_list:
+            first = cam_list[0]
+            default_width = first["width"] or default_width
+            default_height = first["height"] or default_height
+            default_fps = first["fps"] or default_fps
+
+        return cls(
+            enabled=enabled,
+            twin_uuid=fallback_twin_uuid,
+            cameras=cam_list,
+            width=default_width,
+            height=default_height,
+            fps=default_fps,
+            show_previews=not bool(int(os.getenv("CAMERA_NO_PREVIEW", "0"))),
         )
 
 

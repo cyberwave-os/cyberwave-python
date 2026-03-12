@@ -283,6 +283,69 @@ class TestIntegrationReadOperations:
         print("=" * 70 + "\n")
 
 
+class TestIntegrationWorkflows:
+    """Test workflow trigger → poll → result flow with real API calls."""
+
+    def test_workflow_list_and_trigger(self, cyberwave_client):
+        """
+        List workflows, trigger an active one, poll until completion.
+
+        Skips if no active workflow is available.
+        """
+        print("\n" + "=" * 70)
+        print("Testing Workflows: list → trigger → poll")
+        print("=" * 70)
+
+        client = cyberwave_client
+
+        # List workflows
+        workflows = client.workflows.list()
+        print(f"✓ Listed {len(workflows)} workflow(s)")
+
+        # Find an active workflow
+        active = [wf for wf in workflows if wf.is_active]
+        if not active:
+            pytest.skip("No active workflows found — skipping trigger test")
+
+        wf = active[0]
+        print(f"  Using workflow: {wf.name} ({wf.uuid})")
+
+        # Get workflow by ID
+        fetched = client.workflows.get(wf.uuid)
+        assert fetched.uuid == wf.uuid
+        print(f"✓ Fetched workflow by UUID")
+
+        # Trigger the workflow
+        run = client.workflows.trigger(wf.uuid, inputs={})
+        assert run.uuid
+        assert run.status in ("running", "requested", "waiting", "success", "error")
+        print(f"✓ Triggered run {run.uuid} (status: {run.status})")
+
+        # Poll for completion (short timeout — we just verify the flow works)
+        try:
+            run.wait(timeout=30, poll_interval=2)
+            print(f"✓ Run completed: status={run.status}, result={run.result}")
+        except Exception:
+            print(f"  Run still in progress after 30s (status: {run.status}) — OK for CI")
+
+        # List runs for this workflow
+        runs = client.workflow_runs.list(workflow_id=wf.uuid)
+        assert len(runs) >= 1
+        print(f"✓ Listed {len(runs)} run(s) for workflow")
+
+        # Fetch the run we created
+        fetched_run = client.workflow_runs.get(run.uuid)
+        assert fetched_run.uuid == run.uuid
+        print(f"✓ Fetched run by UUID")
+
+        # Test convenience methods
+        wf_runs = wf.runs()
+        assert isinstance(wf_runs, list)
+        print(f"✓ workflow.runs() returned {len(wf_runs)} run(s)")
+
+        print("=" * 70 + "\n")
+
+
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v", "-s"])

@@ -110,13 +110,14 @@ def test_twin_get_latest_frame_wraps_errors():
         twin.get_latest_frame()
 
 
-def test_camera_twin_capture_frame_uses_latest_frame_api():
+def test_camera_twin_capture_frame_inherits_unified_method():
+    """CameraTwin no longer overrides capture_frame; it inherits Twin.capture_frame."""
     twins_manager = MagicMock()
     twins_manager.get_latest_frame.return_value = b"jpeg"
     client = SimpleNamespace(twins=twins_manager)
     camera_twin = CameraTwin(client, SimpleNamespace(uuid="cam-twin", name="CamTwin"))
 
-    result = camera_twin.capture_frame(sensor_id="front")
+    result = camera_twin.capture_frame("bytes", sensor_id="front")
 
     assert result == b"jpeg"
     twins_manager.get_latest_frame.assert_called_once_with(

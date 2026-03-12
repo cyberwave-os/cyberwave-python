@@ -27,18 +27,19 @@ class LabStatusResponseSchema(BaseModel):
     LabStatusResponseSchema
     """ # noqa: E501
     has_session: StrictBool
-    lab_status: StrictStr
     available: StrictBool
+    total_labs: StrictInt
+    free_labs: StrictInt
     queue_length: StrictInt
     queue_position: Optional[StrictInt] = None
     estimated_wait_minutes: Optional[StrictInt] = None
     session_status: Optional[StrictStr] = None
     session_expires_at: Optional[StrictStr] = None
     time_remaining_seconds: Optional[StrictInt] = None
-    environment_name: StrictStr
+    environment_name: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     message: Optional[StrictStr] = ''
-    __properties: ClassVar[List[str]] = ["has_session", "lab_status", "available", "queue_length", "queue_position", "estimated_wait_minutes", "session_status", "session_expires_at", "time_remaining_seconds", "environment_name", "environment_uuid", "message"]
+    __properties: ClassVar[List[str]] = ["has_session", "available", "total_labs", "free_labs", "queue_length", "queue_position", "estimated_wait_minutes", "session_status", "session_expires_at", "time_remaining_seconds", "environment_name", "environment_uuid", "message"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -104,6 +105,11 @@ class LabStatusResponseSchema(BaseModel):
         if self.time_remaining_seconds is None and "time_remaining_seconds" in self.model_fields_set:
             _dict['time_remaining_seconds'] = None
 
+        # set to None if environment_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_name is None and "environment_name" in self.model_fields_set:
+            _dict['environment_name'] = None
+
         # set to None if environment_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
@@ -122,8 +128,9 @@ class LabStatusResponseSchema(BaseModel):
 
         _obj = cls.model_validate({
             "has_session": obj.get("has_session"),
-            "lab_status": obj.get("lab_status"),
             "available": obj.get("available"),
+            "total_labs": obj.get("total_labs"),
+            "free_labs": obj.get("free_labs"),
             "queue_length": obj.get("queue_length"),
             "queue_position": obj.get("queue_position"),
             "estimated_wait_minutes": obj.get("estimated_wait_minutes"),

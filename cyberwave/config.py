@@ -11,7 +11,7 @@ from cyberwave.constants import SOURCE_TYPE_EDGE
 # Production defaults values
 DEFAULT_BASE_URL = "https://api.cyberwave.com"
 DEFAULT_MQTT_HOST = "mqtt.cyberwave.com"
-DEFAULT_MQTT_PORT = 1883
+DEFAULT_MQTT_PORT = 8883
 DEFAULT_MQTT_USERNAME = "mqttcyb"
 DEFAULT_TIMEOUT = 30
 
@@ -33,7 +33,7 @@ class CyberwaveConfig:
         api_key: API key for authentication (sent as Bearer auth value)
         token: Deprecated alias for api_key (kept for backwards compatibility)
         mqtt_host: MQTT broker host (defaults to mqtt.cyberwave.com)
-        mqtt_port: MQTT broker port (defaults to 1883)
+        mqtt_port: MQTT broker port (defaults to 8883)
         mqtt_username: MQTT username (optional)
         mqtt_use_tls: Whether to enable MQTT TLS transport
         mqtt_tls_ca_cert: Path to CA certificate bundle for MQTT TLS

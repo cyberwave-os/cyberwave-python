@@ -292,7 +292,28 @@ class BaseVideoStreamer(abc.ABC):
         self._subscribe_to_answer()
         await asyncio.sleep(2.5)
         await self._setup_webrtc()
-        await self._perform_signaling()
+        try:
+            await self._perform_signaling()
+        except Exception:
+            # Signaling failed (e.g. timeout waiting for answer from frontend).
+            # Clean up the orphaned PeerConnection so the next start() call
+            # (triggered by a start_video MQTT command once the frontend is ready)
+            # begins with a fresh state rather than seeing self.pc != None and
+            # short-circuiting in _handle_start_command.
+            try:
+                if self.pc is not None:
+                    await self.pc.close()
+                    await asyncio.sleep(0.5)
+            except Exception:
+                pass
+            self.pc = None
+            if self.streamer is not None:
+                try:
+                    self.streamer.close()
+                except Exception:
+                    pass
+                self.streamer = None
+            raise
 
         logger.debug("WebRTC connection established")
         asyncio.create_task(self._wait_and_publish_camera_sync_frame())
@@ -314,7 +335,8 @@ class BaseVideoStreamer(abc.ABC):
         if self.pc:
             try:
                 await self.pc.close()
-                await asyncio.sleep(0.5)
+                # Allow aioice STUN retry callbacks to settle before continuing
+                await asyncio.sleep(1.5)
             except Exception as e:
                 logger.error(f"Error closing peer connection: {e}")
             finally:
@@ -376,9 +398,38 @@ class BaseVideoStreamer(abc.ABC):
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
 
+        # Schedule the first retry 15 s after the initial attempt so we are ready
+        # when the frontend opens Live mode (even if we missed the initial window).
+        # Once the first offer is successfully answered we stop initiating new ones
+        # (auto_reconnect handles re-connects after drops via _monitor_connection).
+        _next_retry_at: float = time.monotonic() + 15.0
+        _retry_backoff: float = 30.0
+        _initial_stream_connected: bool = False  # set True after the first successful offer
+
         try:
             while not stop.is_set() and self._is_running:
-                await asyncio.sleep(0.1)
+                # Only retry the initial offer — do not re-offer if the stream
+                # previously connected and later dropped (that is _monitor_connection's job).
+                if self.pc is None and self.auto_reconnect and not _initial_stream_connected:
+                    if time.monotonic() >= _next_retry_at:
+                        try:
+                            logger.info(
+                                "No active camera stream — retrying offer (pc is None)..."
+                            )
+                            await self.start()
+                            self._should_reconnect = self.auto_reconnect
+                            logger.info("Camera stream retry succeeded.")
+                            _initial_stream_connected = True  # stop initiating retries
+                        except Exception as retry_exc:
+                            logger.info(
+                                "Camera stream retry failed (%s). "
+                                "Will retry in %.0fs.",
+                                retry_exc,
+                                _retry_backoff,
+                            )
+                            _next_retry_at = time.monotonic() + _retry_backoff
+                            _retry_backoff = min(_retry_backoff * 2, 120.0)
+                await asyncio.sleep(0.5)
         finally:
             await self._cleanup_run()
 
@@ -448,6 +499,7 @@ class BaseVideoStreamer(abc.ABC):
             "recording": self._should_record,
             "stream_attributes": stream_attributes,
             "sensor": sensor,
+            "track_id": self.streamer.id if self.streamer else None,
         }
 
         self._publish_message(offer_topic, offer_payload)
@@ -903,6 +955,8 @@ from .config import (  # noqa: E402
     Resolution,
     CameraConfig,
     EdgeCameraConfig,
+    SimStreamingConfig,
+    cameras_from_schema,
     RealSenseConfig,
     StreamProfile,
     SensorOption,
@@ -918,7 +972,14 @@ from .config import (  # noqa: E402
 from .camera_cv2 import CV2VideoTrack, CV2CameraStreamer  # noqa: E402
 from .camera_rs import RealSenseVideoTrack, RealSenseStreamer  # noqa: E402
 from .camera_virtual import VirtualVideoTrack, VirtualCameraStreamer  # noqa: E402
-from .manager import CameraStreamManager  # noqa: E402
+from .camera_sim import (  # noqa: E402
+    ThreadSafeFrameBuffer,
+    SimVideoTrack,
+    SimCameraStreamer,
+    MujocoMultiCameraStreamer,
+    CyberwaveSimStreaming,
+)
+from .manager import CameraStreamManager, run_streamer_in_background  # noqa: E402
 
 __all__ = [
     # Base classes
@@ -929,6 +990,8 @@ __all__ = [
     "Resolution",
     "CameraConfig",
     "EdgeCameraConfig",
+    "SimStreamingConfig",
+    "cameras_from_schema",
     "RealSenseConfig",
     "StreamProfile",
     "SensorOption",
@@ -947,8 +1010,15 @@ __all__ = [
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",
+    # Simulation (MuJoCo) implementations
+    "ThreadSafeFrameBuffer",
+    "SimVideoTrack",
+    "SimCameraStreamer",
+    "MujocoMultiCameraStreamer",
+    "CyberwaveSimStreaming",
     # Manager
     "CameraStreamManager",
+    "run_streamer_in_background",
     # Constants
     "DEFAULT_TURN_SERVERS",
 ]

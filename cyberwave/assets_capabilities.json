@@ -449,13 +449,13 @@
           }
         },
         {
-          "id": "Unitree Go2 camera2",
+          "id": "lidar_4d",
           "type": "depth",
-          "model": null,
+          "model": "Unitree Lidar 4D",
           "offset": {
             "position": {
-              "x": 0.3248,
-              "y": 0.4932,
+              "x": 0,
+              "y": 0,
               "z": 0
             },
             "rotation": {
@@ -2353,13 +2353,13 @@
           "offset": {
             "position": {
               "x": 0,
-              "y": 0.0217,
-              "z": 0.0203
+              "y": 0,
+              "z": 0
             },
             "rotation": {
-              "w": 0.7118,
+              "w": 0.7073,
               "x": 0,
-              "y": -0.7023,
+              "y": -0.7069,
               "z": 0
             }
           }
@@ -3084,13 +3084,13 @@
       "minimum_frequency_hz": 0,
       "sensors": [
         {
-          "id": "camera",
+          "id": "default",
           "type": "rgb",
           "model": null,
           "offset": {
             "position": {
-              "x": 0.0564,
-              "y": 0.2246,
+              "x": 0,
+              "y": 0,
               "z": 0
             },
             "rotation": {

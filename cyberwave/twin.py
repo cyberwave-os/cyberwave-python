@@ -5,6 +5,7 @@ High-level Twin abstraction for intuitive digital twin control
 import asyncio
 import json
 import math
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable, Type
 
@@ -43,6 +44,59 @@ def _get_asset_capabilities(registry_id: str) -> Dict[str, Any]:
     cache = _load_capabilities_cache()
     asset_data = cache.get(registry_id, {})
     return asset_data.get("capabilities", {})
+
+
+def _decode_frame(jpeg_bytes: bytes, format: str) -> Any:
+    """Decode JPEG bytes into the requested output format.
+
+    Args:
+        jpeg_bytes: Raw JPEG image bytes.
+        format: ``"path"`` | ``"bytes"`` | ``"numpy"`` | ``"pil"``.
+
+    Returns:
+        Decoded frame in the chosen format.
+    """
+    if format == "bytes":
+        return jpeg_bytes
+
+    if format == "path":
+        import tempfile
+
+        fd, path = tempfile.mkstemp(suffix=".jpg", prefix="cyberwave_")
+        with os.fdopen(fd, "wb") as f:
+            f.write(jpeg_bytes)
+        return path
+
+    if format == "numpy":
+        try:
+            import numpy as np
+            import cv2  # type: ignore[import-untyped]
+        except ImportError:
+            raise CyberwaveError(
+                "numpy and opencv-python are required for format='numpy'. "
+                "Install with: pip install numpy opencv-python"
+            )
+        arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            raise CyberwaveError("Failed to decode JPEG frame")
+        return frame
+
+    if format == "pil":
+        try:
+            from PIL import Image  # type: ignore[import-untyped]
+        except ImportError:
+            raise CyberwaveError(
+                "Pillow is required for format='pil'. "
+                "Install with: pip install Pillow"
+            )
+        import io
+
+        return Image.open(io.BytesIO(jpeg_bytes))
+
+    raise CyberwaveError(
+        f"Unknown format '{format}'. Supported: 'path', 'bytes', 'numpy', 'pil'"
+    )
 
 
 class JointController:
@@ -193,6 +247,88 @@ class TwinControllerHandle:
         )
 
 
+class TwinCameraHandle:
+    """Lightweight namespace for camera/vision operations on a twin.
+
+    Provides a discoverable API surface for all vision-related methods,
+    similar to ``twin.joints`` or ``twin.navigation``.
+
+    Example:
+        >>> frame = twin.camera.read()           # numpy array (BGR)
+        >>> path  = twin.camera.snapshot()        # save JPEG to temp file
+        >>> twin.camera.stream(fps=15)            # blocking video stream
+    """
+
+    def __init__(self, twin: "Twin"):
+        self._twin = twin
+
+    def read(
+        self,
+        format: str = "numpy",
+        *,
+        sensor_id: Optional[str] = None,
+        mock: bool = False,
+    ) -> Any:
+        """Read the latest frame, defaulting to a numpy BGR array.
+
+        Behaves like ``cv2.VideoCapture.read()`` — returns the most recent
+        frame from the twin's camera sensor.
+
+        Args:
+            format: Output format — ``"numpy"`` (default), ``"pil"``,
+                ``"bytes"``, or ``"path"``.
+            sensor_id: Sensor id for multi-camera twins. Omit for single-camera.
+            mock: Request a deterministic mock frame.
+
+        Returns:
+            Frame in the requested format.
+        """
+        return self._twin.capture_frame(format=format, sensor_id=sensor_id, mock=mock)
+
+    def snapshot(
+        self,
+        path: Optional[str] = None,
+        *,
+        sensor_id: Optional[str] = None,
+        mock: bool = False,
+    ) -> str:
+        """Save a JPEG snapshot to disk and return the file path.
+
+        Args:
+            path: Destination file path. A temporary file is created when *None*.
+            sensor_id: Sensor id for multi-camera twins.
+            mock: Request a deterministic mock frame.
+
+        Returns:
+            Absolute path to the saved JPEG file.
+        """
+        if path is None:
+            return self._twin.capture_frame(
+                format="path", sensor_id=sensor_id, mock=mock
+            )
+        jpeg_bytes = self._twin.get_latest_frame(sensor_id=sensor_id, mock=mock)
+        with open(path, "wb") as f:
+            f.write(jpeg_bytes)
+        return os.path.abspath(path)
+
+    def stream(self, fps: int = 30, camera_id: int | str = 0) -> None:
+        """Start a blocking video stream (Ctrl+C to stop).
+
+        Delegates to ``CameraTwin.start_streaming``. Raises if the twin
+        does not support local camera streaming.
+
+        Args:
+            fps: Frames per second.
+            camera_id: Camera device ID or stream URL.
+        """
+        if not hasattr(self._twin, "start_streaming"):
+            raise CyberwaveError(
+                "Video streaming requires a twin with camera sensors. "
+                "This twin does not have streaming capabilities."
+            )
+        self._twin.start_streaming(fps=fps, camera_id=camera_id)
+
+
 class Twin:
     """
     High-level abstraction for a digital twin.
@@ -223,10 +359,11 @@ class Twin:
         self._position: Optional[Dict[str, float]] = None
         self._rotation: Optional[Dict[str, float]] = None
 
-        # Lazy-initialized motion, navigation, and alerts handles
+        # Lazy-initialized motion, navigation, alerts, and camera handles
         self._motion: Optional["TwinMotionHandle"] = None
         self._navigation: Optional["TwinNavigationHandle"] = None
         self._alerts: Optional["TwinAlertManager"] = None
+        self._camera_handle: Optional["TwinCameraHandle"] = None
         self._scale: Optional[Dict[str, float]] = None
 
     @property
@@ -381,6 +518,27 @@ class Twin:
         """
         return TwinControllerHandle(self)
 
+    @property
+    def camera(self) -> "TwinCameraHandle":
+        """
+        Access camera/vision operations for this twin.
+
+        Provides a lightweight namespace with methods like ``read()``,
+        ``snapshot()``, and ``stream()`` — keeping the Twin class clean
+        while making all vision ops easily discoverable.
+
+        Example:
+            >>> frame = twin.camera.read()            # numpy BGR array
+            >>> path  = twin.camera.snapshot()         # save JPEG to temp file
+            >>> twin.camera.stream(fps=15)             # blocking video stream
+
+        Returns:
+            TwinCameraHandle for camera access
+        """
+        if self._camera_handle is None:
+            self._camera_handle = TwinCameraHandle(self)
+        return self._camera_handle
+
     def refresh(self):
         """Refresh twin data from the server"""
         try:
@@ -531,6 +689,104 @@ class Twin:
             )
         except Exception as e:
             raise CyberwaveError(f"Failed to get latest frame for twin {self.uuid}: {e}")
+
+    def capture_frame(
+        self,
+        format: str = "path",
+        *,
+        sensor_id: Optional[str] = None,
+        mock: bool = False,
+    ) -> Any:
+        """Capture a single frame from the twin's camera sensor.
+
+        Fetches the latest JPEG frame via the REST API and converts it to
+        the requested output format.
+
+        Args:
+            format: Output format:
+
+                - ``"path"`` (default) — save to a temp file, return its path.
+                - ``"bytes"`` — raw JPEG bytes.
+                - ``"numpy"`` — BGR ``numpy.ndarray`` (requires *numpy* + *opencv-python*).
+                - ``"pil"`` — ``PIL.Image`` (requires *Pillow*).
+            sensor_id: Sensor id for multi-camera twins.  Omit when the twin
+                has a single RGB sensor.
+            mock: Request a deterministic mock frame (useful for testing).
+
+        Returns:
+            Frame in the requested format.
+
+        Raises:
+            CyberwaveError: If the sensor is not streaming, the format is
+                unknown, or an optional dependency is missing.
+
+        Example:
+            >>> frame_path = twin.capture_frame()                  # temp JPEG path
+            >>> frame_np   = twin.capture_frame("numpy")           # numpy BGR array
+            >>> frame_pil  = twin.capture_frame("pil")             # PIL Image
+            >>> frame_raw  = twin.capture_frame("bytes")           # raw JPEG bytes
+        """
+        jpeg_bytes = self.get_latest_frame(sensor_id=sensor_id, mock=mock)
+        return _decode_frame(jpeg_bytes, format)
+
+    def capture_frames(
+        self,
+        count: int,
+        interval_ms: int = 100,
+        format: str = "path",
+        *,
+        sensor_id: Optional[str] = None,
+        mock: bool = False,
+    ) -> Any:
+        """Capture multiple frames with a delay between each grab.
+
+        Useful for quick data-collection without setting up a full stream.
+
+        Args:
+            count: Number of frames to capture.
+            interval_ms: Delay in milliseconds between consecutive captures.
+            format: Output format (same options as :meth:`capture_frame`).
+                When ``"path"`` (default), returns the path to a temporary
+                folder containing numbered JPEG files.  For all other
+                formats the return value is a ``list``.
+            sensor_id: Sensor id for multi-camera twins.
+            mock: Request deterministic mock frames.
+
+        Returns:
+            A folder path (``format="path"``) or a list of frames.
+
+        Example:
+            >>> folder = twin.capture_frames(5, interval_ms=200)
+            >>> frames = twin.capture_frames(5, format="numpy")
+        """
+        import time as _time
+        import tempfile as _tempfile
+
+        if count < 1:
+            raise CyberwaveError("count must be >= 1")
+
+        if format == "path":
+            folder = _tempfile.mkdtemp(prefix="cyberwave_frames_")
+            for i in range(count):
+                jpeg_bytes = self.get_latest_frame(
+                    sensor_id=sensor_id, mock=mock
+                )
+                frame_path = os.path.join(folder, f"frame_{i:04d}.jpg")
+                with open(frame_path, "wb") as f:
+                    f.write(jpeg_bytes)
+                if i < count - 1:
+                    _time.sleep(interval_ms / 1000.0)
+            return folder
+
+        frames = []
+        for i in range(count):
+            frame = self.capture_frame(
+                format=format, sensor_id=sensor_id, mock=mock
+            )
+            frames.append(frame)
+            if i < count - 1:
+                _time.sleep(interval_ms / 1000.0)
+        return frames
 
     def _update_state(self, data: Dict[str, Any]):
         """Update twin state via API"""
@@ -949,17 +1205,6 @@ class CameraTwin(Twin):
                 except Exception:
                     pass
                 self._camera_streamer = None
-
-    def capture_frame(
-        self, sensor_id: Optional[str] = None, mock: bool = False
-    ) -> bytes:
-        """
-        Capture a single JPEG frame from the latest twin camera data.
-
-        Returns:
-            JPEG frame bytes.
-        """
-        return self.get_latest_frame(sensor_id=sensor_id, mock=mock)
 
     def __repr__(self) -> str:
         sensors = self.capabilities.get("sensors", [])

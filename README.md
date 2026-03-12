@@ -137,24 +137,36 @@ updated_asset = cw.assets.upload_glb(asset.uuid, "/path/to/warehouse_shelf.glb")
 print(updated_asset.glb_file)
 ```
 
-### Fetching the latest camera frame
+### Grab a Frame
 
-Use this when you want to build automations that react to the current visual state of a twin.
+Capture the latest camera frame in 3 lines — no streaming setup required:
 
 ```python
 from cyberwave import Cyberwave
 
 cw = Cyberwave()
-twin = cw.twin(twin_id="your_twin_uuid")
+robot = cw.twin("the-robot-studio/so101")
 
-# Get JPEG bytes for the latest frame
-frame_bytes = twin.get_latest_frame()
+# Grab the latest frame (default: saved to a temp JPEG file)
+path = robot.capture_frame()                   # returns temp file path
+frame = robot.capture_frame("numpy")           # numpy BGR array (requires numpy + opencv-python)
+image = robot.capture_frame("pil")             # PIL.Image (requires Pillow)
+raw = robot.capture_frame("bytes")             # raw JPEG bytes
 
-# For multi-camera twins, target a specific sensor id
-wrist_frame = twin.get_latest_frame(sensor_id="wrist_camera")
+# Batch capture: grab 5 frames 200ms apart
+folder = robot.capture_frames(5, interval_ms=200)           # folder of JPEGs
+frames = robot.capture_frames(5, format="numpy")             # list of arrays
 
-# Optional deterministic mock image (useful in tests)
-mock_frame = twin.get_latest_frame(mock=True)
+# For multi-camera twins, specify a sensor
+wrist = robot.capture_frame("numpy", sensor_id="wrist_cam")
+```
+
+There's also a `twin.camera` namespace with convenience methods:
+
+```python
+frame = robot.camera.read()              # numpy array (default)
+path  = robot.camera.snapshot()           # save JPEG to temp file
+path  = robot.camera.snapshot("out.jpg")  # save to a specific path
 ```
 
 ### Environment Variables
@@ -443,6 +455,49 @@ cw.edges.delete(edge.uuid)
 ```
 
 The fingerprint is a stable identifier derived from the host hardware (hostname, OS, architecture, and MAC address). The Edge Core generates and persists it automatically on first boot at `/etc/cyberwave/fingerprint.json`. When a twin has `metadata.edge_fingerprint` set to the same value, the Edge Core will automatically pull and start its driver container on boot.
+
+### Workflows
+
+List, trigger, and monitor workflows programmatically. Useful for building custom automations on top of Cyberwave's visual workflow engine.
+
+```python
+cw = Cyberwave()
+
+# List available workflows
+for wf in cw.workflows.list():
+    print(f"{wf.name} ({wf.uuid}) — {wf.status}")
+
+# Trigger a workflow
+run = cw.workflows.trigger(
+    "workflow-uuid",
+    inputs={"target_position": [1.0, 2.0, 0.0], "speed": 0.5},
+)
+
+# Poll until done (blocks up to 60 s)
+run.wait(timeout=60)
+print(run.status, run.result)
+
+# Or check manually
+run.refresh()
+if run.error:
+    print(f"Failed: {run.error}")
+```
+
+You can also start from a `Workflow` object:
+
+```python
+wf = cw.workflows.get("workflow-uuid")
+run = wf.trigger(inputs={"speed": 1.0})
+run.wait()
+```
+
+List and filter past runs:
+
+```python
+runs = cw.workflow_runs.list(workflow_id="workflow-uuid", status="error")
+for r in runs:
+    print(r.uuid, r.status, r.error)
+```
 
 ### Alerts
 

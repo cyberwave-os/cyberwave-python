@@ -26,6 +26,7 @@ from .twin import (
     Twin,
     JointController,
     TwinControllerHandle,
+    TwinCameraHandle,
     CameraTwin,
     DepthCameraTwin,
     FlyingTwin,
@@ -73,6 +74,14 @@ from .resources import (
     AssetManager,
     EdgeManager,
     TwinManager,
+)
+
+# Workflow management
+from .workflows import (
+    Workflow,
+    WorkflowRun,
+    WorkflowManager,
+    WorkflowRunManager,
 )
 
 # MQTT client (optional, for direct MQTT access)
@@ -139,7 +148,7 @@ from .constants import (
 from .scene import Scene
 
 # Version information
-__version__ = "0.3.29"
+__version__ = "0.3.37"
 
 # Define public API
 __all__ = [
@@ -155,6 +164,7 @@ __all__ = [
     "Twin",
     "JointController",
     "TwinControllerHandle",
+    "TwinCameraHandle",
     "CameraTwin",
     "DepthCameraTwin",
     "FlyingTwin",
@@ -190,6 +200,11 @@ __all__ = [
     "AssetManager",
     "EdgeManager",
     "TwinManager",
+    # Workflow management
+    "Workflow",
+    "WorkflowRun",
+    "WorkflowManager",
+    "WorkflowRunManager",
     # MQTT client
     "CyberwaveMQTTClient",
     # Camera streaming (optional)

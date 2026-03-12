@@ -21,6 +21,7 @@ from cyberwave.resources import (
     EdgeManager,
     TwinManager,
 )
+from cyberwave.workflows import WorkflowManager, WorkflowRunManager
 from cyberwave.twin import Twin, create_twin
 from cyberwave.utils import TimeReference
 from cyberwave.exceptions import (
@@ -65,7 +66,7 @@ class Cyberwave:
         api_key: API key for authentication
         token: Deprecated alias for api_key (kept for backwards compatibility)
         mqtt_host: MQTT broker host (optional, defaults to "mqtt.cyberwave.com")
-        mqtt_port: MQTT broker port (default: 1883)
+        mqtt_port: MQTT broker port (default: 8883)
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
         mqtt_use_tls: Enable TLS for MQTT connection
         mqtt_tls_ca_cert: Path to CA cert bundle for MQTT TLS
@@ -134,6 +135,8 @@ class Cyberwave:
         self.assets = AssetManager(self.api)
         self.edges = EdgeManager(self.api)
         self.twins = TwinManager(self.api, client=self)
+        self.workflows = WorkflowManager(self)
+        self.workflow_runs = WorkflowRunManager(self)
 
     def _setup_rest_client(self):
         """Setup the REST API client with authentication"""

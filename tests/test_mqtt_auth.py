@@ -102,3 +102,10 @@ def test_wrapper_client_requires_api_key_or_mqtt_password(clean_api_key_env):
 
     with pytest.raises(ValueError, match="API key or mqtt_password is required"):
         WrapperMQTTClient(config=config)
+
+
+def test_config_defaults_to_tls_mqtt_port(clean_api_key_env):
+    config = CyberwaveConfig(api_key="api_key_secret")
+
+    assert config.mqtt_port == 8883
+    assert config.mqtt_use_tls is True

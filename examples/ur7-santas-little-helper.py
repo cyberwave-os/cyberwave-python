@@ -327,7 +327,7 @@ def main():
     
     api_key = os.getenv("CYBERWAVE_API_KEY")
     mqtt_host = os.getenv("CYBERWAVE_MQTT_HOST", "mqtt.cyberwave.com")
-    mqtt_port = int(os.getenv("CYBERWAVE_MQTT_PORT", "1883"))
+    mqtt_port = int(os.getenv("CYBERWAVE_MQTT_PORT", "8883"))
     twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
     
     if not twin_uuid:

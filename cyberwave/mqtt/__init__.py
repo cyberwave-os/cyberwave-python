@@ -39,7 +39,7 @@ class CyberwaveMQTTClient:
 
     Args:
         mqtt_broker: MQTT broker hostname or IP address
-        mqtt_port: MQTT broker port (default: 1883)
+        mqtt_port: MQTT broker port (default: 8883)
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
         api_key: Cyberwave API key used for MQTT authN/authZ
         mqtt_password: Explicit MQTT password (overrides api_key when provided)
@@ -53,7 +53,7 @@ class CyberwaveMQTTClient:
     def __init__(
         self,
         mqtt_broker: str = "mqtt.cyberwave.com",
-        mqtt_port: int = 1883,
+        mqtt_port: int = 8883,
         mqtt_username: str = "mqttcyb",
         api_key: Optional[str] = None,
         mqtt_password: Optional[str] = None,
@@ -86,10 +86,14 @@ class CyberwaveMQTTClient:
         self.client_id = client_id or f"sdk_{uuid.uuid4().hex[:8]}"
 
         # MQTT client (compatible with paho-mqtt 1.x and 2.x)
+        # Explicitly use MQTTv311 to ensure compatibility with brokers that do
+        # not support MQTT v5 (e.g. local Mosquitto with go-auth plugin).
         self.client = mqtt.Client(
             callback_api_version=CallbackAPIVersion.VERSION2,
             client_id=self.client_id,  # type: ignore
+            protocol=mqtt.MQTTv311,
         )
+
         self.client.username_pw_set(
             username=self.mqtt_username, password=auth_password
         )
@@ -296,7 +300,7 @@ class CyberwaveMQTTClient:
                 self.twin_uuids.append(twin_uuid)
 
             already_started = twin_uuid in self.twin_uuids_with_telemetry_start
-            logger.info(
+            logger.debug(
                 "_handle_twin_update_with_telemetry: twin=%s already_started=%s "
                 "current_tracking_list=%s",
                 twin_uuid,

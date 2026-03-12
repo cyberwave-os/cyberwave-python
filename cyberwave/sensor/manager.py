@@ -2,6 +2,11 @@
 
 Provides CameraStreamManager for teleoperation and edge scripts that need to run
 camera streaming in background threads with run_with_auto_reconnect (command handling).
+
+Also exposes :func:`run_streamer_in_background`, a low-level helper that runs any
+pre-built :class:`~cyberwave.sensor.BaseVideoStreamer` in a daemon thread with its
+own asyncio event loop — used by MuJoCo multi-camera streaming and other callers that
+create their streamers before threading.
 """
 
 import asyncio
@@ -16,6 +21,86 @@ if TYPE_CHECKING:
     from ..utils import TimeReference
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Shared low-level thread runner for pre-built streamers
+# =============================================================================
+
+
+def run_streamer_in_background(
+    streamer: Any,
+    stop_event: threading.Event,
+    thread_name: str = "cam-streamer",
+) -> threading.Thread:
+    """Run *streamer* in a daemon thread with its own asyncio event loop.
+
+    Handles MQTT readiness and bridges the threading *stop_event* to the
+    asyncio stop event expected by
+    :meth:`~cyberwave.sensor.BaseVideoStreamer.run_with_auto_reconnect`.
+
+    This is the canonical thread runner for scenarios where the streamer is
+    already built before the thread starts (e.g. MuJoCo simulation cameras).
+    For scenarios where the streamer must be constructed inside the thread
+    (e.g. :class:`CameraStreamManager`) use :func:`_run_streamer_in_thread`.
+
+    Args:
+        streamer: A pre-built :class:`~cyberwave.sensor.BaseVideoStreamer`.
+        stop_event: ``threading.Event`` — set it to stop the stream.
+        thread_name: Thread name for logging and debugging.
+
+    Returns:
+        The already-started daemon thread.
+    """
+
+    def _target() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        # Stash loop on the thread object so external code can schedule
+        # coroutines on it if needed (e.g. forceful stop via run_coroutine_threadsafe).
+        threading.current_thread()._event_loop = loop  # type: ignore[attr-defined]
+        try:
+            loop.run_until_complete(_run_async())
+        except Exception:
+            logger.exception("Streamer thread error (%r)", thread_name)
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
+
+    async def _run_async() -> None:
+        # 1. Ensure MQTT is connected
+        if not streamer.client.connected:
+            streamer.client.connect()
+        deadline = time.time() + 10.0
+        while not streamer.client.connected and time.time() < deadline:
+            await asyncio.sleep(0.2)
+        if not streamer.client.connected:
+            logger.error(
+                "MQTT connection timeout for streamer %r — aborting", thread_name
+            )
+            return
+
+        # 2. Bridge threading stop_event → asyncio Event
+        async_stop = asyncio.Event()
+
+        async def _watch_stop() -> None:
+            while not stop_event.is_set():
+                await asyncio.sleep(0.3)
+            async_stop.set()
+
+        asyncio.create_task(_watch_stop())
+
+        # 3. Run with auto-reconnect until stopped
+        try:
+            await streamer.run_with_auto_reconnect(stop_event=async_stop)
+        except Exception:
+            logger.exception("run_with_auto_reconnect error (%r)", thread_name)
+
+    t = threading.Thread(target=_target, name=thread_name, daemon=True)
+    t.start()
+    return t
 
 
 def _infer_config_from_twin(

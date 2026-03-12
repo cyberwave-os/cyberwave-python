@@ -167,6 +167,21 @@ class Alert:
         self._data = data
         return self
 
+    def press_button(self, button_index: int) -> "Alert":
+        """Press a metadata-defined alert button via backend dispatch.
+
+        Args:
+            button_index: Zero-based index into ``alert.metadata["buttons"]``.
+
+        Returns:
+            Updated Alert instance.
+        """
+        if button_index < 0:
+            raise CyberwaveError("button_index must be >= 0")
+        data = _post_alert_button(self._client, self.uuid, button_index)
+        self._data = data
+        return self
+
     # ------------------------------------------------------------------
     # Mutation helpers
     # ------------------------------------------------------------------
@@ -448,6 +463,27 @@ def _delete_alert(client: "Cyberwave", uuid: str) -> None:
         response.read()
     except Exception as e:
         raise CyberwaveError(f"Failed to delete alert {uuid}: {e}") from e
+
+
+def _post_alert_button(client: "Cyberwave", uuid: str, button_index: int) -> Any:
+    """POST /api/v1/alerts/{uuid}/buttons/{button_index}."""
+    try:
+        _param = _api(client).param_serialize(
+            method="POST",
+            resource_path="/api/v1/alerts/{uuid}/buttons/{button_index}",
+            path_params={"uuid": uuid, "button_index": button_index},
+            auth_settings=_AUTH,
+        )
+        response = _api(client).call_api(*_param)
+        response.read()
+        return _api(client).response_deserialize(
+            response_data=response,
+            response_types_map={"200": "AlertSchema"},
+        ).data
+    except Exception as e:
+        raise CyberwaveError(
+            f"Failed to press button {button_index} for alert {uuid}: {e}"
+        ) from e
 
 
 def _post_alert_action(client: "Cyberwave", uuid: str, action: str) -> Any:

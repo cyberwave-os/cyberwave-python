@@ -286,22 +286,13 @@ class EnvironmentManager(BaseResourceManager):
         """
         import json
         try:
-            # The OpenAPI generator doesn't handle generic dict responses well
-            # Use the with_http_info variant to get the raw response
             response = self.api.src_app_api_environments_get_environment_universal_schema_json_with_http_info(
                 environment_id
             )
-            # Parse the response body as JSON
-            if response and hasattr(response, 'data') and response.data:
-                # If data is bytes, decode it
-                if isinstance(response.data, bytes):
-                    return json.loads(response.data.decode('utf-8'))
-                # If it's already parsed, return it
-                return response.data
-            # Fallback: try to get raw response
-            if response and hasattr(response, 'raw_data'):
-                return json.loads(response.raw_data.decode('utf-8'))
-            return None
+            raw = response.raw_data
+            if isinstance(raw, bytes):
+                return json.loads(raw.decode("utf-8"))
+            return raw
         except Exception as e:
             self._handle_error(e, f"Get universal schema for environment {environment_id}")
             raise
@@ -369,18 +360,14 @@ class EnvironmentManager(BaseResourceManager):
             zip_data = cw.environments.export_mujoco_scene(env_id)
         """
         try:
-            # Use with_http_info to get raw response data
             response = self.api.src_app_api_environments_get_environment_mujoco_scene_zip_direct_with_http_info(
                 environment_id
             )
-            
-            # Extract bytes from response - use raw_data for binary content
             zip_bytes = response.raw_data
-            
+
             if output_path:
                 with open(output_path, 'wb') as f:
                     f.write(zip_bytes)
-                return zip_bytes
             return zip_bytes
         except Exception as e:
             self._handle_error(e, f"export MuJoCo scene for environment {environment_id}")

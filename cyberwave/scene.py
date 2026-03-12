@@ -137,13 +137,23 @@ class Scene:
                 pose.orientation.w,
             ]
 
+        # Map position/orientation lists to the flat fields expected by TwinCreateSchema.
+        # (position_x/y/z, rotation_w/x/y/z — not list-based aliases)
+        pos = position or [0.0, 0.0, 0.0]
+        ori = orientation or [0.0, 0.0, 0.0, 1.0]  # [x, y, z, w]
+
         # Create Twin via API - backend will initialize Twin.universal_schema
         twin = self.client.twin(
             asset_key=asset_key,
             environment_id=self.environment_id,
             name=name,
-            position=position,
-            orientation=orientation,
+            position_x=float(pos[0]),
+            position_y=float(pos[1]),
+            position_z=float(pos[2]),
+            rotation_x=float(ori[0]),
+            rotation_y=float(ori[1]),
+            rotation_z=float(ori[2]),
+            rotation_w=float(ori[3]),
             fixed_base=fixed_base,
         )
 

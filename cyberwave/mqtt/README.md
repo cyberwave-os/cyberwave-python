@@ -32,7 +32,7 @@ from cyberwave.mqtt import CyberwaveMQTTClient
 # Create and connect to MQTT broker
 client = CyberwaveMQTTClient(
     mqtt_broker="mqtt.cyberwave.com",
-    mqtt_port=1883,
+    mqtt_port=8883,
     api_key="your_api_key"
 )
 
