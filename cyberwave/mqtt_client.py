@@ -181,7 +181,9 @@ class CyberwaveMQTTClient:
         """
         return self._client.update_twin_scale(twin_uuid, scale)
 
-    def publish_initial_observation(self, twin_uuid: str, observations: Dict[str, Any], fps: float = 30.0):
+    def publish_initial_observation(
+        self, twin_uuid: str, observations: Dict[str, Any], fps: float = 30.0
+    ):
         """
         Send initial observations to the leader twin.
 
@@ -261,17 +263,75 @@ class CyberwaveMQTTClient:
         twin_uuid: str,
         joint_positions: Dict[str, float],
         source_type: Optional[str] = None,
+        velocities: Optional[Dict[str, float]] = None,
+        efforts: Optional[Dict[str, float]] = None,
+        timestamp: Optional[float] = None,
+        source_subtype: Optional[str] = None,
+        workload_uuid: Optional[str] = None,
+        session_id: Optional[str] = None,
     ):
         """
-        Update multiple joints at once via MQTT. Sends all positions in a single
-        message to create a coordinated trajectory instead of conflicting ones.
+        Update multiple joints at once via MQTT.
+
+        Supports two formats based on provided parameters:
+
+        1. **Flat format** (joint_positions only):
+           Simple and lightweight, sends positions as top-level keys.
+
+        2. **Aggregated format** (with velocities, efforts, timestamp, or metadata):
+           Sends structured payload with nested objects and full telemetry metadata.
 
         Args:
             twin_uuid: UUID of the twin
-            joint_positions: Dict of joint names to positions (e.g., {"shoulder_pan_joint": 1.5})
-            source_type: SOURCE_TYPE_EDGE (default), SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, or SOURCE_TYPE_SIM
+            joint_positions: Dict of joint names to positions (e.g., {"_1": 0.5, "_2": 0.3})
+            source_type: SOURCE_TYPE_EDGE (default), SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, etc.
+            velocities: Optional dict of joint names to velocities (triggers aggregated format)
+            efforts: Optional dict of joint names to efforts (triggers aggregated format)
+            timestamp: Optional timestamp in seconds (triggers aggregated format)
+            source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
+            workload_uuid: Optional UUID of the workload generating this update
+            session_id: Optional session ID for grouping related updates
         """
-        return self._client.update_joints_state(twin_uuid, joint_positions, source_type)
+        return self._client.update_joints_state(
+            twin_uuid,
+            joint_positions,
+            source_type,
+            velocities,
+            efforts,
+            timestamp,
+            source_subtype,
+            workload_uuid,
+            session_id,
+        )
+
+    def update_aggregated_joints_state(
+        self,
+        twin_uuid: str,
+        joint_positions: Dict[str, float],
+        source_type: Optional[str] = None,
+        velocities: Optional[Dict[str, float]] = None,
+        efforts: Optional[Dict[str, float]] = None,
+        timestamp: Optional[float] = None,
+        source_subtype: Optional[str] = None,
+        workload_uuid: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ):
+        """
+        Alias for update_joints_state with aggregated format.
+
+        Deprecated: Use update_joints_state() instead.
+        """
+        return self._client.update_aggregated_joints_state(
+            twin_uuid,
+            joint_positions,
+            source_type,
+            velocities,
+            efforts,
+            timestamp,
+            source_subtype,
+            workload_uuid,
+            session_id,
+        )
 
     def subscribe_environment(
         self, environment_uuid: str, on_update: Optional[Callable] = None
@@ -318,7 +378,12 @@ class CyberwaveMQTTClient:
         """Subscribe to point cloud stream via MQTT."""
         return self._client.subscribe_pointcloud_stream(twin_uuid, on_pointcloud)
 
-    def publish_depth_frame(self, twin_uuid: str, depth_data: Dict[str, Any], timestamp: Optional[float] = None):
+    def publish_depth_frame(
+        self,
+        twin_uuid: str,
+        depth_data: Dict[str, Any],
+        timestamp: Optional[float] = None,
+    ):
         """Publish depth frame data via MQTT."""
         return self._client.publish_depth_frame(twin_uuid, depth_data, timestamp)
 
@@ -334,7 +399,7 @@ class CyberwaveMQTTClient:
 
     def publish_command_message(self, twin_uuid: str, status):
         """Publish Edge command response message via MQTT.
-        
+
         Args:
             twin_uuid: The twin UUID to publish to
             status: Either a string status (e.g., "ok") or a dict with status and other fields

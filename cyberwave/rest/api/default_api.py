@@ -14504,7 +14504,7 @@ class DefaultApi:
     ) -> Dict[str, object]:
         """Create Dataset
 
-        Create a new dataset. This starts an async task to generate the parquet file.
+        Create a new dataset and start async episode parquet generation.
 
         :param dataset_create_schema: (required)
         :type dataset_create_schema: DatasetCreateSchema
@@ -14571,7 +14571,7 @@ class DefaultApi:
     ) -> ApiResponse[Dict[str, object]]:
         """Create Dataset
 
-        Create a new dataset. This starts an async task to generate the parquet file.
+        Create a new dataset and start async episode parquet generation.
 
         :param dataset_create_schema: (required)
         :type dataset_create_schema: DatasetCreateSchema
@@ -14638,7 +14638,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Create Dataset
 
-        Create a new dataset. This starts an async task to generate the parquet file.
+        Create a new dataset and start async episode parquet generation.
 
         :param dataset_create_schema: (required)
         :type dataset_create_schema: DatasetCreateSchema

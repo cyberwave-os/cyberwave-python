@@ -18,16 +18,10 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion  # type: ignore
 # Try to import CallbackAPIVersion for paho-mqtt 2.x, fallback for older versions
 
-from ..constants import (
-    SOURCE_TYPE_SIM,
-    SOURCE_TYPE_EDGE,
-    SOURCE_TYPE_TELE,
-    SOURCE_TYPE_EDIT,
-    SOURCE_TYPE_EDGE_LEADER,
-    SOURCE_TYPE_EDGE_FOLLOWER,
-)
+from ..constants import SOURCE_TYPE_EDGE, SOURCE_TYPES
 
 logger = logging.getLogger(__name__)
+SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
 
 
 class CyberwaveMQTTClient:
@@ -94,9 +88,7 @@ class CyberwaveMQTTClient:
             protocol=mqtt.MQTTv311,
         )
 
-        self.client.username_pw_set(
-            username=self.mqtt_username, password=auth_password
-        )
+        self.client.username_pw_set(username=self.mqtt_username, password=auth_password)
         # Port 8883 is the conventional MQTT-over-TLS port.
         self.use_tls = use_tls or self.mqtt_port == 8883
         self.tls_ca_cert = tls_ca_cert
@@ -137,6 +129,16 @@ class CyberwaveMQTTClient:
         self.twin_uuids_with_telemetry_start: List[str] = []
         self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
         self.source_type = source_type
+
+    def _get_effective_source_type(self, source_type: Optional[str]) -> str:
+        """Resolve and validate the source type for outgoing MQTT messages."""
+        effective_source_type = source_type or self.source_type or SOURCE_TYPE_EDGE
+        if effective_source_type not in SOURCE_TYPES:
+            raise ValueError(
+                f"Invalid source_type: {effective_source_type}. Must be one of: "
+                f"{SOURCE_TYPES_DISPLAY}"
+            )
+        return effective_source_type
 
     def _positions_equal(
         self, pos1: Dict[str, float], pos2: Dict[str, float], tolerance: float = 1e-6
@@ -291,7 +293,7 @@ class CyberwaveMQTTClient:
     ):
         """
         Handle telemetry start for a twin, ensuring it's only sent once.
-        
+
         Thread-safe: Uses a lock to prevent duplicate telemetry_start messages
         when called from multiple threads (e.g., main loop + camera worker).
         """
@@ -649,21 +651,7 @@ class CyberwaveMQTTClient:
                 Defaults to SOURCE_TYPE_EDGE (SDKs run on edge devices by default).
                 Users can override this to use any source type they need.
         """
-        # Use provided source_type or default to self.source_type
-        effective_source_type = source_type or self.source_type or SOURCE_TYPE_EDGE
-        
-        if effective_source_type not in [
-            SOURCE_TYPE_EDGE_LEADER,
-            SOURCE_TYPE_EDGE_FOLLOWER,
-            SOURCE_TYPE_EDGE,
-            SOURCE_TYPE_TELE,
-            SOURCE_TYPE_EDIT,
-            SOURCE_TYPE_SIM,
-        ]:
-            raise ValueError(
-                f"Invalid source_type: {effective_source_type}. Must be one of: "
-                f"{SOURCE_TYPE_EDGE_LEADER}, {SOURCE_TYPE_EDGE_FOLLOWER}, {SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
-            )
+        effective_source_type = self._get_effective_source_type(source_type)
 
         self._handle_twin_update_with_telemetry(twin_uuid)
         # Check rate limiting
@@ -698,50 +686,139 @@ class CyberwaveMQTTClient:
         twin_uuid: str,
         joint_positions: Dict[str, float],
         source_type: Optional[str] = None,
+        velocities: Optional[Dict[str, float]] = None,
+        efforts: Optional[Dict[str, float]] = None,
+        timestamp: Optional[float] = None,
+        source_subtype: Optional[str] = None,
+        workload_uuid: Optional[str] = None,
+        session_id: Optional[str] = None,
     ):
         """
-        Update multiple joints at once via MQTT. Sends all positions in a single
-        message to create a coordinated trajectory instead of conflicting ones.
+        Update multiple joints at once via MQTT.
+
+        Supports two formats based on provided parameters:
+
+        1. **Flat format** (joint_positions only, no velocities/efforts/timestamp):
+           Sends positions directly as top-level keys. Simple and lightweight.
+           ```json
+           {"source_type": "edge", "_1": 0.5, "_2": 0.3}
+           ```
+
+        2. **Aggregated format** (with velocities, efforts, timestamp, or metadata):
+           Sends structured payload with nested objects. Supports full joint state
+           and additional metadata for telemetry tracking.
+           ```json
+           {
+               "source_type": "edge_follower",
+               "positions": {"_1": 0.5, "_2": 0.3},
+               "velocities": {"_1": 0.0, "_2": 0.0},
+               "efforts": {"_1": 0.0, "_2": 0.0},
+               "timestamp": 1709123456.789,
+               "source_subtype": "openvla",
+               "workload_uuid": "uuid-here",
+               "session_id": "session-id"
+           }
+           ```
+
+        Both formats are parsed by Vector into individual joint_state_update telemetry events.
 
         Args:
             twin_uuid: UUID of the twin
-            joint_positions: Dict of joint names to positions (e.g., {"shoulder_pan_joint": 1.5})
-            source_type: SOURCE_TYPE_EDGE (default), SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, or SOURCE_TYPE_SIM
+            joint_positions: Dict of joint names to positions (e.g., {"_1": 0.5, "_2": 0.3})
+            source_type: SOURCE_TYPE_EDGE (default), SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, etc.
+            velocities: Optional dict of joint names to velocities (triggers aggregated format)
+            efforts: Optional dict of joint names to efforts (triggers aggregated format)
+            timestamp: Optional timestamp in seconds (triggers aggregated format)
+            source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
+            workload_uuid: Optional UUID of the workload generating this update
+            session_id: Optional session ID for grouping related updates
         """
-        # Use provided source_type or default to self.source_type
-        effective_source_type = source_type or self.source_type or SOURCE_TYPE_EDGE
-        
-        if effective_source_type not in [
-            SOURCE_TYPE_EDGE_LEADER,
-            SOURCE_TYPE_EDGE_FOLLOWER,
-            SOURCE_TYPE_EDGE,
-            SOURCE_TYPE_TELE,
-            SOURCE_TYPE_EDIT,
-            SOURCE_TYPE_SIM,
-        ]:
-            raise ValueError(
-                f"Invalid source_type: {effective_source_type}. Must be one of: "
-                f"{SOURCE_TYPE_EDGE_LEADER}, {SOURCE_TYPE_EDGE_FOLLOWER}, {SOURCE_TYPE_EDGE}, {SOURCE_TYPE_TELE}, {SOURCE_TYPE_EDIT}, {SOURCE_TYPE_SIM}"
-            )
+        effective_source_type = self._get_effective_source_type(source_type)
 
         if not joint_positions:
             raise ValueError("joint_positions cannot be empty")
 
         self._handle_twin_update_with_telemetry(twin_uuid)
 
-        # Build multi-joint message
-        # Format: {"source_type": "tele", "joint_name_1": position1, "joint_name_2": position2, ...}
         topic = f"{self.topic_prefix}cyberwave/joint/{twin_uuid}/update"
-        message = {
-            "source_type": effective_source_type,
-            **joint_positions,  # Unpack joint positions into message
-        }
 
-        logger.debug(
-            f"Publishing multi-joint state for {twin_uuid}: {len(joint_positions)} joints (source_type: {effective_source_type})"
+        # Determine format: use aggregated if any extended parameters are provided
+        use_aggregated = (
+            velocities is not None
+            or efforts is not None
+            or timestamp is not None
+            or source_subtype is not None
+            or workload_uuid is not None
+            or session_id is not None
         )
 
+        if use_aggregated:
+            message: Dict[str, Any] = {
+                "source_type": effective_source_type,
+                "positions": joint_positions,
+                "timestamp": timestamp if timestamp is not None else time.time(),
+            }
+            if velocities:
+                message["velocities"] = velocities
+            if efforts:
+                message["efforts"] = efforts
+            if source_subtype:
+                message["source_subtype"] = source_subtype
+            if workload_uuid:
+                message["workload_uuid"] = workload_uuid
+            if session_id:
+                message["session_id"] = session_id
+
+            logger.debug(
+                f"Publishing aggregated joint state for {twin_uuid}: "
+                f"{len(joint_positions)} joints (source_type: {effective_source_type})"
+            )
+        else:
+            # Flat format: positions as top-level keys
+            message = {
+                "source_type": effective_source_type,
+                **joint_positions,
+            }
+            logger.debug(
+                f"Publishing joint state for {twin_uuid}: {len(joint_positions)} joints "
+                f"(source_type: {effective_source_type})"
+            )
+
         self.publish(topic, message)
+
+    def update_aggregated_joints_state(
+        self,
+        twin_uuid: str,
+        joint_positions: Dict[str, float],
+        source_type: Optional[str] = None,
+        velocities: Optional[Dict[str, float]] = None,
+        efforts: Optional[Dict[str, float]] = None,
+        timestamp: Optional[float] = None,
+        source_subtype: Optional[str] = None,
+        workload_uuid: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ):
+        """
+        Alias for update_joints_state with aggregated format.
+
+        Deprecated: Use update_joints_state() instead. This method is kept for
+        backward compatibility but simply delegates to update_joints_state().
+        """
+        # Force aggregated format by ensuring timestamp is set
+        if timestamp is None:
+            timestamp = time.time()
+
+        return self.update_joints_state(
+            twin_uuid=twin_uuid,
+            joint_positions=joint_positions,
+            source_type=source_type,
+            velocities=velocities,
+            efforts=efforts,
+            timestamp=timestamp,
+            source_subtype=source_subtype,
+            workload_uuid=workload_uuid,
+            session_id=session_id,
+        )
 
     def publish_initial_observation(
         self, twin_uuid: str, observations: Dict[str, Any], fps: float = 30.0
@@ -788,7 +865,12 @@ class CyberwaveMQTTClient:
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/pointcloud"
         self.subscribe(topic, on_pointcloud)
 
-    def publish_depth_frame(self, twin_uuid: str, depth_data: Dict[str, Any], timestamp: Optional[float] = None):
+    def publish_depth_frame(
+        self,
+        twin_uuid: str,
+        depth_data: Dict[str, Any],
+        timestamp: Optional[float] = None,
+    ):
         """Publish depth frame data via MQTT."""
         self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/depth"
@@ -819,13 +901,20 @@ class CyberwaveMQTTClient:
         """Subscribe to WebRTC signaling messages via MQTT."""
         self._handle_twin_update_with_telemetry(twin_uuid)
         # Subscribe to specialized topics
-        self.subscribe(f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-offer", on_message)
-        self.subscribe(f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-answer", on_message)
-        self.subscribe(f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-candidate", on_message)
+        self.subscribe(
+            f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-offer", on_message
+        )
+        self.subscribe(
+            f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-answer", on_message
+        )
+        self.subscribe(
+            f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/webrtc-candidate",
+            on_message,
+        )
 
     def publish_command_message(self, twin_uuid: str, status):
         """Publish command response message via MQTT.
-        
+
         Args:
             twin_uuid: The twin UUID to publish to
             status: Either a string status (e.g., "ok") or a dict with status and other fields

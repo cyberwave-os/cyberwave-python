@@ -164,6 +164,7 @@ from cyberwave.rest.models.pipeline_stages_schema import PipelineStagesSchema
 from cyberwave.rest.models.plan_schema import PlanSchema
 from cyberwave.rest.models.popular_tag_schema import PopularTagSchema
 from cyberwave.rest.models.popular_tags_response_schema import PopularTagsResponseSchema
+from cyberwave.rest.models.processed_dataset_schema import ProcessedDatasetSchema
 from cyberwave.rest.models.profile_response_schema import ProfileResponseSchema
 from cyberwave.rest.models.profile_update_schema import ProfileUpdateSchema
 from cyberwave.rest.models.project_create_schema import ProjectCreateSchema

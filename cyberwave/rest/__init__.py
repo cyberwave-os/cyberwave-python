@@ -187,6 +187,7 @@ __all__ = [
     "PlanSchema",
     "PopularTagSchema",
     "PopularTagsResponseSchema",
+    "ProcessedDatasetSchema",
     "ProfileResponseSchema",
     "ProfileUpdateSchema",
     "ProjectCreateSchema",
@@ -443,6 +444,7 @@ from cyberwave.rest.models.pipeline_stages_schema import PipelineStagesSchema as
 from cyberwave.rest.models.plan_schema import PlanSchema as PlanSchema
 from cyberwave.rest.models.popular_tag_schema import PopularTagSchema as PopularTagSchema
 from cyberwave.rest.models.popular_tags_response_schema import PopularTagsResponseSchema as PopularTagsResponseSchema
+from cyberwave.rest.models.processed_dataset_schema import ProcessedDatasetSchema as ProcessedDatasetSchema
 from cyberwave.rest.models.profile_response_schema import ProfileResponseSchema as ProfileResponseSchema
 from cyberwave.rest.models.profile_update_schema import ProfileUpdateSchema as ProfileUpdateSchema
 from cyberwave.rest.models.project_create_schema import ProjectCreateSchema as ProjectCreateSchema

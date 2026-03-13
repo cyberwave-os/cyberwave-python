@@ -450,7 +450,7 @@
         },
         {
           "id": "lidar_4d",
-          "type": "depth",
+          "type": "lidar_4d",
           "model": "Unitree Lidar 4D",
           "offset": {
             "position": {

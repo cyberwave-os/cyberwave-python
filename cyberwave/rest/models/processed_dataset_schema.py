@@ -19,22 +19,22 @@ import json
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class EdgeSchema(BaseModel):
+class ProcessedDatasetSchema(BaseModel):
     """
-    Edge device schema using resolver mixins.
+    ProcessedDatasetSchema
     """ # noqa: E501
     uuid: StrictStr
-    fingerprint: Optional[StrictStr]
-    name: StrictStr
-    created_at: datetime
-    updated_at: datetime
-    organization_uuid: Optional[StrictStr]
+    format: StrictStr
+    status: StrictStr
+    path: StrictStr
+    error_message: StrictStr
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "fingerprint", "name", "created_at", "updated_at", "organization_uuid", "metadata"]
+    created_at: datetime
+    __properties: ClassVar[List[str]] = ["uuid", "format", "status", "path", "error_message", "metadata", "created_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -54,7 +54,7 @@ class EdgeSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of EdgeSchema from a JSON string"""
+        """Create an instance of ProcessedDatasetSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -75,21 +75,11 @@ class EdgeSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if fingerprint (nullable) is None
-        # and model_fields_set contains the field
-        if self.fingerprint is None and "fingerprint" in self.model_fields_set:
-            _dict['fingerprint'] = None
-
-        # set to None if organization_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
-            _dict['organization_uuid'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of EdgeSchema from a dict"""
+        """Create an instance of ProcessedDatasetSchema from a dict"""
         if obj is None:
             return None
 
@@ -98,12 +88,12 @@ class EdgeSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
-            "fingerprint": obj.get("fingerprint"),
-            "name": obj.get("name"),
-            "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
-            "organization_uuid": obj.get("organization_uuid"),
-            "metadata": obj.get("metadata")
+            "format": obj.get("format"),
+            "status": obj.get("status"),
+            "path": obj.get("path"),
+            "error_message": obj.get("error_message"),
+            "metadata": obj.get("metadata"),
+            "created_at": obj.get("created_at")
         })
         return _obj
 
