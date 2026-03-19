@@ -38,6 +38,7 @@ class CyberwaveMQTTClient:
         api_key: Cyberwave API key used for MQTT authN/authZ
         mqtt_password: Explicit MQTT password (overrides api_key when provided)
         client_id: Custom MQTT client ID (auto-generated if not provided)
+        client_id_prefix: Prefix for auto-generated MQTT client IDs
         use_tls: Enable TLS transport for MQTT
         tls_ca_cert: Path to CA certificate bundle for broker verification
         topic_prefix: Prefix for MQTT topics (default: "")
@@ -52,6 +53,7 @@ class CyberwaveMQTTClient:
         api_key: Optional[str] = None,
         mqtt_password: Optional[str] = None,
         client_id: Optional[str] = None,
+        client_id_prefix: str = "sdk_",
         use_tls: bool = False,
         tls_ca_cert: Optional[str] = None,
         topic_prefix: str = "",
@@ -77,7 +79,7 @@ class CyberwaveMQTTClient:
         self.topic_prefix = topic_prefix
 
         # Generate unique client ID
-        self.client_id = client_id or f"sdk_{uuid.uuid4().hex[:8]}"
+        self.client_id = client_id or f"{client_id_prefix}{uuid.uuid4().hex[:8]}"
 
         # MQTT client (compatible with paho-mqtt 1.x and 2.x)
         # Explicitly use MQTTv311 to ensure compatibility with brokers that do

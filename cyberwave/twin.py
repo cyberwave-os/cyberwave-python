@@ -3,9 +3,12 @@ High-level Twin abstraction for intuitive digital twin control
 """
 
 import asyncio
+from copy import deepcopy
 import json
 import math
 import os
+import time
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable, Type
 
@@ -20,10 +23,25 @@ if TYPE_CHECKING:
     )
 
 from .exceptions import CyberwaveError
+from .constants import SOURCE_TYPE_SIM, SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE
 
 
 # Load capabilities cache for runtime class selection
 _CAPABILITIES_CACHE: Optional[Dict[str, Any]] = None
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_locomotion_source_type(source_type: Optional[str]) -> Optional[str]:
+    """Preserve legacy ``sim`` callers while publishing ``sim_tele`` commands."""
+    if source_type == SOURCE_TYPE_SIM:
+        return SOURCE_TYPE_SIM_TELE
+    return source_type
+
+
+def _default_control_source_type(client: Any) -> str:
+    runtime_mode = getattr(getattr(client, "config", None), "runtime_mode", "live")
+    return SOURCE_TYPE_SIM_TELE if runtime_mode == "simulation" else SOURCE_TYPE_TELE
 
 
 def _load_capabilities_cache() -> Dict[str, Any]:
@@ -87,8 +105,7 @@ def _decode_frame(jpeg_bytes: bytes, format: str) -> Any:
             from PIL import Image  # type: ignore[import-untyped]
         except ImportError:
             raise CyberwaveError(
-                "Pillow is required for format='pil'. "
-                "Install with: pip install Pillow"
+                "Pillow is required for format='pil'. Install with: pip install Pillow"
             )
         import io
 
@@ -150,6 +167,9 @@ class JointController:
         """
         if degrees:
             position = math.radians(position)
+
+        if source_type is None:
+            source_type = _default_control_source_type(self.twin.client)
 
         try:
             # Connect to MQTT if not already connected
@@ -662,6 +682,112 @@ class Twin:
             "z": update_data["scale_z"],
         }
 
+    def _data_get(self, field: str, default: Any = None) -> Any:
+        """Read a field from TwinSchema object or dict payload."""
+        if hasattr(self._data, field):
+            return getattr(self._data, field)
+        if isinstance(self._data, dict):
+            return self._data.get(field, default)
+        return default
+
+    def _build_deepcopy_payload_for_recreation(self) -> Dict[str, Any]:
+        """Build a deep-copied payload for recreating this twin in another environment."""
+        # Keep this aligned with backend clone semantics where possible using public
+        # twin create/update fields exposed by the SDK.
+        fields_to_copy = (
+            "name",
+            "description",
+            "position_x",
+            "position_y",
+            "position_z",
+            "rotation_w",
+            "rotation_x",
+            "rotation_y",
+            "rotation_z",
+            "scale_x",
+            "scale_y",
+            "scale_z",
+            "kinematics_override",
+            "joint_calibration",
+            "metadata",
+            "controller_policy_uuid",
+            "attach_offset_x",
+            "attach_offset_y",
+            "attach_offset_z",
+            "attach_offset_rotation_w",
+            "attach_offset_rotation_x",
+            "attach_offset_rotation_y",
+            "attach_offset_rotation_z",
+            "fixed_base",
+        )
+        payload: Dict[str, Any] = {}
+        for field in fields_to_copy:
+            value = self._data_get(field)
+            if value is None:
+                continue
+            payload[field] = deepcopy(value)
+        return payload
+
+    def _delete_environment(self, environment_uuid: str) -> None:
+        """Delete an environment, supporting both project and standalone paths."""
+        environment = self.client.environments.get(environment_uuid)  # type: ignore
+        project_uuid = (
+            environment.project_uuid
+            if hasattr(environment, "project_uuid")
+            else (environment.get("project_uuid") if isinstance(environment, dict) else None)
+        )
+        if project_uuid:
+            self.client.environments.delete(environment_uuid, str(project_uuid))  # type: ignore
+            return
+
+        # Fallback for standalone environments (delete endpoint exists in backend
+        # but may not always be exposed by generated SDK stubs).
+        _param = self.client._api_client.param_serialize(
+            method="DELETE",
+            resource_path="/api/v1/environments/{uuid}",
+            path_params={"uuid": environment_uuid},
+            auth_settings=["CustomTokenAuthentication"],
+        )
+        response_data = self.client._api_client.call_api(*_param)
+        response_data.read()
+
+    def add_to_environment(self, environment_uuid: str) -> "Twin":
+        """Recreate this twin in another environment and delete the original twin."""
+        if not environment_uuid:
+            raise CyberwaveError("environment_uuid is required")
+
+        source_environment_uuid = self.environment_id
+        source_twin_uuid = self.uuid
+        if str(source_environment_uuid) == str(environment_uuid):
+            return self
+
+        try:
+            payload = self._build_deepcopy_payload_for_recreation()
+
+            recreated_twin_data = self.client.twins.create(  # type: ignore
+                asset_id=self.asset_id,
+                environment_id=environment_uuid,
+                **payload,
+            )
+
+            self.client.twins.delete(source_twin_uuid)  # type: ignore
+
+            remaining_twins = self.client.twins.list(  # type: ignore
+                environment_id=source_environment_uuid
+            )
+            if not remaining_twins:
+                self._delete_environment(source_environment_uuid)
+
+            self._data = recreated_twin_data
+            self._position = None
+            self._rotation = None
+            self._scale = None
+            return self
+        except Exception as e:
+            raise CyberwaveError(
+                f"Failed to add twin to environment '{environment_uuid}': {e}"
+            )
+
     def delete(self) -> None:
         """Delete this twin"""
         try:
@@ -688,7 +814,9 @@ class Twin:
                 mock=mock,
             )
         except Exception as e:
-            raise CyberwaveError(f"Failed to get latest frame for twin {self.uuid}: {e}")
+            raise CyberwaveError(
+                f"Failed to get latest frame for twin {self.uuid}: {e}"
+            )
 
     def capture_frame(
         self,
@@ -768,9 +896,7 @@ class Twin:
         if format == "path":
             folder = _tempfile.mkdtemp(prefix="cyberwave_frames_")
             for i in range(count):
-                jpeg_bytes = self.get_latest_frame(
-                    sensor_id=sensor_id, mock=mock
-                )
+                jpeg_bytes = self.get_latest_frame(sensor_id=sensor_id, mock=mock)
                 frame_path = os.path.join(folder, f"frame_{i:04d}.jpg")
                 with open(frame_path, "wb") as f:
                     f.write(jpeg_bytes)
@@ -780,9 +906,7 @@ class Twin:
 
         frames = []
         for i in range(count):
-            frame = self.capture_frame(
-                format=format, sensor_id=sensor_id, mock=mock
-            )
+            frame = self.capture_frame(format=format, sensor_id=sensor_id, mock=mock)
             frames.append(frame)
             if i < count - 1:
                 _time.sleep(interval_ms / 1000.0)
@@ -1351,60 +1475,146 @@ class LocomoteTwin(Twin):
 
     def move(self, position: List[float]):
         """
-        Move the digital twin to a specific position in the environment.
+        DEPRECATED: See warning
 
-        NOTE: This updates the digital twin's position in the simulator/viewer,
-        not the physical robot. To command the physical robot to navigate,
-        use twin.navigation.goto() instead.
-
-        Args:
-            position: [x, y, z] coordinates
+        Support for move will be dropped in future versions of the SDK
         """
-        if len(position) != 3:
-            raise CyberwaveError("Position must be [x, y, z]")
-
-        self._connect_to_mqtt_if_not_connected()
-        self.client.mqtt.update_twin_position(
-            self.uuid, {"x": position[0], "y": position[1], "z": position[2]}
+        logger.warning(
+            """move() is deprecated as a way to send commands. You have these two options:
+                - Use edit_position if you want to edit the digital twin position in your environemnt, in order to reproduce a real environment in Cyberwave
+                - Use move_forward or move_backward if you want your robot to navigate the world
+            """
         )
+        return
 
-    def move_forward(self, distance: float):
+    def move_forward(self, distance: float, source_type: Optional[str] = None):
         """
-        Move the digital twin forward in the direction it is facing.
-
-        NOTE: This updates the digital twin's position in the simulator/viewer,
-        not the physical robot. To command the physical robot to navigate,
-        use twin.navigation.goto() instead.
+        Sends a command to a locomotion robot to move in the direction it is facing.
 
         Args:
             distance: Distance to move in meters
+            source_type: ``"sim_tele"``/``"sim"`` for simulation, ``"tele"`` for the real robot.
+                Falls back to the client-level setting from ``cw.affect()``.
+
+        Note: This is different than edit_position. edit_position edits the twin in the Editor so that you can
+        set up your environment. move_forward sends a command to the robot to move in the direction it is facing.
         """
-        # Get current position and rotation
-        current_pos = self._get_current_position()
-        current_rot = self._get_current_rotation()
-
-        # Extract quaternion components
-        w = current_rot["w"]
-        x = current_rot["x"]
-        y = current_rot["y"]
-        z = current_rot["z"]
-
-        # Transform the forward vector [1, 0, 0] by the quaternion
-        # Using quaternion rotation formula: v' = q * v * q^(-1)
-        # For forward vector [1, 0, 0], this gives us:
-        forward_x = 1 - 2 * (y * y + z * z)
-        forward_y = 2 * (x * y + w * z)
-        forward_z = 2 * (x * z - w * y)
-
-        # Calculate new position
-        new_x = current_pos["x"] + forward_x * distance
-        new_y = current_pos["y"] + forward_y * distance
-        new_z = current_pos["z"] + forward_z * distance
-
-        # Update position via MQTT
+        if source_type is None:
+            source_type = _default_control_source_type(self.client)
+        source_type = _normalize_locomotion_source_type(source_type)
+        if source_type not in [SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE]:
+            raise ValueError(
+                f"Invalid source type '{source_type}' for move_forward. "
+                "Use cw.affect('simulation') or cw.affect('real-world'), "
+                "or pass source_type='sim' / 'sim_tele' / 'tele' directly."
+            )
+        # Send movement command via MQTT
         self._connect_to_mqtt_if_not_connected()
-        self.client.mqtt.update_twin_position(
-            self.uuid, {"x": new_x, "y": new_y, "z": new_z}
+        topic_prefix = self.client.config.topic_prefix or ""
+        self.client.mqtt.publish(
+            f"{topic_prefix}cyberwave/twin/{self.uuid}/command",
+            {
+                "source_type": source_type,
+                "command": "move_forward",
+                "data": {"linear_x": distance, "angular_z": 0.0},
+                "timestamp": time.time(),
+            },
+        )
+
+    def move_backward(self, distance: float, source_type: Optional[str] = None):
+        """
+        Sends a command to a locomotion robot to move backward.
+
+        Args:
+            distance: Distance to move in meters
+            source_type: ``"sim_tele"``/``"sim"`` for simulation, ``"tele"`` for the real robot.
+                Falls back to the client-level setting from ``cw.affect()``.
+
+        Note: This is different than edit_position. edit_position edits the twin in the Editor so that you can
+        set up your environment. move_backward sends a command to the robot to move in reverse.
+        """
+        if source_type is None:
+            source_type = _default_control_source_type(self.client)
+        source_type = _normalize_locomotion_source_type(source_type)
+        if source_type not in [SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE]:
+            raise ValueError(
+                f"Invalid source type '{source_type}' for move_backward. "
+                "Use cw.affect('simulation') or cw.affect('real-world'), "
+                "or pass source_type='sim' / 'sim_tele' / 'tele' directly."
+            )
+        # Send movement command via MQTT
+        self._connect_to_mqtt_if_not_connected()
+        topic_prefix = self.client.config.topic_prefix or ""
+        self.client.mqtt.publish(
+            f"{topic_prefix}cyberwave/twin/{self.uuid}/command",
+            {
+                "source_type": source_type,
+                "command": "move_backward",
+                "data": {"linear_x": distance, "angular_z": 0.0},
+                "timestamp": time.time(),
+            },
+        )
+
+    def turn_left(self, angle: float = 1.5, source_type: Optional[str] = None):
+        """
+        Sends a command to a locomotion robot to turn left.
+
+        Args:
+            angle: Angle to turn in radians (default: 1.5)
+            source_type: ``"sim_tele"``/``"sim"`` for simulation, ``"tele"`` for the real robot.
+                Falls back to the client-level setting from ``cw.affect()``.
+        """
+        if source_type is None:
+            source_type = _default_control_source_type(self.client)
+        source_type = _normalize_locomotion_source_type(source_type)
+        if source_type not in [SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE]:
+            raise ValueError(
+                f"Invalid source type '{source_type}' for turn_left. "
+                "Use cw.affect('simulation') or cw.affect('real-world'), "
+                "or pass source_type='sim' / 'sim_tele' / 'tele' directly."
+            )
+        # Send movement command via MQTT
+        self._connect_to_mqtt_if_not_connected()
+        topic_prefix = self.client.config.topic_prefix or ""
+        self.client.mqtt.publish(
+            f"{topic_prefix}cyberwave/twin/{self.uuid}/command",
+            {
+                "source_type": source_type,
+                "command": "turn_left",
+                "data": {"linear_x": 0, "angular_z": angle},
+                "timestamp": time.time(),
+            },
+        )
+
+    def turn_right(self, angle: float = 1.5, source_type: Optional[str] = None):
+        """
+        Sends a command to a locomotion robot to turn right.
+
+        Args:
+            angle: Angle to turn in radians (default: 1.5)
+            source_type: ``"sim_tele"``/``"sim"`` for simulation, ``"tele"`` for the real robot.
+                Falls back to the client-level setting from ``cw.affect()``.
+        """
+        if source_type is None:
+            source_type = _default_control_source_type(self.client)
+        source_type = _normalize_locomotion_source_type(source_type)
+        if source_type not in [SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE]:
+            raise ValueError(
+                f"Invalid source type '{source_type}' for turn_right. "
+                "Use cw.affect('simulation') or cw.affect('real-world'), "
+                "or pass source_type='sim' / 'sim_tele' / 'tele' directly."
+            )
+        # Send movement command via MQTT
+        self._connect_to_mqtt_if_not_connected()
+        topic_prefix = self.client.config.topic_prefix or ""
+        self.client.mqtt.publish(
+            f"{topic_prefix}cyberwave/twin/{self.uuid}/command",
+            {
+                "source_type": source_type,
+                "command": "turn_right",
+                "data": {"linear_x": 0, "angular_z": angle},
+                "timestamp": time.time(),
+            },
         )
 
     def rotate(
@@ -1419,72 +1629,10 @@ class LocomoteTwin(Twin):
         roll: Optional[float] = None,
     ) -> None:
         """
-        Rotate the digital twin using either a quaternion or Euler angles.
-
-        NOTE: This updates the digital twin's rotation in the simulator/viewer,
-        not the physical robot. To command the physical robot to rotate,
-        use twin.navigation.goto() with a yaw parameter instead.
-
-        You can provide either:
-        - Quaternion values (w, x, y, z)
-        - Euler angles in degrees (yaw, pitch, roll)
-
-        Mixing quaternion and Euler angle parameters will raise a ValueError.
-
-        Args:
-            w: Quaternion w component
-            x: Quaternion x component
-            y: Quaternion y component
-            z: Quaternion z component
-            yaw: Rotation around vertical axis in degrees
-            pitch: Rotation around lateral axis in degrees
-            roll: Rotation around longitudinal axis in degrees
+        DEPRECATED: Use edit_rotation instead
         """
-        # Check if quaternion values are provided
-        quaternion_provided = any(v is not None for v in [w, x, y, z])
-        euler_provided = any(v is not None for v in [yaw, pitch, roll])
-
-        if quaternion_provided and euler_provided:
-            raise ValueError(
-                "Cannot mix quaternion (w, x, y, z) and Euler angle (yaw, pitch, roll) "
-                "parameters. Use one format or the other."
-            )
-
-        if quaternion_provided:
-            # Use quaternion directly, defaulting missing values
-            rotation = {
-                "w": w if w is not None else 1.0,
-                "x": x if x is not None else 0.0,
-                "y": y if y is not None else 0.0,
-                "z": z if z is not None else 0.0,
-            }
-        elif euler_provided:
-            # Convert Euler angles to quaternion
-            # Default to 0 for any missing angle
-            yaw_rad = math.radians(yaw if yaw is not None else 0.0)
-            pitch_rad = math.radians(pitch if pitch is not None else 0.0)
-            roll_rad = math.radians(roll if roll is not None else 0.0)
-
-            # Euler to quaternion conversion (ZYX order)
-            cy = math.cos(yaw_rad * 0.5)
-            sy = math.sin(yaw_rad * 0.5)
-            cp = math.cos(pitch_rad * 0.5)
-            sp = math.sin(pitch_rad * 0.5)
-            cr = math.cos(roll_rad * 0.5)
-            sr = math.sin(roll_rad * 0.5)
-
-            rotation = {
-                "w": cr * cp * cy + sr * sp * sy,
-                "x": sr * cp * cy - cr * sp * sy,
-                "y": cr * sp * cy + sr * cp * sy,
-                "z": cr * cp * sy - sr * sp * cy,
-            }
-        else:
-            # Default to identity quaternion
-            rotation = {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
-
-        self._connect_to_mqtt_if_not_connected()
-        self.client.mqtt.update_twin_rotation(self.uuid, rotation)
+        logger.warning("rotate() is deprecated. Use edit_rotation() instead.")
+        self.edit_rotation(yaw=yaw, pitch=pitch, roll=roll)
 
 
 class FlyingTwin(Twin):

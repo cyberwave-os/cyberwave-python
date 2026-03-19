@@ -41,6 +41,7 @@ class CyberwaveConfig:
         workspace_id: Default workspace ID to use
         timeout: Request timeout in seconds
         verify_ssl: Whether to verify SSL certificates
+        runtime_mode: Whether the SDK is running in live or simulation mode
     """
 
     base_url: str = DEFAULT_BASE_URL
@@ -57,6 +58,7 @@ class CyberwaveConfig:
     verify_ssl: bool = True
     source_type: str = SOURCE_TYPE_EDGE
     topic_prefix: Optional[str] = None
+    runtime_mode: str = "live"
 
     def __post_init__(self):
         """Load configuration from environment variables if not provided"""
@@ -110,6 +112,9 @@ class CyberwaveConfig:
                     self.topic_prefix = env_value
                 else:
                     self.topic_prefix = ""
+
+        if not self.runtime_mode:
+            self.runtime_mode = "live"
 
     @property
     def auth_header(self) -> dict:

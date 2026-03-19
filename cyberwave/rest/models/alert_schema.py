@@ -30,7 +30,6 @@ class AlertSchema(BaseModel):
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
-    media: Optional[StrictStr] = None
     alert_type: StrictStr
     severity: StrictStr
     status: StrictStr
@@ -44,7 +43,7 @@ class AlertSchema(BaseModel):
     updated_at: datetime
     resolved_at: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "media", "alert_type", "severity", "status", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "created_by_uuid", "created_at", "updated_at", "resolved_at", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "alert_type", "severity", "status", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "created_by_uuid", "created_at", "updated_at", "resolved_at", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -85,11 +84,6 @@ class AlertSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if media (nullable) is None
-        # and model_fields_set contains the field
-        if self.media is None and "media" in self.model_fields_set:
-            _dict['media'] = None
-
         # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
@@ -135,7 +129,6 @@ class AlertSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),
-            "media": obj.get("media"),
             "alert_type": obj.get("alert_type"),
             "severity": obj.get("severity"),
             "status": obj.get("status"),

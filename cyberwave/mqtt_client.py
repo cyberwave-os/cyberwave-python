@@ -51,6 +51,7 @@ class CyberwaveMQTTClient:
 
         # Determine topic prefix from config (which handles env vars)
         topic_prefix = config.topic_prefix or ""
+        client_id_prefix = "sdk_sim_" if config.runtime_mode == "simulation" else "sdk_"
 
         self._topic_prefix = topic_prefix
 
@@ -64,6 +65,8 @@ class CyberwaveMQTTClient:
             use_tls=config.mqtt_use_tls,
             tls_ca_cert=config.mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,
+            client_id_prefix=client_id_prefix,
+            source_type=config.source_type,
         )
 
     @property

@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt
-from typing import Any, ClassVar, Dict, List
-from cyberwave.rest.models.admin_lab_info_schema import AdminLabInfoSchema
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.admin_session_schema import AdminSessionSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,11 +27,13 @@ class AdminLabOverviewSchema(BaseModel):
     """
     AdminLabOverviewSchema
     """ # noqa: E501
-    labs: List[AdminLabInfoSchema]
+    environment_name: StrictStr
+    environment_uuid: StrictStr
+    active_session: Optional[AdminSessionSchema] = None
     queue: List[AdminSessionSchema]
     recent_sessions: List[AdminSessionSchema]
     stats: Dict[str, StrictInt]
-    __properties: ClassVar[List[str]] = ["labs", "queue", "recent_sessions", "stats"]
+    __properties: ClassVar[List[str]] = ["environment_name", "environment_uuid", "active_session", "queue", "recent_sessions", "stats"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -73,13 +74,9 @@ class AdminLabOverviewSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in labs (list)
-        _items = []
-        if self.labs:
-            for _item_labs in self.labs:
-                if _item_labs:
-                    _items.append(_item_labs.to_dict())
-            _dict['labs'] = _items
+        # override the default output from pydantic by calling `to_dict()` of active_session
+        if self.active_session:
+            _dict['active_session'] = self.active_session.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in queue (list)
         _items = []
         if self.queue:
@@ -94,6 +91,11 @@ class AdminLabOverviewSchema(BaseModel):
                 if _item_recent_sessions:
                     _items.append(_item_recent_sessions.to_dict())
             _dict['recent_sessions'] = _items
+        # set to None if active_session (nullable) is None
+        # and model_fields_set contains the field
+        if self.active_session is None and "active_session" in self.model_fields_set:
+            _dict['active_session'] = None
+
         return _dict
 
     @classmethod
@@ -106,7 +108,9 @@ class AdminLabOverviewSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "labs": [AdminLabInfoSchema.from_dict(_item) for _item in obj["labs"]] if obj.get("labs") is not None else None,
+            "environment_name": obj.get("environment_name"),
+            "environment_uuid": obj.get("environment_uuid"),
+            "active_session": AdminSessionSchema.from_dict(obj["active_session"]) if obj.get("active_session") is not None else None,
             "queue": [AdminSessionSchema.from_dict(_item) for _item in obj["queue"]] if obj.get("queue") is not None else None,
             "recent_sessions": [AdminSessionSchema.from_dict(_item) for _item in obj["recent_sessions"]] if obj.get("recent_sessions") is not None else None,
             "stats": obj.get("stats")

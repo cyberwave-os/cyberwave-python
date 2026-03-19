@@ -32,11 +32,8 @@ class TwinDriverLogSchema(BaseModel):
     message: StrictStr
     container_name: Optional[StrictStr] = None
     source: Optional[StrictStr] = None
-    edge_core_version: Optional[StrictStr] = None
-    sdk_version: Optional[StrictStr] = None
-    driver_image: Optional[StrictStr] = None
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "level", "message", "container_name", "source", "edge_core_version", "sdk_version", "driver_image", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "level", "message", "container_name", "source", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,21 +84,6 @@ class TwinDriverLogSchema(BaseModel):
         if self.source is None and "source" in self.model_fields_set:
             _dict['source'] = None
 
-        # set to None if edge_core_version (nullable) is None
-        # and model_fields_set contains the field
-        if self.edge_core_version is None and "edge_core_version" in self.model_fields_set:
-            _dict['edge_core_version'] = None
-
-        # set to None if sdk_version (nullable) is None
-        # and model_fields_set contains the field
-        if self.sdk_version is None and "sdk_version" in self.model_fields_set:
-            _dict['sdk_version'] = None
-
-        # set to None if driver_image (nullable) is None
-        # and model_fields_set contains the field
-        if self.driver_image is None and "driver_image" in self.model_fields_set:
-            _dict['driver_image'] = None
-
         return _dict
 
     @classmethod
@@ -120,9 +102,6 @@ class TwinDriverLogSchema(BaseModel):
             "message": obj.get("message"),
             "container_name": obj.get("container_name"),
             "source": obj.get("source"),
-            "edge_core_version": obj.get("edge_core_version"),
-            "sdk_version": obj.get("sdk_version"),
-            "driver_image": obj.get("driver_image"),
             "metadata": obj.get("metadata")
         })
         return _obj

@@ -141,6 +141,7 @@ from .constants import (
     SOURCE_TYPE_TELE,
     SOURCE_TYPE_EDIT,
     SOURCE_TYPE_SIM,
+    SOURCE_TYPE_SIM_TELE,
     SOURCE_TYPES,
 )
 
@@ -148,7 +149,7 @@ from .constants import (
 from .scene import Scene
 
 # Version information
-__version__ = "0.3.37"
+__version__ = "0.3.42"
 
 # Define public API
 __all__ = [
@@ -227,6 +228,7 @@ __all__ = [
     "SOURCE_TYPE_TELE",
     "SOURCE_TYPE_EDIT",
     "SOURCE_TYPE_SIM",
+    "SOURCE_TYPE_SIM_TELE",
     "SOURCE_TYPES",
     # Utils
     "TimeReference",

@@ -43,6 +43,7 @@ from cyberwave.rest import (
     AssetGLBFromAttachmentSchema,
     AssetUpdateSchema,
     AttachmentCreateSchema,
+    AttachmentSchema,
     CompleteLargeUploadSchema,
     TwinSchema,
     TwinCreateSchema,
@@ -264,6 +265,40 @@ class EnvironmentManager(BaseResourceManager):
             return environments[0] if environments else None
         except Exception:
             return None
+
+    def create_preview(self, environment_id: str) -> AttachmentSchema:
+        """Generate a static PNG preview for an environment.
+
+        Calls ``POST /api/v1/environments/{uuid}/preview`` and returns the created
+        attachment containing the generated image.
+
+        Args:
+            environment_id: UUID of the environment.
+
+        Returns:
+            AttachmentSchema: Created attachment metadata.
+
+        Example:
+            preview = cw.environments.create_preview(env_id)
+            print(preview.file_url)
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/environments/{uuid}/preview",
+                path_params={"uuid": environment_id},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "AttachmentSchema"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"generate preview for environment {environment_id}")
+            raise
 
     # =========================================================================
     # Universal Schema Export APIs

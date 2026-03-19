@@ -29,7 +29,10 @@ from cyberwave.exceptions import (
     CyberwaveAPIError,
     UnauthorizedException,
 )
-from cyberwave.constants import SOURCE_TYPE_EDGE
+from cyberwave.constants import (
+    SOURCE_TYPE_EDGE,
+    SOURCE_TYPE_SIM,
+)
 
 # Import camera streamers with optional dependency handling
 try:
@@ -47,6 +50,31 @@ try:
 except ImportError:
     _has_realsense = False
     RealSenseStreamer = None
+
+
+_RUNTIME_MODE_MAP = {
+    "live": "live",
+    "real-world": "live",
+    "real": "live",
+    "tele": "live",
+    "teleoperation": "live",
+    "simulation": "simulation",
+    "sim": "simulation",
+    "sim_tele": "simulation",
+}
+
+
+def _resolve_runtime_mode(mode: Optional[str]) -> str:
+    normalized = (mode or "live").lower().strip()
+    if normalized not in _RUNTIME_MODE_MAP:
+        raise ValueError(
+            f"Unknown mode '{mode}'. Use 'live'/'real-world' or 'simulation'."
+        )
+    return _RUNTIME_MODE_MAP[normalized]
+
+
+def _default_state_source_type(runtime_mode: str) -> str:
+    return SOURCE_TYPE_SIM if runtime_mode == "simulation" else SOURCE_TYPE_EDGE
 
 
 class Cyberwave:
@@ -70,8 +98,8 @@ class Cyberwave:
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
         mqtt_use_tls: Enable TLS for MQTT connection
         mqtt_tls_ca_cert: Path to CA cert bundle for MQTT TLS
-        environment_id: Default environment ID
-        workspace_id: Default workspace ID
+        source_type: Optional explicit default state/telemetry source_type override
+        mode: Runtime mode, either live or simulation (defaults to live)
         **config_kwargs: Additional configuration options
     """
 
@@ -86,9 +114,12 @@ class Cyberwave:
         mqtt_use_tls: bool = False,
         mqtt_tls_ca_cert: Optional[str] = None,
         topic_prefix: Optional[str] = None,
-        source_type: Optional[str] = SOURCE_TYPE_EDGE,
+        source_type: Optional[str] = None,
+        mode: Optional[str] = "live",
         **config_kwargs,
     ):
+        runtime_mode = _resolve_runtime_mode(mode)
+
         if not base_url:
             base_url = os.getenv("CYBERWAVE_BASE_URL", DEFAULT_BASE_URL)
 
@@ -122,9 +153,13 @@ class Cyberwave:
             topic_prefix=topic_prefix,
             environment_id=os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
             workspace_id=os.getenv("CYBERWAVE_WORKSPACE_ID", None),
-            source_type=os.getenv("CYBERWAVE_SOURCE_TYPE", SOURCE_TYPE_EDGE),
+            source_type=source_type,
+            runtime_mode=runtime_mode,
             **config_kwargs,
         )
+
+        if source_type is None and not os.getenv("CYBERWAVE_SOURCE_TYPE"):
+            self.config.source_type = _default_state_source_type(runtime_mode)
 
         self._setup_rest_client()
         self._mqtt_client: Optional[CyberwaveMQTTClient] = None
@@ -348,6 +383,43 @@ class Cyberwave:
             return create_twin(self, twin_data, registry_id=registry_id)
         except Exception:
             return create_twin(self, twin_data, registry_id=registry_id)
+
+    def affect(self, mode: str) -> "Cyberwave":
+        """
+        Set whether commands affect the simulation or the real robot.
+
+        This updates the runtime mode used by high-level command helpers such as
+        locomotion APIs, and keeps generic state/telemetry publishers aligned with
+        the selected runtime (`edge` in live mode, `sim` in simulation mode).
+
+        Args:
+            mode: ``"simulation"`` (or ``"sim"``) to target the simulated
+                  environment, ``"live"`` / ``"real-world"`` (or
+                  ``"real"`` / ``"tele"``) to target the real robot.
+
+        Returns:
+            self, for method chaining.
+
+        Example:
+            >>> cw = Cyberwave()
+            >>> cw.affect("simulation")
+            >>> rover.move_forward(1.0)        # moves in simulation
+
+            >>> cw.affect("real-world")
+            >>> rover.move_forward(1.0)        # moves the real robot
+
+            >>> # Per-call override still works:
+            >>> rover.move_forward(1.0, source_type="tele")
+        """
+        runtime_mode = _resolve_runtime_mode(mode)
+        self.config.runtime_mode = runtime_mode
+        self.config.source_type = _default_state_source_type(runtime_mode)
+
+        if self._mqtt_client:
+            self._mqtt_client.disconnect()
+            self._mqtt_client = None
+
+        return self
 
     def configure(
         self,

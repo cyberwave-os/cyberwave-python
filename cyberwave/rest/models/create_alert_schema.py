@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,7 +28,6 @@ class CreateAlertSchema(BaseModel):
     """ # noqa: E501
     name: StrictStr
     description: Optional[StrictStr] = ''
-    media: Optional[StrictStr] = None
     alert_type: Optional[StrictStr] = ''
     severity: Optional[StrictStr] = 'warning'
     source_type: Optional[StrictStr] = 'edge'
@@ -37,8 +36,7 @@ class CreateAlertSchema(BaseModel):
     workflow_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    force: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["name", "description", "media", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "metadata", "force"]
+    __properties: ClassVar[List[str]] = ["name", "description", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -79,11 +77,6 @@ class CreateAlertSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if media (nullable) is None
-        # and model_fields_set contains the field
-        if self.media is None and "media" in self.model_fields_set:
-            _dict['media'] = None
-
         # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
@@ -123,7 +116,6 @@ class CreateAlertSchema(BaseModel):
         _obj = cls.model_validate({
             "name": obj.get("name"),
             "description": obj.get("description") if obj.get("description") is not None else '',
-            "media": obj.get("media"),
             "alert_type": obj.get("alert_type") if obj.get("alert_type") is not None else '',
             "severity": obj.get("severity") if obj.get("severity") is not None else 'warning',
             "source_type": obj.get("source_type") if obj.get("source_type") is not None else 'edge',
@@ -131,8 +123,7 @@ class CreateAlertSchema(BaseModel):
             "environment_uuid": obj.get("environment_uuid"),
             "workflow_uuid": obj.get("workflow_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
-            "metadata": obj.get("metadata"),
-            "force": obj.get("force") if obj.get("force") is not None else False
+            "metadata": obj.get("metadata")
         })
         return _obj
 

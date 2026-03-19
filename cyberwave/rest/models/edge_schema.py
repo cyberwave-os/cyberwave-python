@@ -28,13 +28,12 @@ class EdgeSchema(BaseModel):
     Edge device schema using resolver mixins.
     """ # noqa: E501
     uuid: StrictStr
-    fingerprint: Optional[StrictStr]
     name: StrictStr
     created_at: datetime
     updated_at: datetime
     organization_uuid: Optional[StrictStr]
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "fingerprint", "name", "created_at", "updated_at", "organization_uuid", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "created_at", "updated_at", "organization_uuid", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -75,11 +74,6 @@ class EdgeSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if fingerprint (nullable) is None
-        # and model_fields_set contains the field
-        if self.fingerprint is None and "fingerprint" in self.model_fields_set:
-            _dict['fingerprint'] = None
-
         # set to None if organization_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
@@ -98,7 +92,6 @@ class EdgeSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
-            "fingerprint": obj.get("fingerprint"),
             "name": obj.get("name"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),

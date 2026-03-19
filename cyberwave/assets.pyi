@@ -804,7 +804,12 @@ class CyberwavestandardCamTwin(Twin):
     Digital twin for Standard Camera
     Registry ID: cyberwave/standard-cam
     """
-    pass
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 class CyberwavegenericIpcameraTwin(Twin):
     """
@@ -1046,13 +1051,6 @@ class OpenopenarmTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class CyberwavergbCameraWithDepthEstimationTwin(Twin):
-    """
-    Digital twin for RGB Camera with Depth Estimation
-    Registry ID: cyberwave/rgb-camera-with-depth-estimation
-    """
-    pass
-
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1139,5 +1137,4 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "up/mir-250": Upmir250Twin,
     "agile-x-robotics/tracer-20": AgileXRoboticstracer20Twin,
     "open/openarm": OpenopenarmTwin,
-    "cyberwave/rgb-camera-with-depth-estimation": CyberwavergbCameraWithDepthEstimationTwin,
 }

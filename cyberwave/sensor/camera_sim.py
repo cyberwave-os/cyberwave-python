@@ -561,7 +561,7 @@ class MujocoMultiCameraStreamer:
                 slot._preview_sender_thread = t
                 logger.info("Spawned preview pid=%d for camera %r", proc.pid, slot.sensor_id)
 
-    def capture(self, model, data) -> None:
+    def capture(self, model, data, scene_option=None) -> None:
         """Render each camera offscreen and push frames into their buffers.
 
         Must be called from the **simulation thread** (same thread as :meth:`start`)
@@ -570,15 +570,40 @@ class MujocoMultiCameraStreamer:
         Preview windows are shown via ``cv2.imshow`` + ``cv2.waitKey(1)`` on
         the calling thread — the same pattern used by the ur7 conveyor demo.
 
+        Each camera automatically hides its own body's mesh from its own render
+        (self-occlusion prevention): geoms whose body matches the camera's parent
+        body are made fully transparent after ``update_scene`` but before the pixel
+        capture.  This does NOT affect other cameras' views or the interactive viewer.
+
         Args:
             model: ``mujoco.MjModel`` instance.
             data: ``mujoco.MjData`` instance.
+            scene_option: Optional ``mujoco.MjvOption`` applied to every camera
+                render.  When ``None`` MuJoCo's default options are used.
         """
         for slot in self._slots:
             if slot.renderer is None or slot.buffer is None:
                 continue
             try:
-                slot.renderer.update_scene(data, camera=slot.cam_id)
+                slot.renderer.update_scene(data, camera=slot.cam_id,
+                                           scene_option=scene_option)
+
+                # Per-camera self-hiding: zero-alpha any geom that belongs to
+                # this camera's own parent body so the camera housing doesn't
+                # occlude the robot in the streamed image.
+                # Other cameras still see the body; the interactive viewer is
+                # unaffected because it has its own separate render pipeline.
+                try:
+                    cam_bodyid = int(model.cam_bodyid[slot.cam_id])
+                    scene = slot.renderer.scene
+                    for gi in range(scene.ngeom):
+                        g = scene.geoms[gi]
+                        if (g.objtype == mujoco.mjtObj.mjOBJ_GEOM and
+                                int(model.geom_bodyid[g.objid]) == cam_bodyid):
+                            g.rgba[3] = 0  # fully transparent
+                except Exception:
+                    pass  # non-fatal; worst case the camera body is visible
+
                 frame_rgb: np.ndarray = slot.renderer.render()  # H×W×3 uint8 RGB
                 slot.buffer.add_frame(frame_rgb)
 
@@ -887,13 +912,21 @@ class CyberwaveSimStreaming:
             **stream_kwargs,
         )
 
-    def capture(self, model, data) -> None:
+    def capture(self, model, data, scene_option=None) -> None:
         """Render all cameras and push frames into their WebRTC buffers.
 
         Must be called from the **simulation thread** after every ``mujoco.mj_step``.
+
+        Args:
+            model: ``mujoco.MjModel`` instance.
+            data: ``mujoco.MjData`` instance.
+            scene_option: Optional ``mujoco.MjvOption`` forwarded to each
+                camera renderer.  Pass an option with specific geom groups
+                disabled to hide e.g. the camera body's own mesh from the
+                streamed image without affecting the interactive viewer.
         """
         if self._multi_streamer is not None:
-            self._multi_streamer.capture(model, data)
+            self._multi_streamer.capture(model, data, scene_option=scene_option)
 
     def stop(self) -> None:
         """Stop streaming and release all resources."""
