@@ -24,26 +24,7 @@
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
-      "sensors": [
-        {
-          "id": "wrist_camera",
-          "type": "rgb",
-          "model": null,
-          "offset": {
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
-          }
-        }
-      ]
+      "sensors": []
     }
   },
   "berkeley/berkeley-humanoid": {
@@ -130,6 +111,7 @@
       "sensors": [
         {
           "id": "ANYMal B",
+          "name": "ANYMal B",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -144,10 +126,16 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Depth camera 1",
+          "name": "Depth camera 1",
           "type": "depth",
           "model": null,
           "offset": {
@@ -162,10 +150,16 @@
               "y": -0.6657,
               "z": -0.1458
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Depth camera 2",
+          "name": "Depth camera 2",
           "type": "depth",
           "model": null,
           "offset": {
@@ -180,10 +174,16 @@
               "y": 0.6532,
               "z": -0.1644
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Depth camera 3",
+          "name": "Depth camera 3",
           "type": "depth",
           "model": null,
           "offset": {
@@ -198,10 +198,16 @@
               "y": 0,
               "z": -0.1872
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Depth camera 4",
+          "name": "Depth camera 4",
           "type": "depth",
           "model": null,
           "offset": {
@@ -216,6 +222,11 @@
               "y": 0.9841,
               "z": -0.0006
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -249,6 +260,7 @@
       "sensors": [
         {
           "id": "Skydio X2 camera",
+          "name": "Skydio X2 camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -263,10 +275,16 @@
               "y": 0.9899,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Skydio X2 camera2",
+          "name": "Skydio X2 camera2",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -281,10 +299,16 @@
               "y": 0.9787,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Skydio X2 camera3",
+          "name": "Skydio X2 camera3",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -299,10 +323,16 @@
               "y": -0.1708,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Skydio X2 camera4",
+          "name": "Skydio X2 camera4",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -317,10 +347,16 @@
               "y": 0.146,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Skydio X2 camera5",
+          "name": "Skydio X2 camera5",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -335,10 +371,16 @@
               "y": -0.7257,
               "z": -0.1406
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Skydio X2 camera6",
+          "name": "Skydio X2 camera6",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -353,6 +395,11 @@
               "y": 0.6865,
               "z": 0.0049
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -386,6 +433,7 @@
       "sensors": [
         {
           "id": "Unitree G1 camera",
+          "name": "Unitree G1 camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -400,10 +448,16 @@
               "y": 0.0,
               "z": 0.0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Unitree G1 camera2",
+          "name": "Unitree G1 camera2",
           "type": "depth",
           "model": null,
           "offset": {
@@ -418,6 +472,11 @@
               "y": 0.0,
               "z": 0.0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -450,39 +509,50 @@
       "minimum_frequency_hz": 0,
       "sensors": [
         {
-          "id": "Unitree Go2 camera",
-          "type": "rgb",
-          "model": null,
+          "id": "lidar_4d",
+          "name": "lidar_4d",
+          "type": "lidar_4d",
+          "model": "unitree_4d_lidar_l1",
           "offset": {
             "position": {
-              "x": 0.3296,
-              "y": 0.5026,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
+          },
+          "parameters": {
+            "update_rate": 10.0
           }
         },
         {
-          "id": "Unitree Go2 camera2",
-          "type": "depth",
-          "model": null,
+          "id": "front_camera",
+          "name": "front_camera",
+          "type": "rgb",
+          "model": "go2_hd_camera",
           "offset": {
             "position": {
-              "x": 0.3248,
-              "y": 0.4932,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 30.0,
+            "fovy": 1.5707963267948966
           }
         }
       ]
@@ -656,6 +726,7 @@
       "sensors": [
         {
           "id": "Booster Robotics T1 camera",
+          "name": "Booster Robotics T1 camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -670,10 +741,16 @@
               "y": 0.0,
               "z": 0.0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "Booster Robotics T1 camera2",
+          "name": "Booster Robotics T1 camera2",
           "type": "depth",
           "model": null,
           "offset": {
@@ -688,6 +765,11 @@
               "y": 0.0,
               "z": 0.0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -721,6 +803,7 @@
       "sensors": [
         {
           "id": "Boston Dynamics Spot camera",
+          "name": "Boston Dynamics Spot camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -735,6 +818,11 @@
               "y": 0.0,
               "z": 0.0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -768,6 +856,7 @@
       "sensors": [
         {
           "id": "FFTAI GR2",
+          "name": "FFTAI GR2",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -782,6 +871,11 @@
               "y": 0.0,
               "z": -0.0501
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -955,6 +1049,7 @@
       "sensors": [
         {
           "id": "Disney BDX Camera",
+          "name": "Disney BDX Camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -969,6 +1064,11 @@
               "y": 0.0,
               "z": 0.0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1114,6 +1214,7 @@
       "sensors": [
         {
           "id": "head_camera",
+          "name": "head_camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1128,6 +1229,11 @@
               "y": 0,
               "z": -0.2403
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1161,6 +1267,7 @@
       "sensors": [
         {
           "id": "front_camera",
+          "name": "front_camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1175,6 +1282,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1292,6 +1404,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1306,6 +1419,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1339,6 +1457,7 @@
       "sensors": [
         {
           "id": "head_camera",
+          "name": "head_camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1353,10 +1472,16 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "right_hand_camera",
+          "name": "right_hand_camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1371,6 +1496,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1432,6 +1562,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1446,10 +1577,16 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         },
         {
           "id": "lidar",
+          "name": "lidar",
           "type": "lidar_3d",
           "model": null,
           "offset": {
@@ -1464,6 +1601,9 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "update_rate": null
           }
         }
       ]
@@ -1525,6 +1665,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1539,6 +1680,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1600,6 +1746,7 @@
       "sensors": [
         {
           "id": "sensor_1772020761958",
+          "name": "sensor_1772020761958",
           "type": "depth",
           "model": null,
           "offset": {
@@ -1614,6 +1761,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1647,6 +1799,7 @@
       "sensors": [
         {
           "id": "sensor_1772021035094",
+          "name": "sensor_1772021035094",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1661,6 +1814,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1694,6 +1852,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1708,6 +1867,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -1965,6 +2129,7 @@
       "sensors": [
         {
           "id": "imu_sensor",
+          "name": "imu_sensor",
           "type": "lidar_3d",
           "model": null,
           "offset": {
@@ -1979,10 +2144,14 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "update_rate": null
           }
         },
         {
           "id": "frontcamera",
+          "name": "frontcamera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -1997,6 +2166,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2030,6 +2204,7 @@
       "sensors": [
         {
           "id": "sensor_1772020293962",
+          "name": "sensor_1772020293962",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2044,6 +2219,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2077,6 +2257,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "imu",
           "model": null,
           "offset": {
@@ -2091,6 +2272,9 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "update_rate": null
           }
         }
       ]
@@ -2180,6 +2364,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2194,6 +2379,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2336,7 +2526,32 @@
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 30,
       "minimum_frequency_hz": 0,
-      "sensors": []
+      "sensors": [
+        {
+          "id": "observer_camera",
+          "name": "observer_camera",
+          "type": "rgb",
+          "model": null,
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": -0.5,
+              "y": -0.5,
+              "z": 0.5
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 30.0
+          }
+        }
+      ]
     }
   },
   "intel/realsensed455": {
@@ -2366,21 +2581,27 @@
       "minimum_frequency_hz": 0,
       "sensors": [
         {
-          "id": "depth_camera",
+          "id": "default",
+          "name": "default",
           "type": "depth",
           "model": "Realsense D455",
           "offset": {
             "position": {
               "x": 0,
-              "y": 0.0217,
-              "z": 0.0203
+              "y": 0,
+              "z": 0.0241
             },
             "rotation": {
-              "w": 0.7118,
-              "x": 0,
-              "y": -0.7023,
-              "z": 0
+              "w": 0.4983,
+              "x": -0.502,
+              "y": -0.498,
+              "z": 0.5017
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2414,6 +2635,7 @@
       "sensors": [
         {
           "id": "sensor_1772019624357",
+          "name": "sensor_1772019624357",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2428,6 +2650,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2461,13 +2688,14 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": "logitech c275",
           "offset": {
             "position": {
               "x": 0.0111,
-              "y": 0.024,
-              "z": -0.0494
+              "y": 0.0579,
+              "z": 0.0152
             },
             "rotation": {
               "w": 0.7023,
@@ -2475,6 +2703,11 @@
               "y": 0.7119,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2508,6 +2741,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": " Pi-cameraV3",
           "offset": {
@@ -2522,6 +2756,11 @@
               "y": 0,
               "z": 0.7485
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2533,11 +2772,11 @@
     "capabilities": {
       "has_joints": false,
       "can_actuate": false,
-      "can_locomote": true,
+      "can_locomote": false,
       "can_fly": false,
       "has_legs": false,
       "has_wheels": false,
-      "locomotion_mode": "wheeled",
+      "locomotion_mode": "stationary",
       "locomotion_config": {
         "dof": 0,
         "max_linear_velocity": 0.0,
@@ -2546,7 +2785,7 @@
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
-      "power_source": null,
+      "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": null,
       "navigation_obstacle_avoidance": false,
@@ -2555,6 +2794,7 @@
       "sensors": [
         {
           "id": "sensor_1772019530289",
+          "name": "sensor_1772019530289",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2564,11 +2804,16 @@
               "z": 0
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 0.5,
+              "x": -0.5,
+              "y": -0.5,
+              "z": 0.5
             }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 30.0
           }
         }
       ]
@@ -2602,6 +2847,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2616,6 +2862,11 @@
               "y": -0.5702,
               "z": 0.4191
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2649,6 +2900,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2663,6 +2915,11 @@
               "y": -0.6995,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2696,6 +2953,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2710,6 +2968,11 @@
               "y": -0.9993,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2766,6 +3029,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2780,6 +3044,11 @@
               "y": -0.6882,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2813,6 +3082,7 @@
       "sensors": [
         {
           "id": "sensor_1772019274161",
+          "name": "sensor_1772019274161",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2827,6 +3097,11 @@
               "y": 0.7038,
               "z": 0.0023
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2860,6 +3135,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2874,6 +3150,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2907,6 +3188,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -2921,6 +3203,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -2982,6 +3269,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": " Logitech C920",
           "offset": {
@@ -2996,6 +3284,11 @@
               "y": -0.715,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -3029,6 +3322,7 @@
       "sensors": [
         {
           "id": "camera",
+          "name": "camera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -3043,6 +3337,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -3103,13 +3402,14 @@
       "minimum_frequency_hz": 0,
       "sensors": [
         {
-          "id": "camera",
+          "id": "default",
+          "name": "default",
           "type": "rgb",
           "model": null,
           "offset": {
             "position": {
-              "x": 0.0564,
-              "y": 0.2246,
+              "x": 0,
+              "y": 0,
               "z": 0
             },
             "rotation": {
@@ -3118,6 +3418,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30
           }
         }
       ]
@@ -3151,6 +3456,7 @@
       "sensors": [
         {
           "id": "Lidar1",
+          "name": "Lidar1",
           "type": "lidar_3d",
           "model": null,
           "offset": {
@@ -3165,10 +3471,14 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "update_rate": null
           }
         },
         {
           "id": "FrontCamera",
+          "name": "FrontCamera",
           "type": "rgb",
           "model": null,
           "offset": {
@@ -3183,6 +3493,11 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
           }
         }
       ]
@@ -3300,6 +3615,7 @@
       "sensors": [
         {
           "id": "front_laser_link",
+          "name": "front_laser_link",
           "type": "lidar_3d",
           "model": null,
           "offset": {
@@ -3314,10 +3630,14 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "update_rate": null
           }
         },
         {
           "id": "back_laser_link",
+          "name": "back_laser_link",
           "type": "lidar_3d",
           "model": null,
           "offset": {
@@ -3332,6 +3652,9 @@
               "y": 0,
               "z": 0
             }
+          },
+          "parameters": {
+            "update_rate": null
           }
         }
       ]
@@ -3365,7 +3688,7 @@
       "sensors": []
     }
   },
-  "open/openarm": {
+  "enactic/openarm": {
     "uuid": "39d437e7-25eb-45f8-b427-33f858a64ced",
     "name": "OpenArm",
     "capabilities": {
@@ -3385,6 +3708,221 @@
       "manipulator_count": 2,
       "payload_capacity_kg": 4,
       "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    }
+  },
+  "cyberwave/rgb-camera-with-depth-estimation": {
+    "uuid": "5bae9c0e-941b-4a15-ac73-4cb060e46ac7",
+    "name": "RGB Camera with Depth Estimation",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "default",
+          "name": "default",
+          "type": "depth",
+          "model": "Estimated Depth Camera",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
+          }
+        }
+      ]
+    }
+  },
+  "cyberwave/robot-mat": {
+    "uuid": "4b713269-1dfc-4801-8d73-528b6d598dd8",
+    "name": "Robot Mat",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    }
+  },
+  "orbbec/gemini-355-lg": {
+    "uuid": "ea921c6e-d6b3-489a-9a33-40395a3a2d54",
+    "name": "Gemini 355Lg",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "Default",
+          "name": "Default",
+          "type": "rgb",
+          "model": "Orbbec Gemini 355 Lg",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0.0596
+            },
+            "rotation": {
+              "w": 0.7133,
+              "x": -0.0034,
+              "y": -0.7008,
+              "z": 0.0018
+            }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
+          }
+        }
+      ]
+    }
+  },
+  "cyberwave/35555555": {
+    "uuid": "dfefa8b9-bbca-4a87-96f4-54c18814062c",
+    "name": "Gemini 355",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "Default",
+          "name": "Default",
+          "type": "depth",
+          "model": "Orbecc 355",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0.0427
+            },
+            "rotation": {
+              "w": 0.7054,
+              "x": 0,
+              "y": -0.7088,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30
+          }
+        }
+      ]
+    }
+  },
+  "unitree/lidar-l2": {
+    "uuid": "6a6c39ab-6bd9-4d08-8adc-f6c5b974bad2",
+    "name": "Unitree Lidar L2",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": true,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "wheeled",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
       "power_capacity_wh": -1,
       "navigation_autonomy_level": null,
       "navigation_obstacle_avoidance": false,

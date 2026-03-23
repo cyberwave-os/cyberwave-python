@@ -142,9 +142,10 @@ class BaseVideoStreamer(abc.ABC):
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
             enable_health_check: Whether to enable automatic health check reporting (default: True)
-            camera_name: Optional sensor/camera identifier. When a twin has multiple sensors
-                (e.g. from capabilities.sensors), each stream uses a distinct camera_name.
-                Included in WebRTC offer/datachannel/camera_sync payloads for backend routing.
+            camera_name: Sensor/camera identifier used for WebRTC signaling routing.
+                Required when a twin has multiple streams to prevent answer collisions.
+                Pass camera_name='default' if this is the only video stream on this twin,
+                or use a unique name per stream (e.g. 'rgb', 'depth', 'realsense').
         """
         self.client = client
         self.twin_uuid: Optional[str] = twin_uuid
@@ -209,8 +210,6 @@ class BaseVideoStreamer(abc.ABC):
         """
         prefix = self.client.topic_prefix
         topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/telemetry"
-        # Always include sensor - same as webrtc-offer for consistency
-        sensor = self.camera_name if self.camera_name is not None else "default"
 
         payload = {
             "type": "camera_sync_frame",
@@ -220,7 +219,7 @@ class BaseVideoStreamer(abc.ABC):
             "timestamp_monotonic": timestamp_monotonic,
             "track_id": self.streamer.id if self.streamer else None,
             "twin_uuid": self.twin_uuid,
-            "sensor": sensor,
+            "sensor": self.camera_name,
         }
         self._publish_message(topic, payload)
         logger.info(
@@ -488,8 +487,6 @@ class BaseVideoStreamer(abc.ABC):
             stream_attributes = self.streamer.get_stream_attributes()
 
         # Always include sensor for consistency with sync frame and backend routing
-        sensor = self.camera_name if self.camera_name is not None else "default"
-
         offer_payload = {
             "target": "backend",
             "sender": "edge",
@@ -498,7 +495,7 @@ class BaseVideoStreamer(abc.ABC):
             "timestamp": time.time(),
             "recording": self._should_record,
             "stream_attributes": stream_attributes,
-            "sensor": sensor,
+            "sensor": self.camera_name,
             "track_id": self.streamer.id if self.streamer else None,
         }
 
@@ -584,14 +581,16 @@ class BaseVideoStreamer(abc.ABC):
                     return
                 elif payload.get("type") == "answer":
                     if payload.get("target") == "edge":
+                        # Reject answers whose SDP doesn't contain a video track —
+                        # this is a backwards-compatible way to distinguish audio
+                        # answers from video answers without relying on the sensor field.
+                        if "m=video" not in payload.get("sdp", ""):
+                            logger.debug("Ignoring answer with no m=video (likely audio stream)")
+                            return
                         # When multiple streams per twin, answer includes "sensor" (or "camera")
                         # to target a specific stream. Accept only when sensor matches.
                         answer_sensor = payload.get("sensor") or payload.get("camera")
-                        expected = (
-                            self.camera_name
-                            if self.camera_name is not None
-                            else "default"
-                        )
+                        expected = self.camera_name
                         if answer_sensor is None or answer_sensor == expected:
                             # Accept answer if sensor matches OR if no sensor specified (backwards compat)
                             logger.info(
@@ -993,10 +992,29 @@ except ImportError:
 
 from .manager import CameraStreamManager, run_streamer_in_background  # noqa: E402
 
+# Audio imports
+from .audio_microphone import (  # noqa: E402
+    BaseAudioTrack,
+    BaseAudioStreamer,
+    MicrophoneAudioTrack,
+    MicrophoneAudioStreamer,
+    AUDIO_PTIME,
+    DEFAULT_SAMPLE_RATE,
+)
+# Backward-compatibility aliases
+CallbackAudioTrack = MicrophoneAudioTrack
+CallbackAudioStreamer = MicrophoneAudioStreamer
+
 __all__ = [
     # Base classes
     "BaseVideoTrack",
     "BaseVideoStreamer",
+    "BaseAudioTrack",
+    "BaseAudioStreamer",
+    "MicrophoneAudioTrack",
+    "MicrophoneAudioStreamer",
+    "CallbackAudioTrack",
+    "CallbackAudioStreamer",
     # Configuration
     "CameraType",
     "Resolution",
@@ -1027,6 +1045,8 @@ __all__ = [
     "run_streamer_in_background",
     # Constants
     "DEFAULT_TURN_SERVERS",
+    "AUDIO_PTIME",
+    "DEFAULT_SAMPLE_RATE",
 ]
 
 # Simulation (MuJoCo) exports are only available when mujoco is installed

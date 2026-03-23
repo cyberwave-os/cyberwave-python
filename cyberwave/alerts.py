@@ -282,7 +282,7 @@ class TwinAlertManager:
             media: Optional public URL to supporting media (PNG, GIF, or MP4).
             alert_type: Machine-readable code (e.g. ``calibration_needed``).
             severity: One of ``info``, ``warning``, ``error``, ``critical``.
-            source_type: One of ``edge``, ``cloud``, ``workflow``.
+            source_type: One of ``edge``, ``simulation``, ``cloud``, ``workflow``.
             environment_uuid: Optionally attach to an environment.
             workflow_uuid: Optionally attach to a workflow.
             workspace_uuid: Workspace to associate the alert with.

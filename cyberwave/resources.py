@@ -233,6 +233,135 @@ class EnvironmentManager(BaseResourceManager):
             self._handle_error(e, "create environment")
             raise  # For type checker
 
+    def get_universal_schema(self, environment_id: str) -> Optional[Dict[str, Any]]:
+        """Get the environment-level base universal schema.
+
+        This is the schema stored directly on the environment (not the composed
+        schema from all twins). It is used as the base when composing the full
+        scene schema — for example, to author cross-twin collision excludes.
+
+        Returns ``None`` if no base schema has been set on this environment.
+
+        Args:
+            environment_id: UUID of the environment.
+
+        Returns:
+            The stored ``universal_schema`` dict, or ``None``.
+
+        Example:
+            schema = cw.environments.get_universal_schema(env_id)
+            if schema:
+                print(schema.get("collision_config", {}).get("excludes", []))
+        """
+        try:
+            env = self.get(environment_id)
+            return env.universal_schema
+        except Exception as e:
+            self._handle_error(e, f"get universal schema for environment {environment_id}")
+            raise
+
+    def set_universal_schema(
+        self, environment_id: str, schema: Optional[Dict[str, Any]]
+    ) -> EnvironmentSchema:
+        """Set (replace) the environment-level base universal schema.
+
+        The schema is stored on the environment and used as the base when
+        composing the full scene. Use this to persist environment-wide settings
+        such as cross-twin collision excludes that cannot be expressed at the
+        individual twin level.
+
+        Passing ``None`` clears the stored schema.
+
+        Args:
+            environment_id: UUID of the environment.
+            schema: The new base schema dict, or ``None`` to clear it.
+
+        Returns:
+            Updated EnvironmentSchema.
+
+        Example:
+            cw.environments.set_universal_schema(
+                env_id,
+                {
+                    "metadata": {"name": f"env_{env_id}", "description": ""},
+                    "collision_config": {
+                        "excludes": [{"body1": "foo__link", "body2": "bar__link"}]
+                    },
+                },
+            )
+        """
+        try:
+            env = self.get(environment_id)
+            update_schema = EnvironmentCreateSchema(
+                name=env.name,
+                description=env.description,
+                universal_schema=schema,
+            )
+            return self.api.src_app_api_environments_update_environment(
+                environment_id, update_schema
+            )
+        except Exception as e:
+            self._handle_error(e, f"set universal schema for environment {environment_id}")
+            raise
+
+    def patch_universal_schema(
+        self,
+        environment_id: str,
+        path: str,
+        value: Any,
+        op: str = "replace",
+    ) -> Dict[str, Any]:
+        """Patch the environment's base universal schema at a JSON Pointer path.
+
+        This is the environment-level counterpart of
+        ``twins.patch_universal_schema`` and ``assets.patch_universal_schema``.
+        Use it to author environment-wide settings — such as cross-twin collision
+        excludes — that cannot be expressed at the individual twin level.
+
+        The schema is created fresh (empty CommonSchema with metadata) if none
+        exists yet, so this is safe to call on a freshly created environment.
+
+        Args:
+            environment_id: UUID of the environment.
+            path: JSON Pointer path (e.g. ``"/collision_config/excludes"``).
+            value: Value to set at the path.
+            op: ``"add"`` or ``"replace"`` (default: ``"replace"``).
+
+        Returns:
+            Dict with keys:
+                - ``schema``: the updated full base schema
+                - ``updated``: dict with ``op`` and ``path`` that were applied
+
+        Example:
+            # Add a cross-twin collision exclude
+            result = cw.environments.patch_universal_schema(
+                env_id,
+                path="/collision_config/excludes",
+                value=[{"body1": "abc__gripper", "body2": "def__cube_link"}],
+                op="add",
+            )
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="PATCH",
+                resource_path="/api/v1/environments/{uuid}/universal-schema",
+                path_params={"uuid": environment_id},
+                body={"op": op, "path": path, "value": value},
+                header_params={"Content-Type": "application/json", "Accept": "application/json"},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(
+                e, f"patch universal schema for environment {environment_id}"
+            )
+            raise
+
     def delete(self, environment_id: str, project_id: str) -> None:
         """Delete an environment"""
         try:
@@ -981,7 +1110,11 @@ class TwinManager(BaseResourceManager):
             raise  # For type checker
 
     def get_latest_frame(
-        self, twin_id: str, sensor_id: Optional[str] = None, mock: bool = False
+        self,
+        twin_id: str,
+        sensor_id: Optional[str] = None,
+        mock: bool = False,
+        source_type: Optional[str] = None,
     ) -> bytes:
         """Get the latest JPEG frame for a twin.
 
@@ -989,6 +1122,8 @@ class TwinManager(BaseResourceManager):
             twin_id: UUID of the twin.
             sensor_id: Optional camera sensor id for multi-camera twins.
             mock: If true, request deterministic mock JPEG bytes from the backend.
+            source_type: Optional source selector (``"sim"`` or ``"tele"``).
+                Use ``"sim"`` to request a virtual camera frame from simulation.
 
         Returns:
             JPEG bytes.
@@ -999,6 +1134,17 @@ class TwinManager(BaseResourceManager):
                 query_params.append(("sensor_id", sensor_id))
             if mock:
                 query_params.append(("mock", "true"))
+            if source_type:
+                normalized_source_type = source_type.strip().lower()
+                if normalized_source_type in {"simulation", "sim"}:
+                    query_params.append(("source_type", "sim"))
+                elif normalized_source_type in {
+                    "real-world",
+                    "real",
+                    "tele",
+                    "teleoperation",
+                }:
+                    query_params.append(("source_type", "tele"))
 
             _param = self.api.api_client.param_serialize(
                 method="GET",
@@ -1671,4 +1817,25 @@ class TwinManager(BaseResourceManager):
             )
         except Exception as e:
             self._handle_error(e, f"update calibration for twin {twin_id}")
+            raise
+
+    def delete_calibration(
+        self,
+        twin_id: str,
+        robot_type: Optional[str] = None,
+    ) -> None:
+        """
+        Delete calibration data for a twin.
+
+        Args:
+            twin_id: UUID of the twin
+            robot_type: Optional. "leader" or "follower" to clear only that type.
+                       If None, clears both leader and follower calibration.
+        """
+        try:
+            self.api.src_app_api_twins_delete_twin_calibration(
+                uuid=twin_id, robot_type=robot_type
+            )
+        except Exception as e:
+            self._handle_error(e, f"delete calibration for twin {twin_id}")
             raise

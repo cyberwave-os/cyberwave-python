@@ -48,12 +48,28 @@ cw = Cyberwave(
     api_key="your_api_key_here",
 )
 
+# For simulator-first scripts, initialize with simulation defaults
+sim_cw = Cyberwave(
+    api_key="your_api_key_here",
+    mode="simulation",
+)
+
 # Create a digital twin from an asset
 robot = cw.twin("the-robot-studio/so101")
 
-# Change position and rotation in the environemtn
-robot.edit_positon(x=1.0, y=0.0, z=0.5)
+# If no default environment is configured, this creates a "Quickstart Environment"
+# and places the twin there automatically.
+
+# Change position and rotation in the environment editor
+robot.edit_position(x=1.0, y=0.0, z=0.5)
 robot.edit_rotation(yaw=90)  # degrees
+
+# For locomotion twins, declare whether you want to affect the simulation
+# or the real robot, then call movement methods without source_type arguments
+rover = cw.twin("unitree/go2")
+cw.affect("simulation")   # or cw.affect("real-world") for the physical robot
+rover.move_forward(distance=1.0)
+rover.turn_left(angle=1.57)
 
 # Move the robot arm to 30 degrees
 robot.joints.set("1", 30)
@@ -105,6 +121,15 @@ robot = cw.twin(assets[0].registry_id) # the registry_id is the unique identifie
 # Edit the twin to a specific position
 robot.edit_position([1.0, 0.5, 0.0])
 
+# Navigate locomotion twins
+# Use affect() to set whether commands go to the simulation or the real robot
+cw.affect("simulation")   # or cw.affect("real-world")
+rover = cw.twin("unitree/go2")
+rover.move_forward(distance=1.0)
+rover.move_backward(distance=0.5)
+rover.turn_left(angle=1.57)
+rover.turn_right(angle=1.57)
+
 # Update scale
 robot.edit_scale(x=1.5, y=1.5, z=1.5)
 
@@ -117,6 +142,17 @@ robot.joints.set("shoulder_joint", 45, degrees=True)
 # You can also go a get_or_create for a specific twin an environment you created:
  robot = cw.twin("the-robot-studio/so101", environment_id="YOUR_ENVIRONMENT_ID")
 ```
+
+Move an existing twin to another environment:
+
+```python
+robot = cw.twin("the-robot-studio/so101")
+robot.add_to_environment("TARGET_ENVIRONMENT_UUID")
+```
+
+`add_to_environment()` creates a deep copy of the twin in the target environment, marks the original twin as deleted, and also deletes the source environment if it has no twins left.
+
+`move()` and `rotate()` are deprecated. Use `move_forward()`, `move_backward()`, `turn_left()`, and `turn_right()` for locomotion commands, or `edit_rotation()` to directly set orientation.
 
 ### Uploading Large GLB Assets
 
@@ -159,6 +195,19 @@ frames = robot.capture_frames(5, format="numpy")             # list of arrays
 
 # For multi-camera twins, specify a sensor
 wrist = robot.capture_frame("numpy", sensor_id="wrist_cam")
+```
+
+`capture_frame()` and `get_latest_frame()` follow your active `cw.affect(...)` mode by default:
+
+- `cw.affect("real-world")` → returns the latest real sensor frame
+- `cw.affect("simulation")` → returns the rendered virtual camera frame
+
+You can still override per call with `source_type`:
+
+```python
+cw.affect("simulation")
+sim_raw = robot.get_latest_frame()                    # virtual camera frame
+real_raw = robot.get_latest_frame(source_type="tele")  # force real-world frame
 ```
 
 There's also a `twin.camera` namespace with convenience methods:
@@ -262,6 +311,35 @@ finally:
     cw.disconnect()
 ```
 
+### Audio streaming (microphone)
+
+Stream microphone audio to a digital twin over WebRTC (Opus, 48 kHz mono). Use a `get_audio()` callback that returns 20 ms of s16 mono audio (1920 bytes) or `None` for silence.
+
+```python
+import asyncio
+from cyberwave import Cyberwave
+from cyberwave.sensor.audio_microphone import MicrophoneAudioStreamer
+
+def get_audio() -> bytes | None:
+    # Return 20 ms s16 mono 48 kHz (1920 bytes), or None for silence
+    # e.g. read from PyAudio, sounddevice, or robot WebRTC (Go2)
+    return bytes(1920)  # or your capture
+
+cw = Cyberwave()
+streamer = MicrophoneAudioStreamer(
+    cw.mqtt,
+    get_audio,
+    twin_uuid="your-twin-uuid",
+    sensor_name="mic",
+)
+await streamer.start()
+# ... run until done ...
+await streamer.stop()
+cw.disconnect()
+```
+
+For Unitree Go2 robot microphone streaming, see [examples/audio_stream.py](examples/audio_stream.py) (requires `unitree_webrtc_connect`). For combined video + audio, see [examples/multimedia_stream.py](examples/multimedia_stream.py).
+
 ## Examples
 
 Check the [examples](examples) directory for complete examples:
@@ -270,6 +348,7 @@ Check the [examples](examples) directory for complete examples:
 - Multi-robot coordination
 - Real-time synchronization
 - Joint manipulation for robot arms
+- Audio streaming (e.g. Go2 microphone) — [audio_stream.py](examples/audio_stream.py), [multimedia_stream.py](examples/multimedia_stream.py)
 
 ## Advanced Usage
 
@@ -299,31 +378,39 @@ all_joints = robot.joints.get_all()
 
 To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
 
-### Changing data source
+### Simulation vs. Real World
 
-By default, the SDK will send data marked as arriving from the real world. If you want to send data from a simulated environment using the SDK, you can initialize the SDK as follows:
-
-```python
-from cyberwave import Cyberwave
-
-cw = Cyberwave(source_type="sim")
-```
-
-You can also use the SDK as a client of the Studio editor - making it appear as if it was just another editor on the web app. To do so, you can initialize it as follows:
+Use `mode="simulation"` when you want a simulator-first client with simulation defaults for state publishing, or use `cw.affect()` to switch locomotion/control commands between the simulation and the real robot on an existing client.
 
 ```python
 from cyberwave import Cyberwave
 
-cw = Cyberwave(source_type="edit")
+cw = Cyberwave(mode="simulation")
+
+# In simulation mode, state/telemetry publishers default to source_type="sim"
+# and locomotion/control helpers target the simulator.
+rover = cw.twin("unitree/go2")
+rover.move_forward(1.0)   # moves the digital twin in Cyberwave
+
+# Switch command helpers to the real robot
+cw.affect("real-world")
+rover.move_forward(1.0)   # moves the physical robot
+
+# You can still override per-call when needed
+rover.move_forward(1.0, source_type="tele")
 ```
 
-Lastly, if you want to have your SDK act as a remote teleoperator, sending commands to the actual device from the cloud, you can init the SDK as follows:
+`affect()` is chainable: `cw.affect("simulation").twin("unitree/go2")`.
 
-```python
-from cyberwave import Cyberwave
+Runtime mode defaults:
 
-cw = Cyberwave(source_type="tele")
-```
+- Live mode publishes state updates as `edge`.
+- Simulation mode publishes state updates as `sim`.
+- Locomotion and other control helpers target `tele` in live mode and `sim_tele` in simulation mode.
+
+For lower-level integrations you can still pass `source_type` explicitly or use the `CYBERWAVE_SOURCE_TYPE` environment variable. Accepted raw values are `"sim"`, `"sim_tele"`, `"tele"`, `"edge"`, and `"edit"`. Legacy locomotion calls that pass `"sim"` are still accepted and normalized to `"sim_tele"` for simulator control commands.
+
+This same mode selection is also used by camera frame grabs (`get_latest_frame()` and `capture_frame()`), so frame retrieval stays consistent with the mode your script is affecting.
 
 ### Camera & Sensor discovery
 

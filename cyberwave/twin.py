@@ -796,22 +796,49 @@ class Twin:
             raise CyberwaveError(f"Failed to delete twin: {e}")
 
     def get_latest_frame(
-        self, sensor_id: Optional[str] = None, mock: bool = False
+        self,
+        sensor_id: Optional[str] = None,
+        mock: bool = False,
+        source_type: Optional[str] = None,
     ) -> bytes:
         """Get the latest JPEG frame available for this twin.
 
         Args:
             sensor_id: Optional camera sensor id for multi-camera twins.
             mock: If true, request deterministic mock JPEG bytes.
+            source_type: Optional ``"sim"``/``"tele"`` override.
+                When omitted, this method follows ``cw.affect(...)``.
 
         Returns:
             JPEG bytes from the latest frame.
         """
         try:
+            resolved_source_type = source_type
+            if resolved_source_type is None:
+                client_config = getattr(self.client, "config", None)
+                configured_source_type = getattr(client_config, "source_type", None)
+                if isinstance(configured_source_type, str):
+                    normalized_source_type = configured_source_type.strip().lower()
+                    if normalized_source_type in {"sim", "simulation"}:
+                        resolved_source_type = "sim"
+                    elif normalized_source_type in {
+                        "tele",
+                        "real-world",
+                        "real",
+                        "teleoperation",
+                    }:
+                        resolved_source_type = "tele"
+
+            manager_kwargs: Dict[str, Any] = {
+                "sensor_id": sensor_id,
+                "mock": mock,
+            }
+            if resolved_source_type in {"sim", "tele"}:
+                manager_kwargs["source_type"] = resolved_source_type
+
             return self.client.twins.get_latest_frame(  # type: ignore
                 self.uuid,
-                sensor_id=sensor_id,
-                mock=mock,
+                **manager_kwargs,
             )
         except Exception as e:
             raise CyberwaveError(
@@ -824,6 +851,7 @@ class Twin:
         *,
         sensor_id: Optional[str] = None,
         mock: bool = False,
+        source_type: Optional[str] = None,
     ) -> Any:
         """Capture a single frame from the twin's camera sensor.
 
@@ -840,6 +868,8 @@ class Twin:
             sensor_id: Sensor id for multi-camera twins.  Omit when the twin
                 has a single RGB sensor.
             mock: Request a deterministic mock frame (useful for testing).
+            source_type: Optional source selector (``"sim"``/``"tele"``).
+                When omitted, this follows the active ``cw.affect(...)`` mode.
 
         Returns:
             Frame in the requested format.
@@ -854,7 +884,11 @@ class Twin:
             >>> frame_pil  = twin.capture_frame("pil")             # PIL Image
             >>> frame_raw  = twin.capture_frame("bytes")           # raw JPEG bytes
         """
-        jpeg_bytes = self.get_latest_frame(sensor_id=sensor_id, mock=mock)
+        jpeg_bytes = self.get_latest_frame(
+            sensor_id=sensor_id,
+            mock=mock,
+            source_type=source_type,
+        )
         return _decode_frame(jpeg_bytes, format)
 
     def capture_frames(
@@ -865,6 +899,7 @@ class Twin:
         *,
         sensor_id: Optional[str] = None,
         mock: bool = False,
+        source_type: Optional[str] = None,
     ) -> Any:
         """Capture multiple frames with a delay between each grab.
 
@@ -879,6 +914,7 @@ class Twin:
                 formats the return value is a ``list``.
             sensor_id: Sensor id for multi-camera twins.
             mock: Request deterministic mock frames.
+            source_type: Optional source selector (``"sim"``/``"tele"``).
 
         Returns:
             A folder path (``format="path"``) or a list of frames.
@@ -896,7 +932,11 @@ class Twin:
         if format == "path":
             folder = _tempfile.mkdtemp(prefix="cyberwave_frames_")
             for i in range(count):
-                jpeg_bytes = self.get_latest_frame(sensor_id=sensor_id, mock=mock)
+                jpeg_bytes = self.get_latest_frame(
+                    sensor_id=sensor_id,
+                    mock=mock,
+                    source_type=source_type,
+                )
                 frame_path = os.path.join(folder, f"frame_{i:04d}.jpg")
                 with open(frame_path, "wb") as f:
                     f.write(jpeg_bytes)
@@ -906,7 +946,12 @@ class Twin:
 
         frames = []
         for i in range(count):
-            frame = self.capture_frame(format=format, sensor_id=sensor_id, mock=mock)
+            frame = self.capture_frame(
+                format=format,
+                sensor_id=sensor_id,
+                mock=mock,
+                source_type=source_type,
+            )
             frames.append(frame)
             if i < count - 1:
                 _time.sleep(interval_ms / 1000.0)
@@ -1235,6 +1280,16 @@ class Twin:
         return self.client.twins.update_calibration(
             self.uuid, joint_calibration, robot_type
         )
+
+    def delete_calibration(self, robot_type: Optional[str] = None) -> None:
+        """
+        Delete calibration data for this twin.
+
+        Args:
+            robot_type: Optional. "leader" or "follower" to clear only that type.
+                       If None, clears both leader and follower calibration.
+        """
+        self.client.twins.delete_calibration(self.uuid, robot_type=robot_type)
 
 
 class CameraTwin(Twin):

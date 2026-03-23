@@ -18,8 +18,9 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.processed_dataset_schema import ProcessedDatasetSchema
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -31,11 +32,18 @@ class DatasetSchema(BaseModel):
     episodes: List[StrictStr]
     description: StrictStr
     metadata: Dict[str, Any]
+    processed_datasets: List[ProcessedDatasetSchema]
+    processing_status: StrictStr
+    is_ready: StrictBool
+    total_episodes: StrictInt
+    processed_episodes: StrictInt
+    failed_episodes: StrictInt
+    failed_episode_uuids: List[StrictStr]
     created_at: datetime
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "processed_datasets", "processing_status", "is_ready", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "created_at", "updated_at", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -76,6 +84,13 @@ class DatasetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in processed_datasets (list)
+        _items = []
+        if self.processed_datasets:
+            for _item_processed_datasets in self.processed_datasets:
+                if _item_processed_datasets:
+                    _items.append(_item_processed_datasets.to_dict())
+            _dict['processed_datasets'] = _items
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -102,6 +117,13 @@ class DatasetSchema(BaseModel):
             "episodes": obj.get("episodes"),
             "description": obj.get("description"),
             "metadata": obj.get("metadata"),
+            "processed_datasets": [ProcessedDatasetSchema.from_dict(_item) for _item in obj["processed_datasets"]] if obj.get("processed_datasets") is not None else None,
+            "processing_status": obj.get("processing_status"),
+            "is_ready": obj.get("is_ready"),
+            "total_episodes": obj.get("total_episodes"),
+            "processed_episodes": obj.get("processed_episodes"),
+            "failed_episodes": obj.get("failed_episodes"),
+            "failed_episode_uuids": obj.get("failed_episode_uuids"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),

@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -27,11 +27,14 @@ class ControllerPolicyExecuteSchema(BaseModel):
     ControllerPolicyExecuteSchema
     """ # noqa: E501
     twin_uuid: StrictStr
-    camera_twin_uuid: Optional[StrictStr] = None
     instruction: Optional[StrictStr] = None
     execution: Optional[StrictStr] = 'async'
     max_steps: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "camera_twin_uuid", "instruction", "execution", "max_steps"]
+    target_left_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
+    target_right_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
+    current_joint_states: Optional[Dict[str, Dict[str, Union[StrictFloat, StrictInt]]]] = None
+    server_mode: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["twin_uuid", "instruction", "execution", "max_steps", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -72,11 +75,6 @@ class ControllerPolicyExecuteSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if camera_twin_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.camera_twin_uuid is None and "camera_twin_uuid" in self.model_fields_set:
-            _dict['camera_twin_uuid'] = None
-
         # set to None if instruction (nullable) is None
         # and model_fields_set contains the field
         if self.instruction is None and "instruction" in self.model_fields_set:
@@ -86,6 +84,21 @@ class ControllerPolicyExecuteSchema(BaseModel):
         # and model_fields_set contains the field
         if self.max_steps is None and "max_steps" in self.model_fields_set:
             _dict['max_steps'] = None
+
+        # set to None if target_left_pos (nullable) is None
+        # and model_fields_set contains the field
+        if self.target_left_pos is None and "target_left_pos" in self.model_fields_set:
+            _dict['target_left_pos'] = None
+
+        # set to None if target_right_pos (nullable) is None
+        # and model_fields_set contains the field
+        if self.target_right_pos is None and "target_right_pos" in self.model_fields_set:
+            _dict['target_right_pos'] = None
+
+        # set to None if current_joint_states (nullable) is None
+        # and model_fields_set contains the field
+        if self.current_joint_states is None and "current_joint_states" in self.model_fields_set:
+            _dict['current_joint_states'] = None
 
         return _dict
 
@@ -100,10 +113,13 @@ class ControllerPolicyExecuteSchema(BaseModel):
 
         _obj = cls.model_validate({
             "twin_uuid": obj.get("twin_uuid"),
-            "camera_twin_uuid": obj.get("camera_twin_uuid"),
             "instruction": obj.get("instruction"),
             "execution": obj.get("execution") if obj.get("execution") is not None else 'async',
-            "max_steps": obj.get("max_steps")
+            "max_steps": obj.get("max_steps"),
+            "target_left_pos": obj.get("target_left_pos"),
+            "target_right_pos": obj.get("target_right_pos"),
+            "current_joint_states": obj.get("current_joint_states"),
+            "server_mode": obj.get("server_mode") if obj.get("server_mode") is not None else False
         })
         return _obj
 

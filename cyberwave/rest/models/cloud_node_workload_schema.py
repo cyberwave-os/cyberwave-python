@@ -33,6 +33,12 @@ class CloudNodeWorkloadSchema(BaseModel):
     instance_uuid: Optional[StrictStr]
     instance_slug: Optional[StrictStr]
     status: StrictStr
+    twin_uuid: Optional[StrictStr]
+    controller_policy_uuid: Optional[StrictStr]
+    controller_type: Optional[StrictStr]
+    mlmodel_uuid: Optional[StrictStr]
+    mlmodel_name: Optional[StrictStr]
+    mlmodel_external_id: Optional[StrictStr]
     workspace_uuid: Optional[StrictStr]
     visibility: StrictStr
     created_at: datetime
@@ -42,7 +48,7 @@ class CloudNodeWorkloadSchema(BaseModel):
     command_params: Optional[Dict[str, Any]]
     callback_task: Optional[StrictStr]
     callback_kwargs: Optional[Dict[str, Any]]
-    __properties: ClassVar[List[str]] = ["uuid", "profile_uuid", "profile_slug", "instance_uuid", "instance_slug", "status", "workspace_uuid", "visibility", "created_at", "updated_at", "created_by_email", "command_type", "command_params", "callback_task", "callback_kwargs"]
+    __properties: ClassVar[List[str]] = ["uuid", "profile_uuid", "profile_slug", "instance_uuid", "instance_slug", "status", "twin_uuid", "controller_policy_uuid", "controller_type", "mlmodel_uuid", "mlmodel_name", "mlmodel_external_id", "workspace_uuid", "visibility", "created_at", "updated_at", "created_by_email", "command_type", "command_params", "callback_task", "callback_kwargs"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -93,6 +99,36 @@ class CloudNodeWorkloadSchema(BaseModel):
         if self.instance_slug is None and "instance_slug" in self.model_fields_set:
             _dict['instance_slug'] = None
 
+        # set to None if twin_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
+            _dict['twin_uuid'] = None
+
+        # set to None if controller_policy_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.controller_policy_uuid is None and "controller_policy_uuid" in self.model_fields_set:
+            _dict['controller_policy_uuid'] = None
+
+        # set to None if controller_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.controller_type is None and "controller_type" in self.model_fields_set:
+            _dict['controller_type'] = None
+
+        # set to None if mlmodel_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.mlmodel_uuid is None and "mlmodel_uuid" in self.model_fields_set:
+            _dict['mlmodel_uuid'] = None
+
+        # set to None if mlmodel_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.mlmodel_name is None and "mlmodel_name" in self.model_fields_set:
+            _dict['mlmodel_name'] = None
+
+        # set to None if mlmodel_external_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.mlmodel_external_id is None and "mlmodel_external_id" in self.model_fields_set:
+            _dict['mlmodel_external_id'] = None
+
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -141,6 +177,12 @@ class CloudNodeWorkloadSchema(BaseModel):
             "instance_uuid": obj.get("instance_uuid"),
             "instance_slug": obj.get("instance_slug"),
             "status": obj.get("status"),
+            "twin_uuid": obj.get("twin_uuid"),
+            "controller_policy_uuid": obj.get("controller_policy_uuid"),
+            "controller_type": obj.get("controller_type"),
+            "mlmodel_uuid": obj.get("mlmodel_uuid"),
+            "mlmodel_name": obj.get("mlmodel_name"),
+            "mlmodel_external_id": obj.get("mlmodel_external_id"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "visibility": obj.get("visibility"),
             "created_at": obj.get("created_at"),

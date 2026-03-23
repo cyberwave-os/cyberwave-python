@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Generated exports (just create / just export)
+out/
+
+# MuJoCo runtime log
+MUJOCO_LOG.TXT
+
+# Python
+__pycache__/
+*.py[cod]
+
+# uv virtualenv
+.venv/

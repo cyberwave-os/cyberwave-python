@@ -804,12 +804,7 @@ class CyberwavestandardCamTwin(Twin):
     Digital twin for Standard Camera
     Registry ID: cyberwave/standard-cam
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
+    pass
 
 class CyberwavegenericIpcameraTwin(Twin):
     """
@@ -1041,14 +1036,54 @@ class AgileXRoboticstracer20Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
 
-class OpenopenarmTwin(Twin):
+class EnacticopenarmTwin(Twin):
     """
     Digital twin for OpenArm
-    Registry ID: open/openarm
+    Registry ID: enactic/openarm
     """
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
+        ...
+
+class CyberwavergbCameraWithDepthEstimationTwin(Twin):
+    """
+    Digital twin for RGB Camera with Depth Estimation
+    Registry ID: cyberwave/rgb-camera-with-depth-estimation
+    """
+    pass
+
+class CyberwaverobotMatTwin(Twin):
+    """
+    Digital twin for Robot Mat
+    Registry ID: cyberwave/robot-mat
+    """
+    pass
+
+class Orbbecgemini355LgTwin(Twin):
+    """
+    Digital twin for Gemini 355Lg
+    Registry ID: orbbec/gemini-355-lg
+    """
+    pass
+
+class Cyberwave35555555Twin(Twin):
+    """
+    Digital twin for Gemini 355
+    Registry ID: cyberwave/35555555
+    """
+    pass
+
+class UnitreelidarL2Twin(Twin):
+    """
+    Digital twin for Unitree Lidar L2
+    Registry ID: unitree/lidar-l2
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
         ...
 
 # Asset registry mapping registry_id to Twin class
@@ -1136,5 +1171,10 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave/warehouse": CyberwavewarehouseTwin,
     "up/mir-250": Upmir250Twin,
     "agile-x-robotics/tracer-20": AgileXRoboticstracer20Twin,
-    "open/openarm": OpenopenarmTwin,
+    "enactic/openarm": EnacticopenarmTwin,
+    "cyberwave/rgb-camera-with-depth-estimation": CyberwavergbCameraWithDepthEstimationTwin,
+    "cyberwave/robot-mat": CyberwaverobotMatTwin,
+    "orbbec/gemini-355-lg": Orbbecgemini355LgTwin,
+    "cyberwave/35555555": Cyberwave35555555Twin,
+    "unitree/lidar-l2": UnitreelidarL2Twin,
 }

@@ -1,0 +1,33 @@
+# SO-101 MuJoCo Demo
+# Run `just` to see available recipes.
+# Copy .env.example to .env and fill in your credentials before running.
+
+set dotenv-load := true
+
+script := "so101_mujoco_demo.py"
+
+# Install all demo dependencies into an isolated venv (cyberwave SDK + mujoco + numpy)
+setup:
+    uv sync
+
+# (1) Create the Cyberwave environment (arm + observer camera) → writes out/env.json
+create:
+    uv run python {{script}} create
+
+# (2) Download universal schema + MuJoCo scene → writes out/mujoco_scene/
+export:
+    uv run python {{script}} export
+
+# (3) Run with default sine-wave controller
+# MUJOCO_GL is selected automatically per OS by the script (Linux→egl, macOS→cgl).
+# Override here if needed, e.g.: MUJOCO_GL=glfw just run
+run:
+    uv run python {{script}} run
+
+# Run without any automated motion — use the MuJoCo slider panel (Ctrl+M) to drive the arm
+run-manual:
+    CONTROL_MODE=manual uv run python {{script}} run
+
+# Headless smoke-test (no viewer window, useful for CI)
+run-headless:
+    uv run python {{script}} run --headless

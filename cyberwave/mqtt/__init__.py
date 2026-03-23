@@ -123,14 +123,14 @@ class CyberwaveMQTTClient:
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
 
-        # Auto-connect if requested
-        if auto_connect:
-            self.connect()
-
         self.twin_uuids = twin_uuids or []
         self.twin_uuids_with_telemetry_start: List[str] = []
         self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
         self.source_type = source_type
+
+        # Auto-connect if requested (must happen after all state is initialized)
+        if auto_connect:
+            self.connect()
 
     def _get_effective_source_type(self, source_type: Optional[str]) -> str:
         """Resolve and validate the source type for outgoing MQTT messages."""

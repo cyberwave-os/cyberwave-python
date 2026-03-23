@@ -72,34 +72,133 @@ class Cyberwave:
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
-    ) -> GripperCameraTwin: ...
+    ) -> GripperTwin: ...
     
     @overload
     def twin(
         self,
-        asset_key: Literal["rethink-robotics/baxter"],
+        asset_key: Literal["agile-x-robotics/piper"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
-    ) -> GripperCameraTwin: ...
+    ) -> GripperTwin: ...
     
     @overload
     def twin(
         self,
-        asset_key: Literal["kawada-industries/nextage"],
+        asset_key: Literal["arx-roboticsx/r5a"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
-    ) -> GripperCameraTwin: ...
+    ) -> GripperTwin: ...
     
     @overload
     def twin(
         self,
-        asset_key: Literal["rethink-robotics/sawyer"],
+        asset_key: Literal["kinova/jaco"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
-    ) -> GripperCameraTwin: ...
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["interbotix/vx300s"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["poppy-project/poppy-torso"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["orebro-university/yumi"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["interbotix/wx250s"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["kinova-robotics/kortex-gen3"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["comau/edo"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["rt-net/sciurus17"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["dexsuite/leap-hand-leap"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["unitree/unitree_z1"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["universal_robots/UR7"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["enactic/openarm"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperTwin: ...
     
     @overload
     def twin(
@@ -239,142 +338,16 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["agile-x-robotics/piper"],
+        asset_key: Literal["unitree/lidar-l2"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["arx-roboticsx/r5a"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["kinova/jaco"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["interbotix/vx300s"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["poppy-project/poppy-torso"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["orebro-university/yumi"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["interbotix/wx250s"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["kinova-robotics/kortex-gen3"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["comau/edo"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["rt-net/sciurus17"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["dexsuite/leap-hand-leap"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["unitree/unitree_z1"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["universal_robots/UR7"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["open/openarm"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
+    ) -> LocomoteTwin: ...
     
     @overload
     def twin(
         self,
         asset_key: Literal["anybotics/anymal-b"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> LocomoteDepthCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["unitree/go2"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -473,47 +446,11 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["arx/arx-roboticsx"],
+        asset_key: Literal["unitree/go2"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
-    ) -> LocomoteGripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["timqian/bambot-b0"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> LocomoteGripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["kuka/kuka_iiwa14"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> LocomoteGripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["bitcraze/crazyflie"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> FlyingTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["bitcraze/crazyflie-2"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> FlyingTwin: ...
+    ) -> LocomoteCameraTwin: ...
     
     @overload
     def twin(
@@ -608,15 +545,6 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["cyberwave/standard-cam"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> LocomoteCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
         asset_key: Literal["cyberwave/generic-auv"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -653,6 +581,78 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["arx/arx-roboticsx"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteGripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["timqian/bambot-b0"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteGripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["kuka/kuka_iiwa14"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteGripperTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["bitcraze/crazyflie"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> FlyingTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["bitcraze/crazyflie-2"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> FlyingTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["rethink-robotics/baxter"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["kawada-industries/nextage"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["rethink-robotics/sawyer"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["unitree/unitree-h1"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -671,11 +671,11 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["intel/realsensed455"],
+        asset_key: Literal["cyberwave/generic-nvr"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
-    ) -> DepthCameraTwin: ...
+    ) -> CameraTwin: ...
     
     @overload
     def twin(
@@ -707,6 +707,15 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["cyberwave/standard-cam"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> CameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["cyberwave/generic_ipcamera"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -721,6 +730,42 @@ class Cyberwave:
         twin_id: str | None = None,
         **kwargs,
     ) -> CameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["orbbec/gemini-355-lg"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> CameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["intel/realsensed455"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> DepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["cyberwave/rgb-camera-with-depth-estimation"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> DepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["cyberwave/35555555"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> DepthCameraTwin: ...
     
     @overload
     def twin(

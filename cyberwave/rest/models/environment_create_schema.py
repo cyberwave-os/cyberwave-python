@@ -29,11 +29,12 @@ class EnvironmentCreateSchema(BaseModel):
     name: StrictStr
     description: StrictStr
     settings: Optional[Dict[str, Any]] = None
+    universal_schema: Optional[Dict[str, Any]] = None
     asset_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "settings", "asset_uuid", "workspace_uuid", "project_uuid", "visibility"]
+    __properties: ClassVar[List[str]] = ["name", "description", "settings", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -79,6 +80,11 @@ class EnvironmentCreateSchema(BaseModel):
         if self.settings is None and "settings" in self.model_fields_set:
             _dict['settings'] = None
 
+        # set to None if universal_schema (nullable) is None
+        # and model_fields_set contains the field
+        if self.universal_schema is None and "universal_schema" in self.model_fields_set:
+            _dict['universal_schema'] = None
+
         # set to None if asset_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.asset_uuid is None and "asset_uuid" in self.model_fields_set:
@@ -114,6 +120,7 @@ class EnvironmentCreateSchema(BaseModel):
             "name": obj.get("name"),
             "description": obj.get("description"),
             "settings": obj.get("settings"),
+            "universal_schema": obj.get("universal_schema"),
             "asset_uuid": obj.get("asset_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "project_uuid": obj.get("project_uuid"),

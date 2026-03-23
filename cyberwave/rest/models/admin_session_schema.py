@@ -30,12 +30,14 @@ class AdminSessionSchema(BaseModel):
     user_email: StrictStr
     user_name: StrictStr
     status: StrictStr
+    environment_name: StrictStr
+    environment_uuid: StrictStr
     session_started_at: Optional[StrictStr] = None
     session_expires_at: Optional[StrictStr] = None
     time_remaining_seconds: Optional[StrictInt] = None
     created_at: StrictStr
     waiting_seconds: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["session_uuid", "user_email", "user_name", "status", "session_started_at", "session_expires_at", "time_remaining_seconds", "created_at", "waiting_seconds"]
+    __properties: ClassVar[List[str]] = ["session_uuid", "user_email", "user_name", "status", "environment_name", "environment_uuid", "session_started_at", "session_expires_at", "time_remaining_seconds", "created_at", "waiting_seconds"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -112,6 +114,8 @@ class AdminSessionSchema(BaseModel):
             "user_email": obj.get("user_email"),
             "user_name": obj.get("user_name"),
             "status": obj.get("status"),
+            "environment_name": obj.get("environment_name"),
+            "environment_uuid": obj.get("environment_uuid"),
             "session_started_at": obj.get("session_started_at"),
             "session_expires_at": obj.get("session_expires_at"),
             "time_remaining_seconds": obj.get("time_remaining_seconds"),

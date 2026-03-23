@@ -55,7 +55,7 @@ class TwinSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     attach_to_twin_uuid: Optional[StrictStr] = None
     attach_to_link: Optional[StrictStr] = None
-    child_twin_uuids: Optional[List[Optional[StrictStr]]] = None
+    child_twin_uuids: Optional[List[StrictStr]] = None
     attach_offset_x: Union[StrictFloat, StrictInt]
     attach_offset_y: Union[StrictFloat, StrictInt]
     attach_offset_z: Union[StrictFloat, StrictInt]

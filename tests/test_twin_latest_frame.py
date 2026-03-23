@@ -30,7 +30,12 @@ def test_get_latest_frame_returns_bytes_and_passes_query_params():
     )
     mock_api.api_client.call_api.return_value = response_data
 
-    result = manager.get_latest_frame("twin-uuid", sensor_id="wrist_camera", mock=True)
+    result = manager.get_latest_frame(
+        "twin-uuid",
+        sensor_id="wrist_camera",
+        mock=True,
+        source_type="simulation",
+    )
 
     assert result == b"jpeg-bytes"
     call_kwargs = mock_api.api_client.param_serialize.call_args.kwargs
@@ -39,6 +44,7 @@ def test_get_latest_frame_returns_bytes_and_passes_query_params():
     assert call_kwargs["path_params"] == {"uuid": "twin-uuid"}
     assert ("sensor_id", "wrist_camera") in call_kwargs["query_params"]
     assert ("mock", "true") in call_kwargs["query_params"]
+    assert ("source_type", "sim") in call_kwargs["query_params"]
     response_data.read.assert_called_once()
 
 
@@ -108,6 +114,44 @@ def test_twin_get_latest_frame_wraps_errors():
 
     with pytest.raises(CyberwaveError, match="Failed to get latest frame"):
         twin.get_latest_frame()
+
+
+def test_twin_get_latest_frame_uses_client_affect_source_type():
+    twins_manager = MagicMock()
+    twins_manager.get_latest_frame.return_value = b"frame"
+    client = SimpleNamespace(
+        twins=twins_manager,
+        config=SimpleNamespace(source_type="sim"),
+    )
+    twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+
+    result = twin.get_latest_frame()
+
+    assert result == b"frame"
+    twins_manager.get_latest_frame.assert_called_once_with(
+        "twin-uuid",
+        sensor_id=None,
+        mock=False,
+        source_type="sim",
+    )
+
+
+def test_twin_get_latest_frame_ignores_unsupported_default_source_type():
+    twins_manager = MagicMock()
+    twins_manager.get_latest_frame.return_value = b"frame"
+    client = SimpleNamespace(
+        twins=twins_manager,
+        config=SimpleNamespace(source_type="edge"),
+    )
+    twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+
+    twin.get_latest_frame()
+
+    twins_manager.get_latest_frame.assert_called_once_with(
+        "twin-uuid",
+        sensor_id=None,
+        mock=False,
+    )
 
 
 def test_camera_twin_capture_frame_inherits_unified_method():

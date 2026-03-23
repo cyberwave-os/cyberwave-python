@@ -35,8 +35,10 @@ class EnvironmentSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     settings: Optional[Dict[str, Any]] = None
+    universal_schema: Optional[Dict[str, Any]] = None
     visibility: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "visibility"]
+    thumbnail: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "universal_schema", "visibility", "thumbnail"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,10 +94,20 @@ class EnvironmentSchema(BaseModel):
         if self.settings is None and "settings" in self.model_fields_set:
             _dict['settings'] = None
 
+        # set to None if universal_schema (nullable) is None
+        # and model_fields_set contains the field
+        if self.universal_schema is None and "universal_schema" in self.model_fields_set:
+            _dict['universal_schema'] = None
+
         # set to None if visibility (nullable) is None
         # and model_fields_set contains the field
         if self.visibility is None and "visibility" in self.model_fields_set:
             _dict['visibility'] = None
+
+        # set to None if thumbnail (nullable) is None
+        # and model_fields_set contains the field
+        if self.thumbnail is None and "thumbnail" in self.model_fields_set:
+            _dict['thumbnail'] = None
 
         return _dict
 
@@ -117,7 +129,9 @@ class EnvironmentSchema(BaseModel):
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "settings": obj.get("settings"),
-            "visibility": obj.get("visibility")
+            "universal_schema": obj.get("universal_schema"),
+            "visibility": obj.get("visibility"),
+            "thumbnail": obj.get("thumbnail")
         })
         return _obj
 
