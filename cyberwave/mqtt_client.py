@@ -79,6 +79,11 @@ class CyberwaveMQTTClient:
         """Get the topic prefix used by this MQTT client."""
         return self._topic_prefix
 
+    @property
+    def client_id(self) -> str:
+        """Get the MQTT client ID."""
+        return self._client.client_id
+
     def connect(self):
         """Connect to the MQTT broker."""
         if not self.connected:

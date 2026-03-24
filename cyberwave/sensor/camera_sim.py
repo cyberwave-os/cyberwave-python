@@ -183,9 +183,10 @@ class SimVideoTrack(BaseVideoTrack):
         if frame is None:
             frame = self._placeholder
 
-        # Capture timestamps for sync frame
+        # Read time reference to capture current timestamp at frame capture moment.
+        # This ensures video frame timestamps reflect actual capture time.
         if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.update()
+            timestamp, timestamp_monotonic = self.time_reference.read()
         else:
             timestamp = time.time()
             timestamp_monotonic = time.monotonic()

@@ -469,7 +469,8 @@ class BaseAudioStreamer:
             "stream_attributes": stream_attributes,
             "sensor": self.sensor_name,
             "track_id": self.streamer.id if self.streamer else None,
-            "frontend_type": "audio"
+            "frontend_type": "audio",
+            "session_id": f"{self.client.client_id}_{self.sensor_name}",
         }
         self._publish_message(offer_topic, offer_payload)
 

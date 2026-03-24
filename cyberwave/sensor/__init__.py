@@ -142,10 +142,10 @@ class BaseVideoStreamer(abc.ABC):
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
             enable_health_check: Whether to enable automatic health check reporting (default: True)
-            camera_name: Sensor/camera identifier used for WebRTC signaling routing.
-                Required when a twin has multiple streams to prevent answer collisions.
-                Pass camera_name='default' if this is the only video stream on this twin,
-                or use a unique name per stream (e.g. 'rgb', 'depth', 'realsense').
+            camera_name: Sensor/camera identifier used for WebRTC signaling routing
+                (MQTT offer ``sensor`` field). Omit only for non-recording or legacy
+                paths; for recording, pass :attr:`cyberwave.twin.CameraTwin.default_camera_name`
+                or an explicit per-stream name when a twin has multiple video streams.
         """
         self.client = client
         self.twin_uuid: Optional[str] = twin_uuid
@@ -497,6 +497,7 @@ class BaseVideoStreamer(abc.ABC):
             "stream_attributes": stream_attributes,
             "sensor": self.camera_name,
             "track_id": self.streamer.id if self.streamer else None,
+            "session_id": f"{self.client.client_id}_{self.camera_name}",
         }
 
         self._publish_message(offer_topic, offer_payload)
@@ -541,15 +542,12 @@ class BaseVideoStreamer(abc.ABC):
 
         sdp_lines = sdp.split("\r\n")
         final_sdp_lines = []
-        m_video_parts = []
 
         for line in sdp_lines:
             if line.startswith("m=video"):
                 parts = line.split()
-                for part in parts:
-                    if part not in ["97", "98"]:
-                        m_video_parts.append(part)
-                final_sdp_lines.append(" ".join(m_video_parts))
+                filtered_parts = [part for part in parts if part not in ["97", "98"]]
+                final_sdp_lines.append(" ".join(filtered_parts))
             elif line.startswith(VP8_PREFIXES):
                 continue
             else:
@@ -573,7 +571,7 @@ class BaseVideoStreamer(abc.ABC):
         def on_answer(data):
             try:
                 payload = data if isinstance(data, dict) else json.loads(data)
-                logger.info(f"Received message: type={payload.get('type')}")
+                logger.debug(f"Received message: type={payload.get('type')}")
                 logger.debug(f"Full payload: {payload}")
 
                 if payload.get("type") == "offer":

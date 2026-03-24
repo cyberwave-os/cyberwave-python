@@ -290,10 +290,9 @@ class RealSenseVideoTrack(BaseVideoTrack):
         else:
             color_image, depth_image = frames
 
-        # Update time reference to capture current timestamp at frame capture moment.
-        # This ensures video frame timestamps reflect actual capture time, not
-        # a potentially stale timestamp from the teleop loop.
-        timestamp, timestamp_monotonic = self.time_reference.update()
+        # Read time reference to capture current timestamp at frame capture moment.
+        # This ensures video frame timestamps reflect actual capture time.
+        timestamp, timestamp_monotonic = self.time_reference.read()
 
         # Store frame 0 timestamp for publishing
         if self.frame_count == 0:
@@ -320,7 +319,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
         return video_frame
 
     def get_stream_attributes(self) -> dict:
-        """Get streaming attributes for the offer payload.
+        """"Get streaming attributes for the offer payload.
 
         Returns:
             Dictionary with RealSense camera stream attributes

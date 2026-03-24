@@ -1307,6 +1307,20 @@ class CameraTwin(Twin):
 
     _camera_streamer: Optional["CameraStreamer"] = None
 
+    @property
+    def default_camera_name(self) -> str:
+        """Default sensor/camera id for WebRTC signaling (``sensor`` in offers).
+
+        Uses the first entry in :attr:`Twin.capabilities` ``sensors`` and its ``id``,
+        same rule as :func:`cyberwave.sensor.manager._infer_config_from_twin`.
+        Falls back to ``"default"`` when missing or empty.
+        """
+        sensors = self.capabilities.get("sensors", [])
+        if sensors and isinstance(sensors[0], dict):
+            sid = sensors[0].get("id")
+            return str(sid) if sid is not None else "default"
+        return "default"
+
     def streamer(self) -> "CameraStreamer":
         """Get the camera streamer."""
         if self._camera_streamer is None:

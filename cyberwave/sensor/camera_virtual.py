@@ -109,7 +109,7 @@ class VirtualVideoTrack(BaseVideoTrack):
         # This ensures video frame timestamps reflect actual capture time, not
         # a potentially stale timestamp from the teleop loop.
         if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.update()
+            timestamp, timestamp_monotonic = self.time_reference.read()
         else:
             timestamp = time.time()
             timestamp_monotonic = time.monotonic()
