@@ -171,6 +171,15 @@ class CyberwaveMQTTClient:
             self._handlers[topic] = []
         self._handlers[topic].append(handler)
 
+    def unsubscribe(self, topic: str) -> None:
+        """Unsubscribe from an MQTT topic and remove all its handlers.
+
+        Idempotent — safe to call even if the topic was never subscribed.
+        """
+        self._handlers.pop(topic, None)
+        if self.connected:
+            self.client.unsubscribe(topic)
+
     def _match_mqtt_pattern(self, pattern: str, topic: str) -> bool:
         """Match MQTT topic against MQTT pattern (supports + and # wildcards)."""
         # Convert MQTT pattern to regex
