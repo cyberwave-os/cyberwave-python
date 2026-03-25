@@ -30,7 +30,8 @@ class CloudNodeInstanceSchema(BaseModel):
     slug: StrictStr
     status: StrictStr
     profile_slug: Optional[StrictStr]
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "status", "profile_slug"]
+    provider: Optional[StrictStr]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "status", "profile_slug", "provider"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -76,6 +77,11 @@ class CloudNodeInstanceSchema(BaseModel):
         if self.profile_slug is None and "profile_slug" in self.model_fields_set:
             _dict['profile_slug'] = None
 
+        # set to None if provider (nullable) is None
+        # and model_fields_set contains the field
+        if self.provider is None and "provider" in self.model_fields_set:
+            _dict['provider'] = None
+
         return _dict
 
     @classmethod
@@ -91,7 +97,8 @@ class CloudNodeInstanceSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "slug": obj.get("slug"),
             "status": obj.get("status"),
-            "profile_slug": obj.get("profile_slug")
+            "profile_slug": obj.get("profile_slug"),
+            "provider": obj.get("provider")
         })
         return _obj
 

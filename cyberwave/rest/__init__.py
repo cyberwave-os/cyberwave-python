@@ -74,6 +74,7 @@ __all__ = [
     "CloudNodeLogEntrySchema",
     "CloudNodeLogRequest",
     "CloudNodeLogResponse",
+    "CloudNodeProvider",
     "CloudNodeTerminatedRequest",
     "CloudNodeTerminatedResponse",
     "CloudNodeWorkloadAssignSchema",
@@ -332,6 +333,7 @@ from cyberwave.rest.models.cloud_node_instance_status_response import CloudNodeI
 from cyberwave.rest.models.cloud_node_log_entry_schema import CloudNodeLogEntrySchema as CloudNodeLogEntrySchema
 from cyberwave.rest.models.cloud_node_log_request import CloudNodeLogRequest as CloudNodeLogRequest
 from cyberwave.rest.models.cloud_node_log_response import CloudNodeLogResponse as CloudNodeLogResponse
+from cyberwave.rest.models.cloud_node_provider import CloudNodeProvider as CloudNodeProvider
 from cyberwave.rest.models.cloud_node_terminated_request import CloudNodeTerminatedRequest as CloudNodeTerminatedRequest
 from cyberwave.rest.models.cloud_node_terminated_response import CloudNodeTerminatedResponse as CloudNodeTerminatedResponse
 from cyberwave.rest.models.cloud_node_workload_assign_schema import CloudNodeWorkloadAssignSchema as CloudNodeWorkloadAssignSchema

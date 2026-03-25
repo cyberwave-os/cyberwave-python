@@ -524,9 +524,9 @@ class Cyberwave:
             frame_callback: Optional callback for each frame (ML inference, etc.).
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
             camera_name: Optional sensor identifier for multi-stream twins.
-            fourcc: Optional FOURCC code for V4L2/USB cameras (e.g. ``'MJPG'``).
-                Forces the pixel format before resolution is negotiated.
-                Ignored for RealSense and IP/RTSP cameras.
+            fourcc: Optional FOURCC for local V4L2/USB cameras (e.g. ``'MJPG'``, ``'YUYV'``).
+                Passed to :class:`~cyberwave.sensor.camera_cv2.CV2VideoTrack`. If omitted for a
+                local device, the SDK tries ``MJPG`` by default. Ignored for RealSense and IP/RTSP cameras.
 
         Returns:
             Camera streamer instance (CV2CameraStreamer or RealSenseStreamer)

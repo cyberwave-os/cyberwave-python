@@ -161,8 +161,8 @@ class CameraConfig:
         resolution: Video resolution (default: VGA 640x480)
         fps: Frames per second (default: 30)
         camera_id: Camera device ID (default: 0)
-        fourcc: Optional FOURCC for USB cameras (e.g. 'MJPG'). Set in setup
-            for known cameras (e.g. SO101 wrist camera); otherwise OpenCV uses default.
+        fourcc: Optional FOURCC for local USB/V4L2 (e.g. ``'MJPG'``). If ``None``,
+            :class:`~cyberwave.sensor.camera_cv2.CV2VideoTrack` tries ``MJPG`` by default.
     """
 
     resolution: Resolution = Resolution.VGA
@@ -206,6 +206,7 @@ class EdgeCameraConfig:
         CAMERA_SOURCE=0
         CAMERA_RESOLUTION=HD
         CAMERA_FPS=30
+        # Optional: CAMERA_FOURCC=MJPG — if unset, CV2VideoTrack tries MJPG by default
 
     Example for IP camera:
         CAMERA_TYPE=cv2
@@ -228,7 +229,8 @@ class EdgeCameraConfig:
     resolution: Resolution = Resolution.VGA
     fps: int = 30
     enabled: bool = True
-    fourcc: Optional[str] = None  # FOURCC for USB cameras (e.g. 'MJPG', 'YUYV')
+    # Local USB/V4L2 only; None → CV2VideoTrack tries MJPG by default
+    fourcc: Optional[str] = None
 
     # Twin association (for multi-camera setups)
     twin_uuid: Optional[str] = None

@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.cloud_node_provider import CloudNodeProvider
 from cyberwave.rest.models.visibility import Visibility
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,7 +31,7 @@ class CloudNodeInstanceCreateRequest(BaseModel):
     profile_slug: StrictStr
     slug: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
-    provider: Optional[StrictStr] = 'self-hosted'
+    provider: Optional[CloudNodeProvider] = None
     visibility: Optional[Visibility] = None
     __properties: ClassVar[List[str]] = ["profile_slug", "slug", "workspace_uuid", "provider", "visibility"]
 
@@ -83,6 +84,11 @@ class CloudNodeInstanceCreateRequest(BaseModel):
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
 
+        # set to None if provider (nullable) is None
+        # and model_fields_set contains the field
+        if self.provider is None and "provider" in self.model_fields_set:
+            _dict['provider'] = None
+
         return _dict
 
     @classmethod
@@ -98,7 +104,7 @@ class CloudNodeInstanceCreateRequest(BaseModel):
             "profile_slug": obj.get("profile_slug"),
             "slug": obj.get("slug"),
             "workspace_uuid": obj.get("workspace_uuid"),
-            "provider": obj.get("provider") if obj.get("provider") is not None else 'self-hosted',
+            "provider": obj.get("provider"),
             "visibility": obj.get("visibility")
         })
         return _obj

@@ -1333,6 +1333,7 @@ class CameraTwin(Twin):
         camera_id: int | str = 0,
         fourcc: Optional[str] = None,
         camera_name: Optional[str] = None,
+        **kwargs,
     ) -> "CameraStreamer":
         """
         Start video streaming in the background. Non-blocking.
@@ -1343,9 +1344,11 @@ class CameraTwin(Twin):
         Args:
             fps: Frames per second (default: 30)
             camera_id: Camera device ID or stream URL (default: 0)
-            fourcc: Optional FOURCC code for V4L2/USB cameras (e.g. ``'MJPG'``).
-                Forces the pixel format before resolution is negotiated.
+            fourcc: Optional FOURCC for local V4L2/USB cameras (e.g. ``'MJPG'``). If omitted,
+                :class:`~cyberwave.sensor.camera_cv2.CV2VideoTrack` tries ``MJPG`` by default.
             camera_name: WebRTC signaling sensor id; defaults to :attr:`default_camera_name`.
+            **kwargs: Additional arguments forwarded to :meth:`~cyberwave.client.Cyberwave.video_stream`
+                (e.g. ``resolution``, ``keyframe_interval``, ``frame_callback``, ``time_reference``).
 
         Returns:
             CameraStreamer instance for managing the stream
@@ -1356,6 +1359,7 @@ class CameraTwin(Twin):
             fps=fps,
             fourcc=fourcc,
             camera_name=camera_name or self.default_camera_name,
+            **kwargs,
         )
         await self._camera_streamer.start()
         return self._camera_streamer
@@ -1371,6 +1375,7 @@ class CameraTwin(Twin):
         fps: int = 30,
         camera_id: int | str = 0,
         camera_name: Optional[str] = None,
+        **kwargs,
     ) -> None:
         """Stream video until Ctrl+C. Blocking.
 
@@ -1381,12 +1386,15 @@ class CameraTwin(Twin):
             fps: Frames per second (default: 30)
             camera_id: Camera device ID or stream URL (default: 0)
             camera_name: WebRTC signaling sensor id; defaults to :attr:`default_camera_name`.
+            **kwargs: Additional arguments forwarded to :meth:`~cyberwave.client.Cyberwave.video_stream`
+                (e.g. ``fourcc``, ``resolution``, ``keyframe_interval``, ``frame_callback``).
         """
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_id=camera_id,
             fps=fps,
             camera_name=camera_name or self.default_camera_name,
+            **kwargs,
         )
 
         async def _run():
@@ -1449,6 +1457,7 @@ class DepthCameraTwin(CameraTwin):
         camera_name: Optional[str] = None,
         *,
         enable_depth: bool = True,
+        **kwargs,
     ) -> "CameraStreamer":
         """
         Start video streaming in the background. Non-blocking.
@@ -1462,6 +1471,8 @@ class DepthCameraTwin(CameraTwin):
             fourcc: Optional FOURCC code (inherited from CameraTwin, unused for RealSense)
             camera_name: WebRTC signaling sensor id; defaults to :attr:`default_camera_name`.
             enable_depth: Enable depth streaming (default: True for DepthCameraTwin)
+            **kwargs: Additional arguments forwarded to :meth:`~cyberwave.client.Cyberwave.video_stream`
+                (e.g. ``resolution``, ``keyframe_interval``, ``time_reference``).
 
         Returns:
             CameraStreamer instance for managing the stream
@@ -1473,6 +1484,7 @@ class DepthCameraTwin(CameraTwin):
             fps=fps,
             enable_depth=enable_depth,
             camera_name=camera_name or self.default_camera_name,
+            **kwargs,
         )
         await self._camera_streamer.start()
         return self._camera_streamer
@@ -1481,9 +1493,9 @@ class DepthCameraTwin(CameraTwin):
         self,
         fps: int = 30,
         camera_id: int | str = 0,
-        *,
         enable_depth: bool = True,
         camera_name: Optional[str] = None,
+        **kwargs,
     ) -> None:
         """Stream video until Ctrl+C. Blocking.
 
@@ -1495,6 +1507,8 @@ class DepthCameraTwin(CameraTwin):
             camera_id: Camera device ID (default: 0)
             enable_depth: Enable depth streaming (default: True for DepthCameraTwin)
             camera_name: WebRTC signaling sensor id; defaults to :attr:`default_camera_name`.
+            **kwargs: Additional arguments forwarded to :meth:`~cyberwave.client.Cyberwave.video_stream`
+                (e.g. ``resolution``, ``keyframe_interval``, ``time_reference``).
         """
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
@@ -1503,6 +1517,7 @@ class DepthCameraTwin(CameraTwin):
             fps=fps,
             enable_depth=enable_depth,
             camera_name=camera_name or self.default_camera_name,
+            **kwargs,
         )
 
         async def _run():

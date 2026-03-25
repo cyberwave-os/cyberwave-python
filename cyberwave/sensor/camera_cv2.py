@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Default pixel format for local V4L2/USB when ``fourcc`` is omitted (see ``CV2VideoTrack``).
+_DEFAULT_LOCAL_FOURCC = "MJPG"
+
 
 def _get_default_keyframe_interval() -> Optional[int]:
     """Get default keyframe interval from environment variable.
@@ -53,6 +56,9 @@ class CV2VideoTrack(BaseVideoTrack):
     - IP cameras via HTTP (camera_id as URL string)
     - RTSP streams (camera_id as rtsp:// URL)
 
+    For **local** USB/V4L2 devices, if ``fourcc`` is omitted, the SDK tries ``MJPG``
+    by default and reopens the device without a FOURCC override if negotiation fails.
+
     Example:
         >>> # Local USB camera
         >>> track = CV2VideoTrack(camera_id=0, fps=30, resolution=Resolution.HD)
@@ -64,6 +70,30 @@ class CV2VideoTrack(BaseVideoTrack):
         ...     resolution=Resolution.VGA
         ... )
     """
+
+    @staticmethod
+    def _is_url_stream(camera_id: Union[int, str]) -> bool:
+        return isinstance(camera_id, str) and camera_id.startswith(
+            ("rtsp://", "http://", "https://")
+        )
+
+    @staticmethod
+    def _fourcc_from_cap(cap: cv2.VideoCapture) -> str:
+        code = int(cap.get(cv2.CAP_PROP_FOURCC)) & 0xFFFFFFFF
+        if code == 0:
+            return ""
+        raw = "".join(chr((code >> (8 * i)) & 0xFF) for i in range(4))
+        return raw.replace("\x00", "").strip()
+
+    @staticmethod
+    def _fourcc_tags_match(wanted: str, actual: str) -> bool:
+        w = (wanted or "").strip()[:4].upper()
+        a = (actual or "").strip()[:4].upper()
+        if not w:
+            return True
+        if not a:
+            return False
+        return w == a
 
     def __init__(
         self,
@@ -91,8 +121,10 @@ class CV2VideoTrack(BaseVideoTrack):
             frame_callback: Optional callback called for each frame.
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
                 Called after frame normalization, before encoding.
-            fourcc: Optional FOURCC for USB cameras (e.g. 'MJPG'). Set in setup
-                for known cameras (e.g. SO101 wrist camera); otherwise OpenCV uses default.
+            fourcc: Optional FOURCC for local USB/V4L2 cameras (e.g. ``'MJPG'``, ``'YUYV'``).
+                If omitted for a **local** device, the SDK tries ``MJPG`` by default for better
+                bandwidth/FPS; if that does not stick, it reopens the device without a FOURCC
+                override (OpenCV/V4L2 default). URL/RTSP sources ignore FOURCC.
         """
         super().__init__()
         self.camera_id = camera_id
@@ -100,6 +132,10 @@ class CV2VideoTrack(BaseVideoTrack):
         self.time_reference = time_reference
         self.frame_callback = frame_callback
         self.fourcc = fourcc
+        self._negotiated_fourcc_ascii: Optional[str] = None
+        self._fourcc_attempted: Optional[str] = None
+        self._fourcc_auto_mjpg: bool = False
+        self._fourcc_fallback_reopen: bool = False
 
         # Keyframe interval: use provided value, env var, or None (disabled)
         self.keyframe_interval = (
@@ -128,8 +164,7 @@ class CV2VideoTrack(BaseVideoTrack):
         if not self.cap.isOpened():
             raise RuntimeError(f"Failed to open camera {camera_id}")
 
-        # Configure camera settings
-        self._configure_camera()
+        self._negotiate_and_configure_capture()
 
         # Get actual values after configuration
         self.actual_width, self.actual_height, self.actual_fps = (
@@ -143,6 +178,12 @@ class CV2VideoTrack(BaseVideoTrack):
         )
         if self.keyframe_interval:
             log_msg += f", keyframe_interval={self.keyframe_interval}"
+        if self._negotiated_fourcc_ascii:
+            log_msg += f", fourcc={self._negotiated_fourcc_ascii}"
+        if self._fourcc_auto_mjpg:
+            log_msg += ", fourcc_auto_mjpg=True"
+        if self._fourcc_fallback_reopen:
+            log_msg += ", fourcc_fallback_reopen=True"
         logger.info(log_msg)
 
         # Warn if actual differs from requested
@@ -226,37 +267,91 @@ class CV2VideoTrack(BaseVideoTrack):
         # Fall back to default
         return cv2.VideoCapture(camera_id)
 
-    def _configure_camera(self):
-        """Configure camera capture settings."""
-        # For local USB cameras, set FOURCC before resolution if specified.
-        # MJPG enables high FPS on many cameras; YUYV is common fallback.
-        # Skip for IP/RTSP streams (they use their own codec).
-        is_local_usb = not (
-            isinstance(self.camera_id, str)
-            and self.camera_id.startswith(("rtsp://", "http://", "https://"))
-        )
-        if self.fourcc and is_local_usb:
+    def _apply_capture_geometry_and_buffer(
+        self,
+        cap: cv2.VideoCapture,
+        *,
+        fourcc_str: Optional[str],
+    ) -> None:
+        """Set optional FOURCC (local sources only), then resolution, FPS, RGB, buffer."""
+        if fourcc_str and not self._is_url_stream(self.camera_id):
             try:
-                fourcc_code = cv2.VideoWriter_fourcc(*self.fourcc[:4])
-                self.cap.set(cv2.CAP_PROP_FOURCC, fourcc_code)
-                logger.debug("Set camera FOURCC to %s", self.fourcc)
+                fourcc_code = cv2.VideoWriter_fourcc(*fourcc_str[:4])
+                cap.set(cv2.CAP_PROP_FOURCC, fourcc_code)
+                logger.debug("Set camera FOURCC to %s", fourcc_str)
             except Exception as e:
-                logger.warning("Failed to set FOURCC %s: %s", self.fourcc, e)
+                logger.warning("Failed to set FOURCC %s: %s", fourcc_str, e)
 
-        # Set resolution
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.requested_width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.requested_height)
-        # Set FPS
-        self.cap.set(cv2.CAP_PROP_FPS, self.fps)
-        # Enable RGB conversion
-        self.cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.requested_width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.requested_height)
+        cap.set(cv2.CAP_PROP_FPS, self.fps)
+        cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
 
-        # Minimize buffer to reduce latency (V4L2/USB cameras queue 4-5 frames by default)
-        # RTSP/HTTP streams and local USB cameras both benefit from buffer=1
         try:
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         except Exception:
-            pass  # Some backends don't support BUFFERSIZE
+            pass
+
+    def _negotiate_and_configure_capture(self) -> None:
+        """Try FOURCC negotiation for local cameras; reopen without FOURCC if it fails."""
+        is_local = not self._is_url_stream(self.camera_id)
+        user_tag = (self.fourcc or "").strip()
+        user_fourcc = user_tag[:4] if user_tag else None
+
+        effective_try: Optional[str] = None
+        if is_local:
+            if user_fourcc:
+                effective_try = user_fourcc
+            else:
+                effective_try = _DEFAULT_LOCAL_FOURCC
+                self._fourcc_auto_mjpg = True
+
+        if logger.isEnabledFor(logging.DEBUG):
+            c = self.cap
+            logger.debug(
+                "CV2 after open: backend=%s size=%dx%d fps=%s fourcc=%r",
+                c.getBackendName(),
+                int(c.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                int(c.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                c.get(cv2.CAP_PROP_FPS),
+                self._fourcc_from_cap(c),
+            )
+
+        if effective_try:
+            self._fourcc_attempted = effective_try
+            self._apply_capture_geometry_and_buffer(self.cap, fourcc_str=effective_try)
+            got = self._fourcc_from_cap(self.cap)
+            if not self._fourcc_tags_match(effective_try, got):
+                logger.warning(
+                    "Camera FOURCC did not stick: tried %r, got %r; reopening without "
+                    "FOURCC override",
+                    effective_try,
+                    got or "(empty)",
+                )
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+                self.cap = self._open_capture(self.camera_id)
+                if not self.cap.isOpened():
+                    raise RuntimeError(f"Failed to reopen camera {self.camera_id}")
+                self._fourcc_fallback_reopen = True
+                self._apply_capture_geometry_and_buffer(self.cap, fourcc_str=None)
+        else:
+            self._apply_capture_geometry_and_buffer(self.cap, fourcc_str=None)
+
+        neg = self._fourcc_from_cap(self.cap)
+        self._negotiated_fourcc_ascii = neg or None
+
+        logger.debug(
+            "CV2 FOURCC negotiation: user_fourcc=%r attempted=%r negotiated=%r "
+            "auto_mjpg=%s fallback_reopen=%s",
+            user_fourcc,
+            self._fourcc_attempted,
+            self._negotiated_fourcc_ascii,
+            self._fourcc_auto_mjpg,
+            self._fourcc_fallback_reopen,
+        )
 
     def _get_actual_settings(self) -> tuple[int, int, float]:
         """Get actual camera settings after configuration.
@@ -308,8 +403,14 @@ class CV2VideoTrack(BaseVideoTrack):
             "resolution": str(self.resolution) if self.resolution else None,
             "keyframe_interval": self.keyframe_interval,
         }
+        if self._negotiated_fourcc_ascii:
+            attrs["fourcc"] = self._negotiated_fourcc_ascii
         if self.fourcc:
-            attrs["fourcc"] = self.fourcc
+            attrs["fourcc_requested"] = self.fourcc[:4]
+        if self._fourcc_auto_mjpg:
+            attrs["fourcc_auto_mjpg"] = True
+        if self._fourcc_fallback_reopen:
+            attrs["fourcc_fallback_open_cv_default"] = True
         return attrs
 
     def _normalize_frame(self, frame: np.ndarray) -> np.ndarray:
@@ -596,8 +697,9 @@ class CV2CameraStreamer(BaseVideoStreamer):
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
             camera_name: Optional sensor identifier for multi-stream twins. Use the sensor
                 id from twin capabilities (e.g. "head_camera") when the twin has multiple cameras.
-            fourcc: Optional FOURCC for USB cameras (e.g. 'MJPG'). Set in setup
-                for known cameras; otherwise OpenCV uses default.
+            fourcc: Optional FOURCC for local USB/V4L2 (e.g. ``'MJPG'``). If omitted,
+                :class:`CV2VideoTrack` tries ``MJPG`` by default for better bandwidth/FPS.
+                URL/RTSP sources ignore this.
         """
         super().__init__(
             client=client,

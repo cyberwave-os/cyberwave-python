@@ -51,6 +51,7 @@ from cyberwave.rest.models.cloud_node_instance_status_response import CloudNodeI
 from cyberwave.rest.models.cloud_node_log_entry_schema import CloudNodeLogEntrySchema
 from cyberwave.rest.models.cloud_node_log_request import CloudNodeLogRequest
 from cyberwave.rest.models.cloud_node_log_response import CloudNodeLogResponse
+from cyberwave.rest.models.cloud_node_provider import CloudNodeProvider
 from cyberwave.rest.models.cloud_node_terminated_request import CloudNodeTerminatedRequest
 from cyberwave.rest.models.cloud_node_terminated_response import CloudNodeTerminatedResponse
 from cyberwave.rest.models.cloud_node_workload_assign_schema import CloudNodeWorkloadAssignSchema
