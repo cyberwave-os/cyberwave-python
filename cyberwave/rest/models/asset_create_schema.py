@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class AssetCreateSchema(BaseModel):
     """
@@ -32,11 +33,13 @@ class AssetCreateSchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     registry_id: Optional[StrictStr] = None
+    registry_id_alias: Optional[StrictStr] = None
     universal_schema: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "universal_schema"]
+    __properties: ClassVar[List[str]] = ["name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "registry_id_alias", "universal_schema"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -48,8 +51,7 @@ class AssetCreateSchema(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -89,6 +91,11 @@ class AssetCreateSchema(BaseModel):
         if self.registry_id is None and "registry_id" in self.model_fields_set:
             _dict['registry_id'] = None
 
+        # set to None if registry_id_alias (nullable) is None
+        # and model_fields_set contains the field
+        if self.registry_id_alias is None and "registry_id_alias" in self.model_fields_set:
+            _dict['registry_id_alias'] = None
+
         # set to None if universal_schema (nullable) is None
         # and model_fields_set contains the field
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
@@ -112,6 +119,7 @@ class AssetCreateSchema(BaseModel):
             "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
             "registry_id": obj.get("registry_id"),
+            "registry_id_alias": obj.get("registry_id_alias"),
             "universal_schema": obj.get("universal_schema")
         })
         return _obj

@@ -30,7 +30,7 @@ import os
 import struct
 
 from cyberwave import Cyberwave
-from cyberwave.sensor.audio_microphone import MicrophoneAudioStreamer
+from cyberwave.sensor.microphone import MicrophoneAudioStreamer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -148,8 +148,10 @@ async def main() -> None:
                 UnitreeWebRTCConnection,
                 WebRTCConnectionMethod,
             )
-            logger.info("Connecting to Go2 at %s ...", robot_ip)
-            conn = UnitreeWebRTCConnection(WebRTCConnectionMethod.LocalSTA, ip=robot_ip)
+            _method_str = os.environ.get("CYBERWAVE_GO2_CONNECTION_METHOD", "LocalSTA")
+            _method = WebRTCConnectionMethod.LocalAP if _method_str == "LocalAP" else WebRTCConnectionMethod.LocalSTA
+            logger.info("Connecting to Go2 at %s (method: %s) ...", robot_ip, _method_str)
+            conn = UnitreeWebRTCConnection(_method, ip=robot_ip)
             await conn.connect()
             conn.pc.on("error", lambda e: None)  # suppress pyee disconnect noise
             bridge = Go2AudioBridge()
@@ -180,7 +182,7 @@ async def main() -> None:
         client=cw.mqtt,
         get_audio=get_audio,
         twin_uuid=twin_uuid,
-        sensor_name="mic",
+        mic_name="mic",
         auto_reconnect=True,
         turn_servers=turn_servers,
     )

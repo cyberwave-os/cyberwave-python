@@ -84,6 +84,10 @@ class Workflow:
         return str(_attr(self._data, "name", ""))
 
     @property
+    def slug(self) -> str:
+        return str(_attr(self._data, "slug", ""))
+
+    @property
     def description(self) -> str:
         return str(_attr(self._data, "description", ""))
 
@@ -374,6 +378,23 @@ class WorkflowManager:
         data = _get_workflow(self._client, workflow_id)
         return Workflow(self._client, data)
 
+    def get_by_slug(self, workspace_id: str, slug: str) -> Optional[Workflow]:
+        """Get a workflow by workspace-scoped slug.
+
+        Args:
+            workspace_id: Workspace UUID that scopes the slug lookup.
+            slug: Workflow slug unique within the workspace.
+
+        Returns:
+            A :class:`Workflow` instance if found, otherwise ``None``.
+        """
+        items = _list_workflows(
+            self._client, workspace_id=workspace_id, slug=slug
+        )
+        if not items:
+            return None
+        return Workflow(self._client, items[0])
+
     def trigger(
         self,
         workflow_id: str,
@@ -456,11 +477,21 @@ def _api(client: "Cyberwave") -> Any:
     return client.api.api_client
 
 
-def _list_workflows(client: "Cyberwave") -> list:
+def _list_workflows(
+    client: "Cyberwave",
+    workspace_id: Optional[str] = None,
+    slug: Optional[str] = None,
+) -> list:
     try:
+        query_params: list[tuple[str, str]] = []
+        if workspace_id:
+            query_params.append(("workspace_uuid", workspace_id))
+        if slug:
+            query_params.append(("slug", slug))
         _param = _api(client).param_serialize(
             method="GET",
             resource_path="/api/v1/workflows",
+            query_params=query_params,
             auth_settings=_AUTH,
         )
         response = _api(client).call_api(*_param)

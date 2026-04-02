@@ -114,6 +114,8 @@ __all__ = [
     "EdgeSchema",
     "EnableOrgFeatureRequest",
     "EndSessionResponseSchema",
+    "EnvironmentAssistantRequestSchema",
+    "EnvironmentAssistantResponseSchema",
     "EnvironmentCreateSchema",
     "EnvironmentSchema",
     "EnvironmentSnapshotCreateSchema",
@@ -373,6 +375,8 @@ from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema as Edg
 from cyberwave.rest.models.edge_schema import EdgeSchema as EdgeSchema
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest as EnableOrgFeatureRequest
 from cyberwave.rest.models.end_session_response_schema import EndSessionResponseSchema as EndSessionResponseSchema
+from cyberwave.rest.models.environment_assistant_request_schema import EnvironmentAssistantRequestSchema as EnvironmentAssistantRequestSchema
+from cyberwave.rest.models.environment_assistant_response_schema import EnvironmentAssistantResponseSchema as EnvironmentAssistantResponseSchema
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema as EnvironmentCreateSchema
 from cyberwave.rest.models.environment_schema import EnvironmentSchema as EnvironmentSchema
 from cyberwave.rest.models.environment_snapshot_create_schema import EnvironmentSnapshotCreateSchema as EnvironmentSnapshotCreateSchema

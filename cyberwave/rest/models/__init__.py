@@ -91,6 +91,8 @@ from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest
 from cyberwave.rest.models.end_session_response_schema import EndSessionResponseSchema
+from cyberwave.rest.models.environment_assistant_request_schema import EnvironmentAssistantRequestSchema
+from cyberwave.rest.models.environment_assistant_response_schema import EnvironmentAssistantResponseSchema
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema
 from cyberwave.rest.models.environment_schema import EnvironmentSchema
 from cyberwave.rest.models.environment_snapshot_create_schema import EnvironmentSnapshotCreateSchema

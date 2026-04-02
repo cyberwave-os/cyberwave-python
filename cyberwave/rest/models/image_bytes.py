@@ -23,7 +23,7 @@ from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field
 
-IMAGEBYTES_ANY_OF_SCHEMAS = ["bytearray", "str"]
+IMAGEBYTES_ANY_OF_SCHEMAS = ["bytes", "str"]
 
 class ImageBytes(BaseModel):
     """
@@ -32,13 +32,13 @@ class ImageBytes(BaseModel):
 
     # data type: str
     anyof_schema_1_validator: Optional[StrictStr] = None
-    # data type: bytearray
+    # data type: bytes
     anyof_schema_2_validator: Optional[Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]]] = None
     if TYPE_CHECKING:
-        actual_instance: Optional[Union[bytearray, str]] = None
+        actual_instance: Optional[Union[bytes, str]] = None
     else:
         actual_instance: Any = None
-    any_of_schemas: Set[str] = { "bytearray", "str" }
+    any_of_schemas: Set[str] = { "bytes", "str" }
 
     model_config = {
         "validate_assignment": True,
@@ -68,7 +68,7 @@ class ImageBytes(BaseModel):
             return v
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # validate data type: bytearray
+        # validate data type: bytes
         try:
             instance.anyof_schema_2_validator = v
             return v
@@ -76,7 +76,7 @@ class ImageBytes(BaseModel):
             error_messages.append(str(e))
         if error_messages:
             # no match
-            raise ValueError("No match found when setting the actual_instance in ImageBytes with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting the actual_instance in ImageBytes with anyOf schemas: bytes, str. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -101,7 +101,7 @@ class ImageBytes(BaseModel):
             return instance
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into bytearray
+        # deserialize data into bytes
         try:
             # validation
             instance.anyof_schema_2_validator = json.loads(json_str)
@@ -113,7 +113,7 @@ class ImageBytes(BaseModel):
 
         if error_messages:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into ImageBytes with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into ImageBytes with anyOf schemas: bytes, str. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -127,7 +127,7 @@ class ImageBytes(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], bytearray, str]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], bytes, str]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

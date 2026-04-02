@@ -1,4 +1,4 @@
-"""Unit tests for cyberwave.sensor.audio_microphone.
+"""Unit tests for cyberwave.sensor.microphone.
 
 All tests run fully offline — no network, no MQTT broker, no robot required.
 
@@ -20,7 +20,7 @@ import pytest
 aiortc = pytest.importorskip("aiortc", reason="aiortc not installed (install with extras: camera)")
 from aiortc.mediastreams import MediaStreamError
 
-from cyberwave.sensor.audio_microphone import (
+from cyberwave.sensor.microphone import (
     AUDIO_PTIME,
     DEFAULT_LAYOUT,
     DEFAULT_SAMPLE_RATE,
@@ -122,13 +122,13 @@ class TestMicrophoneAudioTrack:
 class TestOfferPayload:
     """Verify that _send_offer builds the correct MQTT payload."""
 
-    def _make_streamer(self, sensor_name: str = "mic") -> MicrophoneAudioStreamer:
+    def _make_streamer(self, mic_name: str = "mic") -> MicrophoneAudioStreamer:
         client = _make_mqtt_client(topic_prefix="")
         streamer = MicrophoneAudioStreamer(
             client,
             get_audio=_silent_get_audio,
             twin_uuid="twin-123",
-            sensor_name=sensor_name,
+            mic_name=mic_name,
         )
         # Set up a minimal fake PC + track so _send_offer can read them
         fake_pc = MagicMock()
@@ -144,7 +144,6 @@ class TestOfferPayload:
         s.client.publish.assert_called_once()
         _, payload = s.client.publish.call_args[0]
         assert payload["frontend_type"] == "audio"
-        assert payload["track_type"] == "audio"
         assert payload["target"] == "backend"
         assert payload["sender"] == "edge"
         assert payload["sensor"] == "mic"
@@ -167,7 +166,7 @@ class TestOfferPayload:
     def test_topic_prefix_respected(self):
         client = _make_mqtt_client(topic_prefix="env/")
         s = MicrophoneAudioStreamer(
-            client, get_audio=_silent_get_audio, twin_uuid="twin-123", sensor_name="mic"
+            client, get_audio=_silent_get_audio, twin_uuid="twin-123", mic_name="mic"
         )
         fake_pc = MagicMock()
         fake_pc.localDescription.type = "offer"
@@ -199,13 +198,13 @@ VALID_ANSWER = {
 
 
 class TestAnswerRouting:
-    def _make_streamer(self, sensor_name: str = "mic") -> MicrophoneAudioStreamer:
+    def _make_streamer(self, mic_name: str = "mic") -> MicrophoneAudioStreamer:
         client = _make_mqtt_client()
         return MicrophoneAudioStreamer(
             client,
             get_audio=_silent_get_audio,
             twin_uuid="twin-123",
-            sensor_name=sensor_name,
+            mic_name=mic_name,
         )
 
     def test_matching_answer_accepted(self):
@@ -216,7 +215,7 @@ class TestAnswerRouting:
         assert s._answer_data == VALID_ANSWER
 
     def test_answer_with_wrong_sensor_rejected(self):
-        s = self._make_streamer(sensor_name="mic")
+        s = self._make_streamer(mic_name="mic")
         on_answer = _extract_on_answer(s)
         wrong = {**VALID_ANSWER, "sensor": "front_camera"}
         on_answer(wrong)
@@ -236,8 +235,8 @@ class TestAnswerRouting:
         assert s._answer_received is False
 
     def test_answer_missing_sensor_field_accepted_for_any_streamer(self):
-        """sensor=None in answer payload → accepted regardless of streamer sensor_name."""
-        s = self._make_streamer(sensor_name="mic")
+        """sensor=None in answer payload → accepted regardless of streamer mic_name."""
+        s = self._make_streamer(mic_name="mic")
         on_answer = _extract_on_answer(s)
         no_sensor = {k: v for k, v in VALID_ANSWER.items() if k != "sensor"}
         on_answer(no_sensor)

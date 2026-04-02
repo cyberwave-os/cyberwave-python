@@ -84,6 +84,12 @@ from .workflows import (
     WorkflowRunManager,
 )
 
+# Worker API
+from .workers import HookContext
+
+# Model API
+from .models import ModelManager, LoadedModel, Detection, BoundingBox, PredictionResult
+
 # MQTT client (optional, for direct MQTT access)
 from .mqtt import CyberwaveMQTTClient
 
@@ -145,11 +151,19 @@ from .constants import (
     SOURCE_TYPES,
 )
 
+# Worker API
+from .workers import HookContext, HookRegistration, HookRegistry, SynchronizedGroup
+
+# Model output types
+from .models import BoundingBox, Detection, PredictionResult
+
 # Scene Composition
 from .scene import Scene
 
 # Version information
-__version__ = "0.3.42"
+from ._version import get_version
+
+__version__ = get_version()
 
 # Define public API
 __all__ = [
@@ -221,6 +235,14 @@ __all__ = [
     "CameraStreamManager",
     # Edge controller
     "EdgeController",
+    # Worker API
+    "HookContext",
+    # Model API
+    "ModelManager",
+    "LoadedModel",
+    "Detection",
+    "BoundingBox",
+    "PredictionResult",
     # Constants
     "SOURCE_TYPE_EDGE",
     "SOURCE_TYPE_EDGE_FOLLOWER",
@@ -236,6 +258,15 @@ __all__ = [
     "generate_fingerprint",
     "get_device_info",
     "format_device_info_table",
+    # Worker API
+    "HookContext",
+    "HookRegistration",
+    "HookRegistry",
+    "SynchronizedGroup",
+    # Model output types
+    "BoundingBox",
+    "Detection",
+    "PredictionResult",
     # Version
     "__version__",
 ]

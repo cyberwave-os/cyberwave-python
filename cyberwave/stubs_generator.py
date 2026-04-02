@@ -275,6 +275,17 @@ def generate_asset_class(asset: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _asset_identifiers(asset: dict[str, Any]) -> list[str]:
+    registry_id = asset.get("registry_id")
+    alias = asset.get("registry_id_alias")
+    identifiers: list[str] = []
+    if registry_id:
+        identifiers.append(registry_id)
+    if alias and alias not in identifiers:
+        identifiers.append(alias)
+    return identifiers
+
+
 def generate_asset_registry(assets: list[dict[str, Any]]) -> str:
     """Generate the ASSET_REGISTRY mapping."""
     lines = ["# Asset registry mapping registry_id to Twin class"]
@@ -282,9 +293,11 @@ def generate_asset_registry(assets: list[dict[str, Any]]) -> str:
 
     for asset in assets:
         registry_id = asset.get("registry_id")
-        if registry_id:
-            class_name = sanitize_class_name(registry_id)
-            lines.append(f'    "{registry_id}": {class_name}Twin,')
+        if not registry_id:
+            continue
+        class_name = sanitize_class_name(registry_id)
+        for identifier in _asset_identifiers(asset):
+            lines.append(f'    "{identifier}": {class_name}Twin,')
 
     lines.append("}")
     return "\n".join(lines)
@@ -331,11 +344,15 @@ def generate_capabilities_cache(
     for asset in assets:
         registry_id = asset.get("registry_id")
         if registry_id:
-            cache[registry_id] = {
+            payload = {
                 "uuid": asset.get("uuid"),
                 "name": asset.get("name"),
                 "capabilities": asset.get("capabilities", {}),
+                "registry_id": registry_id,
+                "registry_id_alias": asset.get("registry_id_alias"),
             }
+            for identifier in _asset_identifiers(asset):
+                cache[identifier] = payload
 
     output_path.write_text(json.dumps(cache, indent=2))
     print(f"Generated capabilities cache at: {output_path}")
@@ -358,7 +375,7 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
             continue
         if base_class not in type_groups:
             type_groups[base_class] = []
-        type_groups[base_class].append(registry_id)
+        type_groups[base_class].extend(_asset_identifiers(asset))
 
     # Generate the stub content
     lines = [

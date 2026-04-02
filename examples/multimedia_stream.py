@@ -9,10 +9,11 @@ Requirements:
 
 Usage:
     source /path/to/.env.local
-    python multimedia_stream.py
+    python multimedia_stream.py                  # multimedia (single WebRTC connection)
+    python multimedia_stream.py --multimedia     # same — explicit
     python multimedia_stream.py --video          # video only
     python multimedia_stream.py --audio          # audio only
-    python multimedia_stream.py --video --audio  # both (same as no flags)
+    python multimedia_stream.py --video --audio  # both, separate WebRTC connections
 
 Required env vars (see .env.local):
     CYBERWAVE_API_KEY         Knox API key
@@ -33,8 +34,9 @@ import struct
 import numpy as np
 
 from cyberwave import Cyberwave
-from cyberwave.sensor.audio_microphone import MicrophoneAudioStreamer
-from cyberwave.sensor.camera_virtual import VirtualCameraStreamer
+from cyberwave.sensor.microphone import MicrophoneAudioStreamer, MicrophoneAudioTrack
+from cyberwave.sensor.camera_virtual import VirtualCameraStreamer, VirtualVideoTrack
+from cyberwave.sensor.av_streamer import MultimediaStreamer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -161,30 +163,44 @@ def _parse_args() -> argparse.Namespace:
         description="Stream fake video and/or synthetic audio to a Cyberwave digital twin.",
     )
     parser.add_argument(
+        "--multimedia",
+        action="store_true",
+        help="Stream video + audio over a single WebRTC connection (default when no flags given)",
+    )
+    parser.add_argument(
         "--video",
         action="store_true",
-        help="Stream video (default: on if neither --audio nor --video is given)",
+        help="Stream video only (separate WebRTC connection)",
     )
     parser.add_argument(
         "--audio",
         action="store_true",
-        help="Stream audio (default: on if neither --audio nor --video is given)",
+        help="Stream audio only (separate WebRTC connection)",
     )
     return parser.parse_args()
 
 
 async def main() -> None:
     args = _parse_args()
-    neither = not args.audio and not args.video
-    stream_video = args.video or neither
-    stream_audio = args.audio or neither
+
+    # No flags at all → default to multimedia mode
+    no_flags = not args.multimedia and not args.video and not args.audio
+    use_multimedia = args.multimedia or no_flags
+    stream_video = args.video
+    stream_audio = args.audio
+
+    if use_multimedia and (stream_video or stream_audio):
+        raise SystemExit(
+            "--multimedia cannot be combined with --video or --audio. "
+            "Use --video --audio for separate WebRTC connections."
+        )
 
     twin_uuid = os.environ.get("CYBERWAVE_TWIN_UUID", "")
     audio_twin = os.environ.get("CYBERWAVE_AUDIO_TWIN_UUID", "") or twin_uuid
 
-    if stream_video and not twin_uuid:
+    if (use_multimedia or stream_video) and not twin_uuid:
         raise SystemExit("Set CYBERWAVE_TWIN_UUID to the UUID of your digital twin.")
-    if stream_audio and not audio_twin:
+    if (use_multimedia or stream_audio) and not audio_twin:
         raise SystemExit(
             "Set CYBERWAVE_AUDIO_TWIN_UUID or CYBERWAVE_TWIN_UUID for audio streaming."
         )
@@ -201,58 +217,61 @@ async def main() -> None:
 
     get_frame = FakeVideoSource().get_frame
     get_audio = MelodyAudioSource().get_audio
-    if stream_video and stream_audio:
-        logger.info("Streaming: fake video (colour-cycling) + Ode to Joy melody")
-    elif stream_video:
-        logger.info("Streaming: fake video (colour-cycling)")
-    else:
-        logger.info("Streaming: Ode to Joy melody")
 
     cw.mqtt.connect()
     logger.info("MQTT connected")
 
-    # ── Start streamers ────────────────────────────────────────────────────────
+    multimedia_streamer: MultimediaStreamer | None = None
     cam_streamer: VirtualCameraStreamer | None = None
-    if stream_video:
-        cam_streamer = VirtualCameraStreamer(
+    audio_streamer: MicrophoneAudioStreamer | None = None
+
+    if use_multimedia:
+        logger.info(
+            "Streaming: fake video + Ode to Joy melody (single WebRTC connection)"
+        )
+        multimedia_streamer = MultimediaStreamer(
             client=cw.mqtt,
-            get_frame=get_frame,
-            width=960,
-            height=540,
-            fps=15,
+            create_video_track=lambda: VirtualVideoTrack(
+                get_frame, width=960, height=540, fps=15,
+            ),
+            create_audio_track=lambda: MicrophoneAudioTrack(get_audio),
             twin_uuid=twin_uuid,
             camera_name="rgb",
+            mic_name="audio",
             auto_reconnect=True,
         )
-
-    audio_streamer: MicrophoneAudioStreamer | None = None
-    if stream_audio:
-        audio_streamer = MicrophoneAudioStreamer(
-            client=cw.mqtt,
-            get_audio=get_audio,
-            twin_uuid=audio_twin,
-            sensor_name="audio",
-            auto_reconnect=True,
-        )
-
-    if stream_video and stream_audio:
-        await cam_streamer.start()
-        await audio_streamer.start()
-    elif stream_video:
-        await cam_streamer.start()
-    else:
-        await audio_streamer.start()
-
-    if stream_video and stream_audio:
+        await multimedia_streamer.start()
         logger.info(
-            "Streaming video+audio to twin %s (audio twin: %s) — press Ctrl+C to stop",
+            "Streaming video+audio to twin %s (single PC) — press Ctrl+C to stop",
             twin_uuid,
-            audio_twin,
         )
-    elif stream_video:
-        logger.info("Streaming video to twin %s — press Ctrl+C to stop", twin_uuid)
     else:
-        logger.info("Streaming audio to twin %s — press Ctrl+C to stop", audio_twin)
+        if stream_video:
+            logger.info("Streaming: fake video (colour-cycling)")
+            cam_streamer = VirtualCameraStreamer(
+                client=cw.mqtt,
+                get_frame=get_frame,
+                width=960,
+                height=540,
+                fps=15,
+                twin_uuid=twin_uuid,
+                camera_name="rgb",
+                auto_reconnect=True,
+            )
+            await cam_streamer.start()
+            logger.info("Streaming video to twin %s — press Ctrl+C to stop", twin_uuid)
+
+        if stream_audio:
+            logger.info("Streaming: Ode to Joy melody")
+            audio_streamer = MicrophoneAudioStreamer(
+                client=cw.mqtt,
+                get_audio=get_audio,
+                twin_uuid=audio_twin,
+                mic_name="audio",
+                auto_reconnect=True,
+            )
+            await audio_streamer.start()
+            logger.info("Streaming audio to twin %s — press Ctrl+C to stop", audio_twin)
 
     try:
         await asyncio.sleep(float("inf"))
@@ -260,16 +279,15 @@ async def main() -> None:
         pass
     finally:
         logger.info("Stopping...")
-        if stream_video and stream_audio:
-            await asyncio.gather(
-                cam_streamer.stop(),
-                audio_streamer.stop(),
-                return_exceptions=True,
-            )
-        elif stream_video:
-            await cam_streamer.stop()
-        else:
-            await audio_streamer.stop()
+        tasks = []
+        if multimedia_streamer is not None:
+            tasks.append(multimedia_streamer.stop())
+        if cam_streamer is not None:
+            tasks.append(cam_streamer.stop())
+        if audio_streamer is not None:
+            tasks.append(audio_streamer.stop())
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         cw.mqtt.disconnect()
         logger.info("Done")
 

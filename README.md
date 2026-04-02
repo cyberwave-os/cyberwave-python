@@ -65,9 +65,9 @@ robot.edit_position(x=1.0, y=0.0, z=0.5)
 robot.edit_rotation(yaw=90)  # degrees
 
 # For locomotion twins, declare whether you want to affect the simulation
-# or the real robot, then call movement methods without source_type arguments
+# or the live robot, then call movement methods without source_type arguments
 rover = cw.twin("unitree/go2")
-cw.affect("simulation")   # or cw.affect("real-world") for the physical robot
+cw.affect("simulation")   # or cw.affect("live") for the physical robot
 rover.move_forward(distance=1.0)
 rover.turn_left(angle=1.57)
 
@@ -116,14 +116,18 @@ environment = cw.environments.create(
 # To instantiate a twin, you can query the available assets from the catalog.
 # This query will return both the public assets availaable at cyberwave.com/catalog and the private assets available to your organization.
 assets = cw.assets.search("so101")
-robot = cw.twin(assets[0].registry_id) # the registry_id is the unique identifier for the asset in the catalog. in this case it's the-robot-studio/so101
+robot = cw.twin(assets[0].registry_id) # the registry_id is the canonical asset identifier, e.g. the-robot-studio/so101
+
+# Standard assets can also expose a shorter registry ID alias for SDK ergonomics.
+# For example, a catalog camera asset may be callable with:
+camera = cw.twin("camera")
 
 # Edit the twin to a specific position
 robot.edit_position([1.0, 0.5, 0.0])
 
 # Navigate locomotion twins
-# Use affect() to set whether commands go to the simulation or the real robot
-cw.affect("simulation")   # or cw.affect("real-world")
+# Use affect() to set whether commands go to the simulation or the live robot
+cw.affect("simulation")   # or cw.affect("live")
 rover = cw.twin("unitree/go2")
 rover.move_forward(distance=1.0)
 rover.move_backward(distance=0.5)
@@ -318,7 +322,7 @@ Stream microphone audio to a digital twin over WebRTC (Opus, 48 kHz mono). Use a
 ```python
 import asyncio
 from cyberwave import Cyberwave
-from cyberwave.sensor.audio_microphone import MicrophoneAudioStreamer
+from cyberwave.sensor.microphone import MicrophoneAudioStreamer
 
 def get_audio() -> bytes | None:
     # Return 20 ms s16 mono 48 kHz (1920 bytes), or None for silence
@@ -378,9 +382,9 @@ all_joints = robot.joints.get_all()
 
 To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
 
-### Simulation vs. Real World
+### Simulation vs. Live
 
-Use `mode="simulation"` when you want a simulator-first client with simulation defaults for state publishing, or use `cw.affect()` to switch locomotion/control commands between the simulation and the real robot on an existing client.
+Use `mode="simulation"` when you want a simulator-first client with simulation defaults for state publishing, or use `cw.affect()` to switch locomotion/control commands between the simulation and the live robot on an existing client.
 
 ```python
 from cyberwave import Cyberwave
@@ -392,8 +396,8 @@ cw = Cyberwave(mode="simulation")
 rover = cw.twin("unitree/go2")
 rover.move_forward(1.0)   # moves the digital twin in Cyberwave
 
-# Switch command helpers to the real robot
-cw.affect("real-world")
+# Switch command helpers to the live robot
+cw.affect("live")
 rover.move_forward(1.0)   # moves the physical robot
 
 # You can still override per-call when needed
@@ -401,6 +405,8 @@ rover.move_forward(1.0, source_type="tele")
 ```
 
 `affect()` is chainable: `cw.affect("simulation").twin("unitree/go2")`.
+
+`"real-world"` is also accepted as an alias for `"live"`.
 
 Runtime mode defaults:
 
@@ -623,6 +629,77 @@ alert.silence()       # suppress without resolving
 alert.update(severity="critical")
 alert.delete()
 ```
+
+## Data Layer (`cw.data`) — *stub*
+
+Transport-agnostic pub/sub for edge sensor data. Supports Zenoh (primary) and filesystem (fallback) backends.
+
+Requires `CYBERWAVE_TWIN_UUID` to be set when accessing `cw.data`.
+
+```python
+cw = Cyberwave(api_key="...")
+
+# Publish a numpy frame
+import numpy as np
+frame = np.zeros((480, 640, 3), dtype=np.uint8)
+cw.data.publish("frames", frame)
+
+# Get the latest value (with staleness check)
+depth = cw.data.latest("depth", max_age_ms=50)
+if depth is None:
+    print("Depth sample too stale or not yet available")
+
+# Subscribe to decoded data
+def on_joints(data: dict):
+    print("Joints:", data)
+
+sub = cw.data.subscribe("joint_states", on_joints)
+# ... later
+sub.close()
+```
+
+Backend selection via `CYBERWAVE_DATA_BACKEND` env var (`zenoh` or `filesystem`).
+
+For Zenoh: `pip install cyberwave[zenoh]` or `pip install eclipse-zenoh`.
+
+### Time-aware fusion
+
+Interpolated point reads and time-window queries for multi-sensor workers.
+
+```python
+from cyberwave.data import Quaternion
+
+joints = cw.data.at("joint_states", t=ctx.timestamp, interpolation="linear")
+pose = cw.data.at("orientation", t=ctx.timestamp, interpolation="slerp")  # requires Quaternion values
+imu_samples = cw.data.window("imu", from_t=prev_frame_ts, to_t=ctx.timestamp)
+recent_ft = cw.data.window("force_torque", duration_ms=100)
+```
+
+| Strategy | Value types | Behavior |
+| --- | --- | --- |
+| `"linear"` | scalar, vector, dict, numpy, `Quaternion` | Element-wise lerp (NLERP for quaternions) |
+| `"slerp"` | `Quaternion` instances | Spherical linear interpolation |
+| `"nearest"` | any | Returns closest sample by time |
+| `"none"` | any | Exact timestamp match or `None` |
+
+Wrap orientation data in `Quaternion(x, y, z, w)` for type-safe SLERP. Convention: Hamilton `(x, y, z, w)`, same as ROS/MuJoCo.
+
+See the [data fusion docs](https://docs.cyberwave.com/sdks/data-fusion) for details.
+
+### Synchronized multi-channel hooks
+
+`@cw.on_synchronized` fires only when samples from all listed channels arrive within a configurable time tolerance — an approximate time synchronizer for multi-sensor fusion.
+
+```python
+@cw.on_synchronized(twin_uuid, ["frames/front", "depth/default", "joint_states"], tolerance_ms=50)
+def detect_collision(samples, ctx):
+    frame = samples["frames/front"].payload
+    depth = samples["depth/default"].payload
+    joints = samples["joint_states"].payload
+    # All three are within 50ms of each other
+```
+
+See the [synchronized hooks docs](https://docs.cyberwave.com/sdks/data-synchronized-hooks) for details.
 
 ## Testing
 

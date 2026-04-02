@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class AssetSchema(BaseModel):
     """
@@ -35,6 +36,7 @@ class AssetSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     owner_uuid: Optional[StrictStr] = None
     registry_id: Optional[StrictStr] = None
+    registry_id_alias: Optional[StrictStr] = None
     glb_file: Optional[StrictStr] = None
     urdf_file: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
@@ -44,10 +46,12 @@ class AssetSchema(BaseModel):
     thumbnail: Optional[StrictStr] = None
     has_universal_schema: Optional[StrictBool] = False
     universal_schema: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema"]
+    fixed_base: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -59,8 +63,7 @@ class AssetSchema(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -99,6 +102,11 @@ class AssetSchema(BaseModel):
         # and model_fields_set contains the field
         if self.registry_id is None and "registry_id" in self.model_fields_set:
             _dict['registry_id'] = None
+
+        # set to None if registry_id_alias (nullable) is None
+        # and model_fields_set contains the field
+        if self.registry_id_alias is None and "registry_id_alias" in self.model_fields_set:
+            _dict['registry_id_alias'] = None
 
         # set to None if glb_file (nullable) is None
         # and model_fields_set contains the field
@@ -160,6 +168,7 @@ class AssetSchema(BaseModel):
             "visibility": obj.get("visibility"),
             "owner_uuid": obj.get("owner_uuid"),
             "registry_id": obj.get("registry_id"),
+            "registry_id_alias": obj.get("registry_id_alias"),
             "glb_file": obj.get("glb_file"),
             "urdf_file": obj.get("urdf_file"),
             "workspace_uuid": obj.get("workspace_uuid"),
@@ -168,7 +177,8 @@ class AssetSchema(BaseModel):
             "capabilities": obj.get("capabilities"),
             "thumbnail": obj.get("thumbnail"),
             "has_universal_schema": obj.get("has_universal_schema") if obj.get("has_universal_schema") is not None else False,
-            "universal_schema": obj.get("universal_schema")
+            "universal_schema": obj.get("universal_schema"),
+            "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False
         })
         return _obj
 

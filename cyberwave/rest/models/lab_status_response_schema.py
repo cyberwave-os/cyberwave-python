@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class LabStatusResponseSchema(BaseModel):
     """
@@ -31,6 +32,8 @@ class LabStatusResponseSchema(BaseModel):
     total_labs: StrictInt
     free_labs: StrictInt
     queue_length: StrictInt
+    configured_labs: Optional[StrictInt] = 0
+    online_labs: Optional[StrictInt] = 0
     queue_position: Optional[StrictInt] = None
     estimated_wait_minutes: Optional[StrictInt] = None
     session_status: Optional[StrictStr] = None
@@ -39,10 +42,11 @@ class LabStatusResponseSchema(BaseModel):
     environment_name: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     message: Optional[StrictStr] = ''
-    __properties: ClassVar[List[str]] = ["has_session", "available", "total_labs", "free_labs", "queue_length", "queue_position", "estimated_wait_minutes", "session_status", "session_expires_at", "time_remaining_seconds", "environment_name", "environment_uuid", "message"]
+    __properties: ClassVar[List[str]] = ["has_session", "available", "total_labs", "free_labs", "queue_length", "configured_labs", "online_labs", "queue_position", "estimated_wait_minutes", "session_status", "session_expires_at", "time_remaining_seconds", "environment_name", "environment_uuid", "message"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -54,8 +58,7 @@ class LabStatusResponseSchema(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -132,6 +135,8 @@ class LabStatusResponseSchema(BaseModel):
             "total_labs": obj.get("total_labs"),
             "free_labs": obj.get("free_labs"),
             "queue_length": obj.get("queue_length"),
+            "configured_labs": obj.get("configured_labs") if obj.get("configured_labs") is not None else 0,
+            "online_labs": obj.get("online_labs") if obj.get("online_labs") is not None else 0,
             "queue_position": obj.get("queue_position"),
             "estimated_wait_minutes": obj.get("estimated_wait_minutes"),
             "session_status": obj.get("session_status"),

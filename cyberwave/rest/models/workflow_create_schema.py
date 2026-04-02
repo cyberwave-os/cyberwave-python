@@ -21,21 +21,24 @@ from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class WorkflowCreateSchema(BaseModel):
     """
     WorkflowCreateSchema
     """ # noqa: E501
     name: StrictStr
+    slug: Optional[StrictStr] = None
     description: Optional[StrictStr] = ''
     is_active: Optional[StrictBool] = False
     workspace_uuid: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "is_active", "workspace_uuid", "visibility", "metadata"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "workspace_uuid", "visibility", "metadata"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -47,8 +50,7 @@ class WorkflowCreateSchema(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -73,6 +75,11 @@ class WorkflowCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -96,6 +103,7 @@ class WorkflowCreateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "name": obj.get("name"),
+            "slug": obj.get("slug"),
             "description": obj.get("description") if obj.get("description") is not None else '',
             "is_active": obj.get("is_active") if obj.get("is_active") is not None else False,
             "workspace_uuid": obj.get("workspace_uuid"),

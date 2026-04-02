@@ -3,8 +3,9 @@ Main Cyberwave client that integrates REST and MQTT APIs
 """
 
 import os
+import time
 import warnings
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from cyberwave.rest import DefaultApi, ApiClient, Configuration
 from cyberwave.config import (
@@ -12,6 +13,7 @@ from cyberwave.config import (
     DEFAULT_BASE_URL,
 )
 from cyberwave.controller import EdgeController
+from cyberwave.models.manager import ModelManager
 from cyberwave.mqtt_client import CyberwaveMQTTClient
 from cyberwave.resources import (
     WorkspaceManager,
@@ -21,6 +23,7 @@ from cyberwave.resources import (
     EdgeManager,
     TwinManager,
 )
+from cyberwave.workers.hooks import HookRegistry
 from cyberwave.workflows import WorkflowManager, WorkflowRunManager
 from cyberwave.twin import Twin, create_twin
 from cyberwave.utils import TimeReference
@@ -33,6 +36,8 @@ from cyberwave.constants import (
     SOURCE_TYPE_EDGE,
     SOURCE_TYPE_SIM,
 )
+from cyberwave.data.api import DataBus
+from cyberwave.workers.hooks import HookRegistry
 
 # Import camera streamers with optional dependency handling
 try:
@@ -163,6 +168,11 @@ class Cyberwave:
 
         self._setup_rest_client()
         self._mqtt_client: Optional[CyberwaveMQTTClient] = None
+        self._data_bus: Optional[DataBus] = None
+        self._hook_registry = HookRegistry()
+
+        self._hook_registry = HookRegistry()
+        self.models = ModelManager()
 
         self.workspaces = WorkspaceManager(self.api)
         self.projects = ProjectManager(self.api)
@@ -207,6 +217,13 @@ class Cyberwave:
             _request_timeout=None,
             **kwargs,
         ):
+            header_params = dict(header_params or {})
+            has_authorization = any(
+                str(key).lower() == "authorization" for key in header_params
+            )
+            if self.config.api_key and not has_authorization:
+                header_params["Authorization"] = f"Bearer {self.config.api_key}"
+
             last_request_headers.clear()
             if header_params:
                 last_request_headers.update(header_params)
@@ -279,6 +296,30 @@ class Cyberwave:
                 ) from e
 
         return wrapped
+
+    @property
+    def data(self) -> DataBus:
+        """Data-layer bus (lazy initialization).
+
+        Returns a :class:`~cyberwave.data.api.DataBus` backed by the
+        backend selected via ``CYBERWAVE_DATA_BACKEND``.
+
+        Raises:
+            CyberwaveError: If ``CYBERWAVE_TWIN_UUID`` is not set.
+        """
+        if self._data_bus is None:
+            from cyberwave.data.config import get_backend
+
+            twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
+            if not twin_uuid:
+                raise CyberwaveError(
+                    "CYBERWAVE_TWIN_UUID environment variable is required "
+                    "for cw.data but is not set.  Export it before accessing "
+                    "the data bus, e.g.: export CYBERWAVE_TWIN_UUID=<uuid>"
+                )
+            backend = get_backend()
+            self._data_bus = DataBus(backend, twin_uuid)
+        return self._data_bus
 
     @property
     def mqtt(self) -> CyberwaveMQTTClient:
@@ -361,10 +402,9 @@ class Cyberwave:
             ).uuid
             self.config.environment_id = env_id
 
-        assets = self.assets.search(asset_key)
-        if not assets:
+        asset = self.assets.get_by_registry_id(asset_key)
+        if asset is None:
             raise CyberwaveError(f"Asset '{asset_key}' not found")
-        asset = assets[0]
 
         # Get registry_id for capability lookup
         registry_id = getattr(asset, "registry_id", None) or asset_key
@@ -382,7 +422,7 @@ class Cyberwave:
             )
             return create_twin(self, twin_data, registry_id=registry_id)
         except Exception:
-            return create_twin(self, twin_data, registry_id=registry_id)
+            raise
 
     def affect(self, mode: str) -> "Cyberwave":
         """
@@ -691,10 +731,129 @@ class Cyberwave:
 
         return Scene(self, environment_id)
 
+    # ── Hook decorator delegation ────────────────────────────────
+
+    @property
+    def on_frame(self) -> Callable:
+        return self._hook_registry.on_frame
+
+    @property
+    def on_depth(self) -> Callable:
+        return self._hook_registry.on_depth
+
+    @property
+    def on_audio(self) -> Callable:
+        return self._hook_registry.on_audio
+
+    @property
+    def on_pointcloud(self) -> Callable:
+        return self._hook_registry.on_pointcloud
+
+    @property
+    def on_imu(self) -> Callable:
+        return self._hook_registry.on_imu
+
+    @property
+    def on_force_torque(self) -> Callable:
+        return self._hook_registry.on_force_torque
+
+    @property
+    def on_joint_states(self) -> Callable:
+        return self._hook_registry.on_joint_states
+
+    @property
+    def on_attitude(self) -> Callable:
+        return self._hook_registry.on_attitude
+
+    @property
+    def on_gps(self) -> Callable:
+        return self._hook_registry.on_gps
+
+    @property
+    def on_end_effector_pose(self) -> Callable:
+        return self._hook_registry.on_end_effector_pose
+
+    @property
+    def on_gripper_state(self) -> Callable:
+        return self._hook_registry.on_gripper_state
+
+    @property
+    def on_map(self) -> Callable:
+        return self._hook_registry.on_map
+
+    @property
+    def on_battery(self) -> Callable:
+        return self._hook_registry.on_battery
+
+    @property
+    def on_temperature(self) -> Callable:
+        return self._hook_registry.on_temperature
+
+    @property
+    def on_lidar(self) -> Callable:
+        return self._hook_registry.on_lidar
+
+    @property
+    def on_data(self) -> Callable:
+        return self._hook_registry.on_data
+
+    @property
+    def on_synchronized(self) -> Callable:
+        return self._hook_registry.on_synchronized
+
+    # ── Worker runtime helpers ───────────────────────────────────
+
+    def publish_event(
+        self,
+        twin_uuid: str,
+        event_type: str,
+        data: dict[str, Any],
+        *,
+        source: str = "edge_node",
+    ) -> None:
+        """Publish a business event via MQTT.
+
+        Payload shape matches ``BaseEdgeNode.publish_event()`` and the
+        backend ``mqtt_consumer.handle_business_event()``::
+
+            {"event_type": ..., "source": ..., "data": ..., "timestamp": ...}
+        """
+        prefix = self.mqtt.topic_prefix
+        self.mqtt.publish(
+            f"{prefix}cyberwave/twin/{twin_uuid}/event",
+            {
+                "event_type": event_type,
+                "source": source,
+                "data": data,
+                "timestamp": time.time(),
+            },
+        )
+
+    def run_edge_workers(self, workers_dir: str | None = None) -> None:
+        """Start the edge worker runtime: load workers, activate hooks, block.
+
+        Creates a :class:`~cyberwave.workers.runtime.WorkerRuntime`, loads
+        worker modules from *workers_dir*, wires hooks to data-layer
+        subscriptions, and blocks until ``stop()`` or a signal is received.
+
+        The runtime is stored as ``self._runtime`` so that external code
+        (e.g. a health-check thread or edge-core shutdown message) can call
+        ``client._runtime.stop()`` without relying on signals.
+        """
+        from cyberwave.workers.runtime import WorkerRuntime
+
+        self._runtime = WorkerRuntime(self)
+        self._runtime.load(workers_dir)
+        self._runtime.start()
+        self._runtime.run()
+
     def disconnect(self):
-        """Disconnect all connections (REST and MQTT)"""
+        """Disconnect all connections (REST, MQTT, and data bus)."""
         if self._mqtt_client:
             self._mqtt_client.disconnect()
+        if self._data_bus is not None:
+            self._data_bus.close()
+            self._data_bus = None
 
     def __enter__(self):
         return self

@@ -21,20 +21,23 @@ from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class WorkflowUpdateSchema(BaseModel):
     """
     WorkflowUpdateSchema
     """ # noqa: E501
     name: Optional[StrictStr] = None
+    slug: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
     is_active: Optional[StrictBool] = None
     visibility: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "is_active", "visibility", "metadata"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "metadata"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -46,8 +49,7 @@ class WorkflowUpdateSchema(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -76,6 +78,11 @@ class WorkflowUpdateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.name is None and "name" in self.model_fields_set:
             _dict['name'] = None
+
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
 
         # set to None if description (nullable) is None
         # and model_fields_set contains the field
@@ -110,6 +117,7 @@ class WorkflowUpdateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "name": obj.get("name"),
+            "slug": obj.get("slug"),
             "description": obj.get("description"),
             "is_active": obj.get("is_active"),
             "visibility": obj.get("visibility"),

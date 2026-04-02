@@ -59,6 +59,7 @@ class CyberwaveConfig:
     source_type: str = SOURCE_TYPE_EDGE
     topic_prefix: Optional[str] = None
     runtime_mode: str = "live"
+    twin_uuid: Optional[str] = None
 
     def __post_init__(self):
         """Load configuration from environment variables if not provided"""
@@ -115,6 +116,9 @@ class CyberwaveConfig:
 
         if not self.runtime_mode:
             self.runtime_mode = "live"
+
+        if not self.twin_uuid:
+            self.twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
 
     @property
     def auth_header(self) -> dict:

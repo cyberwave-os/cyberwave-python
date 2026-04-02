@@ -61,6 +61,27 @@ class TestWorkflowManager:
         assert isinstance(wf, Workflow)
         assert wf.name == "Inspect"
 
+    def test_get_by_slug_returns_workflow(self):
+        client = _make_client()
+        manager = WorkflowManager(client)
+        raw = [{"uuid": "wf-1", "name": "Inspect", "slug": "inspect"}]
+
+        with patch("cyberwave.workflows._list_workflows", return_value=raw) as mock_list:
+            wf = manager.get_by_slug("ws-1", "inspect")
+
+        mock_list.assert_called_once_with(client, workspace_id="ws-1", slug="inspect")
+        assert isinstance(wf, Workflow)
+        assert wf.slug == "inspect"
+
+    def test_get_by_slug_returns_none_when_missing(self):
+        client = _make_client()
+        manager = WorkflowManager(client)
+
+        with patch("cyberwave.workflows._list_workflows", return_value=[]):
+            wf = manager.get_by_slug("ws-1", "missing")
+
+        assert wf is None
+
     def test_trigger_returns_workflow_run(self):
         client = _make_client()
         manager = WorkflowManager(client)
@@ -158,6 +179,11 @@ class TestWorkflow:
         client = _make_client()
         assert Workflow(client, {"uuid": "1", "is_active": True}).status == "active"
         assert Workflow(client, {"uuid": "2", "is_active": False}).status == "inactive"
+
+    def test_slug_property(self):
+        client = _make_client()
+        wf = Workflow(client, {"uuid": "wf-1", "slug": "image-to-asset"})
+        assert wf.slug == "image-to-asset"
 
     def test_repr(self):
         client = _make_client()

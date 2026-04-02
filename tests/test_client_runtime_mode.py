@@ -104,3 +104,19 @@ def test_affect_changes_emitted_command_and_state_source_types() -> None:
         live_mqtt.update_twin_position("twin-uuid", {"x": 4.0, "y": 5.0, "z": 6.0})
         live_state_payload = live_mqtt._client.publish.call_args.args[1]
         assert live_state_payload["source_type"] == "edge"
+
+
+def test_rest_client_injects_authorization_for_generated_public_endpoint() -> None:
+    client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
+    client._api_client.rest_client.request = MagicMock(return_value=MagicMock())
+    serialized = client.api._src_app_api_assets_list_assets_serialize(
+        _request_auth=None,
+        _content_type=None,
+        _headers=None,
+        _host_index=0,
+    )
+
+    client._api_client.call_api(*serialized)
+
+    headers = client._api_client.rest_client.request.call_args.kwargs["headers"]
+    assert headers["Authorization"] == "Bearer test_key"

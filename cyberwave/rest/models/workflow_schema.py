@@ -24,16 +24,19 @@ from cyberwave.rest.models.workflow_connection_schema import WorkflowConnectionS
 from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class WorkflowSchema(BaseModel):
     """
     Workflow schema.
     """ # noqa: E501
     uuid: StrictStr
+    slug: StrictStr
     name: StrictStr
     description: StrictStr
     is_active: StrictBool
     workspace_uuid: StrictStr
+    workspace_name: Optional[StrictStr] = None
     visibility: StrictStr
     created_at: datetime
     updated_at: datetime
@@ -42,10 +45,11 @@ class WorkflowSchema(BaseModel):
     metadata: Dict[str, Any]
     nodes: Optional[List[WorkflowNodeSchema]] = None
     connections: Optional[List[WorkflowConnectionSchema]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "is_active", "workspace_uuid", "visibility", "created_at", "updated_at", "created_by", "updated_by", "metadata", "nodes", "connections"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "visibility", "created_at", "updated_at", "created_by", "updated_by", "metadata", "nodes", "connections"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -57,8 +61,7 @@ class WorkflowSchema(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -97,6 +100,11 @@ class WorkflowSchema(BaseModel):
                 if _item_connections:
                     _items.append(_item_connections.to_dict())
             _dict['connections'] = _items
+        # set to None if workspace_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_name is None and "workspace_name" in self.model_fields_set:
+            _dict['workspace_name'] = None
+
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -130,10 +138,12 @@ class WorkflowSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
+            "slug": obj.get("slug"),
             "name": obj.get("name"),
             "description": obj.get("description"),
             "is_active": obj.get("is_active"),
             "workspace_uuid": obj.get("workspace_uuid"),
+            "workspace_name": obj.get("workspace_name"),
             "visibility": obj.get("visibility"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),

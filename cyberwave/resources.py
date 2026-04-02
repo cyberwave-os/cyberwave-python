@@ -829,6 +829,265 @@ class AssetManager(BaseResourceManager):
             self._handle_error(e, f"patch universal schema for asset {asset_id}")
             raise
 
+    def get_universal_schema_at_path(self, asset_id: str, path: str = "") -> Dict[str, Any]:
+        """
+        Get value at a specific JSON Pointer path in the asset's universal schema.
+
+        Args:
+            asset_id: UUID of the asset
+            path: JSON Pointer path (e.g., "/sensors/0", "/physics/gravity")
+                 Empty string returns the entire schema
+
+        Returns:
+            Dict with keys:
+                - path: The JSON Pointer path
+                - value: The value at that path (can be any JSON type)
+
+        Example:
+            result = cw.assets.get_universal_schema_at_path(asset_id, "/physics")
+            physics = result['value']
+
+            result = cw.assets.get_universal_schema_at_path(asset_id, "/sensors/0")
+            sensor = result['value']
+        """
+        try:
+            return self.api.src_app_api_assets_get_asset_universal_schema_at_path(
+                asset_id, path=path
+            )
+        except Exception as e:
+            self._handle_error(e, f"get universal schema at path for asset {asset_id}")
+            raise
+
+    def rebuild_universal_schema(self, asset_id: str) -> Dict[str, Any]:
+        """
+        Rebuild the asset's universal schema from its source files (URDF/MJCF/SDF).
+
+        This re-parses the uploaded robot description and regenerates the
+        canonical schema. Useful after uploading new source files or to reset
+        manual edits.
+
+        Args:
+            asset_id: UUID of the asset
+
+        Returns:
+            Dict with the rebuilt schema
+
+        Example:
+            result = cw.assets.rebuild_universal_schema(asset_id)
+        """
+        try:
+            return self.api.src_app_api_assets_rebuild_asset_universal_schema(asset_id)
+        except Exception as e:
+            self._handle_error(e, f"rebuild universal schema for asset {asset_id}")
+            raise
+
+    # =========================================================================
+    # Physics convenience methods
+    # =========================================================================
+
+    def get_physics(self, asset_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the physics section of the asset's universal schema.
+
+        Returns:
+            The physics dict, or None if no physics are configured.
+
+        Example:
+            physics = cw.assets.get_physics(asset_id)
+            if physics:
+                print(f"Gravity: {physics['gravity']}")
+                print(f"Timestep: {physics['timestep']}")
+        """
+        schema = self.get_universal_schema(asset_id)
+        return schema.get("physics")
+
+    def set_physics(
+        self,
+        asset_id: str,
+        *,
+        gravity: Optional[Dict[str, float]] = None,
+        timestep: Optional[float] = None,
+        solver: Optional[Dict[str, Any]] = None,
+        contact: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Set physics properties on the asset's universal schema.
+
+        Only provided fields are written; omitted fields keep their current
+        values (or use schema defaults if physics didn't exist yet).
+
+        Args:
+            asset_id: UUID of the asset
+            gravity: Gravity vector, e.g. ``{"x": 0, "y": 0, "z": -9.81}``
+            timestep: Simulation timestep in seconds (e.g. ``0.001``)
+            solver: Solver config dict, e.g.
+                ``{"type": "quick", "iterations": 50}``
+            contact: Default contact surface dict, e.g.
+                ``{"mu_static": 0.8, "mu_dynamic": 0.7, "restitution": 0.1}``
+
+        Returns:
+            Dict with keys ``schema``, ``hash``, ``updated``.
+
+        Example:
+            cw.assets.set_physics(
+                asset_id,
+                gravity={"x": 0, "y": 0, "z": -9.81},
+                timestep=0.002,
+                solver={"type": "quick", "iterations": 100},
+                contact={"mu_static": 1.0, "restitution": 0.05},
+            )
+        """
+        current = self.get_physics(asset_id) or {}
+        updated: Dict[str, Any] = {**current}
+        if gravity is not None:
+            updated["gravity"] = gravity
+        if timestep is not None:
+            updated["timestep"] = timestep
+        if solver is not None:
+            updated["solver"] = {**current.get("solver", {}), **solver}
+        if contact is not None:
+            updated["contact"] = {**current.get("contact", {}), **contact}
+        return self.patch_universal_schema(asset_id, path="/physics", value=updated, op="add")
+
+    def set_gravity(
+        self,
+        asset_id: str,
+        x: float = 0.0,
+        y: float = 0.0,
+        z: float = -9.81,
+    ) -> Dict[str, Any]:
+        """
+        Set the gravity vector in the asset's physics.
+
+        Args:
+            asset_id: UUID of the asset
+            x: Gravity X component (default 0.0)
+            y: Gravity Y component (default 0.0)
+            z: Gravity Z component (default -9.81)
+
+        Returns:
+            Dict with keys ``schema``, ``hash``, ``updated``.
+
+        Example:
+            # Earth gravity (default)
+            cw.assets.set_gravity(asset_id)
+
+            # Mars gravity
+            cw.assets.set_gravity(asset_id, z=-3.71)
+
+            # Zero-g
+            cw.assets.set_gravity(asset_id, z=0.0)
+        """
+        return self.patch_universal_schema(
+            asset_id,
+            path="/physics/gravity",
+            value={"x": x, "y": y, "z": z},
+            op="add",
+        )
+
+    def set_physics_solver(
+        self,
+        asset_id: str,
+        *,
+        solver_type: Optional[str] = None,
+        iterations: Optional[int] = None,
+        sor: Optional[float] = None,
+        min_step_size: Optional[float] = None,
+        max_step_size: Optional[float] = None,
+        tolerance: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Set the physics solver configuration.
+
+        Only provided fields are written; omitted fields keep their current values.
+
+        Args:
+            asset_id: UUID of the asset
+            solver_type: Solver type — ``"quick"``, ``"ode"``, ``"bullet"``,
+                ``"dart"``, or ``"simbody"``
+            iterations: Solver iterations per step
+            sor: Successive Over-Relaxation parameter (ODE)
+            min_step_size: Minimum step size
+            max_step_size: Maximum step size
+            tolerance: Solver tolerance
+
+        Returns:
+            Dict with keys ``schema``, ``hash``, ``updated``.
+
+        Example:
+            cw.assets.set_physics_solver(
+                asset_id,
+                solver_type="quick",
+                iterations=100,
+            )
+        """
+        current_physics = self.get_physics(asset_id) or {}
+        current_solver: Dict[str, Any] = {**current_physics.get("solver", {})}
+        if solver_type is not None:
+            current_solver["type"] = solver_type
+        if iterations is not None:
+            current_solver["iterations"] = iterations
+        if sor is not None:
+            current_solver["sor"] = sor
+        if min_step_size is not None:
+            current_solver["min_step_size"] = min_step_size
+        if max_step_size is not None:
+            current_solver["max_step_size"] = max_step_size
+        if tolerance is not None:
+            current_solver["tolerance"] = tolerance
+        return self.patch_universal_schema(
+            asset_id, path="/physics/solver", value=current_solver, op="add"
+        )
+
+    def set_contact_properties(
+        self,
+        asset_id: str,
+        *,
+        mu_static: Optional[float] = None,
+        mu_dynamic: Optional[float] = None,
+        restitution: Optional[float] = None,
+        stiffness: Optional[float] = None,
+        damping: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Set the default contact surface properties in the asset's physics.
+
+        Only provided fields are written; omitted fields keep their current values.
+
+        Args:
+            asset_id: UUID of the asset
+            mu_static: Static friction coefficient (default 0.8)
+            mu_dynamic: Dynamic friction coefficient (default 0.7)
+            restitution: Restitution / bounciness (default 0.1)
+            stiffness: Contact stiffness (default 10000.0)
+            damping: Contact damping (default 20.0)
+
+        Returns:
+            Dict with keys ``schema``, ``hash``, ``updated``.
+
+        Example:
+            cw.assets.set_contact_properties(
+                asset_id,
+                mu_static=1.0,
+                restitution=0.0,
+            )
+        """
+        current_physics = self.get_physics(asset_id) or {}
+        current_contact: Dict[str, Any] = {**current_physics.get("contact", {})}
+        if mu_static is not None:
+            current_contact["mu_static"] = mu_static
+        if mu_dynamic is not None:
+            current_contact["mu_dynamic"] = mu_dynamic
+        if restitution is not None:
+            current_contact["restitution"] = restitution
+        if stiffness is not None:
+            current_contact["stiffness"] = stiffness
+        if damping is not None:
+            current_contact["damping"] = damping
+        return self.patch_universal_schema(
+            asset_id, path="/physics/contact", value=current_contact, op="add"
+        )
+
     def search(self, query: str) -> List[AssetSchema]:
         """Search for assets by name or tags"""
         try:
@@ -854,101 +1113,41 @@ class AssetManager(BaseResourceManager):
             raise  # For type checker
 
     def get_by_registry_id(self, registry_id: str) -> Optional[AssetSchema]:
-        """Get asset by registry ID (e.g., 'cyberwave/ip-camera').
+        """Get asset by canonical registry ID or registry ID alias."""
+        try:
+            asset = self.get(registry_id)
+            if asset:
+                return asset
+        except Exception:
+            pass
 
-        Uses search API first for efficiency, falls back to list scan.
-        """
+        normalized_identifier = registry_id.strip().lower()
+        if not normalized_identifier:
+            return None
+
         try:
             # Try search API first (more efficient)
-            search_results = self.search(registry_id)
+            search_results = self.search(normalized_identifier)
             for asset in search_results:
-                if getattr(asset, "registry_id", None) == registry_id:
+                if getattr(asset, "registry_id", None) == normalized_identifier or getattr(
+                    asset, "registry_id_alias", None
+                ) == normalized_identifier:
                     return asset
 
             # Fall back to full list scan if not found in search
             assets = self.list()
             for asset in assets:
-                if getattr(asset, "registry_id", None) == registry_id:
+                if getattr(asset, "registry_id", None) == normalized_identifier or getattr(
+                    asset, "registry_id_alias", None
+                ) == normalized_identifier:
                     return asset
             return None
         except Exception:
             return None
 
     def get_by_alias(self, alias: str) -> Optional[AssetSchema]:
-        """Get asset by alias defined in metadata.aliases.
-
-        Optimized to minimize API calls:
-        1. First checks for exact name match (no extra queries)
-        2. Uses search API to find candidates
-        3. Only fetches full details for top candidates (max 5)
-        4. Uses caching to avoid repeated fetches
-
-        Args:
-            alias: Alias to search for (case-insensitive)
-
-        Returns:
-            AssetSchema if found, None otherwise
-        """
-        try:
-            alias_lower = alias.lower()
-
-            # Step 1: Try search API - often returns relevant results
-            search_results = self.search(alias)
-
-            # Check search results for exact name match first (no extra query)
-            for asset in search_results:
-                name = getattr(asset, "name", "").lower()
-                if name == alias_lower:
-                    # Get full asset to ensure we have complete data
-                    asset_uuid = str(getattr(asset, "uuid", ""))
-                    cached = self._get_cached(asset_uuid)
-                    if cached:
-                        return cached
-                    full_asset = self.get(asset_uuid)
-                    self._set_cache(asset_uuid, full_asset)
-                    return full_asset
-
-            # Step 2: Check aliases in search results (limit to top 5 to avoid N+1)
-            candidates = search_results[:5]
-            for asset in candidates:
-                asset_uuid = str(getattr(asset, "uuid", ""))
-                if not asset_uuid:
-                    continue
-
-                # Check cache first
-                cached = self._get_cached(asset_uuid)
-                if cached:
-                    full_metadata = getattr(cached, "metadata", {}) or {}
-                    aliases = full_metadata.get("aliases", [])
-                    if any(a.lower() == alias_lower for a in aliases):
-                        return cached
-                    continue
-
-                # Fetch full asset to check aliases
-                full_asset = self.get(asset_uuid)
-                self._set_cache(asset_uuid, full_asset)
-                full_metadata = getattr(full_asset, "metadata", {}) or {}
-                aliases = full_metadata.get("aliases", [])
-                if any(a.lower() == alias_lower for a in aliases):
-                    return full_asset
-
-            # Step 3: If not found in search results, scan full list for name match
-            # This handles cases where search didn't return the asset
-            assets = self.list()
-            for asset in assets:
-                name = getattr(asset, "name", "").lower()
-                if name == alias_lower:
-                    asset_uuid = str(getattr(asset, "uuid", ""))
-                    cached = self._get_cached(asset_uuid)
-                    if cached:
-                        return cached
-                    full_asset = self.get(asset_uuid)
-                    self._set_cache(asset_uuid, full_asset)
-                    return full_asset
-
-            return None
-        except Exception:
-            return None
+        """Get asset by the first-class registry ID alias."""
+        return self.get_by_registry_id(alias)
 
 
 class EdgeManager(BaseResourceManager):
