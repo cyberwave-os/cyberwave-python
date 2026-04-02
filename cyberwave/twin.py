@@ -127,12 +127,7 @@ class JointController:
         """Refresh joint states from the server"""
         try:
             states = self.twin.client.twins.get_joint_states(self.twin.uuid)
-            if hasattr(states, "joint_states"):
-                self._joint_states = {
-                    js.joint_name: js.position for js in states.joint_states
-                }
-            else:
-                self._joint_states = {}
+            self._joint_states = dict(zip(states.name, states.position))
         except Exception as e:
             raise CyberwaveError(f"Failed to refresh joint states: {e}")
 
