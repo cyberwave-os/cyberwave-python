@@ -137,7 +137,7 @@ class TestEdgePhoto:
         camera = TwinCameraHandle(twin)
 
         # No response sent — should timeout
-        with pytest.raises(CyberwaveError, match="Timed out"):
+        with pytest.raises(CyberwaveError, match="Timed out.*take_photo"):
             camera.edge_photo(timeout=0.2)
 
     def test_raises_on_edge_error_response(self):

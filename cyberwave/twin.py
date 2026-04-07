@@ -365,6 +365,10 @@ class TwinCameraHandle:
         This bypasses the cloud REST API and WebRTC entirely — it works
         as long as MQTT is connected and the edge driver has a camera frame.
 
+        .. note::
+            Not all edge drivers implement the ``take_photo`` MQTT command.
+            If this method times out, the driver likely doesn't support it.
+
         Args:
             format: Output format — ``"numpy"`` (default), ``"pil"``,
                 ``"bytes"``, or ``"path"``.
@@ -412,7 +416,9 @@ class TwinCameraHandle:
 
             if not received.wait(timeout=timeout):
                 raise CyberwaveError(
-                    f"Timed out waiting {timeout}s for edge photo response"
+                    f"Timed out waiting {timeout}s for edge photo response. "
+                    "The edge driver may not support the 'take_photo' command, "
+                    "or MQTT is not connected."
                 )
 
             payload = result.get("payload", {})
