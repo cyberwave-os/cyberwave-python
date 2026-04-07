@@ -3,10 +3,12 @@ High-level Twin abstraction for intuitive digital twin control
 """
 
 import asyncio
+import base64
 from copy import deepcopy
 import json
 import math
 import os
+import threading
 import time
 import logging
 from pathlib import Path
@@ -347,6 +349,117 @@ class TwinCameraHandle:
                 "This twin does not have streaming capabilities."
             )
         self._twin.start_streaming(fps=fps, camera_id=camera_id)
+
+    def edge_photo(
+        self,
+        format: str = "numpy",
+        *,
+        timeout: float = 5.0,
+    ) -> Any:
+        """Capture a frame from the edge device via MQTT ``take_photo`` command.
+
+        Sends a ``take_photo`` command over MQTT to the edge driver, which
+        grabs the latest cached camera frame, JPEG-encodes it, and responds
+        on ``camera/photo`` with a base64-encoded JPEG.
+
+        This bypasses the cloud REST API and WebRTC entirely — it works
+        as long as MQTT is connected and the edge driver has a camera frame.
+
+        Args:
+            format: Output format — ``"numpy"`` (default), ``"pil"``,
+                ``"bytes"``, or ``"path"``.
+            timeout: Seconds to wait for the photo response before raising.
+
+        Returns:
+            Frame in the requested format.
+
+        Raises:
+            CyberwaveError: If MQTT is unavailable, the edge returns an
+                error, or the timeout is exceeded.
+        """
+        twin = self._twin
+        twin._connect_to_mqtt_if_not_connected()
+        prefix = twin.client.config.topic_prefix or ""
+
+        photo_topic = f"{prefix}cyberwave/twin/{twin.uuid}/camera/photo"
+        cmd_topic = f"{prefix}cyberwave/twin/{twin.uuid}/command"
+
+        received = threading.Event()
+        result: Dict[str, Any] = {}
+
+        def _on_photo(message):
+            try:
+                payload = json.loads(message) if isinstance(message, str) else message
+            except (json.JSONDecodeError, TypeError):
+                result["error"] = f"Invalid photo response: {message!r}"
+                received.set()
+                return
+            result["payload"] = payload
+            received.set()
+
+        twin.client.mqtt.subscribe(photo_topic, _on_photo)
+
+        try:
+            twin.client.mqtt.publish(
+                cmd_topic,
+                {
+                    "source_type": SOURCE_TYPE_TELE,
+                    "command": "take_photo",
+                    "data": {},
+                    "timestamp": time.time(),
+                },
+            )
+
+            if not received.wait(timeout=timeout):
+                raise CyberwaveError(
+                    f"Timed out waiting {timeout}s for edge photo response"
+                )
+
+            payload = result.get("payload", {})
+            if "error" in payload or payload.get("status") == "error":
+                msg = payload.get("message", payload.get("error", "unknown error"))
+                raise CyberwaveError(f"Edge photo failed: {msg}")
+
+            image_b64 = payload.get("image")
+            if not image_b64:
+                raise CyberwaveError(
+                    f"Edge photo response missing 'image' field: {list(payload.keys())}"
+                )
+
+            jpeg_bytes = base64.b64decode(image_b64)
+            return _decode_frame(jpeg_bytes, format)
+        finally:
+            mqtt_client = getattr(twin.client.mqtt, "_client", twin.client.mqtt)
+            mqtt_client.unsubscribe(photo_topic)
+
+    def edge_photos(
+        self,
+        count: int = 1,
+        interval_ms: int = 200,
+        format: str = "bytes",
+        *,
+        timeout: float = 5.0,
+    ) -> List[Any]:
+        """Capture multiple frames from the edge device.
+
+        Calls :meth:`edge_photo` repeatedly with a delay between shots.
+
+        Args:
+            count: Number of frames to capture.
+            interval_ms: Milliseconds between consecutive shots.
+            format: Output format for each frame.
+            timeout: Per-frame timeout in seconds.
+
+        Returns:
+            List of frames in the requested format.
+        """
+        frames = []
+        for i in range(count):
+            frame = self.edge_photo(format=format, timeout=timeout)
+            frames.append(frame)
+            if i < count - 1:
+                time.sleep(interval_ms / 1000.0)
+        return frames
 
 
 class Twin:
