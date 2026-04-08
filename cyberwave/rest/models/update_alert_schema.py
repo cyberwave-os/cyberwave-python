@@ -33,8 +33,9 @@ class UpdateAlertSchema(BaseModel):
     alert_type: Optional[StrictStr] = None
     severity: Optional[StrictStr] = None
     status: Optional[StrictStr] = None
+    category: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "media", "alert_type", "severity", "status", "metadata"]
+    __properties: ClassVar[List[str]] = ["name", "description", "media", "alert_type", "severity", "status", "category", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -105,6 +106,11 @@ class UpdateAlertSchema(BaseModel):
         if self.status is None and "status" in self.model_fields_set:
             _dict['status'] = None
 
+        # set to None if category (nullable) is None
+        # and model_fields_set contains the field
+        if self.category is None and "category" in self.model_fields_set:
+            _dict['category'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -128,6 +134,7 @@ class UpdateAlertSchema(BaseModel):
             "alert_type": obj.get("alert_type"),
             "severity": obj.get("severity"),
             "status": obj.get("status"),
+            "category": obj.get("category"),
             "metadata": obj.get("metadata")
         })
         return _obj

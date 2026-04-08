@@ -14,6 +14,7 @@ from .backend import DataBackend
 from .exceptions import BackendConfigError
 
 SUPPORTED_BACKENDS = ("zenoh", "filesystem")
+PUBLISH_MODES = ("dual", "zenoh_only", "mqtt_only")
 
 
 def _parse_bool_env(value: str | None, default: bool = False) -> bool:
@@ -51,6 +52,16 @@ class BackendConfig:
     key_prefix: str = "cw"
     """Key prefix prepended to channel names in Zenoh key expressions."""
 
+    publish_mode: str = ""
+    """Controls which transport paths are active.
+
+    * ``"dual"`` (default) — publish on both MQTT and Zenoh.
+    * ``"zenoh_only"`` — publish on Zenoh only (no MQTT cloud path).
+    * ``"mqtt_only"`` — publish on MQTT only (legacy mode, Zenoh disabled).
+
+    Env: ``CYBERWAVE_PUBLISH_MODE``.
+    """
+
     def __post_init__(self) -> None:
         if not self.backend:
             self.backend = os.environ.get("CYBERWAVE_DATA_BACKEND", "zenoh")
@@ -69,6 +80,31 @@ class BackendConfig:
 
         if not self.filesystem_base_dir:
             self.filesystem_base_dir = os.environ.get("CYBERWAVE_DATA_DIR")
+
+        if not self.publish_mode:
+            import warnings
+
+            raw = os.environ.get("CYBERWAVE_PUBLISH_MODE", "dual").strip().lower()
+            if raw not in PUBLISH_MODES:
+                warnings.warn(
+                    f"Unknown CYBERWAVE_PUBLISH_MODE '{raw}'; falling back to 'dual'. "
+                    f"Valid values: {', '.join(PUBLISH_MODES)}.",
+                    stacklevel=2,
+                )
+                raw = "dual"
+            self.publish_mode = raw
+
+
+def is_zenoh_publish_enabled(config: BackendConfig | None = None) -> bool:
+    """Return True when the publish mode includes a Zenoh path."""
+    cfg = config or BackendConfig()
+    return cfg.publish_mode in ("dual", "zenoh_only")
+
+
+def is_mqtt_publish_enabled(config: BackendConfig | None = None) -> bool:
+    """Return True when the publish mode includes an MQTT path."""
+    cfg = config or BackendConfig()
+    return cfg.publish_mode in ("dual", "mqtt_only")
 
 
 def get_backend(config: BackendConfig | None = None) -> DataBackend:

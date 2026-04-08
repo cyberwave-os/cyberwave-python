@@ -12,10 +12,16 @@ from cyberwave.twin import CameraTwin, Twin, TwinCameraHandle, _decode_frame
 FAKE_JPEG = b"\xff\xd8fake-jpeg-payload\xff\xd9"
 
 
-def _make_twin(cls=Twin):
+def _make_twin(cls=Twin, source_type=None):
     twins_manager = MagicMock()
     twins_manager.get_latest_frame.return_value = FAKE_JPEG
-    client = SimpleNamespace(twins=twins_manager)
+    if source_type is not None:
+        client = SimpleNamespace(
+            twins=twins_manager,
+            config=SimpleNamespace(source_type=source_type),
+        )
+    else:
+        client = SimpleNamespace(twins=twins_manager)
     twin = cls(client, SimpleNamespace(uuid="twin-uuid", name="TestTwin"))
     return twin, twins_manager
 
@@ -145,6 +151,30 @@ class TestTwinCaptureFrame:
         mgr.get_latest_frame.side_effect = RuntimeError("network")
         with pytest.raises(CyberwaveError, match="Failed to get latest frame"):
             twin.capture_frame("bytes")
+
+    def test_uses_sim_source_type_when_affect_simulation(self):
+        """capture_frame respects cw.affect('simulation') → source_type='sim'."""
+        twin, mgr = _make_twin(source_type="sim")
+        twin.capture_frame("bytes")
+        mgr.get_latest_frame.assert_called_once_with(
+            "twin-uuid", sensor_id=None, mock=False, source_type="sim"
+        )
+
+    def test_uses_tele_source_type_when_affect_real_world(self):
+        """capture_frame respects cw.affect('real-world') → source_type='edge' → maps to 'tele'."""
+        twin, mgr = _make_twin(source_type="edge")
+        twin.capture_frame("bytes")
+        mgr.get_latest_frame.assert_called_once_with(
+            "twin-uuid", sensor_id=None, mock=False, source_type="tele"
+        )
+
+    def test_explicit_source_type_overrides_affect(self):
+        """An explicit source_type= argument takes precedence over the affect() setting."""
+        twin, mgr = _make_twin(source_type="sim")
+        twin.capture_frame("bytes", source_type="tele")
+        mgr.get_latest_frame.assert_called_once_with(
+            "twin-uuid", sensor_id=None, mock=False, source_type="tele"
+        )
 
 
 # ---------------------------------------------------------------------------

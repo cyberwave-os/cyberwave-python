@@ -43,6 +43,8 @@ class CyberwaveMQTTClient:
         tls_ca_cert: Path to CA certificate bundle for broker verification
         topic_prefix: Prefix for MQTT topics (default: "")
         auto_connect: Automatically connect on initialization (default: True)
+        protocol: MQTT protocol version (default: ``mqtt.MQTTv311``).
+            Pass ``mqtt.MQTTv5`` to use MQTT v5 features when your broker supports it.
     """
 
     def __init__(
@@ -60,6 +62,7 @@ class CyberwaveMQTTClient:
         auto_connect: bool = False,
         twin_uuids: Optional[List[str]] = None,
         source_type: Optional[str] = SOURCE_TYPE_EDGE,
+        protocol: Optional[int] = None,
     ):
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
@@ -81,13 +84,11 @@ class CyberwaveMQTTClient:
         # Generate unique client ID
         self.client_id = client_id or f"{client_id_prefix}{uuid.uuid4().hex[:8]}"
 
-        # MQTT client (compatible with paho-mqtt 1.x and 2.x)
-        # Explicitly use MQTTv311 to ensure compatibility with brokers that do
-        # not support MQTT v5 (e.g. local Mosquitto with go-auth plugin).
+        self._protocol = protocol if protocol is not None else mqtt.MQTTv311
         self.client = mqtt.Client(
             callback_api_version=CallbackAPIVersion.VERSION2,
             client_id=self.client_id,  # type: ignore
-            protocol=mqtt.MQTTv311,
+            protocol=self._protocol,
         )
 
         self.client.username_pw_set(username=self.mqtt_username, password=auth_password)
@@ -122,10 +123,13 @@ class CyberwaveMQTTClient:
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
+        self.client.on_subscribe = self._on_subscribe
 
         self.twin_uuids = twin_uuids or []
         self.twin_uuids_with_telemetry_start: List[str] = []
         self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
+        self._subscription_lock = threading.Lock()
+        self._pending_subscriptions: Dict[int, str] = {}
         self.source_type = source_type
 
         # Auto-connect if requested (must happen after all state is initialized)
@@ -238,13 +242,61 @@ class CyberwaveMQTTClient:
 
             # Resubscribe to all topics
             for topic in self._handlers.keys():
-                client.subscribe(topic)
-                logger.debug(f"Subscribed to topic: {topic}")
+                result = client.subscribe(topic)
+                if result[0] == mqtt.MQTT_ERR_SUCCESS:
+                    with self._subscription_lock:
+                        self._pending_subscriptions[result[1]] = topic
+                    logger.debug(
+                        "Resubscribe request sent for topic %s (mid=%s)",
+                        topic,
+                        result[1],
+                    )
+                else:
+                    logger.error("Failed to resubscribe to %s: %s", topic, result[0])
         else:
             logger.error(
                 f"Failed to connect to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}, return code: {rc}"
             )
             self.connected = False
+
+    def _on_subscribe(self, client, userdata, mid, reason_codes=None, properties=None):
+        """Callback when the broker acknowledges a subscription."""
+        del client, userdata, properties
+
+        with self._subscription_lock:
+            topic = self._pending_subscriptions.pop(mid, f"<unknown mid={mid}>")
+
+        if reason_codes is None:
+            codes = []
+        elif isinstance(reason_codes, (list, tuple)):
+            codes = list(reason_codes)
+        else:
+            codes = [reason_codes]
+
+        statuses = []
+        failed = False
+        for code in codes:
+            value = getattr(code, "value", code if isinstance(code, int) else None)
+            label = str(code)
+            statuses.append(f"{label} ({value})" if isinstance(value, int) else label)
+            if isinstance(value, int):
+                failed = failed or value >= 128
+
+        status_text = ", ".join(statuses) if statuses else "no reason codes"
+        if failed:
+            logger.error(
+                "SUBACK rejected subscription for %s (mid=%s): %s",
+                topic,
+                mid,
+                status_text,
+            )
+        else:
+            logger.info(
+                "SUBACK accepted subscription for %s (mid=%s): %s",
+                topic,
+                mid,
+                status_text,
+            )
 
     def _on_disconnect(self, client, userdata, rc, *args, **kwargs):
         """Callback when disconnected from MQTT broker."""
@@ -422,7 +474,13 @@ class CyberwaveMQTTClient:
         if self.connected:
             result = self.client.subscribe(topic, qos=qos)
             if result[0] == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(f"Subscribed to topic: {topic}")
+                with self._subscription_lock:
+                    self._pending_subscriptions[result[1]] = topic
+                logger.info(
+                    "Subscribe request sent for topic: %s (mid=%s), awaiting SUBACK",
+                    topic,
+                    result[1],
+                )
             else:
                 logger.error(f"Failed to subscribe to {topic}: {result[0]}")
         else:

@@ -7,7 +7,6 @@ import time
 import warnings
 from typing import Any, Callable, Optional
 
-from cyberwave.rest import DefaultApi, ApiClient, Configuration
 from cyberwave.config import (
     CyberwaveConfig,
     DEFAULT_BASE_URL,
@@ -15,16 +14,7 @@ from cyberwave.config import (
 from cyberwave.controller import EdgeController
 from cyberwave.models.manager import ModelManager
 from cyberwave.mqtt_client import CyberwaveMQTTClient
-from cyberwave.resources import (
-    WorkspaceManager,
-    ProjectManager,
-    EnvironmentManager,
-    AssetManager,
-    EdgeManager,
-    TwinManager,
-)
 from cyberwave.workers.hooks import HookRegistry
-from cyberwave.workflows import WorkflowManager, WorkflowRunManager
 from cyberwave.twin import Twin, create_twin
 from cyberwave.utils import TimeReference
 from cyberwave.exceptions import (
@@ -103,6 +93,8 @@ class Cyberwave:
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
         mqtt_use_tls: Enable TLS for MQTT connection
         mqtt_tls_ca_cert: Path to CA cert bundle for MQTT TLS
+        mqtt_protocol: MQTT protocol version (default: MQTTv311).
+            Pass ``paho.mqtt.client.MQTTv5`` to use MQTT v5 when your broker supports it.
         source_type: Optional explicit default state/telemetry source_type override
         mode: Runtime mode, either live or simulation (defaults to live)
         **config_kwargs: Additional configuration options
@@ -118,6 +110,7 @@ class Cyberwave:
         mqtt_username: Optional[str] = None,
         mqtt_use_tls: bool = False,
         mqtt_tls_ca_cert: Optional[str] = None,
+        mqtt_protocol: Optional[int] = None,
         topic_prefix: Optional[str] = None,
         source_type: Optional[str] = None,
         mode: Optional[str] = "live",
@@ -155,6 +148,7 @@ class Cyberwave:
             mqtt_username=mqtt_username,
             mqtt_use_tls=mqtt_use_tls,
             mqtt_tls_ca_cert=mqtt_tls_ca_cert,
+            mqtt_protocol=mqtt_protocol,
             topic_prefix=topic_prefix,
             environment_id=os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
             workspace_id=os.getenv("CYBERWAVE_WORKSPACE_ID", None),
@@ -174,6 +168,16 @@ class Cyberwave:
         self._hook_registry = HookRegistry()
         self.models = ModelManager()
 
+        from cyberwave.resources import (
+            WorkspaceManager,
+            ProjectManager,
+            EnvironmentManager,
+            AssetManager,
+            EdgeManager,
+            TwinManager,
+        )
+        from cyberwave.workflows import WorkflowManager, WorkflowRunManager
+
         self.workspaces = WorkspaceManager(self.api)
         self.projects = ProjectManager(self.api)
         self.environments = EnvironmentManager(self.api)
@@ -185,6 +189,8 @@ class Cyberwave:
 
     def _setup_rest_client(self):
         """Setup the REST API client with authentication"""
+        from cyberwave.rest import DefaultApi, ApiClient, Configuration
+
         configuration = Configuration(host=self.config.base_url)
 
         if self.config.api_key:

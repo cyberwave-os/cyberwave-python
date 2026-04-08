@@ -33,13 +33,14 @@ class CreateAlertSchema(BaseModel):
     alert_type: Optional[StrictStr] = ''
     severity: Optional[StrictStr] = 'warning'
     source_type: Optional[StrictStr] = 'edge'
+    category: Optional[StrictStr] = 'technical'
     twin_uuid: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     workflow_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     force: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["name", "description", "media", "alert_type", "severity", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "metadata", "force"]
+    __properties: ClassVar[List[str]] = ["name", "description", "media", "alert_type", "severity", "source_type", "category", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "metadata", "force"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -128,6 +129,7 @@ class CreateAlertSchema(BaseModel):
             "alert_type": obj.get("alert_type") if obj.get("alert_type") is not None else '',
             "severity": obj.get("severity") if obj.get("severity") is not None else 'warning',
             "source_type": obj.get("source_type") if obj.get("source_type") is not None else 'edge',
+            "category": obj.get("category") if obj.get("category") is not None else 'technical',
             "twin_uuid": obj.get("twin_uuid"),
             "environment_uuid": obj.get("environment_uuid"),
             "workflow_uuid": obj.get("workflow_uuid"),

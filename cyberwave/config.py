@@ -37,6 +37,8 @@ class CyberwaveConfig:
         mqtt_username: MQTT username (optional)
         mqtt_use_tls: Whether to enable MQTT TLS transport
         mqtt_tls_ca_cert: Path to CA certificate bundle for MQTT TLS
+        mqtt_protocol: MQTT protocol version (e.g. ``paho.mqtt.client.MQTTv311`` or
+            ``paho.mqtt.client.MQTTv5``).  Defaults to MQTTv311.
         environment_id: Default environment ID to use
         workspace_id: Default workspace ID to use
         timeout: Request timeout in seconds
@@ -52,6 +54,7 @@ class CyberwaveConfig:
     mqtt_username: Optional[str] = None
     mqtt_use_tls: bool = False
     mqtt_tls_ca_cert: Optional[str] = None
+    mqtt_protocol: Optional[int] = None
     environment_id: Optional[str] = None
     workspace_id: Optional[str] = None
     timeout: int = DEFAULT_TIMEOUT

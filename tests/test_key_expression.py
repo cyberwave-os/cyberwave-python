@@ -14,6 +14,7 @@ import pytest
 
 from cyberwave.data.exceptions import ChannelError
 from cyberwave.data.keys import (
+    COMMAND_CHANNELS,
     LATEST_VALUE_CHANNELS,
     STREAM_CHANNELS,
     WELL_KNOWN_CHANNELS,
@@ -43,8 +44,11 @@ class TestChannelSets:
     def test_no_overlap(self) -> None:
         assert not (STREAM_CHANNELS & LATEST_VALUE_CHANNELS)
 
+    def test_command_channels_are_subset(self) -> None:
+        assert COMMAND_CHANNELS <= WELL_KNOWN_CHANNELS
+
     def test_union_equals_all(self) -> None:
-        assert STREAM_CHANNELS | LATEST_VALUE_CHANNELS == WELL_KNOWN_CHANNELS
+        assert STREAM_CHANNELS | LATEST_VALUE_CHANNELS | COMMAND_CHANNELS == WELL_KNOWN_CHANNELS
 
     def test_expected_stream_channels(self) -> None:
         expected = {"frames", "depth", "audio", "pointcloud", "imu", "force_torque"}

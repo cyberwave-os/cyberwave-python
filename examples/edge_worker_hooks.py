@@ -475,7 +475,12 @@ def main() -> None:
 
     @cw.on_synchronized(TWIN_UUID, ["joint_states", "imu"], tolerance_ms=150)
     def on_synced(samples: dict[str, Sample], ctx: HookContext) -> None:
-        state.touch("on_synchronized", "both channels within 150 ms")
+        j = _decode_json(samples["joint_states"].payload)
+        imu = _decode_json(samples["imu"].payload)
+        state.touch(
+            "on_synchronized",
+            f"q1={j['q1']:+.3f}  az={imu['az']:.3f}  (synced)",
+        )
 
     @cw.on_data(TWIN_UUID, "diagnostics")
     def on_diagnostics(payload: bytes, ctx: HookContext) -> None:
@@ -533,8 +538,7 @@ def main() -> None:
 
     runtime.stop()
     backend.close()
-
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    _broker.close()
 
     print(f"\033[{DASHBOARD_ROWS}B")
     with state.lock:

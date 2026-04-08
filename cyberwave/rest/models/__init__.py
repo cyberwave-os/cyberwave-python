@@ -20,6 +20,7 @@ from cyberwave.rest.models.admin_lab_info_schema import AdminLabInfoSchema
 from cyberwave.rest.models.admin_lab_overview_schema import AdminLabOverviewSchema
 from cyberwave.rest.models.admin_session_schema import AdminSessionSchema
 from cyberwave.rest.models.alert_schema import AlertSchema
+from cyberwave.rest.models.api_token_context_schema import ApiTokenContextSchema
 from cyberwave.rest.models.asset_catalog_import_schema import AssetCatalogImportSchema
 from cyberwave.rest.models.asset_create_schema import AssetCreateSchema
 from cyberwave.rest.models.asset_create_with_urdf_schema import AssetCreateWithURDFSchema
@@ -94,6 +95,7 @@ from cyberwave.rest.models.end_session_response_schema import EndSessionResponse
 from cyberwave.rest.models.environment_assistant_request_schema import EnvironmentAssistantRequestSchema
 from cyberwave.rest.models.environment_assistant_response_schema import EnvironmentAssistantResponseSchema
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema
+from cyberwave.rest.models.environment_navigation_settings_patch_schema import EnvironmentNavigationSettingsPatchSchema
 from cyberwave.rest.models.environment_schema import EnvironmentSchema
 from cyberwave.rest.models.environment_snapshot_create_schema import EnvironmentSnapshotCreateSchema
 from cyberwave.rest.models.environment_snapshot_schema import EnvironmentSnapshotSchema
@@ -145,6 +147,7 @@ from cyberwave.rest.models.motion_plan_schema import MotionPlanSchema
 from cyberwave.rest.models.motion_plan_step_schema import MotionPlanStepSchema
 from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponseSchema
 from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema
+from cyberwave.rest.models.navigation_waypoint_action_schema import NavigationWaypointActionSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema
 from cyberwave.rest.models.occupancy_map_create_schema import OccupancyMapCreateSchema
 from cyberwave.rest.models.onboarding_completion_schema import OnboardingCompletionSchema
@@ -207,6 +210,7 @@ from cyberwave.rest.models.twin_driver_logs_response_schema import TwinDriverLog
 from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
 from cyberwave.rest.models.twin_metrics_query_schema import TwinMetricsQuerySchema
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema
+from cyberwave.rest.models.twin_navigation_capture_upload_response_schema import TwinNavigationCaptureUploadResponseSchema
 from cyberwave.rest.models.twin_navigation_command_schema import TwinNavigationCommandSchema
 from cyberwave.rest.models.twin_relationship_schema import TwinRelationshipSchema
 from cyberwave.rest.models.twin_schema import TwinSchema

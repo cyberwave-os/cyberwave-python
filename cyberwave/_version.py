@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as metadata_version
 
-STATIC_VERSION = "0.4.0"
+STATIC_VERSION = "0.4.1"
 
 
 def get_version() -> str:

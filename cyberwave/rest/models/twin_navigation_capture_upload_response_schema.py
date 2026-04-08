@@ -17,25 +17,23 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
-from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema
-from cyberwave.rest.models.navigation_waypoint_action_schema import NavigationWaypointActionSchema
+from pydantic import BaseModel, ConfigDict, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class NavigationWaypointSchema(BaseModel):
+class TwinNavigationCaptureUploadResponseSchema(BaseModel):
     """
-    @sync cyberwave-frontend/lib/types/navigation-types.ts:NavigationWaypoint
+    TwinNavigationCaptureUploadResponseSchema
     """ # noqa: E501
-    id: Optional[StrictStr] = None
-    position: Dict[str, Union[StrictFloat, StrictInt]]
-    rotation: Optional[NavigationRotationSchema] = None
-    yaw: Optional[Union[StrictFloat, StrictInt]] = None
-    actions: Optional[List[NavigationWaypointActionSchema]] = None
+    attachment_uuid: StrictStr
+    file_url: Optional[StrictStr] = None
+    event_uuid: Optional[StrictStr] = None
+    event_type: Optional[StrictStr] = None
+    triggered_workflow_uuids: Optional[List[StrictStr]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "position", "rotation", "yaw", "actions", "metadata"]
+    __properties: ClassVar[List[str]] = ["attachment_uuid", "file_url", "event_uuid", "event_type", "triggered_workflow_uuids", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -55,7 +53,7 @@ class NavigationWaypointSchema(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of NavigationWaypointSchema from a JSON string"""
+        """Create an instance of TwinNavigationCaptureUploadResponseSchema from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,35 +74,20 @@ class NavigationWaypointSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of rotation
-        if self.rotation:
-            _dict['rotation'] = self.rotation.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of each item in actions (list)
-        _items = []
-        if self.actions:
-            for _item_actions in self.actions:
-                if _item_actions:
-                    _items.append(_item_actions.to_dict())
-            _dict['actions'] = _items
-        # set to None if id (nullable) is None
+        # set to None if file_url (nullable) is None
         # and model_fields_set contains the field
-        if self.id is None and "id" in self.model_fields_set:
-            _dict['id'] = None
+        if self.file_url is None and "file_url" in self.model_fields_set:
+            _dict['file_url'] = None
 
-        # set to None if rotation (nullable) is None
+        # set to None if event_uuid (nullable) is None
         # and model_fields_set contains the field
-        if self.rotation is None and "rotation" in self.model_fields_set:
-            _dict['rotation'] = None
+        if self.event_uuid is None and "event_uuid" in self.model_fields_set:
+            _dict['event_uuid'] = None
 
-        # set to None if yaw (nullable) is None
+        # set to None if event_type (nullable) is None
         # and model_fields_set contains the field
-        if self.yaw is None and "yaw" in self.model_fields_set:
-            _dict['yaw'] = None
-
-        # set to None if actions (nullable) is None
-        # and model_fields_set contains the field
-        if self.actions is None and "actions" in self.model_fields_set:
-            _dict['actions'] = None
+        if self.event_type is None and "event_type" in self.model_fields_set:
+            _dict['event_type'] = None
 
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
@@ -115,7 +98,7 @@ class NavigationWaypointSchema(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of NavigationWaypointSchema from a dict"""
+        """Create an instance of TwinNavigationCaptureUploadResponseSchema from a dict"""
         if obj is None:
             return None
 
@@ -123,11 +106,11 @@ class NavigationWaypointSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "id": obj.get("id"),
-            "position": obj.get("position"),
-            "rotation": NavigationRotationSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
-            "yaw": obj.get("yaw"),
-            "actions": [NavigationWaypointActionSchema.from_dict(_item) for _item in obj["actions"]] if obj.get("actions") is not None else None,
+            "attachment_uuid": obj.get("attachment_uuid"),
+            "file_url": obj.get("file_url"),
+            "event_uuid": obj.get("event_uuid"),
+            "event_type": obj.get("event_type"),
+            "triggered_workflow_uuids": obj.get("triggered_workflow_uuids"),
             "metadata": obj.get("metadata")
         })
         return _obj

@@ -34,11 +34,12 @@ class TwinNavigationCommandSchema(BaseModel):
     yaw: Optional[Union[StrictFloat, StrictInt]] = None
     waypoints: Optional[List[NavigationWaypointSchema]] = None
     controller_policy_uuid: Optional[StrictStr] = None
+    reference_frame: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     source_type: Optional[StrictStr] = None
     constraints: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "yaw", "waypoints", "controller_policy_uuid", "environment_uuid", "source_type", "constraints", "metadata"]
+    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "yaw", "waypoints", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata"]
 
     @field_validator('command')
     def command_validate_enum(cls, value):
@@ -118,6 +119,11 @@ class TwinNavigationCommandSchema(BaseModel):
         if self.controller_policy_uuid is None and "controller_policy_uuid" in self.model_fields_set:
             _dict['controller_policy_uuid'] = None
 
+        # set to None if reference_frame (nullable) is None
+        # and model_fields_set contains the field
+        if self.reference_frame is None and "reference_frame" in self.model_fields_set:
+            _dict['reference_frame'] = None
+
         # set to None if environment_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
@@ -156,6 +162,7 @@ class TwinNavigationCommandSchema(BaseModel):
             "yaw": obj.get("yaw"),
             "waypoints": [NavigationWaypointSchema.from_dict(_item) for _item in obj["waypoints"]] if obj.get("waypoints") is not None else None,
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
+            "reference_frame": obj.get("reference_frame"),
             "environment_uuid": obj.get("environment_uuid"),
             "source_type": obj.get("source_type"),
             "constraints": obj.get("constraints"),

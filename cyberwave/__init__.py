@@ -66,26 +66,44 @@ from .compact import (
     get_client,
 )
 
-# Resource managers (optional, available through client instance)
-from .resources import (
-    WorkspaceManager,
-    ProjectManager,
-    EnvironmentManager,
-    AssetManager,
-    EdgeManager,
-    TwinManager,
-)
+# Resource managers depend on the auto-generated REST client (cyberwave.rest)
+# which may not be present in edge-only installs.
+try:
+    from .resources import (
+        WorkspaceManager,
+        ProjectManager,
+        EnvironmentManager,
+        AssetManager,
+        EdgeManager,
+        TwinManager,
+    )
+except ImportError:
+    WorkspaceManager = None  # type: ignore[assignment,misc]
+    ProjectManager = None  # type: ignore[assignment,misc]
+    EnvironmentManager = None  # type: ignore[assignment,misc]
+    AssetManager = None  # type: ignore[assignment,misc]
+    EdgeManager = None  # type: ignore[assignment,misc]
+    TwinManager = None  # type: ignore[assignment,misc]
 
 # Workflow management
-from .workflows import (
-    Workflow,
-    WorkflowRun,
-    WorkflowManager,
-    WorkflowRunManager,
-)
+try:
+    from .workflows import (
+        Workflow,
+        WorkflowRun,
+        WorkflowManager,
+        WorkflowRunManager,
+    )
+except ImportError:
+    Workflow = None  # type: ignore[assignment,misc]
+    WorkflowRun = None  # type: ignore[assignment,misc]
+    WorkflowManager = None  # type: ignore[assignment,misc]
+    WorkflowRunManager = None  # type: ignore[assignment,misc]
 
 # Worker API
 from .workers import HookContext
+
+# Manifest schema
+from .manifest import ManifestSchema, detect_dispatch_mode, validate_manifest
 
 # Model API
 from .models import ModelManager, LoadedModel, Detection, BoundingBox, PredictionResult
@@ -267,6 +285,10 @@ __all__ = [
     "BoundingBox",
     "Detection",
     "PredictionResult",
+    # Manifest
+    "ManifestSchema",
+    "detect_dispatch_mode",
+    "validate_manifest",
     # Version
     "__version__",
 ]

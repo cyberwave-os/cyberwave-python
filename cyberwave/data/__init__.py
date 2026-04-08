@@ -36,7 +36,12 @@ Time-aware fusion (Phases 3–4)::
 
 from .api import DataBus
 from .backend import DataBackend, Sample, Subscription
-from .config import BackendConfig, get_backend
+from .config import (
+    BackendConfig,
+    get_backend,
+    is_mqtt_publish_enabled,
+    is_zenoh_publish_enabled,
+)
 from .exceptions import (
     BackendConfigError,
     BackendUnavailableError,
@@ -66,6 +71,7 @@ from .header import (
     encode,
 )
 from .keys import (
+    COMMAND_CHANNELS,
     LATEST_VALUE_CHANNELS,
     STREAM_CHANNELS,
     WELL_KNOWN_CHANNELS,
@@ -90,6 +96,8 @@ __all__ = [
     "Subscription",
     "BackendConfig",
     "get_backend",
+    "is_zenoh_publish_enabled",
+    "is_mqtt_publish_enabled",
     # Exceptions
     "DataBackendError",
     "BackendUnavailableError",
@@ -115,6 +123,7 @@ __all__ = [
     "parse_key",
     "channel_from_key",
     "is_valid_key",
+    "COMMAND_CHANNELS",
     "STREAM_CHANNELS",
     "LATEST_VALUE_CHANNELS",
     "WELL_KNOWN_CHANNELS",

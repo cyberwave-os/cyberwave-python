@@ -158,6 +158,25 @@ robot.add_to_environment("TARGET_ENVIRONMENT_UUID")
 
 `move()` and `rotate()` are deprecated. Use `move_forward()`, `move_backward()`, `turn_left()`, and `turn_right()` for locomotion commands, or `edit_rotation()` to directly set orientation.
 
+### Listing Primitive Assets (catalog assets with shortcuts)
+
+Primitive assets are curated public catalog entries with a short **alias** (e.g. `camera`, `lidar`). They can be instantiated directly by alias without knowing the full `vendor/slug` registry ID — making it easy to quickly populate an environment.
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave()
+
+# List all catalog primitives (public assets with a registry_id_alias)
+primitives = cw.assets.list_primitives()
+for asset in primitives:
+    print(f"{asset.registry_id_alias!r:20} -> {asset.registry_id}")
+
+# Instantiate a primitive directly by its alias
+camera = cw.twin("camera")
+lidar  = cw.twin("lidar")
+```
+
 ### Uploading Large GLB Assets
 
 The SDK supports large GLB uploads by automatically switching to an attachment + signed URL flow when files exceed the standard upload limit.
@@ -344,6 +363,52 @@ cw.disconnect()
 
 For Unitree Go2 robot microphone streaming, see [examples/audio_stream.py](examples/audio_stream.py) (requires `unitree_webrtc_connect`). For combined video + audio, see [examples/multimedia_stream.py](examples/multimedia_stream.py).
 
+### Drones and Flying Twins
+
+Twins whose asset has `can_fly: true` are returned as `FlyingTwin` instances.
+They expose `takeoff()`, `land()`, and `hover()` MQTT commands, plus helpers to
+read and persist the hovering state in the twin's metadata.
+
+```python
+from cyberwave import Cyberwave
+from cyberwave.twin import FlyingTwin
+
+cw = Cyberwave()
+drone: FlyingTwin = cw.twin("cyberwave/px4vision")  # type: ignore[assignment]
+
+# Send the takeoff command
+ALTITUDE = 2.0  # metres
+drone.takeoff(altitude=ALTITUDE)
+
+# Read the hovering status back
+if drone.is_hovering():
+    status = drone.get_hovering_status()
+    print(f"Hovering at {status['controller_requested_hovering_altitude']} m")
+
+# Land and clear the hovering state
+drone.land()
+drone.set_hovering_status(hovering=False)
+```
+
+The hovering state is stored under `twin.metadata.status`:
+
+```json
+{
+  "status": {
+    "controller_requested_hovering": true,
+    "controller_requested_hovering_altitude": 2.0
+  }
+}
+```
+
+The `controller_requested_` prefix makes it clear these are controller
+intentions, not ground-truth sensor readings from the drone.
+
+In the Cyberwave **playground simulate** mode, setting `controller_requested_hovering=True`
+disables gravity for that twin so it stays at its current altitude visually.
+
+See the full example in [examples/drone_hovering.py](examples/drone_hovering.py).
+
 ## Examples
 
 Check the [examples](examples) directory for complete examples:
@@ -353,6 +418,7 @@ Check the [examples](examples) directory for complete examples:
 - Real-time synchronization
 - Joint manipulation for robot arms
 - Audio streaming (e.g. Go2 microphone) — [audio_stream.py](examples/audio_stream.py), [multimedia_stream.py](examples/multimedia_stream.py)
+- Drone takeoff, hovering status, and landing — [drone_hovering.py](examples/drone_hovering.py)
 
 ## Advanced Usage
 
@@ -700,6 +766,54 @@ def detect_collision(samples, ctx):
 ```
 
 See the [synchronized hooks docs](https://docs.cyberwave.com/sdks/data-synchronized-hooks) for details.
+
+## Zenoh-MQTT Bridge (`cyberwave.zenoh_mqtt`) — *stub*
+
+Bidirectional forwarder between the local Zenoh data bus and the cloud MQTT broker. Runs on edge devices alongside Edge Core.
+
+**Outbound** (edge to cloud): subscribes to Zenoh channels and publishes to MQTT.
+**Inbound** (cloud to edge): subscribes to MQTT command topics and republishes into the local Zenoh session.
+
+When the MQTT connection drops, outbound messages are buffered to a persistent file-backed queue and drained in FIFO order on reconnect.
+
+```python
+from cyberwave.zenoh_mqtt import ZenohMqttBridge, BridgeConfig
+
+bridge = ZenohMqttBridge(
+    config=BridgeConfig(
+        twin_uuids=["<twin_uuid>"],
+        outbound_channels=["model_output", "event", "model_health"],
+    ),
+    mqtt_host="<mqtt_host>",
+    mqtt_port=8883,
+    mqtt_password="<api_key>",
+)
+bridge.start()
+# bridge runs until stopped
+bridge.stop()
+```
+
+### Default topic mapping
+
+| Zenoh key | MQTT topic | Direction |
+|---|---|---|
+| `cw/{twin}/data/model_output` | `cyberwave/twin/{twin}/model_output` | Edge to Cloud |
+| `cw/{twin}/data/event` | `cyberwave/twin/{twin}/event` | Edge to Cloud |
+| `cw/{twin}/data/model_health` | `cyberwave/twin/{twin}/model_health` | Edge to Cloud |
+| MQTT `cyberwave/twin/{twin}/commands/sync_workflows` | `cw/{twin}/data/commands_sync_workflows` | Cloud to Edge |
+
+### Configuration (environment variables)
+
+| Variable | Default | Description |
+|---|---|---|
+| `CYBERWAVE_BRIDGE_ENABLED` | `false` | Master switch |
+| `CYBERWAVE_BRIDGE_TWIN_UUIDS` | — | Comma-separated twin UUIDs to bridge |
+| `CYBERWAVE_BRIDGE_OUTBOUND_CHANNELS` | `model_output,event,model_health` | Zenoh channels forwarded to MQTT |
+| `CYBERWAVE_BRIDGE_INBOUND_TOPICS` | `commands/sync_workflows` | MQTT suffixes forwarded to Zenoh |
+| `CYBERWAVE_BRIDGE_QUEUE_DIR` | `/tmp/cyberwave_bridge_queue` | Persistent queue directory |
+| `CYBERWAVE_BRIDGE_QUEUE_MAX_BYTES` | `52428800` (50 MiB) | Max offline queue size |
+
+Requires `pip install cyberwave[zenoh]` (Zenoh) and `paho-mqtt` (already a core dependency).
 
 ## Testing
 

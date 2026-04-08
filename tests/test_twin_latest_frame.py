@@ -136,7 +136,8 @@ def test_twin_get_latest_frame_uses_client_affect_source_type():
     )
 
 
-def test_twin_get_latest_frame_ignores_unsupported_default_source_type():
+def test_twin_get_latest_frame_maps_edge_source_type_to_tele():
+    """When affect('real-world') sets source_type='edge', capture_frame should use 'tele'."""
     twins_manager = MagicMock()
     twins_manager.get_latest_frame.return_value = b"frame"
     client = SimpleNamespace(
@@ -151,6 +152,7 @@ def test_twin_get_latest_frame_ignores_unsupported_default_source_type():
         "twin-uuid",
         sensor_id=None,
         mock=False,
+        source_type="tele",
     )
 
 

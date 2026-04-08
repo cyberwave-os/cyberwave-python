@@ -186,9 +186,9 @@ def test_multiple_workers_multiple_hooks(tmp_path):
 def test_real_client_property_hook_delegation():
     """The real Cyberwave client's @property hook delegates register correctly."""
     with (
-        patch("cyberwave.client.ApiClient"),
-        patch("cyberwave.client.DefaultApi"),
-        patch("cyberwave.client.Configuration"),
+        patch("cyberwave.rest.ApiClient"),
+        patch("cyberwave.rest.DefaultApi"),
+        patch("cyberwave.rest.Configuration"),
     ):
         from cyberwave.client import Cyberwave
 

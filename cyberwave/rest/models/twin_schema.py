@@ -65,7 +65,8 @@ class TwinSchema(BaseModel):
     attach_offset_rotation_y: Union[StrictFloat, StrictInt]
     attach_offset_rotation_z: Union[StrictFloat, StrictInt]
     fixed_base: StrictBool
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base"]
+    export_warnings: Optional[List[Dict[str, StrictStr]]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "export_warnings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -199,7 +200,8 @@ class TwinSchema(BaseModel):
             "attach_offset_rotation_x": obj.get("attach_offset_rotation_x"),
             "attach_offset_rotation_y": obj.get("attach_offset_rotation_y"),
             "attach_offset_rotation_z": obj.get("attach_offset_rotation_z"),
-            "fixed_base": obj.get("fixed_base")
+            "fixed_base": obj.get("fixed_base"),
+            "export_warnings": obj.get("export_warnings")
         })
         return _obj
 

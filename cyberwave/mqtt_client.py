@@ -67,6 +67,7 @@ class CyberwaveMQTTClient:
             topic_prefix=topic_prefix,
             client_id_prefix=client_id_prefix,
             source_type=config.source_type,
+            protocol=config.mqtt_protocol,
         )
 
     @property
@@ -230,6 +231,14 @@ class CyberwaveMQTTClient:
             metadata: Optional dict (e.g. {"fps": 100, "observations": {...}})
         """
         return self._client.publish_telemetry_start_message(twin_uuid, metadata)
+
+    def publish_telemetry_end(self, twin_uuid: str) -> None:
+        """
+        Publish telemetry_end and clear SDK telemetry-start tracking for this twin.
+
+        Match edge teleop cleanup so recordings/sessions end cleanly.
+        """
+        return self._client.publish_telemetry_end(twin_uuid)
 
     def update_joint_state(
         self,

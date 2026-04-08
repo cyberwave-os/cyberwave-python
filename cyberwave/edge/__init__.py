@@ -34,6 +34,7 @@ from cyberwave.edge.amr import (
     NavigationStatus,
     AMRAdapterProtocol,
 )
+from cyberwave.edge.platform import is_port_listening, is_usbip_server_running
 
 __all__ = [
     # Base
@@ -46,4 +47,7 @@ __all__ = [
     "RobotState",
     "NavigationStatus",
     "AMRAdapterProtocol",
+    # Platform detection
+    "is_port_listening",
+    "is_usbip_server_running",
 ]

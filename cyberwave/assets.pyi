@@ -1105,34 +1105,13 @@ class CyberwavewallTwin(Twin):
     Digital twin for Wall
     Registry ID: cyberwave/wall
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
+    pass
 
 class Unitreez1GripperTwin(Twin):
     """
     Digital twin for Unitree Z1 Gripper
     Registry ID: unitree/z1-gripper
     """
-    @property
-    def joints(self) -> JointController:
-        """Controller for robot joints"""
-        ...
-
-class SzDjiTechnologydjiMavic3EnterpriseTwin(Twin):
-    """
-    Digital twin for DJI Mavic 3 Enterprise
-    Registry ID: SZ-DJI-Technology/DJI-Mavic-3-Enterprise
-    """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
@@ -1166,6 +1145,22 @@ class PollenRoboticsreachyMiniTwin(Twin):
     """
     Digital twin for Reachy Mini
     Registry ID: pollen-robotics/reachy-mini
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class SzDjiTechnologydjiMavic3EnterpriseTwin(Twin):
+    """
+    Digital twin for DJI Mavic 3 Enterprise
+    Registry ID: sz-dji-technology/DJI-Mavic-3-Enterprise
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1235,7 +1230,9 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "unitree/unitree_z1": UnitreeunitreeZ1Twin,
     "fictionlab/leo-rover": FictionlableoRoverTwin,
     "cyberwave/generic_cube": CyberwavegenericCubeTwin,
+    "cube": CyberwavegenericCubeTwin,
     "cyberwave/generictable": CyberwavegenerictableTwin,
+    "table": CyberwavegenerictableTwin,
     "cyberwave/generic-box": CyberwavegenericBoxTwin,
     "universal_robots/UR5": UniversalRobotsur5Twin,
     "cyberwave/generic-nvr": CyberwavegenericNvrTwin,
@@ -1244,6 +1241,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "logitech/c275": Logitechc275Twin,
     "raspberry/pi-camerav3": RaspberrypiCamerav3Twin,
     "cyberwave/standard-cam": CyberwavestandardCamTwin,
+    "camera": CyberwavestandardCamTwin,
     "cyberwave/generic_ipcamera": CyberwavegenericIpcameraTwin,
     "prox-dynamics/black-hornet-nano": ProxDynamicsblackHornetNanoTwin,
     "cyberwave/generic-auv": CyberwavegenericAuvTwin,
@@ -1270,12 +1268,15 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "orbbec/gemini-355": Orbbecgemini355Twin,
     "unitree/lidar-l2": UnitreelidarL2Twin,
     "cyberwave/cylinder": CyberwavecylinderTwin,
+    "cylinder": CyberwavecylinderTwin,
     "cyberwave/sphere": CyberwavesphereTwin,
+    "sphere": CyberwavesphereTwin,
     "cyberwave/wall": CyberwavewallTwin,
+    "wall": CyberwavewallTwin,
     "unitree/z1-gripper": Unitreez1GripperTwin,
-    "SZ-DJI-Technology/DJI-Mavic-3-Enterprise": SzDjiTechnologydjiMavic3EnterpriseTwin,
     "generic-drone-payloads/uwb-radar-pod": GenericDronePayloadsuwbRadarPodTwin,
     "generic-drone-payloads/rf-scanner-pod": GenericDronePayloadsrfScannerPodTwin,
     "FWR/Robotic-Arm": FwrroboticArmTwin,
     "pollen-robotics/reachy-mini": PollenRoboticsreachyMiniTwin,
+    "sz-dji-technology/DJI-Mavic-3-Enterprise": SzDjiTechnologydjiMavic3EnterpriseTwin,
 }

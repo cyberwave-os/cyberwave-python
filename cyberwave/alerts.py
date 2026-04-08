@@ -95,6 +95,10 @@ class Alert:
         return str(_attr(self._data, "source_type", ""))
 
     @property
+    def category(self) -> str:
+        return str(_attr(self._data, "category", "technical"))
+
+    @property
     def twin_uuid(self) -> Optional[str]:
         val = _attr(self._data, "twin_uuid")
         return str(val) if val else None
@@ -195,11 +199,22 @@ class Alert:
         alert_type: Optional[str] = None,
         severity: Optional[str] = None,
         status: Optional[str] = None,
+        category: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "Alert":
         """Update mutable fields on this alert.
 
         Only the fields you pass will be changed; the rest stay as-is.
+
+        Args:
+            name: Human-readable title.
+            description: Optional details.
+            media: Optional public URL to supporting media (PNG, GIF, or MP4).
+            alert_type: Machine-readable code (e.g. ``calibration_needed``).
+            severity: One of ``info``, ``warning``, ``error``, ``critical``.
+            status: One of ``active``, ``acknowledged``, ``resolved``, ``silenced``.
+            category: One of ``technical``, ``business``.
+            metadata: Optional metadata dict.
 
         Returns:
             Updated Alert instance.
@@ -217,6 +232,8 @@ class Alert:
             payload["severity"] = severity
         if status is not None:
             payload["status"] = status
+        if category is not None:
+            payload["category"] = category
         if metadata is not None:
             payload["metadata"] = metadata
 
@@ -268,6 +285,7 @@ class TwinAlertManager:
         alert_type: str = "",
         severity: str = "warning",
         source_type: str = "edge",
+        category: str = "technical",
         environment_uuid: Optional[str] = None,
         workflow_uuid: Optional[str] = None,
         workspace_uuid: Optional[str] = None,
@@ -283,6 +301,7 @@ class TwinAlertManager:
             alert_type: Machine-readable code (e.g. ``calibration_needed``).
             severity: One of ``info``, ``warning``, ``error``, ``critical``.
             source_type: One of ``edge``, ``simulation``, ``cloud``, ``workflow``.
+            category: One of ``technical`` (default) or ``business``.
             environment_uuid: Optionally attach to an environment.
             workflow_uuid: Optionally attach to a workflow.
             workspace_uuid: Workspace to associate the alert with.
@@ -302,6 +321,7 @@ class TwinAlertManager:
             "alert_type": alert_type,
             "severity": severity,
             "source_type": source_type,
+            "category": category,
             "twin_uuid": self._twin.uuid,
         }
         if media is not None:

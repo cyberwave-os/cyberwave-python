@@ -36,6 +36,7 @@ class AlertSchema(BaseModel):
     severity: StrictStr
     status: StrictStr
     source_type: StrictStr
+    category: StrictStr
     twin_uuid: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     workflow_uuid: Optional[StrictStr] = None
@@ -45,7 +46,7 @@ class AlertSchema(BaseModel):
     updated_at: datetime
     resolved_at: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "media", "alert_type", "severity", "status", "source_type", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "created_by_uuid", "created_at", "updated_at", "resolved_at", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "media", "alert_type", "severity", "status", "source_type", "category", "twin_uuid", "environment_uuid", "workflow_uuid", "workspace_uuid", "created_by_uuid", "created_at", "updated_at", "resolved_at", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -141,6 +142,7 @@ class AlertSchema(BaseModel):
             "severity": obj.get("severity"),
             "status": obj.get("status"),
             "source_type": obj.get("source_type"),
+            "category": obj.get("category"),
             "twin_uuid": obj.get("twin_uuid"),
             "environment_uuid": obj.get("environment_uuid"),
             "workflow_uuid": obj.get("workflow_uuid"),

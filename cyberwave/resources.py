@@ -1088,6 +1088,47 @@ class AssetManager(BaseResourceManager):
             asset_id, path="/physics/contact", value=current_contact, op="add"
         )
 
+    def list_primitives(self) -> List[AssetSchema]:
+        """
+        List public catalog assets that have a registry_id_alias (shortcut) set.
+
+        Primitives are curated catalog entries with a short alias such as
+        ``camera`` or ``lidar``.  They can be instantiated directly by alias
+        (e.g. ``cw.twin("camera")``), making it easy to populate an
+        environment without knowing the full ``vendor/slug`` registry ID.
+
+        Returns:
+            List of AssetSchema objects sorted by alias.
+
+        Example:
+            primitives = cw.assets.list_primitives()
+            for asset in primitives:
+                print(asset.registry_id_alias, "->", asset.registry_id)
+
+            # Instantiate a primitive directly by alias
+            camera = cw.twin("camera")
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/assets/primitives",
+            )
+
+            _response_types_map = {
+                "200": "List[AssetSchema]",
+            }
+
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map=_response_types_map,
+            ).data
+        except Exception as e:
+            self._handle_error(e, "list primitive assets")
+            raise  # For type checker
+
     def search(self, query: str) -> List[AssetSchema]:
         """Search for assets by name or tags"""
         try:

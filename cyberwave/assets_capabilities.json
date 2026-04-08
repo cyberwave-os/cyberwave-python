@@ -2585,7 +2585,37 @@
       "sensors": []
     },
     "registry_id": "cyberwave/generic_cube",
-    "registry_id_alias": null
+    "registry_id_alias": "cube"
+  },
+  "cube": {
+    "uuid": "f69e1538-9a4a-458c-bbd0-cc28632adce9",
+    "name": "Generic Cube",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/generic_cube",
+    "registry_id_alias": "cube"
   },
   "cyberwave/generictable": {
     "uuid": "0d9a292d-9a1c-4326-baf9-50dd00b3d528",
@@ -2615,7 +2645,37 @@
       "sensors": []
     },
     "registry_id": "cyberwave/generictable",
-    "registry_id_alias": null
+    "registry_id_alias": "table"
+  },
+  "table": {
+    "uuid": "0d9a292d-9a1c-4326-baf9-50dd00b3d528",
+    "name": "Generic Table",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/generictable",
+    "registry_id_alias": "table"
   },
   "cyberwave/generic-box": {
     "uuid": "8cbd76ce-b150-4504-8ae1-d2248ed7657c",
@@ -2997,15 +3057,74 @@
             }
           },
           "parameters": {
-            "width": null,
-            "height": null,
-            "update_rate": null
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
           }
         }
       ]
     },
     "registry_id": "cyberwave/standard-cam",
-    "registry_id_alias": null
+    "registry_id_alias": "camera"
+  },
+  "camera": {
+    "uuid": "6bce0a96-860f-4fa0-994c-f78f64cc1fc3",
+    "name": "Standard Camera",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "sensor_1772019530289",
+          "name": "sensor_1772019530289",
+          "type": "rgb",
+          "model": null,
+          "offset": {
+            "position": {
+              "x": 0.0408,
+              "y": -0.0016,
+              "z": 0.0277
+            },
+            "rotation": {
+              "w": 0.707,
+              "x": -0.707,
+              "y": -0.0091,
+              "z": 0.0091
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
+          }
+        }
+      ]
+    },
+    "registry_id": "cyberwave/standard-cam",
+    "registry_id_alias": "camera"
   },
   "cyberwave/generic_ipcamera": {
     "uuid": "1d7fa94f-9a03-4c9e-a27f-e6d7db5bc905",
@@ -4199,7 +4318,37 @@
       "sensors": []
     },
     "registry_id": "cyberwave/cylinder",
-    "registry_id_alias": null
+    "registry_id_alias": "cylinder"
+  },
+  "cylinder": {
+    "uuid": "73c6a84b-4fb9-4406-94ea-52deb12bc81e",
+    "name": "Cylinder",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/cylinder",
+    "registry_id_alias": "cylinder"
   },
   "cyberwave/sphere": {
     "uuid": "13ef2f8d-1688-4df1-949a-c954c5dd2f92",
@@ -4229,7 +4378,37 @@
       "sensors": []
     },
     "registry_id": "cyberwave/sphere",
-    "registry_id_alias": null
+    "registry_id_alias": "sphere"
+  },
+  "sphere": {
+    "uuid": "13ef2f8d-1688-4df1-949a-c954c5dd2f92",
+    "name": "Sphere",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/sphere",
+    "registry_id_alias": "sphere"
   },
   "cyberwave/wall": {
     "uuid": "7de03ac5-c0a1-4874-8b86-7eeec3419a95",
@@ -4237,11 +4416,16 @@
     "capabilities": {
       "has_joints": false,
       "can_actuate": false,
-      "can_locomote": true,
+      "can_locomote": false,
       "can_fly": false,
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -4254,7 +4438,37 @@
       "sensors": []
     },
     "registry_id": "cyberwave/wall",
-    "registry_id_alias": null
+    "registry_id_alias": "wall"
+  },
+  "wall": {
+    "uuid": "7de03ac5-c0a1-4874-8b86-7eeec3419a95",
+    "name": "Wall",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/wall",
+    "registry_id_alias": "wall"
   },
   "unitree/z1-gripper": {
     "uuid": "b90d2b95-ad50-47eb-9d3a-2d96d5e321b3",
@@ -4284,84 +4498,6 @@
       "sensors": []
     },
     "registry_id": "unitree/z1-gripper",
-    "registry_id_alias": null
-  },
-  "SZ-DJI-Technology/DJI-Mavic-3-Enterprise": {
-    "uuid": "8e4f5d66-db10-4368-b59e-8c4b0b2012db",
-    "name": "DJI Mavic 3 Enterprise",
-    "capabilities": {
-      "has_joints": true,
-      "can_actuate": true,
-      "can_locomote": true,
-      "can_fly": true,
-      "has_legs": false,
-      "has_wheels": false,
-      "locomotion_mode": "aerial",
-      "locomotion_config": {
-        "dof": 6,
-        "max_linear_velocity": 19.0,
-        "max_angular_velocity": 3.14
-      },
-      "can_grip": false,
-      "manipulator_count": 0,
-      "payload_capacity_kg": 1.0,
-      "power_source": "battery",
-      "power_capacity_wh": 77,
-      "navigation_autonomy_level": "waypoint",
-      "navigation_obstacle_avoidance": true,
-      "maximum_frequency_hz": 100,
-      "minimum_frequency_hz": 10,
-      "sensors": [
-        {
-          "id": "hasselblad_camera",
-          "name": "hasselblad_camera",
-          "type": "rgb",
-          "model": "Hasselblad 4/3 CMOS",
-          "offset": {
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
-          },
-          "parameters": {
-            "width": null,
-            "height": null,
-            "update_rate": null,
-            "fov_degrees": 84
-          }
-        },
-        {
-          "id": "onboard_imu",
-          "name": "onboard_imu",
-          "type": "imu",
-          "model": "Integrated IMU",
-          "offset": {
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
-          },
-          "parameters": {
-            "update_rate": null
-          }
-        }
-      ]
-    },
-    "registry_id": "SZ-DJI-Technology/DJI-Mavic-3-Enterprise",
     "registry_id_alias": null
   },
   "generic-drone-payloads/uwb-radar-pod": {
@@ -4480,7 +4616,7 @@
       },
       "can_grip": false,
       "manipulator_count": 1,
-      "payload_capacity_kg": 5.0,
+      "payload_capacity_kg": 5,
       "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": null,
@@ -4515,6 +4651,64 @@
       "sensors": []
     },
     "registry_id": "pollen-robotics/reachy-mini",
+    "registry_id_alias": null
+  },
+  "sz-dji-technology/DJI-Mavic-3-Enterprise": {
+    "uuid": "e1aac6c3-e125-428c-988b-5f182040ee0f",
+    "name": "DJI Mavic 3 Enterprise",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": true,
+      "can_fly": true,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "wheeled",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 1,
+      "power_source": "battery",
+      "power_capacity_wh": 77,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": true,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "hasselblad_camera",
+          "name": "hasselblad_camera",
+          "type": "rgb",
+          "model": "Hasselblad 4/3 CMOS",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_degrees": 84,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
+          }
+        }
+      ]
+    },
+    "registry_id": "sz-dji-technology/DJI-Mavic-3-Enterprise",
     "registry_id_alias": null
   }
 }

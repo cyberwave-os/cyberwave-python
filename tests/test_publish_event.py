@@ -11,9 +11,9 @@ from cyberwave.config import CyberwaveConfig
 def cw_client():
     """Create a Cyberwave client with mocked REST + MQTT."""
     with (
-        patch("cyberwave.client.ApiClient"),
-        patch("cyberwave.client.DefaultApi"),
-        patch("cyberwave.client.Configuration"),
+        patch("cyberwave.rest.ApiClient"),
+        patch("cyberwave.rest.DefaultApi"),
+        patch("cyberwave.rest.Configuration"),
     ):
         from cyberwave.client import Cyberwave
 

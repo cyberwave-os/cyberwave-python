@@ -210,23 +210,39 @@ class HookRegistry:
         *,
         tolerance_ms: float = 50.0,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register a callback that fires when all *channels* have
-        a sample within *tolerance_ms* of each other.
+        """Register a callback that fires when all *channels* have a sample
+        within *tolerance_ms* of each other.
 
-        Dispatch logic is implemented in a follow-up issue; this
-        method only records the registration.
+        The callback receives ``(samples: dict[str, Sample], ctx: HookContext)``
+        where *samples* maps channel name to the most recent sample on that
+        channel.  Dispatching is handled by :class:`WorkerRuntime`.
+
+        Duplicate registrations (same callback + channels + twin_uuid) emit a
+        warning and are skipped.
         """
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            group = SynchronizedGroup(
+                channels=tuple(channels),
+                twin_uuid=twin_uuid,
+                callback=fn,
+                tolerance_ms=tolerance_ms,
+            )
             with self._lock:
-                self._synchronized.append(
-                    SynchronizedGroup(
-                        channels=tuple(channels),
-                        twin_uuid=twin_uuid,
-                        callback=fn,
-                        tolerance_ms=tolerance_ms,
-                    )
-                )
+                for existing in self._synchronized:
+                    if (
+                        existing.callback is fn
+                        and existing.channels == group.channels
+                        and existing.twin_uuid == twin_uuid
+                    ):
+                        warnings.warn(
+                            f"Duplicate synchronized hook registration: callback "
+                            f"{fn.__qualname__!r} is already registered on channels "
+                            f"{list(channels)!r} for twin {twin_uuid!r}",
+                            stacklevel=3,
+                        )
+                        return fn
+                self._synchronized.append(group)
             return fn
 
         return decorator

@@ -54,7 +54,24 @@ LATEST_VALUE_CHANNELS: frozenset[str] = frozenset(
     }
 )
 
-WELL_KNOWN_CHANNELS: frozenset[str] = STREAM_CHANNELS | LATEST_VALUE_CHANNELS
+# Command channels: published by workers / policy models, consumed by drivers.
+# Format: commands/<action_type>  e.g. "commands/velocity", "commands/joint_positions"
+# Drivers subscribe to these for closed-loop autonomous actuation.
+# Human teleop always takes priority over command-channel messages.
+COMMAND_CHANNELS: frozenset[str] = frozenset(
+    {
+        "commands",  # wildcard parent — subscribe with build_wildcard(channel="commands")
+        "commands/velocity",        # {linear_x, linear_y, linear_z, angular_x, angular_y, angular_z}
+        "commands/joint_positions", # {positions: [float], names: [str], velocities?: [float]}
+        "commands/end_effector_pose",  # {x, y, z, qx, qy, qz, qw}
+        "commands/gripper",         # {opening: float, force?: float}
+        "commands/navigate",        # {goal_type: "goto"|"path", position?: {x,y,z}, waypoints?: [...]}
+        "commands/pose",            # {pose: "stand"|"sit"|"recovery"}
+        "commands/led",             # {action: "toggle"|"on"|"off", color?: str}
+    }
+)
+
+WELL_KNOWN_CHANNELS: frozenset[str] = STREAM_CHANNELS | LATEST_VALUE_CHANNELS | COMMAND_CHANNELS
 
 # ── Validation patterns ─────────────────────────────────────────────
 
@@ -62,7 +79,7 @@ _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 
-_CHANNEL_SEGMENT_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_CHANNEL_SEGMENT_RE = re.compile(r"^[a-z][a-z0-9_]*(?:/[a-z][a-z0-9_]*)*$")
 
 _SENSOR_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -79,7 +96,8 @@ def _validate_channel_segment(segment: str) -> None:
     if not _CHANNEL_SEGMENT_RE.match(segment):
         raise ChannelError(
             f"Invalid channel segment: '{segment}'.  "
-            "Must be lowercase alphanumeric + underscores, starting with a letter."
+            "Must be lowercase alphanumeric + underscores, starting with a letter.  "
+            "Hierarchical channels use '/' (e.g. 'commands/velocity')."
         )
 
 

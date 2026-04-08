@@ -3,6 +3,11 @@ Frame Capture & Manipulation Example
 
 Grab frames from a twin's camera sensor and process them with OpenCV / PIL.
 
+The source of the frame — real camera ("real-world") or simulated 3-D
+render ("simulation") — is controlled by ``cw.affect()``.  When no
+explicit ``source_type`` is passed to ``capture_frame``, the active
+affect mode is used automatically.
+
 Requirements:
     pip install cyberwave numpy opencv-python Pillow
 """
@@ -14,7 +19,15 @@ from cyberwave import Cyberwave
 cw = Cyberwave()
 robot = cw.twin("the-robot-studio/so101")
 
-# ── Single frame as numpy array ───────────────────────────────────────
+# ── Affect-based source selection ─────────────────────────────────────
+
+cw.affect("simulation")
+sim_frame = robot.capture_frame("numpy")   # rendered frame from the 3-D camera
+
+cw.affect("real-world")
+real_frame = robot.capture_frame("numpy")  # live frame from the real camera
+
+# ── Single frame as numpy array (uses the current affect mode) ────────
 
 frame = robot.capture_frame("numpy")  # BGR numpy array
 

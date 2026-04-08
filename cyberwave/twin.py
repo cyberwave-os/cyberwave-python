@@ -3,12 +3,10 @@ High-level Twin abstraction for intuitive digital twin control
 """
 
 import asyncio
-import base64
 from copy import deepcopy
 import json
 import math
 import os
-import threading
 import time
 import logging
 from pathlib import Path
@@ -349,123 +347,6 @@ class TwinCameraHandle:
                 "This twin does not have streaming capabilities."
             )
         self._twin.start_streaming(fps=fps, camera_id=camera_id)
-
-    def edge_photo(
-        self,
-        format: str = "numpy",
-        *,
-        timeout: float = 5.0,
-    ) -> Any:
-        """Capture a frame from the edge device via MQTT ``take_photo`` command.
-
-        Sends a ``take_photo`` command over MQTT to the edge driver, which
-        grabs the latest cached camera frame, JPEG-encodes it, and responds
-        on ``camera/photo`` with a base64-encoded JPEG.
-
-        This bypasses the cloud REST API and WebRTC entirely — it works
-        as long as MQTT is connected and the edge driver has a camera frame.
-
-        .. note::
-            Not all edge drivers implement the ``take_photo`` MQTT command.
-            If this method times out, the driver likely doesn't support it.
-
-        Args:
-            format: Output format — ``"numpy"`` (default), ``"pil"``,
-                ``"bytes"``, or ``"path"``.
-            timeout: Seconds to wait for the photo response before raising.
-
-        Returns:
-            Frame in the requested format.
-
-        Raises:
-            CyberwaveError: If MQTT is unavailable, the edge returns an
-                error, or the timeout is exceeded.
-        """
-        twin = self._twin
-        twin._connect_to_mqtt_if_not_connected()
-        prefix = twin.client.config.topic_prefix or ""
-
-        photo_topic = f"{prefix}cyberwave/twin/{twin.uuid}/camera/photo"
-        cmd_topic = f"{prefix}cyberwave/twin/{twin.uuid}/command"
-
-        received = threading.Event()
-        result: Dict[str, Any] = {}
-
-        def _on_photo(message):
-            try:
-                payload = json.loads(message) if isinstance(message, str) else message
-            except (json.JSONDecodeError, TypeError):
-                result["error"] = f"Invalid photo response: {message!r}"
-                received.set()
-                return
-            result["payload"] = payload
-            received.set()
-
-        twin.client.mqtt.subscribe(photo_topic, _on_photo)
-
-        try:
-            twin.client.mqtt.publish(
-                cmd_topic,
-                {
-                    "source_type": SOURCE_TYPE_TELE,
-                    "command": "take_photo",
-                    "data": {},
-                    "timestamp": time.time(),
-                },
-            )
-
-            if not received.wait(timeout=timeout):
-                raise CyberwaveError(
-                    f"Timed out waiting {timeout}s for edge photo response. "
-                    "The edge driver may not support the 'take_photo' command, "
-                    "or MQTT is not connected."
-                )
-
-            payload = result.get("payload", {})
-            if "error" in payload or payload.get("status") == "error":
-                msg = payload.get("message", payload.get("error", "unknown error"))
-                raise CyberwaveError(f"Edge photo failed: {msg}")
-
-            image_b64 = payload.get("image")
-            if not image_b64:
-                raise CyberwaveError(
-                    f"Edge photo response missing 'image' field: {list(payload.keys())}"
-                )
-
-            jpeg_bytes = base64.b64decode(image_b64)
-            return _decode_frame(jpeg_bytes, format)
-        finally:
-            mqtt_client = getattr(twin.client.mqtt, "_client", twin.client.mqtt)
-            mqtt_client.unsubscribe(photo_topic)
-
-    def edge_photos(
-        self,
-        count: int = 1,
-        interval_ms: int = 200,
-        format: str = "bytes",
-        *,
-        timeout: float = 5.0,
-    ) -> List[Any]:
-        """Capture multiple frames from the edge device.
-
-        Calls :meth:`edge_photo` repeatedly with a delay between shots.
-
-        Args:
-            count: Number of frames to capture.
-            interval_ms: Milliseconds between consecutive shots.
-            format: Output format for each frame.
-            timeout: Per-frame timeout in seconds.
-
-        Returns:
-            List of frames in the requested format.
-        """
-        frames = []
-        for i in range(count):
-            frame = self.edge_photo(format=format, timeout=timeout)
-            frames.append(frame)
-            if i < count - 1:
-                time.sleep(interval_ms / 1000.0)
-        return frames
 
 
 class Twin:
@@ -853,7 +734,11 @@ class Twin:
         project_uuid = (
             environment.project_uuid
             if hasattr(environment, "project_uuid")
-            else (environment.get("project_uuid") if isinstance(environment, dict) else None)
+            else (
+                environment.get("project_uuid")
+                if isinstance(environment, dict)
+                else None
+            )
         )
         if project_uuid:
             self.client.environments.delete(environment_uuid, str(project_uuid))  # type: ignore
@@ -945,6 +830,7 @@ class Twin:
                         "real-world",
                         "real",
                         "teleoperation",
+                        "edge",
                     }:
                         resolved_source_type = "tele"
 
@@ -1881,16 +1767,139 @@ class FlyingTwin(Twin):
         self.client.mqtt.publish(
             f"twins/{self.uuid}/commands/takeoff", {"altitude": altitude}
         )
+        # if the default source is telesim, also update the hovering status. In other scenarios (e.g. actual drone driver running) the hovering status is updated by the driver.
+        if _default_control_source_type(self.client) == SOURCE_TYPE_SIM_TELE:
+            self.set_hovering_status(hovering=True, hovering_altitude=altitude)
 
     def land(self) -> None:
         """Land the drone."""
         self._connect_to_mqtt_if_not_connected()
         self.client.mqtt.publish(f"twins/{self.uuid}/commands/land", {})
+        # if the default source is telesim, also update the hovering status. In other scenarios (e.g. actual drone driver running) the hovering status is updated by the driver.
+        if _default_control_source_type(self.client) == SOURCE_TYPE_SIM_TELE:
+            self.set_hovering_status(hovering=False)
 
     def hover(self) -> None:
         """Hover in place."""
         self._connect_to_mqtt_if_not_connected()
         self.client.mqtt.publish(f"twins/{self.uuid}/commands/hover", {})
+        # if the default source is telesim, also update the hovering status. In other scenarios (e.g. actual drone driver running) the hovering status is updated by the driver.
+        if _default_control_source_type(self.client) == SOURCE_TYPE_SIM_TELE:
+            self.set_hovering_status(hovering=True)
+
+    # ------------------------------------------------------------------
+    # Hovering status helpers
+    # ------------------------------------------------------------------
+
+    def is_hovering(self) -> bool:
+        """
+        Return True if this twin is currently in hovering mode.
+
+        The hovering state is stored in ``twin.metadata.status.controller_requested_hovering``.
+        This method reads the locally-cached twin data; call :meth:`refresh`
+        first if you need the latest server-side value.
+
+        Returns:
+            bool: True when metadata.status.controller_requested_hovering is True, False otherwise.
+        """
+        meta: Dict[str, Any] = {}
+        if hasattr(self._data, "metadata") and self._data.metadata:
+            meta = dict(self._data.metadata)
+        elif isinstance(self._data, dict):
+            meta = self._data.get("metadata") or {}
+        return bool(
+            meta.get("status", {}).get("controller_requested_hovering", False)
+        )
+
+    def get_hovering_status(self) -> Dict[str, Any]:
+        """
+        Return the hovering status dict from this twin's metadata.
+
+        The returned dict follows the schema::
+
+            {
+                "controller_requested_hovering": bool,
+                "controller_requested_hovering_altitude": float | None,  # altitude in metres
+            }
+
+        This method reads the locally-cached twin data; call :meth:`refresh`
+        first if you need the latest server-side value.
+
+        Returns:
+            dict: Hovering status with keys ``controller_requested_hovering`` and
+            optionally ``controller_requested_hovering_altitude``.
+        """
+        meta: Dict[str, Any] = {}
+        if hasattr(self._data, "metadata") and self._data.metadata:
+            meta = dict(self._data.metadata)
+        elif isinstance(self._data, dict):
+            meta = self._data.get("metadata") or {}
+        status = meta.get("status") or {}
+        return {
+            "controller_requested_hovering": bool(
+                status.get("controller_requested_hovering", False)
+            ),
+            "controller_requested_hovering_altitude": status.get(
+                "controller_requested_hovering_altitude"
+            ),
+        }
+
+    def set_hovering_status(
+        self,
+        *,
+        hovering: bool,
+        hovering_altitude: Optional[float] = None,
+    ) -> None:
+        """
+        Persist the hovering status to the twin's metadata on the server.
+
+        This performs a deep-merge into ``twin.metadata.status`` so that
+        other metadata fields are not overwritten.
+
+        Args:
+            hovering: Whether the drone is currently hovering.
+            hovering_altitude: Current altitude in meters. Required (or
+                strongly recommended) when ``hovering`` is True.  Pass
+                ``None`` to leave any existing value unchanged.
+
+        Example::
+
+            twin.set_hovering_status(hovering=True, hovering_altitude=2.5)
+            twin.set_hovering_status(hovering=False)
+
+        The values are persisted under
+        ``twin.metadata.status.controller_requested_hovering`` and
+        ``twin.metadata.status.controller_requested_hovering_altitude``.
+        """
+        # Read current metadata so we can merge rather than overwrite
+        meta: Dict[str, Any] = {}
+        if hasattr(self._data, "metadata") and self._data.metadata:
+            meta = dict(self._data.metadata)
+        elif isinstance(self._data, dict):
+            meta = dict(self._data.get("metadata") or {})
+
+        status: Dict[str, Any] = dict(meta.get("status") or {})
+        status["controller_requested_hovering"] = hovering
+        if hovering_altitude is not None:
+            status["controller_requested_hovering_altitude"] = hovering_altitude
+        elif not hovering:
+            # Clear altitude when landing so stale values don't persist
+            status.pop("controller_requested_hovering_altitude", None)
+
+        meta["status"] = status
+
+        try:
+            self.client.twins.update(self.uuid, metadata=meta)  # type: ignore[union-attr]
+        except Exception as exc:
+            raise CyberwaveError(
+                f"Failed to update hovering status for twin {self.uuid}: {exc}"
+            ) from exc
+
+        # Keep local cache in sync
+        if hasattr(self._data, "metadata"):
+            self._data.metadata = meta  # type: ignore[assignment]
+        elif isinstance(self._data, dict):
+            self._data["metadata"] = meta
 
     def __repr__(self) -> str:
         return f"FlyingTwin(uuid='{self.uuid}', name='{self.name}')"
