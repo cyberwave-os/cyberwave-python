@@ -346,6 +346,193 @@ class TestIntegrationWorkflows:
         print("=" * 70 + "\n")
 
 
+class TestIntegrationRegressions:
+    """
+    Regression tests for bugs that were not caught before shipping.
+
+    Each test documents a specific production bug and verifies the fix is in place.
+    """
+
+    def test_twin_with_slash_registry_id(self, cyberwave_client):
+        """
+        Regression test for CYB-1720 bug #2.
+
+        Calling ``cw.twin("vendor/model")`` raised ``CyberwaveError: Asset not
+        found`` because ``get_by_registry_id`` tried ``GET /assets/vendor/model``
+        which Django's URL router split at the slash, returning 404.
+
+        The fix routes slash-containing identifiers through the
+        ``?registry_id=`` query parameter instead of the URL path.
+        """
+        print("\n" + "=" * 70)
+        print("Regression: cw.twin() with slash-containing registry_id")
+        print("=" * 70)
+
+        client = cyberwave_client
+        registry_id = f"test-vendor/test-robot-{int(time.time())}"
+
+        created_resources: dict = {"asset": None, "environment": None, "project": None}
+
+        try:
+            project = client.projects.create(
+                name=f"SDK Regression Test {int(time.time())}",
+                workspace_id=None,
+                description="Auto-generated project for SDK regression testing",
+            )
+            created_resources["project"] = project
+
+            environment = client.environments.create(
+                name=f"Regression Test Env {int(time.time())}",
+                project_id=project.uuid,
+            )
+            created_resources["environment"] = environment
+
+            asset = client.assets.create(
+                name=f"Regression Test Asset {int(time.time())}",
+                description="Created for slash-registry_id regression test",
+                asset_type="generic",
+                registry_id=registry_id,
+            )
+            created_resources["asset"] = asset
+
+            print(
+                f"  Created asset with registry_id='{registry_id}' (UUID: {asset.uuid})"
+            )
+
+            # This was the failing call — must not raise CyberwaveError
+            twin = client.twin(registry_id, environment_id=environment.uuid)
+
+            assert twin is not None, "twin() must return a Twin instance"
+            assert twin.uuid is not None, "returned twin must have a valid UUID"
+            print(
+                f"✓ cw.twin('{registry_id}') succeeded (twin UUID: {twin.uuid})"
+            )
+
+        finally:
+            if created_resources["asset"]:
+                try:
+                    client.assets.delete(created_resources["asset"].uuid)
+                except Exception:
+                    pass
+            if created_resources["environment"] and created_resources["project"]:
+                try:
+                    client.environments.delete(
+                        created_resources["environment"].uuid,
+                        created_resources["project"].uuid,
+                    )
+                except Exception:
+                    pass
+            if created_resources["project"]:
+                try:
+                    client.projects.delete(created_resources["project"].uuid)
+                except Exception:
+                    pass
+
+        print("=" * 70 + "\n")
+
+    def test_get_latest_frame_returns_valid_jpeg_bytes(self, cyberwave_client):
+        """
+        Regression test for CYB-1720 bug #1.
+
+        ``twin.get_latest_frame()`` was returning an invalid / truncated image.
+        When the ``mock=True`` flag is passed the backend returns a deterministic
+        JPEG, allowing us to verify:
+
+        1. The return value is ``bytes`` (not ``None``, not a string).
+        2. The bytes start with the JPEG magic number ``\\xff\\xd8`` and end
+           with the EOI marker ``\\xff\\xd9``.
+        """
+        print("\n" + "=" * 70)
+        print("Regression: twin.get_latest_frame() returns valid JPEG bytes")
+        print("=" * 70)
+
+        client = cyberwave_client
+
+        created_resources: dict = {"asset": None, "environment": None, "project": None}
+
+        try:
+            project = client.projects.create(
+                name=f"SDK Frame Regression {int(time.time())}",
+                workspace_id=None,
+                description="Auto-generated project for frame regression test",
+            )
+            created_resources["project"] = project
+
+            environment = client.environments.create(
+                name=f"Frame Regression Env {int(time.time())}",
+                project_id=project.uuid,
+            )
+            created_resources["environment"] = environment
+
+            asset = client.assets.create(
+                name=f"Frame Regression Asset {int(time.time())}",
+                description="Created for get_latest_frame regression test",
+                asset_type="generic",
+            )
+            created_resources["asset"] = asset
+
+            twin_data = client.twins.create(
+                asset_id=asset.uuid,
+                environment_id=environment.uuid,
+            )
+
+            # Use mock=True so the server always returns a deterministic JPEG
+            # without needing a real camera stream to be active.
+            frame_bytes = client.twins.get_latest_frame(twin_data.uuid, mock=True)
+
+            assert isinstance(
+                frame_bytes, bytes
+            ), f"get_latest_frame must return bytes, got {type(frame_bytes)}"
+            assert len(frame_bytes) > 0, "returned frame must not be empty"
+            assert frame_bytes[:2] == b"\xff\xd8", (
+                "JPEG bytes must start with the SOI marker \\xff\\xd8, "
+                f"got {frame_bytes[:2]!r}"
+            )
+            assert frame_bytes[-2:] == b"\xff\xd9", (
+                "JPEG bytes must end with the EOI marker \\xff\\xd9, "
+                f"got {frame_bytes[-2:]!r}"
+            )
+
+            print(
+                f"✓ get_latest_frame(mock=True) returned {len(frame_bytes)} valid JPEG bytes"
+            )
+
+            # Also verify the Twin-level wrapper produces the same result
+            from cyberwave.twin import create_twin
+
+            twin = create_twin(client, twin_data)
+            twin_frame_bytes = twin.get_latest_frame(mock=True)
+            assert isinstance(twin_frame_bytes, bytes)
+            assert len(twin_frame_bytes) > 0
+            assert twin_frame_bytes[:2] == b"\xff\xd8"
+            assert twin_frame_bytes[-2:] == b"\xff\xd9"
+            print(
+                f"✓ Twin.get_latest_frame(mock=True) returned {len(twin_frame_bytes)} valid JPEG bytes"
+            )
+
+        finally:
+            if created_resources["asset"]:
+                try:
+                    client.assets.delete(created_resources["asset"].uuid)
+                except Exception:
+                    pass
+            if created_resources["environment"] and created_resources["project"]:
+                try:
+                    client.environments.delete(
+                        created_resources["environment"].uuid,
+                        created_resources["project"].uuid,
+                    )
+                except Exception:
+                    pass
+            if created_resources["project"]:
+                try:
+                    client.projects.delete(created_resources["project"].uuid)
+                except Exception:
+                    pass
+
+        print("=" * 70 + "\n")
+
+
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v", "-s"])

@@ -232,13 +232,24 @@ class CyberwaveMQTTClient:
         """
         return self._client.publish_telemetry_start_message(twin_uuid, metadata)
 
-    def publish_telemetry_end(self, twin_uuid: str) -> None:
+    def publish_telemetry_end(
+        self,
+        twin_uuid: str,
+        sensor: Optional[str] = None,
+        stream_source: Optional[str] = None,
+        stream_instance_id: Optional[str] = None,
+    ) -> None:
         """
         Publish telemetry_end and clear SDK telemetry-start tracking for this twin.
 
         Match edge teleop cleanup so recordings/sessions end cleanly.
         """
-        return self._client.publish_telemetry_end(twin_uuid)
+        return self._client.publish_telemetry_end(
+            twin_uuid,
+            sensor=sensor,
+            stream_source=stream_source,
+            stream_instance_id=stream_instance_id,
+        )
 
     def update_joint_state(
         self,

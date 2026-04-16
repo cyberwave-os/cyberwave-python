@@ -2,10 +2,13 @@
 Main Cyberwave client that integrates REST and MQTT APIs
 """
 
+import logging
 import os
 import time
 import warnings
 from typing import Any, Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 from cyberwave.config import (
     CyberwaveConfig,
@@ -97,6 +100,8 @@ class Cyberwave:
             Pass ``paho.mqtt.client.MQTTv5`` to use MQTT v5 when your broker supports it.
         source_type: Optional explicit default state/telemetry source_type override
         mode: Runtime mode, either live or simulation (defaults to live)
+        environment_id: Default environment ID (overrides CYBERWAVE_ENVIRONMENT_ID env var)
+        workspace_id: Default workspace ID (overrides CYBERWAVE_WORKSPACE_ID env var)
         **config_kwargs: Additional configuration options
     """
 
@@ -114,6 +119,8 @@ class Cyberwave:
         topic_prefix: Optional[str] = None,
         source_type: Optional[str] = None,
         mode: Optional[str] = "live",
+        environment_id: Optional[str] = None,
+        workspace_id: Optional[str] = None,
         **config_kwargs,
     ):
         runtime_mode = _resolve_runtime_mode(mode)
@@ -150,8 +157,8 @@ class Cyberwave:
             mqtt_tls_ca_cert=mqtt_tls_ca_cert,
             mqtt_protocol=mqtt_protocol,
             topic_prefix=topic_prefix,
-            environment_id=os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
-            workspace_id=os.getenv("CYBERWAVE_WORKSPACE_ID", None),
+            environment_id=environment_id or os.getenv("CYBERWAVE_ENVIRONMENT_ID", None),
+            workspace_id=workspace_id or os.getenv("CYBERWAVE_WORKSPACE_ID", None),
             source_type=source_type,
             runtime_mode=runtime_mode,
             **config_kwargs,
@@ -166,7 +173,7 @@ class Cyberwave:
         self._hook_registry = HookRegistry()
 
         self._hook_registry = HookRegistry()
-        self.models = ModelManager()
+        self.models = ModelManager(data_bus=lambda: self._try_get_data_bus())
 
         from cyberwave.resources import (
             WorkspaceManager,
@@ -327,12 +334,87 @@ class Cyberwave:
             self._data_bus = DataBus(backend, twin_uuid)
         return self._data_bus
 
+    def _try_get_data_bus(self) -> DataBus | None:
+        """Return the data bus if available, None otherwise (no exception)."""
+        try:
+            return self.data
+        except (CyberwaveError, ImportError, Exception):
+            return None
+
     @property
     def mqtt(self) -> CyberwaveMQTTClient:
         """Get MQTT client instance (lazy initialization)"""
         if self._mqtt_client is None:
             self._mqtt_client = CyberwaveMQTTClient(self.config)
         return self._mqtt_client
+
+    _QUICKSTART_WORKSPACE_NAME = "Quickstart Workspace"
+    _QUICKSTART_PROJECT_NAME = "Quickstart Project"
+    _QUICKSTART_ENV_NAME = "Quickstart Environment"
+
+    def _get_or_create_quickstart_env(self) -> tuple[str, bool]:
+        """Return (env_uuid, created) for the quickstart environment.
+
+        Reuses an existing environment named ``_QUICKSTART_ENV_NAME`` when one
+        is available so that repeated runs do not produce duplicate environments.
+        """
+        workspace_id = self.config.workspace_id
+        if not workspace_id:
+            workspaces = self.workspaces.list()
+            existing_workspace = next(
+                (
+                    ws
+                    for ws in workspaces
+                    if getattr(ws, "name", None) == self._QUICKSTART_WORKSPACE_NAME
+                ),
+                None,
+            )
+            if existing_workspace:
+                workspace_id = existing_workspace.uuid
+            elif workspaces:
+                workspace_id = workspaces[0].uuid
+            else:
+                workspace_id = self.workspaces.create(
+                    name=self._QUICKSTART_WORKSPACE_NAME,
+                ).uuid
+        self.config.workspace_id = workspace_id
+
+        projects = self.projects.list()
+        existing_project = next(
+            (
+                p
+                for p in projects
+                if getattr(p, "name", None) == self._QUICKSTART_PROJECT_NAME
+            ),
+            None,
+        )
+        if existing_project:
+            project_id = existing_project.uuid
+        elif projects:
+            project_id = projects[0].uuid
+        else:
+            project_id = self.projects.create(
+                name=self._QUICKSTART_PROJECT_NAME,
+                workspace_id=workspace_id,
+            ).uuid
+
+        environments = self.environments.list(project_id=project_id)
+        existing_env = next(
+            (
+                e
+                for e in environments
+                if getattr(e, "name", None) == self._QUICKSTART_ENV_NAME
+            ),
+            None,
+        )
+        if existing_env:
+            return str(existing_env.uuid), False
+
+        new_env = self.environments.create(
+            name=self._QUICKSTART_ENV_NAME,
+            project_id=project_id,
+        )
+        return str(new_env.uuid), True
 
     def twin(
         self,
@@ -383,30 +465,21 @@ class Cyberwave:
 
         env_id = environment_id or self.config.environment_id
         if not env_id:
-            projects = self.projects.list()
-            if not projects:
-                workspace_id = self.config.workspace_id
-                if not workspace_id:
-                    workspaces = self.workspaces.list()
-                    if not workspaces:
-                        # create a new workspace
-                        workspace_id = self.workspaces.create(
-                            name="Quickstart Workspace",
-                        ).uuid
-                        self.config.workspace_id = workspace_id
-                    workspace_id = workspaces[0].uuid
-                project_id = self.projects.create(
-                    name="Quickstart Project",
-                    workspace_id=self.config.workspace_id,
-                ).uuid
-                self.config.project_id = project_id
-            else:
-                project_id = projects[0].uuid
-            env_id = self.environments.create(
-                name="Quickstart Environment",
-                project_id=project_id,
-            ).uuid
+            env_id, created = self._get_or_create_quickstart_env()
             self.config.environment_id = env_id
+            env_url = f"https://cyberwave.com/environments/{env_id}"
+            if created:
+                print(
+                    f"[Cyberwave] No environment specified — created a new '{self._QUICKSTART_ENV_NAME}'.\n"
+                    f"  View it at: {env_url}\n"
+                    "  Tip: set environment_id= (or CYBERWAVE_ENVIRONMENT_ID) to skip this step."
+                )
+            else:
+                print(
+                    f"[Cyberwave] No environment specified — reusing existing '{self._QUICKSTART_ENV_NAME}'.\n"
+                    f"  View it at: {env_url}\n"
+                    "  Tip: set environment_id= (or CYBERWAVE_ENVIRONMENT_ID) to skip this step."
+                )
 
         asset = self.assets.get_by_registry_id(asset_key)
         if asset is None:
@@ -824,6 +897,12 @@ class Cyberwave:
 
             {"event_type": ..., "source": ..., "data": ..., "timestamp": ...}
         """
+        logger.debug(
+            "publish_event: twin=%s type=%s data=%s",
+            twin_uuid[:8] + "...",
+            event_type,
+            data,
+        )
         prefix = self.mqtt.topic_prefix
         self.mqtt.publish(
             f"{prefix}cyberwave/twin/{twin_uuid}/event",
@@ -848,6 +927,14 @@ class Cyberwave:
         """
         from cyberwave.workers.runtime import WorkerRuntime
 
+        try:
+            self.mqtt.connect()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "MQTT connect failed; events will be dropped until reconnected",
+                exc_info=True,
+            )
         self._runtime = WorkerRuntime(self)
         self._runtime.load(workers_dir)
         self._runtime.start()

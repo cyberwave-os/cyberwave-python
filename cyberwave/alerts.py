@@ -410,7 +410,7 @@ def _list_alerts(client: "Cyberwave", query: Dict[str, Any]) -> list:
         response.read()
         return _api(client).response_deserialize(
             response_data=response,
-            response_types_map={"200": "List[AlertSchema]"},
+            response_types_map={"200": "object"},
         ).data
     except Exception as e:
         raise CyberwaveError(f"Failed to list alerts: {e}") from e
@@ -428,7 +428,7 @@ def _get_alert(client: "Cyberwave", uuid: str) -> Any:
         response.read()
         return _api(client).response_deserialize(
             response_data=response,
-            response_types_map={"200": "AlertSchema"},
+            response_types_map={"200": "object"},
         ).data
     except Exception as e:
         raise CyberwaveError(f"Failed to get alert {uuid}: {e}") from e
@@ -446,7 +446,7 @@ def _create_alert(client: "Cyberwave", payload: Dict[str, Any]) -> Any:
         response.read()
         return _api(client).response_deserialize(
             response_data=response,
-            response_types_map={"200": "AlertSchema"},
+            response_types_map={"200": "object"},
         ).data
     except Exception as e:
         raise CyberwaveError(f"Failed to create alert: {e}") from e
@@ -465,7 +465,7 @@ def _put_alert(client: "Cyberwave", uuid: str, payload: Dict[str, Any]) -> Any:
         response.read()
         return _api(client).response_deserialize(
             response_data=response,
-            response_types_map={"200": "AlertSchema"},
+            response_types_map={"200": "object"},
         ).data
     except Exception as e:
         raise CyberwaveError(f"Failed to update alert {uuid}: {e}") from e
@@ -498,7 +498,7 @@ def _post_alert_button(client: "Cyberwave", uuid: str, button_index: int) -> Any
         response.read()
         return _api(client).response_deserialize(
             response_data=response,
-            response_types_map={"200": "AlertSchema"},
+            response_types_map={"200": "object"},
         ).data
     except Exception as e:
         raise CyberwaveError(
@@ -519,7 +519,7 @@ def _post_alert_action(client: "Cyberwave", uuid: str, action: str) -> Any:
         response.read()
         return _api(client).response_deserialize(
             response_data=response,
-            response_types_map={"200": "AlertSchema"},
+            response_types_map={"200": "object"},
         ).data
     except Exception as e:
         raise CyberwaveError(f"Failed to {action} alert {uuid}: {e}") from e

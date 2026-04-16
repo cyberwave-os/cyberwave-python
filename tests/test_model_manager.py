@@ -1,12 +1,15 @@
 """Tests for cyberwave.models.manager — ModelManager."""
 
+import hashlib
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from cyberwave.exceptions import CyberwaveModelIntegrityError
 from cyberwave.models.loaded_model import LoadedModel
-from cyberwave.models.manager import ModelManager
+from cyberwave.models.manager import MODEL_METADATA_FILENAME, ModelManager
 from cyberwave.models.runtimes.base import ModelRuntime
 from cyberwave.models.types import PredictionResult
 
@@ -103,6 +106,11 @@ class TestDetectRuntime:
             ("haar-face", "opencv"),
             ("background-subtraction-mog2", "opencv"),
             ("cascade-classifier", "opencv"),
+            ("model.onnx", "onnxruntime"),
+            ("detector.tflite", "tflite"),
+            ("optimised.engine", "tensorrt"),
+            ("plan.trt", "tensorrt"),
+            ("weights.pth", "torch"),
         ],
     )
     def test_known_ids(self, model_id, expected):
@@ -127,6 +135,8 @@ class TestDetectRuntimeFromExtension:
             (".tflite", "tflite"),
             (".xml", "opencv"),
             (".engine", "tensorrt"),
+            (".trt", "tensorrt"),
+            (".pth", "torch"),
             (".PT", "ultralytics"),
             (".unknown", "ultralytics"),
         ],
@@ -181,7 +191,7 @@ class TestResolveModelPath:
     def test_ultralytics_fallback(self, tmp_path):
         mgr = ModelManager(model_dir=str(tmp_path))
         result = mgr._resolve_model_path("yolov8n", "ultralytics")
-        assert result == Path("yolov8n")
+        assert result == tmp_path / "yolov8n"
 
     def test_non_ultralytics_not_found(self, tmp_path):
         mgr = ModelManager(model_dir=str(tmp_path))
@@ -260,3 +270,74 @@ class TestLoadFromFile:
         m = mgr.load_from_file(str(model_file), runtime="fake")
         assert m.name == "custom"
         assert m.runtime == "fake"
+
+
+# ---------------------------------------------------------------------------
+# _verify_model_checksum
+# ---------------------------------------------------------------------------
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+class TestVerifyModelChecksum:
+    def test_passes_when_checksum_matches(self, tmp_path: Path) -> None:
+        model_data = b"valid model weights"
+        model_file = tmp_path / "model.pt"
+        model_file.write_bytes(model_data)
+
+        metadata = {
+            "checksum_sha256": _sha256(model_data),
+        }
+        (tmp_path / MODEL_METADATA_FILENAME).write_text(json.dumps(metadata))
+
+        ModelManager._verify_model_checksum("test-model", model_file)
+        assert model_file.exists()
+
+    def test_raises_and_deletes_on_mismatch(self, tmp_path: Path) -> None:
+        model_file = tmp_path / "model.pt"
+        model_file.write_bytes(b"corrupted data")
+
+        metadata = {
+            "checksum_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        }
+        (tmp_path / MODEL_METADATA_FILENAME).write_text(json.dumps(metadata))
+
+        with pytest.raises(CyberwaveModelIntegrityError, match="failed checksum"):
+            ModelManager._verify_model_checksum("test-model", model_file)
+
+        assert not model_file.exists()
+
+    def test_skips_when_no_metadata_file(self, tmp_path: Path) -> None:
+        model_file = tmp_path / "model.pt"
+        model_file.write_bytes(b"any data")
+
+        ModelManager._verify_model_checksum("test-model", model_file)
+        assert model_file.exists()
+
+    def test_skips_when_metadata_is_malformed_json(self, tmp_path: Path) -> None:
+        model_file = tmp_path / "model.pt"
+        model_file.write_bytes(b"any data")
+        (tmp_path / MODEL_METADATA_FILENAME).write_text("not-json{{{")
+
+        ModelManager._verify_model_checksum("test-model", model_file)
+        assert model_file.exists()
+
+    def test_skips_when_checksum_key_missing(self, tmp_path: Path) -> None:
+        model_file = tmp_path / "model.pt"
+        model_file.write_bytes(b"any data")
+        (tmp_path / MODEL_METADATA_FILENAME).write_text(json.dumps({"other": "field"}))
+
+        ModelManager._verify_model_checksum("test-model", model_file)
+        assert model_file.exists()
+
+    def test_skips_when_checksum_is_empty_string(self, tmp_path: Path) -> None:
+        model_file = tmp_path / "model.pt"
+        model_file.write_bytes(b"any data")
+        (tmp_path / MODEL_METADATA_FILENAME).write_text(
+            json.dumps({"checksum_sha256": ""})
+        )
+
+        ModelManager._verify_model_checksum("test-model", model_file)
+        assert model_file.exists()

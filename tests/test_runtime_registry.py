@@ -68,5 +68,6 @@ class TestRuntimeRegistry:
         assert "test_available" in avail
         assert "test_unavailable" not in avail
 
-    def test_ultralytics_is_registered(self):
-        assert "ultralytics" in _RUNTIME_REGISTRY
+    def test_builtin_runtimes_are_registered(self):
+        for name in ("ultralytics", "onnxruntime", "opencv", "tflite", "tensorrt", "torch"):
+            assert name in _RUNTIME_REGISTRY, f"runtime '{name}' not registered"

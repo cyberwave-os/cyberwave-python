@@ -25,14 +25,6 @@ Zenoh key space (canonical ``cw`` prefix, no double-prefix)::
     cw/<UUID_A>/data/telemetry   # A → B hop
     cw/<UUID_B>/data/telemetry   # B → C hop
 
-Key prefix note
----------------
-``ZenohBackend`` is constructed with ``key_prefix=""`` so it forwards the key
-string from ``DataBus`` unchanged.  ``DataBus`` already prepends ``"cw"`` and
-builds the canonical ``cw/<uuid>/data/<channel>`` key.  Using the default
-``ZenohBackend(key_prefix="cw")`` together with ``DataBus`` would produce a
-double-prefix ``cw/cw/<uuid>/data/<channel>``.
-
 In-process broker
 -----------------
 A lightweight Zenoh session is started at ``tcp/localhost:<port>`` with
@@ -121,12 +113,8 @@ def _start_broker(port: int) -> Any:
 
 
 def _make_backend(connect: list[str]) -> ZenohBackend:
-    """Open a new Zenoh session connected to *connect* endpoints.
-
-    ``key_prefix=""`` lets DataBus supply the full canonical key
-    ``cw/<uuid>/data/<channel>`` without an extra layer of prefixing.
-    """
-    return ZenohBackend(key_prefix="", connect=connect, shared_memory=False)
+    """Open a new Zenoh session connected to *connect* endpoints."""
+    return ZenohBackend(connect=connect, shared_memory=False)
 
 
 def _make_bus(backend: ZenohBackend, twin_uuid: str) -> DataBus:

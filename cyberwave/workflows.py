@@ -2,7 +2,8 @@
 Workflow and WorkflowRun abstractions for the Cyberwave SDK.
 
 Provides:
-- ``Workflow`` object with convenience ``trigger()`` and ``runs()`` methods.
+- ``Workflow`` object with convenience ``trigger()``, ``runs()``, and
+  ``is_running()`` methods.
 - ``WorkflowRun`` object with ``refresh()``, ``wait()``, ``cancel()``,
   and ``on_status_change()`` for MQTT-based real-time updates.
 - ``WorkflowManager`` (``client.workflows``) for list / get / trigger.
@@ -28,6 +29,11 @@ Example::
     run.wait(timeout=60)
     print(f"Final status: {run.status}")
     print(f"Output: {run.result}")
+
+    # Check if a workflow is currently running
+    wf = client.workflows.get("wf-uuid")
+    if wf.is_running():
+        print("Workflow is currently executing")
 """
 
 from __future__ import annotations
@@ -152,6 +158,30 @@ class Workflow:
         return self._client.workflow_runs.list(
             workflow_id=self.uuid, status=status
         )
+
+    def is_running(self) -> bool:
+        """Check whether this workflow has any currently active run.
+
+        A run is considered active when its status is ``"running"``,
+        ``"waiting"``, or ``"requested"``.
+
+        Returns:
+            ``True`` if at least one active run exists, ``False`` otherwise.
+        """
+        active_runs = self._client.workflow_runs.list(
+            workflow_id=self.uuid, status="running"
+        )
+        if active_runs:
+            return True
+        waiting_runs = self._client.workflow_runs.list(
+            workflow_id=self.uuid, status="waiting"
+        )
+        if waiting_runs:
+            return True
+        requested_runs = self._client.workflow_runs.list(
+            workflow_id=self.uuid, status="requested"
+        )
+        return bool(requested_runs)
 
     def __repr__(self) -> str:
         return (
@@ -411,6 +441,21 @@ class WorkflowManager:
         """
         data = _trigger_workflow(self._client, workflow_id, inputs)
         return WorkflowRun(self._client, data)
+
+    def is_running(self, workflow_id: str) -> bool:
+        """Check whether a workflow has any currently active run.
+
+        A run is considered active when its status is ``"running"``,
+        ``"waiting"``, or ``"requested"``.
+
+        Args:
+            workflow_id: UUID of the workflow to check.
+
+        Returns:
+            ``True`` if at least one active run exists, ``False`` otherwise.
+        """
+        wf = self.get(workflow_id)
+        return wf.is_running()
 
 
 class WorkflowRunManager:

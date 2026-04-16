@@ -45,6 +45,7 @@ class VirtualVideoTrack(BaseVideoTrack):
         width: Frame width in pixels (default: 640)
         height: Frame height in pixels (default: 480)
         fps: Target frames per second (default: 15)
+        output_format: AV pixel format returned by recv() (default: yuv420p)
         time_reference: Optional TimeReference for clock sync
         placeholder_image: Optional RGB placeholder image when get_frame returns None
     """
@@ -56,6 +57,8 @@ class VirtualVideoTrack(BaseVideoTrack):
         width: int = 640,
         height: int = 480,
         fps: int = 15,
+        output_format: str = "yuv420p",
+        keyframe_interval: Optional[int] = None,
         time_reference: Optional["TimeReference"] = None,
         placeholder_image: Optional[np.ndarray] = None,
     ) -> None:
@@ -64,6 +67,9 @@ class VirtualVideoTrack(BaseVideoTrack):
         self.width = width
         self.height = height
         self.fps = fps
+        self.output_format = output_format
+        self.keyframe_interval = keyframe_interval
+        self._frames_since_keyframe = 0
         self._last_time = None
         self.time_reference = time_reference
 
@@ -150,6 +156,32 @@ class VirtualVideoTrack(BaseVideoTrack):
         # Convert to video frame
         arr = np.ascontiguousarray(frame)
         video_frame = VideoFrame.from_ndarray(arr, format="rgb24")
+
+        # Force periodic keyframes so consumers that attach later can decode quickly.
+        force_keyframe = False
+        if self.keyframe_interval:
+            if (
+                self._frames_since_keyframe >= self.keyframe_interval
+                or self.frame_count == 0
+            ):
+                force_keyframe = True
+                self._frames_since_keyframe = 0
+            else:
+                self._frames_since_keyframe += 1
+
+        if force_keyframe:
+            try:
+                from av.video.frame import PictureType
+
+                video_frame.pict_type = PictureType.I
+            except (ImportError, AttributeError):
+                pass
+            try:
+                video_frame.key_frame = 1
+            except AttributeError:
+                pass
+
+        video_frame = video_frame.reformat(format=self.output_format)
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, self.fps)
 
@@ -193,12 +225,17 @@ class VirtualCameraStreamer(BaseVideoStreamer):
         width: int = 640,
         height: int = 480,
         fps: int = 15,
+        output_format: str = "yuv420p",
+        keyframe_interval: Optional[int] = None,
         time_reference: Optional["TimeReference"] = None,
         twin_uuid: Optional[str] = None,
         auto_reconnect: bool = True,
         placeholder_image: Optional[np.ndarray] = None,
         camera_name: Optional[str] = None,
         enable_health_check: bool = True,
+        stream_source: Optional[str] = None,
+        stream_instance_id: Optional[str] = None,
+        frontend_type: Optional[str] = None,
     ) -> None:
         """Initialize virtual camera streamer.
 
@@ -208,12 +245,16 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             width: Frame width in pixels (default: 640)
             height: Frame height in pixels (default: 480)
             fps: Target frames per second (default: 15)
+            output_format: AV pixel format returned by recv() (default: yuv420p)
+            keyframe_interval: Force a keyframe every N frames
             time_reference: Time reference for synchronization
             twin_uuid: UUID of the digital twin
             auto_reconnect: Whether to automatically reconnect on disconnection
             placeholder_image: Optional placeholder image when get_frame returns None
             camera_name: Optional sensor identifier for multi-stream twins
             enable_health_check: Whether to enable automatic health check reporting
+            frontend_type: Track type sent in the WebRTC offer (e.g. "rgb", "depth").
+                Must match the consumer's expected track type so the SFU can pair them.
         """
         super().__init__(
             client=client,
@@ -222,6 +263,9 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             auto_reconnect=auto_reconnect,
             camera_name=camera_name,
             enable_health_check=enable_health_check,
+            stream_source=stream_source,
+            stream_instance_id=stream_instance_id,
+            frontend_type=frontend_type,
         )
 
         # Store virtual camera-specific parameters
@@ -229,6 +273,8 @@ class VirtualCameraStreamer(BaseVideoStreamer):
         self.width = width
         self.height = height
         self.fps = fps
+        self.output_format = output_format
+        self.keyframe_interval = keyframe_interval
         self.placeholder_image = placeholder_image
 
         logger.info(
@@ -243,6 +289,8 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             width=self.width,
             height=self.height,
             fps=self.fps,
+            output_format=self.output_format,
+            keyframe_interval=self.keyframe_interval,
             time_reference=self.time_reference,
             placeholder_image=self.placeholder_image,
         )

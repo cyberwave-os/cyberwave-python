@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import builtins
+import json
 import logging
 import os
 import signal
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from cyberwave.data.keys import build_key
 from cyberwave.exceptions import CyberwaveError
+from cyberwave.workers.constants import MONITOR_STATS_KEY
 from cyberwave.workers.context import HookContext
+from cyberwave.workers.decode import decode_sample_payload
 from cyberwave.workers.hooks import HookRegistration, HookRegistry, SynchronizedGroup
 from cyberwave.workers.loader import load_workers
 
@@ -23,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_WORKERS_DIR = "/app/workers"
 FALLBACK_WORKERS_DIR = os.path.expanduser("~/.cyberwave/workers")
+
+MONITOR_PUBLISH_INTERVAL_S = 2.0
 
 
 class WorkerRuntime:
@@ -38,6 +44,11 @@ class WorkerRuntime:
         self._subscriptions: list[Any] = []
         self._dispatch_threads: list[threading.Thread] = []
         self._stop_event = threading.Event()
+
+        # Per-hook metrics: {hook_callback_name: {"frames": int, "drops": int}}
+        self._hook_stats_lock = threading.Lock()
+        self._hook_stats: dict[str, dict[str, int]] = {}
+        self._stats_thread: threading.Thread | None = None
 
     # ── lifecycle ────────────────────────────────────────────────
 
@@ -76,6 +87,9 @@ class WorkerRuntime:
         total = len(self._registry.hooks) + len(self._registry.synchronized_groups)
         logger.info("Worker runtime started with %d hook(s)", total)
 
+        self._warm_up_models()
+        self._start_stats_publisher()
+
     def run(self) -> None:
         """Block until :meth:`stop` is called or a signal is received."""
         try:
@@ -89,7 +103,7 @@ class WorkerRuntime:
         self._stop_event.wait()
 
     def stop(self) -> None:
-        """Stop the runtime: unsubscribe all hooks and release resources."""
+        """Stop the runtime: flush pending work, unsubscribe hooks, disconnect data bus."""
         logger.info("Stopping worker runtime...")
         self._stop_event.set()
 
@@ -104,16 +118,51 @@ class WorkerRuntime:
             t.join(timeout=5.0)
         self._dispatch_threads.clear()
 
+        if self._stats_thread is not None:
+            self._stats_thread.join(timeout=3.0)
+            self._stats_thread = None
+
+        try:
+            self._cw.disconnect()
+        except Exception:
+            logger.debug("Error disconnecting Cyberwave client on shutdown", exc_info=True)
+
         if getattr(builtins, "cw", None) is self._cw:
             delattr(builtins, "cw")
 
     # ── internals ────────────────────────────────────────────────
 
-    def _build_context(self, hook: HookRegistration, sample: Any) -> HookContext:
+    def _warm_up_models(self) -> None:
+        """Run warm-up inference on all loaded models to eliminate cold-start latency."""
+        models_mgr = getattr(self._cw, "models", None)
+        if models_mgr is None:
+            return
+        loaded_models: dict[str, Any] = getattr(models_mgr, "_loaded", {})
+        if not loaded_models:
+            return
+        logger.info("Warming up %d loaded model(s)...", len(loaded_models))
+        for model in loaded_models.values():
+            warm_up_fn = getattr(model, "warm_up", None)
+            if warm_up_fn is not None:
+                try:
+                    warm_up_fn()
+                except Exception:
+                    logger.warning(
+                        "Model warm-up failed for %s", getattr(model, "name", "?"), exc_info=True,
+                    )
+
+    def _build_context(
+        self,
+        hook: HookRegistration,
+        sample: Any,
+        *,
+        wire_ts: float | None = None,
+    ) -> HookContext:
         parts = hook.channel.rsplit("/", 1)
         sensor_name = parts[1] if len(parts) > 1 else "default"
+        ts = wire_ts if wire_ts is not None else getattr(sample, "timestamp", 0.0)
         return HookContext(
-            timestamp=getattr(sample, "timestamp", 0.0),
+            timestamp=ts,
             channel=hook.channel,
             sensor_name=sensor_name,
             twin_uuid=hook.twin_uuid,
@@ -131,12 +180,21 @@ class WorkerRuntime:
         """
         ready = threading.Event()
         slot: list[Any] = [None]
+        hook_name = hook.callback.__name__
+        drop_counter = [0]
+
+        with self._hook_stats_lock:
+            self._hook_stats[hook_name] = {"frames": 0, "drops": 0}
 
         def on_sample(sample: Any) -> None:
+            if slot[0] is not None:
+                drop_counter[0] += 1
             slot[0] = sample
             ready.set()
 
         def dispatch_loop() -> None:
+            hint = hook.content_hint
+            frames_processed = 0
             while not self._stop_event.is_set():
                 if not ready.wait(timeout=1.0):
                     continue
@@ -144,9 +202,22 @@ class WorkerRuntime:
                 sample = slot[0]
                 if sample is None:
                     continue
-                ctx = self._build_context(hook, sample)
+                decoded_data, wire_ts = decode_sample_payload(sample, content_hint=hint)
+                ctx = self._build_context(hook, sample, wire_ts=wire_ts)
                 try:
-                    hook.callback(sample.payload, ctx)
+                    hook.callback(decoded_data, ctx)
+                    frames_processed += 1
+                    with self._hook_stats_lock:
+                        entry = self._hook_stats.get(hook_name)
+                        if entry is not None:
+                            entry["frames"] = frames_processed
+                            entry["drops"] = drop_counter[0]
+                    if frames_processed % 100 == 0:
+                        logger.info(
+                            "Hook %s: processed %d frames",
+                            hook.callback.__name__,
+                            frames_processed,
+                        )
                 except Exception:
                     logger.exception(
                         "Error in hook %s for channel %s",
@@ -252,6 +323,59 @@ class WorkerRuntime:
                     ch,
                     group.callback.__name__,
                 )
+
+    # ── stats publisher ────────────────────────────────────────────
+
+    def _start_stats_publisher(self) -> None:
+        """Spawn a daemon thread that periodically publishes runtime stats."""
+        data_bus = self._get_data_bus()
+        if data_bus is None:
+            logger.debug("No data bus — monitor stats publisher disabled.")
+            return
+
+        def _publish_loop() -> None:
+            while not self._stop_event.is_set():
+                self._stop_event.wait(MONITOR_PUBLISH_INTERVAL_S)
+                if self._stop_event.is_set():
+                    break
+                try:
+                    self._publish_stats_snapshot(data_bus)
+                except Exception:
+                    logger.debug("Failed to publish monitor stats", exc_info=True)
+
+        t = threading.Thread(target=_publish_loop, name="cw-stats-publisher", daemon=True)
+        t.start()
+        self._stats_thread = t
+
+    def _publish_stats_snapshot(self, data_bus: Any) -> None:
+        """Collect and publish a single stats snapshot."""
+        # Hook stats.
+        with self._hook_stats_lock:
+            hooks_snap = {k: dict(v) for k, v in self._hook_stats.items()}
+
+        # Zenoh backend transport counters.
+        transport_stats = data_bus.stats()
+
+        # Model inference stats.
+        model_stats = []
+        models_mgr = getattr(self._cw, "models", None)
+        loaded_models: dict[str, Any] = getattr(models_mgr, "_loaded", {}) if models_mgr else {}
+        for model in loaded_models.values():
+            fn = getattr(model, "inference_stats", None)
+            if fn is not None:
+                model_stats.append(fn())
+
+        backend_connected = getattr(data_bus.backend, "is_connected", None)
+
+        snapshot = {
+            "ts": time.time(),
+            "hooks": hooks_snap,
+            "transport": transport_stats,
+            "models": model_stats,
+            "zenoh_connected": backend_connected if backend_connected is not None else True,
+        }
+        payload = json.dumps(snapshot, separators=(",", ":")).encode()
+        data_bus.backend.publish(MONITOR_STATS_KEY, payload)
 
     def _build_key_for_hook(self, hook: HookRegistration, data_bus: Any) -> str:
         """Build the Zenoh key expression for a hook registration.

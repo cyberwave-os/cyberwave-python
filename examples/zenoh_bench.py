@@ -135,7 +135,7 @@ def _start_broker(port: int) -> Any:
 
 
 def _make_backend(connect: list[str]) -> ZenohBackend:
-    return ZenohBackend(key_prefix="", connect=connect, shared_memory=False)
+    return ZenohBackend(connect=connect, shared_memory=False)
 
 
 def _make_bus(backend: ZenohBackend, twin_uuid: str) -> DataBus:

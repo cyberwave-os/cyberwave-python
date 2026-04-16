@@ -36,6 +36,14 @@ class BackendConfig:
     zenoh_connect: list[str] = field(default_factory=list)
     """Zenoh router endpoints.  Env: ``ZENOH_CONNECT`` (comma-separated)."""
 
+    zenoh_listen: list[str] = field(default_factory=list)
+    """Zenoh listener endpoints.  Env: ``ZENOH_LISTEN`` (comma-separated).
+
+    When set, the Zenoh session binds a TCP listener so external peers
+    (e.g. the CLI monitor) can connect without multicast discovery.
+    Example: ``tcp/0.0.0.0:7447``.
+    """
+
     zenoh_shared_memory: bool | None = None
     """Enable Zenoh shared-memory transport.  Env: ``ZENOH_SHARED_MEMORY``.
 
@@ -50,7 +58,7 @@ class BackendConfig:
     """Max samples per channel (filesystem only)."""
 
     key_prefix: str = "cw"
-    """Key prefix prepended to channel names in Zenoh key expressions."""
+    """Key prefix for Zenoh key expressions (used by ``DataBus``, not the backend)."""
 
     publish_mode: str = ""
     """Controls which transport paths are active.
@@ -71,6 +79,13 @@ class BackendConfig:
             if connect_env:
                 self.zenoh_connect = [
                     e.strip() for e in connect_env.split(",") if e.strip()
+                ]
+
+        if not self.zenoh_listen:
+            listen_env = os.environ.get("ZENOH_LISTEN", "")
+            if listen_env:
+                self.zenoh_listen = [
+                    e.strip() for e in listen_env.split(",") if e.strip()
                 ]
 
         if self.zenoh_shared_memory is None:
@@ -122,8 +137,8 @@ def get_backend(config: BackendConfig | None = None) -> DataBackend:
 
         return ZenohBackend(
             connect=cfg.zenoh_connect or None,
+            listen=cfg.zenoh_listen or None,
             shared_memory=bool(cfg.zenoh_shared_memory),
-            key_prefix=cfg.key_prefix,
         )
 
     if cfg.backend == "filesystem":

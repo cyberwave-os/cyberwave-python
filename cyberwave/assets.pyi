@@ -1173,6 +1173,13 @@ class SzDjiTechnologydjiMavic3EnterpriseTwin(Twin):
         """Controller for robot joints"""
         ...
 
+class SamWilcocksWorkspaced500Lidar2Twin(Twin):
+    """
+    Digital twin for D500-Lidar
+    Registry ID: sam-wilcocks-workspace/d500-lidar-2
+    """
+    pass
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1279,4 +1286,5 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "FWR/Robotic-Arm": FwrroboticArmTwin,
     "pollen-robotics/reachy-mini": PollenRoboticsreachyMiniTwin,
     "sz-dji-technology/DJI-Mavic-3-Enterprise": SzDjiTechnologydjiMavic3EnterpriseTwin,
+    "sam-wilcocks-workspace/d500-lidar-2": SamWilcocksWorkspaced500Lidar2Twin,
 }

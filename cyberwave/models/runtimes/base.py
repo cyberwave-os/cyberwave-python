@@ -49,3 +49,8 @@ class ModelRuntime(ABC):
     def is_available(self) -> bool:
         """Return ``True`` if the runtime's dependencies are importable."""
         ...
+
+    @property
+    def supports_predict(self) -> bool:
+        """Whether ``predict()`` is implemented (not just a stub)."""
+        return True

@@ -7,11 +7,10 @@ from copy import deepcopy
 import json
 import math
 import os
+import threading
 import time
 import logging
 from pathlib import Path
-import threading
-import base64
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable, Type
 
 if TYPE_CHECKING:
@@ -32,6 +31,43 @@ from .constants import SOURCE_TYPE_SIM, SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE
 _CAPABILITIES_CACHE: Optional[Dict[str, Any]] = None
 
 logger = logging.getLogger(__name__)
+
+
+def _run_coroutine_blocking(coro) -> None:  # type: ignore[no-untyped-def]
+    """Run an async coroutine in a blocking fashion, compatible with running event loops.
+
+    When called from an environment that already has a running event loop (e.g. Jupyter
+    notebooks, Google Colab, IPython), ``asyncio.run()`` raises a ``RuntimeError``.
+    In those cases we spin up a dedicated background thread with its own event loop so
+    the coroutine can run to completion while the caller's thread blocks normally.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None and loop.is_running():
+        # We're inside a running event loop (e.g. Jupyter/Colab).  Run the coroutine
+        # in a separate OS thread that owns a fresh event loop.
+        exc_holder: list = []
+
+        def _run_in_thread() -> None:
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                new_loop.run_until_complete(coro)
+            except Exception as exc:
+                exc_holder.append(exc)
+            finally:
+                new_loop.close()
+
+        t = threading.Thread(target=_run_in_thread, daemon=True)
+        t.start()
+        t.join()
+        if exc_holder:
+            raise exc_holder[0]
+    else:
+        asyncio.run(coro)
 
 
 def _normalize_locomotion_source_type(source_type: Optional[str]) -> Optional[str]:
@@ -225,6 +261,47 @@ class JointController:
             return {}
         return self._joint_states.copy()
 
+    def print_joint_states(self) -> None:
+        """Print all joint states in a human-readable table (radians and degrees).
+
+        Fetches the latest joint states from the server and prints them in a
+        formatted table showing each joint name with its position in both radians
+        and degrees.
+
+        Example output::
+
+            Joint States for twin <twin-uuid>:
+            ┌──────────────────────────────────────┬───────────────────┬──────────────────┐
+            │ Joint                                │   Radians         │   Degrees        │
+            ├──────────────────────────────────────┼───────────────────┼──────────────────┤
+            │ shoulder_joint                       │    0.7854 rad     │    45.00 °       │
+            │ elbow_joint                          │    0.0000 rad     │     0.00 °       │
+            └──────────────────────────────────────┴───────────────────┴──────────────────┘
+        """
+        self.refresh()
+        states = self.get_all()
+
+        if not states:
+            print(f"No joint states found for twin {self.twin.uuid}")
+            return
+
+        col_name_w = max(len("Joint"), max(len(n) for n in states))
+        header = (
+            f"{'Joint':<{col_name_w}}  {'Radians':>12}  {'Degrees':>12}"
+        )
+        separator = "-" * len(header)
+
+        print(f"\nJoint states for twin {self.twin.uuid}:")
+        print(separator)
+        print(header)
+        print(separator)
+        for name, position_rad in sorted(states.items()):
+            position_deg = math.degrees(position_rad)
+            print(
+                f"{name:<{col_name_w}}  {position_rad:>10.4f} rad  {position_deg:>10.2f} °"
+            )
+        print(separator)
+
 
 class TwinControllerHandle:
     """Handle for controller functionality like keyboard teleop."""
@@ -349,123 +426,6 @@ class TwinCameraHandle:
                 "This twin does not have streaming capabilities."
             )
         self._twin.start_streaming(fps=fps, camera_id=camera_id)
-
-    def edge_photo(
-        self,
-        format: str = "numpy",
-        *,
-        timeout: float = 5.0,
-    ) -> Any:
-        """Capture a frame from the edge device via MQTT ``take_photo`` command.
-
-        Sends a ``take_photo`` command over MQTT to the edge driver, which
-        grabs the latest cached camera frame, JPEG-encodes it, and responds
-        on ``camera/photo`` with a base64-encoded JPEG.
-
-        This bypasses the cloud REST API and WebRTC entirely — it works
-        as long as MQTT is connected and the edge driver has a camera frame.
-
-        .. note::
-            Not all edge drivers implement the ``take_photo`` MQTT command.
-            If this method times out, the driver likely doesn't support it.
-
-        Args:
-            format: Output format — ``"numpy"`` (default), ``"pil"``,
-                ``"bytes"``, or ``"path"``.
-            timeout: Seconds to wait for the photo response before raising.
-
-        Returns:
-            Frame in the requested format.
-
-        Raises:
-            CyberwaveError: If MQTT is unavailable, the edge returns an
-                error, or the timeout is exceeded.
-        """
-        twin = self._twin
-        twin._connect_to_mqtt_if_not_connected()
-        prefix = twin.client.config.topic_prefix or ""
-
-        photo_topic = f"{prefix}cyberwave/twin/{twin.uuid}/camera/photo"
-        cmd_topic = f"{prefix}cyberwave/twin/{twin.uuid}/command"
-
-        received = threading.Event()
-        result: Dict[str, Any] = {}
-
-        def _on_photo(message):
-            try:
-                payload = json.loads(message) if isinstance(message, str) else message
-            except (json.JSONDecodeError, TypeError):
-                result["error"] = f"Invalid photo response: {message!r}"
-                received.set()
-                return
-            result["payload"] = payload
-            received.set()
-
-        twin.client.mqtt.subscribe(photo_topic, _on_photo)
-
-        try:
-            twin.client.mqtt.publish(
-                cmd_topic,
-                {
-                    "source_type": SOURCE_TYPE_TELE,
-                    "command": "take_photo",
-                    "data": {},
-                    "timestamp": time.time(),
-                },
-            )
-
-            if not received.wait(timeout=timeout):
-                raise CyberwaveError(
-                    f"Timed out waiting {timeout}s for edge photo response. "
-                    "The edge driver may not support the 'take_photo' command, "
-                    "or MQTT is not connected."
-                )
-
-            payload = result.get("payload", {})
-            if "error" in payload or payload.get("status") == "error":
-                msg = payload.get("message", payload.get("error", "unknown error"))
-                raise CyberwaveError(f"Edge photo failed: {msg}")
-
-            image_b64 = payload.get("image")
-            if not image_b64:
-                raise CyberwaveError(
-                    f"Edge photo response missing 'image' field: {list(payload.keys())}"
-                )
-
-            jpeg_bytes = base64.b64decode(image_b64)
-            return _decode_frame(jpeg_bytes, format)
-        finally:
-            mqtt_client = getattr(twin.client.mqtt, "_client", twin.client.mqtt)
-            mqtt_client.unsubscribe(photo_topic)
-
-    def edge_photos(
-        self,
-        count: int = 1,
-        interval_ms: int = 200,
-        format: str = "bytes",
-        *,
-        timeout: float = 5.0,
-    ) -> List[Any]:
-        """Capture multiple frames from the edge device.
-
-        Calls :meth:`edge_photo` repeatedly with a delay between shots.
-
-        Args:
-            count: Number of frames to capture.
-            interval_ms: Milliseconds between consecutive shots.
-            format: Output format for each frame.
-            timeout: Per-frame timeout in seconds.
-
-        Returns:
-            List of frames in the requested format.
-        """
-        frames = []
-        for i in range(count):
-            frame = self.edge_photo(format=format, timeout=timeout)
-            frames.append(frame)
-            if i < count - 1:
-                time.sleep(interval_ms / 1000.0)
-        return frames
 
 
 class Twin:
@@ -1533,13 +1493,13 @@ class CameraTwin(Twin):
                 self._camera_streamer = None
 
         try:
-            asyncio.run(_run())
+            _run_coroutine_blocking(_run())
         except KeyboardInterrupt:
             pass
         finally:
             if self._camera_streamer is not None:
                 try:
-                    asyncio.run(self._camera_streamer.stop())
+                    _run_coroutine_blocking(self._camera_streamer.stop())
                 except Exception:
                     pass
                 self._camera_streamer = None
@@ -1656,13 +1616,13 @@ class DepthCameraTwin(CameraTwin):
                 self._camera_streamer = None
 
         try:
-            asyncio.run(_run())
+            _run_coroutine_blocking(_run())
         except KeyboardInterrupt:
             pass
         finally:
             if self._camera_streamer is not None:
                 try:
-                    asyncio.run(self._camera_streamer.stop())
+                    _run_coroutine_blocking(self._camera_streamer.stop())
                 except Exception:
                     pass
                 self._camera_streamer = None
@@ -1926,7 +1886,9 @@ class FlyingTwin(Twin):
             meta = dict(self._data.metadata)
         elif isinstance(self._data, dict):
             meta = self._data.get("metadata") or {}
-        return bool(meta.get("status", {}).get("controller_requested_hovering", False))
+        return bool(
+            meta.get("status", {}).get("controller_requested_hovering", False)
+        )
 
     def get_hovering_status(self) -> Dict[str, Any]:
         """

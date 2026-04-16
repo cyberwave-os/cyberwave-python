@@ -45,10 +45,12 @@ class ZenohSubscription(Subscription):
         subscriber: Any,
         *,
         stop_event: threading.Event | None = None,
+        on_close: Callable[[], None] | None = None,
     ) -> None:
         self._subscriber = subscriber
         self._stop_event = stop_event
         self._closed = False
+        self._on_close = on_close
 
     def close(self) -> None:
         if self._closed:
@@ -60,6 +62,14 @@ class ZenohSubscription(Subscription):
             self._subscriber.undeclare()
         except Exception:
             pass
+        if self._on_close is not None:
+            self._on_close()
+
+
+_WATCHDOG_INTERVAL_S = 5.0
+_RECONNECT_BACKOFF_BASE_S = 1.0
+_RECONNECT_BACKOFF_MAX_S = 30.0
+_RECONNECT_MAX_ATTEMPTS = 20
 
 
 class ZenohBackend(DataBackend):
@@ -68,18 +78,19 @@ class ZenohBackend(DataBackend):
     Args:
         connect: Zenoh router endpoints (e.g. ``["tcp/localhost:7447"]``).
             ``None`` uses peer-to-peer discovery.
+        listen: Zenoh listener endpoints (e.g. ``["tcp/0.0.0.0:7447"]``).
+            Binds a TCP listener so external peers can connect without
+            multicast discovery.
         shared_memory: Enable Zenoh shared-memory transport for same-host
             zero-copy delivery.
-        key_prefix: Prefix prepended to every channel name when constructing
-            Zenoh key expressions.
     """
 
     def __init__(
         self,
         *,
         connect: list[str] | None = None,
+        listen: list[str] | None = None,
         shared_memory: bool = False,
-        key_prefix: str = "cw",
     ) -> None:
         if not _has_zenoh:
             raise BackendUnavailableError(
@@ -88,37 +99,149 @@ class ZenohBackend(DataBackend):
                 "or:  pip install eclipse-zenoh"
             )
 
-        cfg = zenoh.Config()
-        if connect:
-            cfg.insert_json5("connect/endpoints", json.dumps(connect))
-        # Explicitly set SHM in both directions: some Zenoh builds auto-enable
-        # SHM by default, which fails on platforms where POSIX SHM is
-        # restricted (e.g. certain WSL2 / container environments).
-        cfg.insert_json5(
-            "transport/shared_memory/enabled",
-            "true" if shared_memory else "false",
-        )
+        self._connect = connect
+        self._listen = listen
+        self._shared_memory = shared_memory
 
-        try:
-            self._session: Any = zenoh.open(cfg)
-        except Exception as exc:
-            raise BackendUnavailableError(
-                f"Failed to open Zenoh session: {exc}"
-            ) from exc
+        self._session: Any = self._open_session()
 
-        self._key_prefix = key_prefix
         self._subscriptions: list[ZenohSubscription] = []
         self._lock = threading.Lock()
         self._closed = False
+        self._connected = True
 
         self._latest_store: dict[str, Sample] = {}
         self._store_lock = threading.Lock()
         self._queryables: dict[str, Any] = {}
 
-    def _resolve_key(self, channel: str) -> str:
-        if self._key_prefix:
-            return f"{self._key_prefix}/{channel}"
-        return channel
+        # Per-channel message counters and byte accumulators for monitoring.
+        self._stats_lock = threading.Lock()
+        self._publish_counts: dict[str, int] = {}
+        self._publish_bytes: dict[str, int] = {}
+        self._recv_counts: dict[str, int] = {}
+        self._recv_bytes: dict[str, int] = {}
+        self._stats_start_time: float = time.time()
+
+        # Reconnection machinery
+        self._reconnect_event = threading.Event()
+        self._watchdog_stop = threading.Event()
+        self._active_sub_specs: list[tuple[str, Callable[[Sample], None], str]] = []
+        self._active_sub_specs_lock = threading.Lock()
+
+        self._watchdog_thread = threading.Thread(
+            target=self._session_watchdog, name="zenoh-watchdog", daemon=True,
+        )
+        self._watchdog_thread.start()
+
+    # -- session management ---------------------------------------------------
+
+    def _build_config(self) -> Any:
+        cfg = zenoh.Config()
+        if self._connect:
+            cfg.insert_json5("connect/endpoints", json.dumps(self._connect))
+        if self._listen:
+            cfg.insert_json5("listen/endpoints", json.dumps(self._listen))
+        cfg.insert_json5(
+            "transport/shared_memory/enabled",
+            "true" if self._shared_memory else "false",
+        )
+        return cfg
+
+    def _open_session(self) -> Any:
+        cfg = self._build_config()
+        try:
+            return zenoh.open(cfg)
+        except Exception as exc:
+            raise BackendUnavailableError(
+                f"Failed to open Zenoh session: {exc}"
+            ) from exc
+
+    @property
+    def is_connected(self) -> bool:
+        """Whether the Zenoh session is believed to be alive."""
+        return self._connected and not self._closed
+
+    def _session_watchdog(self) -> None:
+        """Periodically probe session liveness; trigger reconnect on failure."""
+        while not self._watchdog_stop.wait(_WATCHDOG_INTERVAL_S):
+            if self._closed:
+                return
+            try:
+                # .info is a property in zenoh >=1.x, a method in older versions.
+                info = self._session.info
+                if callable(info):
+                    info = info()
+                info.zid()
+                if not self._connected:
+                    logger.info("Zenoh session probe succeeded — marking connected")
+                    self._connected = True
+            except Exception:
+                if self._connected:
+                    logger.warning("Zenoh session probe failed — starting reconnect")
+                    self._connected = False
+                self._reconnect_event.set()
+                self._reconnect()
+
+    def _reconnect(self) -> None:
+        """Close the old session and open a new one, re-subscribing all active channels.
+
+        Note: existing Zenoh subscription handles held by callers become stale
+        (``handle._closed`` is True) after reconnect.  This is acceptable because
+        callers interact through callbacks, not handles — ``_resubscribe_all``
+        creates fresh handles on the new session transparently.
+        """
+        # Close old subscription handles so their recv-loop threads exit cleanly.
+        with self._lock:
+            for handle in self._subscriptions:
+                handle.close()
+            self._subscriptions.clear()
+
+        delay = _RECONNECT_BACKOFF_BASE_S
+        for attempt in range(1, _RECONNECT_MAX_ATTEMPTS + 1):
+            if self._closed:
+                return
+            try:
+                try:
+                    self._session.close()
+                except Exception:
+                    pass
+
+                self._session = self._open_session()
+                self._connected = True
+                self._reconnect_event.clear()
+                logger.info("Zenoh session reconnected (attempt %d)", attempt)
+
+                self._resubscribe_all()
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Zenoh reconnect attempt %d/%d failed: %s — retrying in %.1fs",
+                    attempt, _RECONNECT_MAX_ATTEMPTS, exc, delay,
+                )
+                self._watchdog_stop.wait(delay)
+                delay = min(delay * 2, _RECONNECT_BACKOFF_MAX_S)
+
+        logger.error(
+            "Zenoh reconnection failed after %d attempts — session is down",
+            _RECONNECT_MAX_ATTEMPTS,
+        )
+
+    def _resubscribe_all(self) -> None:
+        """Re-declare all tracked subscriptions on the new session.
+
+        Uses the internal ``_subscribe_on_session`` helper to avoid
+        re-appending specs to ``_active_sub_specs`` (which would cause
+        unbounded growth after repeated reconnects).
+        """
+        with self._active_sub_specs_lock:
+            specs = list(self._active_sub_specs)
+
+        for channel, callback, policy in specs:
+            try:
+                logger.debug("Re-subscribing to '%s' (policy=%s)", channel, policy)
+                self._subscribe_on_session(channel, callback, policy=policy)
+            except Exception:
+                logger.exception("Failed to re-subscribe to '%s' after reconnect", channel)
 
     # -- DataBackend implementation -------------------------------------------
 
@@ -129,11 +252,15 @@ class ZenohBackend(DataBackend):
         *,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        key = self._resolve_key(channel)
         try:
-            self._session.put(key, payload)
+            self._session.put(channel, payload)
         except Exception as exc:
-            raise PublishError(f"Zenoh publish to '{key}' failed: {exc}") from exc
+            raise PublishError(f"Zenoh publish to '{channel}' failed: {exc}") from exc
+
+        nbytes = len(payload)
+        with self._stats_lock:
+            self._publish_counts[channel] = self._publish_counts.get(channel, 0) + 1
+            self._publish_bytes[channel] = self._publish_bytes.get(channel, 0) + nbytes
 
         with self._store_lock:
             self._latest_store[channel] = Sample(
@@ -141,7 +268,7 @@ class ZenohBackend(DataBackend):
                 payload=payload,
                 metadata=metadata,
             )
-        self._ensure_queryable(channel, key)
+        self._ensure_queryable(channel)
 
     def subscribe(
         self,
@@ -151,17 +278,40 @@ class ZenohBackend(DataBackend):
         policy: str = "latest",
     ) -> Subscription:
         self._validate_policy(policy)
-        key = self._resolve_key(channel)
+
+        spec = (channel, callback, policy)
+        with self._active_sub_specs_lock:
+            self._active_sub_specs.append(spec)
+
+        def _remove_spec() -> None:
+            with self._active_sub_specs_lock:
+                try:
+                    self._active_sub_specs.remove(spec)
+                except ValueError:
+                    pass
+
+        return self._subscribe_on_session(channel, callback, policy=policy, on_close=_remove_spec)
+
+    def _subscribe_on_session(
+        self,
+        channel: str,
+        callback: Callable[[Sample], None],
+        *,
+        policy: str = "latest",
+        on_close: Callable[[], None] | None = None,
+    ) -> Subscription:
+        """Declare a Zenoh subscriber on the current session (no spec tracking)."""
+        backend_ref = self
 
         if policy == "latest":
             try:
                 sub = self._session.declare_subscriber(
-                    key,
+                    channel,
                     zenoh.handlers.RingChannel(1),
                 )
             except Exception as exc:
                 raise SubscriptionError(
-                    f"Zenoh subscribe to '{key}' failed: {exc}"
+                    f"Zenoh subscribe to '{channel}' failed: {exc}"
                 ) from exc
 
             stop_event = threading.Event()
@@ -176,11 +326,15 @@ class ZenohBackend(DataBackend):
                     try:
                         zenoh_sample = subscriber.try_recv()
                     except Exception:
-                        break
+                        logger.debug(
+                            "Zenoh recv exception on '%s' — waiting for reconnect", ch,
+                        )
+                        while not stop.is_set() and not backend_ref._connected:
+                            stop.wait(1.0)
+                        if stop.is_set():
+                            break
+                        continue
                     if zenoh_sample is None:
-                        # 1 ms: low enough to not miss samples on 1 kHz
-                        # force/torque streams, short enough to keep CPU idle
-                        # between frames on a 60 fps camera channel.
                         stop.wait(0.001)
                         continue
                     if stop.is_set():
@@ -189,6 +343,14 @@ class ZenohBackend(DataBackend):
                         raw = bytes(zenoh_sample.payload)
                     except Exception:
                         raw = zenoh_sample.payload.to_bytes()
+                    nbytes = len(raw)
+                    with backend_ref._stats_lock:
+                        backend_ref._recv_counts[ch] = (
+                            backend_ref._recv_counts.get(ch, 0) + 1
+                        )
+                        backend_ref._recv_bytes[ch] = (
+                            backend_ref._recv_bytes.get(ch, 0) + nbytes
+                        )
                     cb(Sample(channel=ch, payload=raw, timestamp=time.time()))
 
             t = threading.Thread(
@@ -197,7 +359,7 @@ class ZenohBackend(DataBackend):
                 daemon=True,
             )
             t.start()
-            handle = ZenohSubscription(sub, stop_event=stop_event)
+            handle = ZenohSubscription(sub, stop_event=stop_event, on_close=on_close)
         else:
 
             def _on_sample_fifo(zenoh_sample: Any) -> None:
@@ -205,6 +367,14 @@ class ZenohBackend(DataBackend):
                     raw = bytes(zenoh_sample.payload)
                 except Exception:
                     raw = zenoh_sample.payload.to_bytes()
+                nbytes = len(raw)
+                with backend_ref._stats_lock:
+                    backend_ref._recv_counts[channel] = (
+                        backend_ref._recv_counts.get(channel, 0) + 1
+                    )
+                    backend_ref._recv_bytes[channel] = (
+                        backend_ref._recv_bytes.get(channel, 0) + nbytes
+                    )
                 callback(
                     Sample(
                         channel=channel,
@@ -214,12 +384,12 @@ class ZenohBackend(DataBackend):
                 )
 
             try:
-                sub = self._session.declare_subscriber(key, _on_sample_fifo)
+                sub = self._session.declare_subscriber(channel, _on_sample_fifo)
             except Exception as exc:
                 raise SubscriptionError(
-                    f"Zenoh subscribe to '{key}' failed: {exc}"
+                    f"Zenoh subscribe to '{channel}' failed: {exc}"
                 ) from exc
-            handle = ZenohSubscription(sub)
+            handle = ZenohSubscription(sub, on_close=on_close)
 
         with self._lock:
             # Prune handles that were already closed by the caller.  Keeps the
@@ -228,6 +398,50 @@ class ZenohBackend(DataBackend):
             self._subscriptions = [h for h in self._subscriptions if not h._closed]
             self._subscriptions.append(handle)
         return handle
+
+    def stats(self) -> dict[str, Any]:
+        """Return a snapshot of publish/receive counters per channel.
+
+        The returned dict has the structure::
+
+            {
+                "publish": {"channel_key": count, ...},
+                "publish_bytes": {"channel_key": total_bytes, ...},
+                "recv": {"channel_key": count, ...},
+                "recv_bytes": {"channel_key": total_bytes, ...},
+                "uptime_s": float,
+            }
+        """
+        with self._stats_lock:
+            return {
+                "publish": dict(self._publish_counts),
+                "publish_bytes": dict(self._publish_bytes),
+                "recv": dict(self._recv_counts),
+                "recv_bytes": dict(self._recv_bytes),
+                "uptime_s": time.time() - self._stats_start_time,
+            }
+
+    def stats_and_reset(self) -> dict[str, Any]:
+        """Return counters then reset them to zero.
+
+        Useful for computing per-interval rates: call periodically and
+        divide counts by the elapsed interval.
+        """
+        now = time.time()
+        with self._stats_lock:
+            snapshot = {
+                "publish": dict(self._publish_counts),
+                "publish_bytes": dict(self._publish_bytes),
+                "recv": dict(self._recv_counts),
+                "recv_bytes": dict(self._recv_bytes),
+                "elapsed_s": now - self._stats_start_time,
+            }
+            self._publish_counts.clear()
+            self._publish_bytes.clear()
+            self._recv_counts.clear()
+            self._recv_bytes.clear()
+            self._stats_start_time = now
+        return snapshot
 
     def latest(
         self,
@@ -240,9 +454,8 @@ class ZenohBackend(DataBackend):
         if cached is not None:
             return cached
 
-        key = self._resolve_key(channel)
         try:
-            replies = self._session.get(key, timeout=timeout_s)
+            replies = self._session.get(channel, timeout=timeout_s)
             for reply in replies:
                 try:
                     ok = reply.ok
@@ -260,13 +473,17 @@ class ZenohBackend(DataBackend):
                 self._latest_store[channel] = sample
                 return sample
         except Exception:
-            logger.debug("Zenoh get('%s') returned no results", key, exc_info=True)
+            logger.debug("Zenoh get('%s') returned no results", channel, exc_info=True)
         return None
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
+        self._connected = False
+        self._watchdog_stop.set()
+        with self._active_sub_specs_lock:
+            self._active_sub_specs.clear()
         with self._lock:
             for handle in self._subscriptions:
                 handle.close()
@@ -284,14 +501,14 @@ class ZenohBackend(DataBackend):
 
     # -- internal helpers -----------------------------------------------------
 
-    def _ensure_queryable(self, channel: str, key: str) -> None:
+    def _ensure_queryable(self, channel: str) -> None:
         """Declare a queryable so ``latest()`` from other sessions can resolve."""
         if channel in self._queryables:
             return
         try:
-            qable = self._session.declare_queryable(key, complete=True)
+            qable = self._session.declare_queryable(channel, complete=True)
 
-            def _serve(q_channel: str, q_key: str, queryable: Any) -> None:
+            def _serve(q_channel: str, queryable: Any) -> None:
                 """Serve queries in a background thread."""
                 while True:
                     try:
@@ -302,12 +519,12 @@ class ZenohBackend(DataBackend):
                         cached = self._latest_store.get(q_channel)
                     if cached is not None:
                         try:
-                            query.reply(q_key, cached.payload)
+                            query.reply(q_channel, cached.payload)
                         except Exception:
                             pass
 
-            t = threading.Thread(target=_serve, args=(channel, key, qable), daemon=True)
+            t = threading.Thread(target=_serve, args=(channel, qable), daemon=True)
             t.start()
             self._queryables[channel] = qable
         except Exception:
-            logger.debug("Failed to declare queryable for '%s'", key, exc_info=True)
+            logger.debug("Failed to declare queryable for '%s'", channel, exc_info=True)

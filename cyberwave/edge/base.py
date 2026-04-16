@@ -522,9 +522,7 @@ class BaseEdgeNode(ABC):
             List of twin UUIDs (from discovery or config)
         """
         uuids = [
-            t.get("twin_uuid")
-            for t in self._discovered_twins
-            if t.get("twin_uuid")
+            t.get("twin_uuid") for t in self._discovered_twins if t.get("twin_uuid")
         ]
         if not uuids and self.config.twin_uuid:
             uuids = [self.config.twin_uuid]

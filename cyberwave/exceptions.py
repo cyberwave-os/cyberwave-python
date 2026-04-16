@@ -295,6 +295,11 @@ class CyberwaveValidationError(CyberwaveError):
     pass
 
 
+class CyberwaveModelIntegrityError(CyberwaveError):
+    """Raised when a cached model file fails checksum verification on load."""
+    pass
+
+
 class CyberwaveMQTTError(CyberwaveError):
     """
     Exception raised for MQTT-related errors.

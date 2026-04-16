@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 from cyberwave.models.runtimes.base import ModelRuntime
@@ -30,10 +32,55 @@ class UltralyticsRuntime(ModelRuntime):
     ) -> Any:
         from ultralytics import YOLO
 
-        model = YOLO(model_path)
+        p = Path(model_path)
+
+        # Ultralytics strips the directory from missing weights and downloads
+        # to CWD.  When the file doesn't exist yet, chdir into a writable
+        # model directory so the auto-downloaded weights don't land in an
+        # unwritable CWD (common in containers).
+        #
+        # NOTE: os.chdir() is process-global.  Concurrent load() calls for
+        # missing models will race on CWD.  In practice model loading is a
+        # one-time startup operation so this is acceptable.
+        download_dir = self._writable_model_dir(p) if not p.exists() else None
+        old_cwd = os.getcwd() if download_dir else None
+        try:
+            if download_dir:
+                os.chdir(download_dir)
+            model = YOLO(p.name if download_dir else model_path)
+        finally:
+            if old_cwd is not None:
+                os.chdir(old_cwd)
+
         if device:
             model.to(device)
         return model
+
+    @staticmethod
+    def _writable_model_dir(model_path: Path) -> Path:
+        """Find a writable directory for Ultralytics auto-downloads."""
+        candidates = []
+
+        if model_path.is_absolute() and model_path.parent != Path("/"):
+            candidates.append(model_path.parent)
+
+        env_dir = os.environ.get("CYBERWAVE_MODELS_DIR") or os.environ.get(
+            "CYBERWAVE_MODEL_DIR"
+        )
+        if env_dir:
+            candidates.append(Path(env_dir))
+
+        candidates.extend([Path("/app/models"), Path.home() / ".cyberwave" / "models"])
+
+        for d in candidates:
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+                if os.access(d, os.W_OK):
+                    return d
+            except OSError:
+                continue
+
+        return Path("/tmp")
 
     def predict(
         self,

@@ -63,31 +63,19 @@ class AdapterConfig:
     """Configuration for AMR protocol adapters."""
 
     # Adapter type (agilox, vda5050, etc.)
-    adapter_type: str = field(
-        default_factory=lambda: os.getenv("ADAPTER_TYPE", "")
-    )
+    adapter_type: str = field(default_factory=lambda: os.getenv("ADAPTER_TYPE", ""))
 
     # Connection settings
     host: str = field(default_factory=lambda: os.getenv("ADAPTER_HOST", ""))
-    port: int = field(
-        default_factory=lambda: int(os.getenv("ADAPTER_PORT", "0"))
-    )
+    port: int = field(default_factory=lambda: int(os.getenv("ADAPTER_PORT", "0")))
 
     # Authentication
-    username: str = field(
-        default_factory=lambda: os.getenv("ADAPTER_USERNAME", "")
-    )
-    password: str = field(
-        default_factory=lambda: os.getenv("ADAPTER_PASSWORD", "")
-    )
-    api_key: str = field(
-        default_factory=lambda: os.getenv("ADAPTER_API_KEY", "")
-    )
+    username: str = field(default_factory=lambda: os.getenv("ADAPTER_USERNAME", ""))
+    password: str = field(default_factory=lambda: os.getenv("ADAPTER_PASSWORD", ""))
+    api_key: str = field(default_factory=lambda: os.getenv("ADAPTER_API_KEY", ""))
 
     # Robot identity
-    robot_id: str = field(
-        default_factory=lambda: os.getenv("ADAPTER_ROBOT_ID", "")
-    )
+    robot_id: str = field(default_factory=lambda: os.getenv("ADAPTER_ROBOT_ID", ""))
 
     # Polling/streaming settings
     position_poll_rate_hz: float = field(
@@ -212,7 +200,9 @@ class AMREdgeNode(BaseEdgeNode):
     - _create_adapter(): Create and return the protocol-specific adapter
     """
 
-    def __init__(self, config: EdgeNodeConfig, adapter_config: Optional[AdapterConfig] = None):
+    def __init__(
+        self, config: EdgeNodeConfig, adapter_config: Optional[AdapterConfig] = None
+    ):
         """
         Initialize the AMR edge node.
 

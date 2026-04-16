@@ -72,7 +72,7 @@ rover.move_forward(distance=1.0)
 rover.turn_left(angle=1.57)
 
 # Move the robot arm to 30 degrees
-robot.joints.set("shoulder_pan", 30)
+robot.joints.set("1", 30)
 
 # Get current joint positions
 print(robot.joints.get_all())
@@ -138,10 +138,10 @@ rover.turn_right(angle=1.57)
 robot.edit_scale(x=1.5, y=1.5, z=1.5)
 
 # Move a joint to a specific position using radians
-robot.joints.set("shoulder_pan", math.pi/4)
+robot.joints.set("shoulder_joint", math.pi/4)
 
 # You can also use degrees:
-robot.joints.set("shoulder_pan", 45, degrees=True)
+robot.joints.set("shoulder_joint", 45, degrees=True)
 
 # You can also go a get_or_create for a specific twin an environment you created:
  robot = cw.twin("the-robot-studio/so101", environment_id="YOUR_ENVIRONMENT_ID")
@@ -430,20 +430,35 @@ You can change a specific joint actuation. You can use degrees or radiants:
 robot = cw.twin("the-robot-studio/so101")
 
 # Set individual joints (degrees by default)
-robot.joints.set("shoulder_pan", 45, degrees=True)
+robot.joints.set("shoulder_joint", 45, degrees=True)
 
 # Or use radians
 import math
-robot.joints.set("elbow_flex", math.pi/4, degrees=False)
+robot.joints.set("elbow_joint", math.pi/4, degrees=False)
 
 # Get current joint position
-angle = robot.joints.get("shoulder_pan")
+angle = robot.joints.get("shoulder_joint")
 
 # List all joints
 joint_names = robot.joints.list()
 
-# Get all joint states at once
+# Get all joint states at once as a dict {name: radians}
 all_joints = robot.joints.get_all()
+
+# Print all joint states in a human-readable table (radians + degrees)
+robot.joints.print_joint_states()
+```
+
+`print_joint_states()` fetches the latest states from the server and prints a formatted table:
+
+```
+Joint states for twin <twin-uuid>:
+------------------------------------------------------
+Joint                       Radians       Degrees
+------------------------------------------------------
+elbow_joint               0.0000 rad       0.00 °
+shoulder_joint            0.7854 rad      45.00 °
+------------------------------------------------------
 ```
 
 To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
@@ -696,7 +711,7 @@ alert.update(severity="critical")
 alert.delete()
 ```
 
-## Data Layer (`cw.data`) — _stub_
+## Data Layer (`cw.data`) — *stub*
 
 Transport-agnostic pub/sub for edge sensor data. Supports Zenoh (primary) and filesystem (fallback) backends.
 
@@ -741,12 +756,12 @@ imu_samples = cw.data.window("imu", from_t=prev_frame_ts, to_t=ctx.timestamp)
 recent_ft = cw.data.window("force_torque", duration_ms=100)
 ```
 
-| Strategy    | Value types                               | Behavior                                  |
-| ----------- | ----------------------------------------- | ----------------------------------------- |
-| `"linear"`  | scalar, vector, dict, numpy, `Quaternion` | Element-wise lerp (NLERP for quaternions) |
-| `"slerp"`   | `Quaternion` instances                    | Spherical linear interpolation            |
-| `"nearest"` | any                                       | Returns closest sample by time            |
-| `"none"`    | any                                       | Exact timestamp match or `None`           |
+| Strategy | Value types | Behavior |
+| --- | --- | --- |
+| `"linear"` | scalar, vector, dict, numpy, `Quaternion` | Element-wise lerp (NLERP for quaternions) |
+| `"slerp"` | `Quaternion` instances | Spherical linear interpolation |
+| `"nearest"` | any | Returns closest sample by time |
+| `"none"` | any | Exact timestamp match or `None` |
 
 Wrap orientation data in `Quaternion(x, y, z, w)` for type-safe SLERP. Convention: Hamilton `(x, y, z, w)`, same as ROS/MuJoCo.
 
@@ -767,7 +782,45 @@ def detect_collision(samples, ctx):
 
 See the [synchronized hooks docs](https://docs.cyberwave.com/sdks/data-synchronized-hooks) for details.
 
-## Zenoh-MQTT Bridge (`cyberwave.zenoh_mqtt`) — _stub_
+## ML Models (`cw.models`) — *stub*
+
+Load and run ML models on edge devices. Models are loaded via `cw.models.load()` and expose a `predict()` method.
+
+```python
+cw = Cyberwave()
+model = cw.models.load("yolov8n")
+result = model.predict(frame)
+for det in result.detections:
+    print(f"{det.label}: {det.confidence:.2f}")
+```
+
+### Model warm-up — *stub*
+
+Eliminate cold-start latency by calling `warm_up()` after loading:
+
+```python
+model = cw.models.load("yolov8n")
+cold_ms, warm_ms = model.warm_up()  # two dummy inferences
+# cold_ms ≈ 150 ms (JIT/allocation), warm_ms ≈ 8 ms (steady-state)
+```
+
+The worker runtime calls `warm_up()` automatically on startup for all loaded models.
+
+### Frame resolution scaling — *stub*
+
+Set `CYBERWAVE_WORKER_INPUT_RESOLUTION` to downscale frames before inference without changing the camera driver's publish resolution:
+
+```bash
+export CYBERWAVE_WORKER_INPUT_RESOLUTION=640x480  # 4K camera → 640x480 for YOLO nano
+```
+
+### Automatic detection publishing
+
+When a loaded model produces detections, the SDK automatically publishes them to a `detections/<runtime>` Zenoh channel (e.g. `detections/ultralytics`, `detections/onnxruntime`) as structured JSON. Drivers that subscribe to `detections/*` (e.g. the OBSBOT camera driver) can draw bounding box overlays directly on the video stream — no extra worker code needed.
+
+This requires a Zenoh data bus (`pip install cyberwave[zenoh]` and `CYBERWAVE_TWIN_UUID` set). If unavailable, auto-publish is silently skipped.
+
+## Zenoh-MQTT Bridge (`cyberwave.zenoh_mqtt`) — *stub*
 
 Bidirectional forwarder between the local Zenoh data bus and the cloud MQTT broker. Runs on edge devices alongside Edge Core.
 
@@ -795,23 +848,23 @@ bridge.stop()
 
 ### Default topic mapping
 
-| Zenoh key                                            | MQTT topic                               | Direction     |
-| ---------------------------------------------------- | ---------------------------------------- | ------------- |
-| `cw/{twin}/data/model_output`                        | `cyberwave/twin/{twin}/model_output`     | Edge to Cloud |
-| `cw/{twin}/data/event`                               | `cyberwave/twin/{twin}/event`            | Edge to Cloud |
-| `cw/{twin}/data/model_health`                        | `cyberwave/twin/{twin}/model_health`     | Edge to Cloud |
+| Zenoh key | MQTT topic | Direction |
+|---|---|---|
+| `cw/{twin}/data/model_output` | `cyberwave/twin/{twin}/model_output` | Edge to Cloud |
+| `cw/{twin}/data/event` | `cyberwave/twin/{twin}/event` | Edge to Cloud |
+| `cw/{twin}/data/model_health` | `cyberwave/twin/{twin}/model_health` | Edge to Cloud |
 | MQTT `cyberwave/twin/{twin}/commands/sync_workflows` | `cw/{twin}/data/commands_sync_workflows` | Cloud to Edge |
 
 ### Configuration (environment variables)
 
-| Variable                             | Default                           | Description                          |
-| ------------------------------------ | --------------------------------- | ------------------------------------ |
-| `CYBERWAVE_BRIDGE_ENABLED`           | `false`                           | Master switch                        |
-| `CYBERWAVE_BRIDGE_TWIN_UUIDS`        | —                                 | Comma-separated twin UUIDs to bridge |
-| `CYBERWAVE_BRIDGE_OUTBOUND_CHANNELS` | `model_output,event,model_health` | Zenoh channels forwarded to MQTT     |
-| `CYBERWAVE_BRIDGE_INBOUND_TOPICS`    | `commands/sync_workflows`         | MQTT suffixes forwarded to Zenoh     |
-| `CYBERWAVE_BRIDGE_QUEUE_DIR`         | `/tmp/cyberwave_bridge_queue`     | Persistent queue directory           |
-| `CYBERWAVE_BRIDGE_QUEUE_MAX_BYTES`   | `52428800` (50 MiB)               | Max offline queue size               |
+| Variable | Default | Description |
+|---|---|---|
+| `CYBERWAVE_BRIDGE_ENABLED` | `false` | Master switch |
+| `CYBERWAVE_BRIDGE_TWIN_UUIDS` | — | Comma-separated twin UUIDs to bridge |
+| `CYBERWAVE_BRIDGE_OUTBOUND_CHANNELS` | `model_output,event,model_health` | Zenoh channels forwarded to MQTT |
+| `CYBERWAVE_BRIDGE_INBOUND_TOPICS` | `commands/sync_workflows` | MQTT suffixes forwarded to Zenoh |
+| `CYBERWAVE_BRIDGE_QUEUE_DIR` | `/tmp/cyberwave_bridge_queue` | Persistent queue directory |
+| `CYBERWAVE_BRIDGE_QUEUE_MAX_BYTES` | `52428800` (50 MiB) | Max offline queue size |
 
 Requires `pip install cyberwave[zenoh]` (Zenoh) and `paho-mqtt` (already a core dependency).
 

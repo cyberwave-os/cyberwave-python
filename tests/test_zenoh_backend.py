@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(not _has_zenoh, reason="eclipse-zenoh not instal
 def backend():
     from cyberwave.data.zenoh_backend import ZenohBackend
 
-    be = ZenohBackend(key_prefix="test")
+    be = ZenohBackend()
     yield be
     be.close()
 
@@ -36,23 +36,13 @@ class TestZenohSession:
         backend.close()
         backend.close()
 
-    def test_key_prefix(self, backend):
-        assert backend._resolve_key("frames/default") == "test/frames/default"
-
-    def test_empty_prefix(self):
-        from cyberwave.data.zenoh_backend import ZenohBackend
-
-        be = ZenohBackend(key_prefix="")
-        assert be._resolve_key("ch") == "ch"
-        be.close()
-
 
 class TestSharedMemoryConfig:
     def test_shared_memory_flag_accepted(self):
         from cyberwave.data.zenoh_backend import ZenohBackend
 
         try:
-            be = ZenohBackend(shared_memory=True, key_prefix="shm_test")
+            be = ZenohBackend(shared_memory=True)
         except BackendUnavailableError:
             pytest.skip("POSIX shared memory not available on this platform")
         assert be._session is not None
@@ -63,10 +53,7 @@ class TestConnectEndpoints:
     def test_custom_endpoints_accepted(self):
         from cyberwave.data.zenoh_backend import ZenohBackend
 
-        be = ZenohBackend(
-            connect=["tcp/127.0.0.1:7447"],
-            key_prefix="conn_test",
-        )
+        be = ZenohBackend(connect=["tcp/127.0.0.1:7447"])
         assert be._session is not None
         be.close()
 

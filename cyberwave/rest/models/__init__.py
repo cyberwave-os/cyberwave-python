@@ -25,6 +25,7 @@ from cyberwave.rest.models.asset_catalog_import_schema import AssetCatalogImport
 from cyberwave.rest.models.asset_create_schema import AssetCreateSchema
 from cyberwave.rest.models.asset_create_with_urdf_schema import AssetCreateWithURDFSchema
 from cyberwave.rest.models.asset_glb_from_attachment_schema import AssetGLBFromAttachmentSchema
+from cyberwave.rest.models.asset_list_query_schema import AssetListQuerySchema
 from cyberwave.rest.models.asset_list_schema import AssetListSchema
 from cyberwave.rest.models.asset_schema import AssetSchema
 from cyberwave.rest.models.asset_update_schema import AssetUpdateSchema
@@ -32,9 +33,6 @@ from cyberwave.rest.models.attachment_create_schema import AttachmentCreateSchem
 from cyberwave.rest.models.attachment_schema import AttachmentSchema
 from cyberwave.rest.models.available_features_schema import AvailableFeaturesSchema
 from cyberwave.rest.models.bulk_joint_states_update_schema import BulkJointStatesUpdateSchema
-from cyberwave.rest.models.business_event_create_schema import BusinessEventCreateSchema
-from cyberwave.rest.models.business_event_list_response_schema import BusinessEventListResponseSchema
-from cyberwave.rest.models.business_event_schema import BusinessEventSchema
 from cyberwave.rest.models.camera_config_update_schema import CameraConfigUpdateSchema
 from cyberwave.rest.models.catalog_seed_group_schema import CatalogSeedGroupSchema
 from cyberwave.rest.models.catalog_seed_item_schema import CatalogSeedItemSchema
@@ -77,6 +75,7 @@ from cyberwave.rest.models.controller_policy_schema import ControllerPolicySchem
 from cyberwave.rest.models.controller_policy_update_schema import ControllerPolicyUpdateSchema
 from cyberwave.rest.models.create_alert_schema import CreateAlertSchema
 from cyberwave.rest.models.create_asset_from_prompt_or_image_request_schema import CreateAssetFromPromptOrImageRequestSchema
+from cyberwave.rest.models.create_feature_definition_request import CreateFeatureDefinitionRequest
 from cyberwave.rest.models.create_mission_execution_schema import CreateMissionExecutionSchema
 from cyberwave.rest.models.create_mission_schema import CreateMissionSchema
 from cyberwave.rest.models.create_task_schema import CreateTaskSchema
@@ -90,6 +89,7 @@ from cyberwave.rest.models.edge_core_restart_response_schema import EdgeCoreRest
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema
 from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema
+from cyberwave.rest.models.enable_global_feature_request import EnableGlobalFeatureRequest
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest
 from cyberwave.rest.models.end_session_response_schema import EndSessionResponseSchema
 from cyberwave.rest.models.environment_assistant_request_schema import EnvironmentAssistantRequestSchema
@@ -104,8 +104,10 @@ from cyberwave.rest.models.episode_create_schema import EpisodeCreateSchema
 from cyberwave.rest.models.episode_schema import EpisodeSchema
 from cyberwave.rest.models.episode_update_schema import EpisodeUpdateSchema
 from cyberwave.rest.models.execute_task_schema import ExecuteTaskSchema
+from cyberwave.rest.models.feature_definition_schema import FeatureDefinitionSchema
 from cyberwave.rest.models.feature_metadata_schema import FeatureMetadataSchema
 from cyberwave.rest.models.feature_status_schema import FeatureStatusSchema
+from cyberwave.rest.models.global_feature_schema import GlobalFeatureSchema
 from cyberwave.rest.models.grant_user_feature_request import GrantUserFeatureRequest
 from cyberwave.rest.models.image_bytes import ImageBytes
 from cyberwave.rest.models.image_bytes1 import ImageBytes1
@@ -183,6 +185,8 @@ from cyberwave.rest.models.recording_generation_request_schema_by_date import Re
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse
+from cyberwave.rest.models.replay_timeline_event_schema import ReplayTimelineEventSchema
+from cyberwave.rest.models.replay_timeline_events_response_schema import ReplayTimelineEventsResponseSchema
 from cyberwave.rest.models.response import Response
 from cyberwave.rest.models.revoke_user_feature_request import RevokeUserFeatureRequest
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema
@@ -221,6 +225,7 @@ from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSc
 from cyberwave.rest.models.urdf_project_schema import URDFProjectSchema
 from cyberwave.rest.models.universal_schema_patch_schema import UniversalSchemaPatchSchema
 from cyberwave.rest.models.update_alert_schema import UpdateAlertSchema
+from cyberwave.rest.models.update_feature_definition_request import UpdateFeatureDefinitionRequest
 from cyberwave.rest.models.update_member_role_request import UpdateMemberRoleRequest
 from cyberwave.rest.models.update_member_role_response import UpdateMemberRoleResponse
 from cyberwave.rest.models.update_recording_metadata_schema import UpdateRecordingMetadataSchema

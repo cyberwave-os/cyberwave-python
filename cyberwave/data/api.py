@@ -88,6 +88,16 @@ class DataBus:
         """Key prefix used when building Zenoh key expressions (default ``"cw"``)."""
         return self._key_prefix
 
+    @property
+    def twin_uuid(self) -> str:
+        """Twin UUID this bus is scoped to."""
+        return self._twin_uuid
+
+    @property
+    def sensor_name(self) -> str | None:
+        """Optional sensor qualifier (e.g. ``"default"``, ``"wrist"``)."""
+        return self._sensor_name
+
     # ------------------------------------------------------------------
     # publish
     # ------------------------------------------------------------------
@@ -127,6 +137,25 @@ class DataBus:
         payload_bytes = self._sample_to_bytes(sample)
         wire_bytes = tmpl.pack(payload_bytes)
         self._backend.publish(key, wire_bytes)
+
+    def publish_raw(
+        self,
+        channel: str,
+        payload: bytes,
+    ) -> None:
+        """Publish raw *payload* bytes to *channel* without wire-format headers.
+
+        Use this for payloads that are already serialized (e.g. JSON detection
+        results) where the standard header + envelope would be unexpected by
+        the subscriber.
+        """
+        key = build_key(
+            self._twin_uuid,
+            channel,
+            self._sensor_name,
+            prefix=self._key_prefix,
+        )
+        self._backend.publish(key, payload)
 
     # ------------------------------------------------------------------
     # subscribe
@@ -233,6 +262,24 @@ class DataBus:
                 return None
 
         return _decode_sample(header, payload)
+
+    # ------------------------------------------------------------------
+    # stats
+    # ------------------------------------------------------------------
+
+    def stats(self) -> dict[str, Any]:
+        """Return transport-level message counters if the backend supports it."""
+        fn = getattr(self._backend, "stats", None)
+        if fn is not None:
+            return fn()
+        return {}
+
+    def stats_and_reset(self) -> dict[str, Any]:
+        """Return counters then reset; see :meth:`ZenohBackend.stats_and_reset`."""
+        fn = getattr(self._backend, "stats_and_reset", None)
+        if fn is not None:
+            return fn()
+        return {}
 
     # ------------------------------------------------------------------
     # lifecycle

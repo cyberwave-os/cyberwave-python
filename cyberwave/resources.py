@@ -1153,21 +1153,80 @@ class AssetManager(BaseResourceManager):
             self._handle_error(e, "search assets")
             raise  # For type checker
 
-    def get_by_registry_id(self, registry_id: str) -> Optional[AssetSchema]:
-        """Get asset by canonical registry ID or registry ID alias."""
-        try:
-            asset = self.get(registry_id)
-            if asset:
-                return asset
-        except Exception:
-            pass
+    def list_by_registry_id(self, registry_id: str) -> List[AssetSchema]:
+        """List assets matching an exact registry_id or registry_id_alias.
 
+        Uses the ``?registry_id=`` query parameter on the list endpoint, which
+        performs an exact-match against both ``registry_id`` and
+        ``registry_id_alias`` fields on the server side.  This is the correct
+        way to look up an asset by a registry identifier that may contain a
+        slash (e.g. ``"vendor/model"``), since embedding such a value directly
+        in a URL path segment would break Django's URL routing.
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/assets",
+                query_params=[("registry_id", registry_id)],
+            )
+
+            _response_types_map = {
+                "200": "List[AssetSchema]",
+            }
+
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map=_response_types_map,
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"list assets by registry_id {registry_id}")
+            raise  # For type checker
+
+    def get_by_registry_id(self, registry_id: str) -> Optional[AssetSchema]:
+        """Get asset by canonical registry ID or registry ID alias.
+
+        When the identifier contains a slash (e.g. ``"vendor/model"``), a
+        direct ``GET /assets/{registry_id}`` call would break Django's URL
+        routing because the slash is interpreted as a path separator.  For
+        that reason this method uses the ``?registry_id=`` query-parameter
+        route, which does an exact server-side match against both
+        ``registry_id`` and ``registry_id_alias``.
+
+        For plain aliases (no slash) the direct ``GET /assets/{alias}``
+        shortcut is tried first so that the common case remains efficient.
+        """
         normalized_identifier = registry_id.strip().lower()
         if not normalized_identifier:
             return None
 
+        # For identifiers without a slash (plain alias), try the direct GET
+        # endpoint first.  This avoids an extra round-trip for the common case.
+        if "/" not in normalized_identifier:
+            try:
+                asset = self.get(normalized_identifier)
+                if asset:
+                    return asset
+            except Exception:
+                pass
+
+        # Use the list endpoint with an exact registry_id filter.  This works
+        # for both plain aliases and full "vendor/model" registry IDs, and
+        # avoids the URL-routing issue that occurs when a slash appears in a
+        # path parameter.
         try:
-            # Try search API first (more efficient)
+            results = self.list_by_registry_id(normalized_identifier)
+            if results:
+                return results[0]
+        except Exception:
+            pass
+
+        # Last-resort: keyword search + client-side exact match.  Covers edge
+        # cases where the registry_id filter doesn't return the asset (e.g.
+        # assets only visible via metadata.registry_id).
+        try:
             search_results = self.search(normalized_identifier)
             for asset in search_results:
                 if getattr(asset, "registry_id", None) == normalized_identifier or getattr(
@@ -1175,7 +1234,6 @@ class AssetManager(BaseResourceManager):
                 ) == normalized_identifier:
                     return asset
 
-            # Fall back to full list scan if not found in search
             assets = self.list()
             for asset in assets:
                 if getattr(asset, "registry_id", None) == normalized_identifier or getattr(

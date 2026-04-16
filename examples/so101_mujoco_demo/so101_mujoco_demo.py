@@ -25,8 +25,9 @@ Environment variables (copy .env.example → .env)
   CONTROL_MODE        sine | manual (default: sine)
 """
 
-import argparse, json, os, shutil, sys, time, zipfile
+import argparse, fractions, json, os, shutil, sys, time, threading, zipfile
 import ctypes
+from datetime import datetime, timezone as _tz
 from pathlib import Path
 
 # Select a sensible default OpenGL backend per OS before importing mujoco.
@@ -87,8 +88,167 @@ ENV_NAME        = "so101_mujoco_demo"
 ARM_ASSET_KEY   = "the-robot-studio/so101"
 CAM_ASSET_KEY   = "cyberwave/standard-cam"
 
+# Path to Django backend media directory (where telemetry files are stored locally).
+# The FileSystemStorage backend uses {media_root}/{relative_path} for telemetry.
+# Override via BACKEND_MEDIA_DIR env var when using a non-standard layout.
+BACKEND_MEDIA_DIR = Path(
+    os.getenv(
+        "BACKEND_MEDIA_DIR",
+        str(SCRIPT_DIR / "../../../../cyberwave-backend/media"),
+    )
+).resolve()
+
 # MuJoCo viewer look-at point and initial camera angle
 CAMERA_LOOKAT = [0.2, 0.0, 0.3]
+
+# ── Alert schedule ────────────────────────────────────────────────────────────
+#
+# Each entry fires once when sim-time crosses the threshold (seconds).
+# is_burst=True triggers 10 rapid-fire alerts in ~2 s.
+_ALERT_SCHEDULE = [
+    # (threshold_s, name, severity, description, is_burst)
+    (5.0,  "Joint velocity approaching limit", "warning",
+     "Left shoulder joint nearing velocity cap during sine sweep", False),
+    (15.0, "Torque spike detected",             "critical",
+     "Shoulder pitch joint: 18.7 Nm transient torque peak",         False),
+    (25.0, "burst",                             None,   None,        True),
+    (35.0, "Motion resumed after protection",   "warning",
+     "Arm returned to safe operating range after torque protection", False),
+]
+
+
+def _fire_burst(arm_twin) -> None:
+    """Emit 10 alerts within ~2 s (one every 200 ms) in a background thread
+    so the MuJoCo loop is not stalled for 2 seconds."""
+    def _worker():
+        for i in range(10):
+            try:
+                arm_twin.alerts.create(
+                    name=f"Stress-test burst #{i + 1}/10",
+                    severity="warning",
+                    source_type="edge",
+                    description="Rapid-fire burst alert for UI stress-test",
+                    metadata={"burst_index": i, "burst_total": 10},
+                )
+            except Exception as exc:
+                print(f"[ALERT] burst #{i + 1} failed: {exc}")
+            time.sleep(0.2)
+        print("[ALERT] Burst of 10 alerts complete.")
+
+    threading.Thread(target=_worker, daemon=True).start()
+    print("[ALERT] Burst started in background (10 alerts × 200 ms).")
+
+# ── Camera alert schedule ─────────────────────────────────────────────────────
+#
+# Same structure as _ALERT_SCHEDULE but fires on the *camera* twin.
+_CAM_ALERT_SCHEDULE = [
+    # (threshold_s, name, severity, description, is_burst)
+    (8.0,  "Low lighting detected",    "warning",
+     "Scene illumination below recommended threshold for observation camera", False),
+    (20.0, "Camera frame drop event",  "warning",
+     "Transient GPU load caused brief frame-rate reduction in camera pipeline", False),
+    (38.0, "Vision pipeline nominal",  "info",
+     "Camera auto-exposure settled; image quality stable", False),
+]
+
+
+# ── Camera frame recorder ─────────────────────────────────────────────────────
+
+
+class SimFrameRecorder:
+    """Record camera frames from a MuJoCo scene to an H.264/Matroska (.mkv) file.
+
+    Uses a dedicated ``mujoco.Renderer`` so it never contends with the WebRTC
+    streaming renderer.  Frames are throttled to *fps* to keep file size small.
+
+    Args:
+        output_path: Destination ``.mkv`` file (created on :meth:`start`).
+        cam_id: MuJoCo camera index.
+        model: ``mujoco.MjModel`` — used to create the internal Renderer.
+        width: Render width in pixels (default 320).
+        height: Render height in pixels (default 240).
+        fps: Target recording frame-rate (default 15).
+    """
+
+    def __init__(
+        self,
+        output_path: Path,
+        cam_id: int,
+        model,
+        width: int = 320,
+        height: int = 240,
+        fps: int = 15,
+    ) -> None:
+        self._path = output_path
+        self._cam_id = cam_id
+        self._fps = fps
+        self._interval = 1.0 / fps
+        self._renderer = mujoco.Renderer(model, height=height, width=width)
+        self._container = None
+        self._video_stream = None
+        self._frame_count = 0
+        self._last_write_time = 0.0
+
+    def start(self) -> None:
+        """Open the MKV container and add an H.264 video stream."""
+        import av as _av
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._container = _av.open(str(self._path), "w", format="matroska")
+        self._video_stream = self._container.add_stream("libx264", rate=self._fps)
+        self._video_stream.width = self._renderer.width
+        self._video_stream.height = self._renderer.height
+        self._video_stream.pix_fmt = "yuv420p"
+        self._video_stream.options = {"preset": "ultrafast", "crf": "28"}
+
+    def capture(self, data) -> None:
+        """Render and write one frame (throttled to *fps*)."""
+        import av as _av
+        now = time.monotonic()
+        if now - self._last_write_time < self._interval:
+            return
+        self._last_write_time = now
+        self._renderer.update_scene(data, camera=self._cam_id)
+        frame_rgb = self._renderer.render()  # H×W×3 uint8 RGB
+        frame = _av.VideoFrame.from_ndarray(frame_rgb, format="rgb24")
+        frame = frame.reformat(format="yuv420p")
+        frame.pts = self._frame_count
+        frame.time_base = fractions.Fraction(1, self._fps)
+        for packet in self._video_stream.encode(frame):
+            self._container.mux(packet)
+        self._frame_count += 1
+
+    def stop(self) -> int:
+        """Flush encoder and close the file.  Returns number of frames written."""
+        if self._video_stream and self._container:
+            for packet in self._video_stream.encode():
+                self._container.mux(packet)
+            self._container.close()
+            self._container = None
+        self._renderer.close()
+        return self._frame_count
+
+
+def _publish_camera_stored(
+    cw,
+    cam_twin_uuid: str,
+    env_uuid: str,
+    storage_path: str,
+    ts: float,
+) -> None:
+    """Publish a ``camera_stored`` MQTT message so the backend creates a
+    ``CAMERA_STORED`` TwinTelemetry event and triggers the MKV→MP4→parquet
+    pipeline automatically.
+    """
+    topic = f"{cw.mqtt.topic_prefix}cyberwave/twin/{cam_twin_uuid}/telemetry"
+    payload = {
+        "type": "camera_stored",
+        "timestamp": ts,
+        "environment_uuid": env_uuid,
+        "paths": [storage_path],
+    }
+    cw.mqtt.publish(topic, payload)
+    print(f"[CAMERA] Published camera_stored → {storage_path}")
+
 
 # Home pose: arm slightly extended for visibility.
 # Keys are joint-name fragments; MuJoCo joints whose name contains the key are
@@ -253,6 +413,8 @@ def cmd_run(args):
     env_data = json.loads(env_json.read_text())
     arm_twin_uuid = env_data["arm_twin_uuid"]
     arm_uuid_hex  = arm_twin_uuid.replace("-", "")
+    cam_twin_uuid = env_data["camera_twin_uuid"]
+    env_uuid      = env_data["environment_uuid"]
 
     control_mode = os.getenv("CONTROL_MODE", "sine").lower()
     headless     = args.headless
@@ -281,6 +443,14 @@ def cmd_run(args):
     cw = Cyberwave()
     cw.mqtt.connect()
 
+    # Twin objects used for alert emission.
+    arm_twin = cw.twin(twin_id=arm_twin_uuid)
+    cam_twin = cw.twin(twin_id=cam_twin_uuid)
+    print(f"Arm alert target  : {arm_twin.name} ({arm_twin_uuid})")
+    print(f"Cam alert target  : {cam_twin.name} ({cam_twin_uuid})")
+    _alert_fired:     set[float] = set()
+    _cam_alert_fired: set[float] = set()
+
     # Camera streaming.  MUJOCO_GL=egl must be set before the process starts
     # (see justfile) — mujoco reads it at import time, not at renderer creation.
     schema_cameras = cameras_from_schema(OUT_DIR / "universal_schema.json")
@@ -297,13 +467,60 @@ def cmd_run(args):
     streaming.start(model)
     print("Camera streaming started.")
 
+    # Locate the observer camera in the MuJoCo model for the frame recorder.
+    cam_uuid_hex = cam_twin_uuid.replace("-", "")
+    _rec_cam_id = -1
+    for _ci in range(model.ncam):
+        _cname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_CAMERA, _ci) or ""
+        if cam_uuid_hex in _cname or "color_camera" in _cname:
+            _rec_cam_id = _ci
+            print(f"Recording camera  : {_cname!r} (id={_ci})")
+            break
+
+    # MKV path is built here but the timestamp will be snapped to loop-start below.
+    _run_ts_us = 0  # placeholder — set just before the headless/viewer loop starts
+    _run_date  = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    # MKV path and recorder are finalised just before the headless/viewer loop starts.
+    _mkv_storage_path: str = ""
+    _mkv_host_path: Path   = Path()
+    recorder: "SimFrameRecorder | None" = None
+    if _rec_cam_id < 0:
+        print("[WARN] Could not find observer camera in model — skipping recording.")
+
     if headless:
-        print("\nRunning headless (200 steps)...")
-        for _ in range(200):
+        # Snap MKV timestamp to actual loop-start wall time so the camera session
+        # window aligns with the alerts that will be created during the run.
+        _run_ts_us = int(time.time() * 1_000_000)
+        _run_date  = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+        if _rec_cam_id >= 0:
+            _mkv_storage_path = (
+                f"video_telemetry/{cam_twin_uuid}/color_camera"
+                f"/{_run_date}/{_run_ts_us}/chunk_0.mkv"
+            )
+            _mkv_host_path = BACKEND_MEDIA_DIR / _mkv_storage_path
+            recorder = SimFrameRecorder(
+                output_path=_mkv_host_path,
+                cam_id=_rec_cam_id,
+                model=model,
+                width=320,
+                height=240,
+                fps=15,
+            )
+            recorder.start()
+            print(f"Frame recorder    : {_mkv_host_path}")
+
+        # Announce camera twin telemetry so the backend records it as a session.
+        cw.mqtt.publish_telemetry_start(cam_twin_uuid)
+
+        # Run 20 000 steps = 40 s of sim time to fire every alert in the schedule.
+        print("\nRunning headless (20 000 steps / ~40 s sim-time)...")
+        for step_i in range(20_000):
             if control_fn:
                 control_fn(model, data, data.time)
             mujoco.mj_step(model, data)
             streaming.capture(model, data)
+            if recorder is not None:
+                recorder.capture(data)
             cw.mqtt.update_joints_state(
                 twin_uuid=arm_twin_uuid,
                 joint_positions={
@@ -314,8 +531,100 @@ def cmd_run(args):
                 source_type=SOURCE_TYPE_EDGE,
                 timestamp=data.time,
             )
-        print(f"Done. t={data.time:.3f}s")
+            # Arm alert schedule.
+            for thresh, name, severity, desc, is_burst in _ALERT_SCHEDULE:
+                if data.time >= thresh and thresh not in _alert_fired:
+                    _alert_fired.add(thresh)
+                    if is_burst:
+                        _fire_burst(arm_twin)
+                    else:
+                        try:
+                            arm_twin.alerts.create(
+                                name=name,
+                                severity=severity,
+                                source_type="edge",
+                                description=desc,
+                                metadata={"sim_time_s": round(data.time, 2)},
+                            )
+                            print(f"[ALERT][arm] [{severity}] {name} @ t={data.time:.1f}s")
+                        except Exception as exc:
+                            print(f"[ALERT][arm] create failed: {exc}")
+            # Camera alert schedule.
+            for thresh, name, severity, desc, is_burst in _CAM_ALERT_SCHEDULE:
+                if data.time >= thresh and thresh not in _cam_alert_fired:
+                    _cam_alert_fired.add(thresh)
+                    try:
+                        cam_twin.alerts.create(
+                            name=name,
+                            severity=severity,
+                            source_type="edge",
+                            description=desc,
+                            metadata={"sim_time_s": round(data.time, 2)},
+                        )
+                        print(f"[ALERT][cam] [{severity}] {name} @ t={data.time:.1f}s")
+                    except Exception as exc:
+                        print(f"[ALERT][cam] create failed: {exc}")
+            if step_i % 2000 == 0:
+                print(f"  step={step_i} t={data.time:.1f}s alerts_fired={len(_alert_fired)}")
+        # Wait for burst background thread to finish.
+        time.sleep(3)
+        print(
+            f"Done. t={data.time:.3f}s  arm_alerts={len(_alert_fired)}"
+            f"  cam_alerts={len(_cam_alert_fired)}"
+        )
+
+        # Stop recorder and trigger backend camera pipeline.
+        if recorder is not None:
+            n_frames = recorder.stop()
+            print(f"[CAMERA] Recorder stopped: {n_frames} frames → {_mkv_host_path}")
+            if n_frames > 0 and _mkv_host_path.exists():
+                _publish_camera_stored(
+                    cw=cw,
+                    cam_twin_uuid=cam_twin_uuid,
+                    env_uuid=env_uuid,
+                    storage_path=_mkv_storage_path,
+                    ts=time.time(),
+                )
+            else:
+                print("[CAMERA] No frames recorded — skipping camera_stored publish.")
+
+        # Signal session end for both twins.
+        try:
+            cw.mqtt.publish_telemetry_end(arm_twin_uuid)
+        except Exception:
+            pass
+        try:
+            cw.mqtt.publish_telemetry_end(cam_twin_uuid)
+        except Exception:
+            pass
+        try:
+            cw.disconnect()
+        except Exception:
+            pass
         return
+
+    # Snap MKV timestamp to viewer launch time.
+    _run_ts_us = int(time.time() * 1_000_000)
+    _run_date  = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    if _rec_cam_id >= 0:
+        _mkv_storage_path = (
+            f"video_telemetry/{cam_twin_uuid}/color_camera"
+            f"/{_run_date}/{_run_ts_us}/chunk_0.mkv"
+        )
+        _mkv_host_path = BACKEND_MEDIA_DIR / _mkv_storage_path
+        recorder = SimFrameRecorder(
+            output_path=_mkv_host_path,
+            cam_id=_rec_cam_id,
+            model=model,
+            width=320,
+            height=240,
+            fps=15,
+        )
+        recorder.start()
+        print(f"Frame recorder    : {_mkv_host_path}")
+
+    # Announce camera twin telemetry for the interactive session.
+    cw.mqtt.publish_telemetry_start(cam_twin_uuid)
 
     print("\nLaunching MuJoCo viewer — close window to exit.")
     if control_mode == "manual":
@@ -341,6 +650,8 @@ def cmd_run(args):
                 mujoco.mj_step(model, data)
 
                 streaming.capture(model, data)
+                if recorder is not None:
+                    recorder.capture(data)
 
                 cw.mqtt.update_joints_state(
                     twin_uuid=arm_twin_uuid,
@@ -355,12 +666,64 @@ def cmd_run(args):
 
                 viewer.sync()
 
+                # ── Arm alert schedule ────────────────────────────────────
+                for thresh, name, severity, desc, is_burst in _ALERT_SCHEDULE:
+                    if data.time >= thresh and thresh not in _alert_fired:
+                        _alert_fired.add(thresh)
+                        if is_burst:
+                            _fire_burst(arm_twin)
+                        else:
+                            try:
+                                arm_twin.alerts.create(
+                                    name=name,
+                                    severity=severity,
+                                    source_type="edge",
+                                    description=desc,
+                                    metadata={"sim_time_s": round(data.time, 2)},
+                                )
+                                print(f"[ALERT][arm] [{severity}] {name} @ t={data.time:.1f}s")
+                            except Exception as exc:
+                                print(f"[ALERT][arm] create failed: {exc}")
+                # ── Camera alert schedule ─────────────────────────────────
+                for thresh, name, severity, desc, _is_burst in _CAM_ALERT_SCHEDULE:
+                    if data.time >= thresh and thresh not in _cam_alert_fired:
+                        _cam_alert_fired.add(thresh)
+                        try:
+                            cam_twin.alerts.create(
+                                name=name,
+                                severity=severity,
+                                source_type="edge",
+                                description=desc,
+                                metadata={"sim_time_s": round(data.time, 2)},
+                            )
+                            print(f"[ALERT][cam] [{severity}] {name} @ t={data.time:.1f}s")
+                        except Exception as exc:
+                            print(f"[ALERT][cam] create failed: {exc}")
+
                 rem = model.opt.timestep - (time.perf_counter() - t0)
                 if rem > 0:
                     time.sleep(rem)
     finally:
         try:
             streaming.stop()
+        except Exception:
+            pass
+        if recorder is not None:
+            try:
+                n_frames = recorder.stop()
+                print(f"[CAMERA] Recorder stopped: {n_frames} frames → {_mkv_host_path}")
+                if n_frames > 0 and _mkv_host_path.exists():
+                    _publish_camera_stored(
+                        cw=cw,
+                        cam_twin_uuid=cam_twin_uuid,
+                        env_uuid=env_uuid,
+                        storage_path=_mkv_storage_path,
+                        ts=time.time(),
+                    )
+            except Exception as exc:
+                print(f"[CAMERA] Recorder stop failed: {exc}")
+        try:
+            cw.mqtt.publish_telemetry_end(cam_twin_uuid)
         except Exception:
             pass
         try:

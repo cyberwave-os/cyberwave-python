@@ -8,6 +8,16 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
+_HOOK_TYPE_CONTENT_HINTS: dict[str, str] = {
+    "frame": "numpy",
+    "depth": "numpy",
+    "pointcloud": "numpy",
+    "audio": "numpy",
+    "lidar": "numpy",
+}
+"""Map hook types that always carry numpy payloads so decode can skip JSON/bytes attempts."""
+
+
 @dataclass(frozen=True)
 class HookRegistration:
     """One registered hook binding a callback to a channel on a twin."""
@@ -18,6 +28,8 @@ class HookRegistration:
     hook_type: str
     sensor_name: str = "default"
     options: dict[str, Any] = field(default_factory=dict)
+    content_hint: str = ""
+    """``"numpy"`` for binary sensor channels, empty for auto-detect."""
 
     def __repr__(self) -> str:
         opts = f", options={self.options}" if self.options else ""
@@ -92,6 +104,7 @@ class HookRegistry:
         **options: Any,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         filtered_options = {k: v for k, v in options.items() if v is not None}
+        hint = _HOOK_TYPE_CONTENT_HINTS.get(hook_type, "")
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             self.register(
@@ -102,6 +115,7 @@ class HookRegistry:
                     hook_type=hook_type,
                     sensor_name=sensor_name,
                     options=filtered_options,
+                    content_hint=hint,
                 )
             )
             return fn

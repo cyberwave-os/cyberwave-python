@@ -29,11 +29,9 @@ class TwinNavigationCaptureUploadResponseSchema(BaseModel):
     """ # noqa: E501
     attachment_uuid: StrictStr
     file_url: Optional[StrictStr] = None
-    event_uuid: Optional[StrictStr] = None
-    event_type: Optional[StrictStr] = None
     triggered_workflow_uuids: Optional[List[StrictStr]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["attachment_uuid", "file_url", "event_uuid", "event_type", "triggered_workflow_uuids", "metadata"]
+    __properties: ClassVar[List[str]] = ["attachment_uuid", "file_url", "triggered_workflow_uuids", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -79,16 +77,6 @@ class TwinNavigationCaptureUploadResponseSchema(BaseModel):
         if self.file_url is None and "file_url" in self.model_fields_set:
             _dict['file_url'] = None
 
-        # set to None if event_uuid (nullable) is None
-        # and model_fields_set contains the field
-        if self.event_uuid is None and "event_uuid" in self.model_fields_set:
-            _dict['event_uuid'] = None
-
-        # set to None if event_type (nullable) is None
-        # and model_fields_set contains the field
-        if self.event_type is None and "event_type" in self.model_fields_set:
-            _dict['event_type'] = None
-
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -108,8 +96,6 @@ class TwinNavigationCaptureUploadResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "attachment_uuid": obj.get("attachment_uuid"),
             "file_url": obj.get("file_url"),
-            "event_uuid": obj.get("event_uuid"),
-            "event_type": obj.get("event_type"),
             "triggered_workflow_uuids": obj.get("triggered_workflow_uuids"),
             "metadata": obj.get("metadata")
         })

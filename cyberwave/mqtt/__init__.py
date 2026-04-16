@@ -543,7 +543,13 @@ class CyberwaveMQTTClient:
         """
         self._handle_twin_update_with_telemetry(twin_uuid, metadata)
 
-    def publish_telemetry_end(self, twin_uuid: str):
+    def publish_telemetry_end(
+        self,
+        twin_uuid: str,
+        sensor: str | None = None,
+        stream_source: str | None = None,
+        stream_instance_id: str | None = None,
+    ):
         """Publish telemetry end message via MQTT.
 
         Also clears the telemetry tracking state for this twin, allowing
@@ -555,6 +561,12 @@ class CyberwaveMQTTClient:
             "type": "telemetry_end",
             "timestamp": time.time(),
         }
+        if sensor:
+            message["sensor"] = sensor
+        if stream_source:
+            message["stream_source"] = stream_source
+        if stream_instance_id:
+            message["stream_instance_id"] = stream_instance_id
         self.publish(topic, message)
 
         # Clear tracking state so next publish_telemetry_start will fire

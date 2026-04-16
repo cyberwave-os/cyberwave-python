@@ -109,13 +109,22 @@ def test_affect_changes_emitted_command_and_state_source_types() -> None:
 def test_rest_client_injects_authorization_for_generated_public_endpoint() -> None:
     client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
     client._api_client.rest_client.request = MagicMock(return_value=MagicMock())
-    serialized = client.api._src_app_api_assets_list_assets_serialize(
-        _request_auth=None,
-        _content_type=None,
-        _headers=None,
-        _host_index=0,
-    )
+    import inspect
 
+    sig = inspect.signature(client.api._src_app_api_assets_list_assets_serialize)
+    # Build kwargs with None for all positional params except the known keyword-only ones
+    keyword_only = {"_request_auth", "_content_type", "_headers", "_host_index"}
+    call_kwargs: dict = {
+        "_request_auth": None,
+        "_content_type": None,
+        "_headers": None,
+        "_host_index": 0,
+    }
+    for name, param in sig.parameters.items():
+        if name not in keyword_only and param.default is inspect.Parameter.empty:
+            call_kwargs[name] = None
+
+    serialized = client.api._src_app_api_assets_list_assets_serialize(**call_kwargs)
     client._api_client.call_api(*serialized)
 
     headers = client._api_client.rest_client.request.call_args.kwargs["headers"]

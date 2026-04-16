@@ -125,6 +125,9 @@ class BaseVideoStreamer(abc.ABC):
         auto_reconnect: bool = True,
         enable_health_check: bool = True,
         camera_name: Optional[str] = None,
+        stream_source: Optional[str] = None,
+        stream_instance_id: Optional[str] = None,
+        frontend_type: Optional[str] = None,
     ):
         """Initialize the video streamer.
 
@@ -139,10 +142,16 @@ class BaseVideoStreamer(abc.ABC):
                 (MQTT offer ``sensor`` field). Omit only for non-recording or legacy
                 paths; for recording, pass :attr:`cyberwave.twin.CameraTwin.default_camera_name`
                 or an explicit per-stream name when a twin has multiple video streams.
+            frontend_type: Track type sent in the WebRTC offer (e.g. "rgb", "depth").
+                Must match what the browser consumer sends so the SFU can pair them.
+                Defaults to None (SFU uses "rgb").
         """
         self.client = client
         self.twin_uuid: Optional[str] = twin_uuid
         self.camera_name: Optional[str] = camera_name
+        self.stream_source: Optional[str] = stream_source
+        self.stream_instance_id: Optional[str] = stream_instance_id
+        self.frontend_type: Optional[str] = frontend_type
         self.auto_reconnect = auto_reconnect
         # Use explicit None check so empty list [] disables TURN servers
         self.turn_servers = (
@@ -472,6 +481,12 @@ class BaseVideoStreamer(abc.ABC):
             "track_id": self.streamer.id if self.streamer else None,
             "session_id": f"{self.client.client_id}_{self.camera_name}",
         }
+        if self.stream_source:
+            offer_payload["stream_source"] = self.stream_source
+        if self.stream_instance_id:
+            offer_payload["stream_instance_id"] = self.stream_instance_id
+        if self.frontend_type:
+            offer_payload["frontend_type"] = self.frontend_type
 
         self._publish_message(offer_topic, offer_payload)
         logger.debug(f"WebRTC offer sent to {offer_topic}")
@@ -557,7 +572,19 @@ class BaseVideoStreamer(abc.ABC):
                             return
                         answer_sensor = payload.get("sensor") or payload.get("camera")
                         expected = self.camera_name
-                        if answer_sensor is None or answer_sensor == expected:
+                        answer_stream_source = payload.get("stream_source") or "live"
+                        expected_stream_source = self.stream_source or "live"
+                        answer_stream_instance_id = (
+                            payload.get("stream_instance_id") or "default"
+                        )
+                        expected_stream_instance_id = (
+                            self.stream_instance_id or "default"
+                        )
+                        if (
+                            (answer_sensor is None or answer_sensor == expected)
+                            and answer_stream_source == expected_stream_source
+                            and answer_stream_instance_id == expected_stream_instance_id
+                        ):
                             logger.info(
                                 "Processing answer targeted at edge"
                                 + (
@@ -570,8 +597,12 @@ class BaseVideoStreamer(abc.ABC):
                             self._answer_received = True
                         else:
                             logger.debug(
-                                f"Ignoring answer with mismatched sensor: "
-                                f"expected={expected}, got={answer_sensor}"
+                                "Ignoring answer with mismatched stream identity: "
+                                f"expected_sensor={expected}, got_sensor={answer_sensor}, "
+                                f"expected_stream_source={expected_stream_source}, "
+                                f"got_stream_source={answer_stream_source}, "
+                                f"expected_stream_instance_id={expected_stream_instance_id}, "
+                                f"got_stream_instance_id={answer_stream_instance_id}"
                             )
                     else:
                         logger.debug("Skipping answer message not targeted at edge")

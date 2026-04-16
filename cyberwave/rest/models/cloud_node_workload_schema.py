@@ -49,7 +49,9 @@ class CloudNodeWorkloadSchema(BaseModel):
     command_params: Optional[Dict[str, Any]]
     callback_task: Optional[StrictStr]
     callback_kwargs: Optional[Dict[str, Any]]
-    __properties: ClassVar[List[str]] = ["uuid", "profile_uuid", "profile_slug", "instance_uuid", "instance_slug", "status", "twin_uuid", "controller_policy_uuid", "controller_type", "mlmodel_uuid", "mlmodel_name", "mlmodel_external_id", "workspace_uuid", "visibility", "created_at", "updated_at", "created_by_email", "command_type", "command_params", "callback_task", "callback_kwargs"]
+    asset_uuid: Optional[StrictStr] = None
+    asset_name: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "profile_uuid", "profile_slug", "instance_uuid", "instance_slug", "status", "twin_uuid", "controller_policy_uuid", "controller_type", "mlmodel_uuid", "mlmodel_name", "mlmodel_external_id", "workspace_uuid", "visibility", "created_at", "updated_at", "created_by_email", "command_type", "command_params", "callback_task", "callback_kwargs", "asset_uuid", "asset_name"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -160,6 +162,16 @@ class CloudNodeWorkloadSchema(BaseModel):
         if self.callback_kwargs is None and "callback_kwargs" in self.model_fields_set:
             _dict['callback_kwargs'] = None
 
+        # set to None if asset_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.asset_uuid is None and "asset_uuid" in self.model_fields_set:
+            _dict['asset_uuid'] = None
+
+        # set to None if asset_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.asset_name is None and "asset_name" in self.model_fields_set:
+            _dict['asset_name'] = None
+
         return _dict
 
     @classmethod
@@ -192,7 +204,9 @@ class CloudNodeWorkloadSchema(BaseModel):
             "command_type": obj.get("command_type"),
             "command_params": obj.get("command_params"),
             "callback_task": obj.get("callback_task"),
-            "callback_kwargs": obj.get("callback_kwargs")
+            "callback_kwargs": obj.get("callback_kwargs"),
+            "asset_uuid": obj.get("asset_uuid"),
+            "asset_name": obj.get("asset_name")
         })
         return _obj
 

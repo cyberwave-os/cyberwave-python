@@ -43,7 +43,33 @@ def available_runtimes() -> list[str]:
     return [name for name, cls in _RUNTIME_REGISTRY.items() if cls().is_available()]
 
 
-# Auto-register built-in runtimes
+# Auto-register built-in runtimes.  Each runtime module defers its heavy
+# third-party import (onnxruntime, cv2, torch, tensorrt, tflite_runtime)
+# to load()/predict() method bodies, so the module-level imports below
+# always succeed regardless of which optional dependencies are installed.
+# (numpy *is* imported eagerly in onnxruntime_rt and opencv_rt, but it is
+# a core SDK dependency so that is fine.)
+
 from cyberwave.models.runtimes.ultralytics_rt import UltralyticsRuntime  # noqa: E402
 
 register_runtime(UltralyticsRuntime)
+
+from cyberwave.models.runtimes.onnxruntime_rt import OnnxRuntime  # noqa: E402
+
+register_runtime(OnnxRuntime)
+
+from cyberwave.models.runtimes.opencv_rt import OpenCVRuntime  # noqa: E402
+
+register_runtime(OpenCVRuntime)
+
+from cyberwave.models.runtimes.tflite_rt import TFLiteRuntime  # noqa: E402
+
+register_runtime(TFLiteRuntime)
+
+from cyberwave.models.runtimes.tensorrt_rt import TensorRTRuntime  # noqa: E402
+
+register_runtime(TensorRTRuntime)
+
+from cyberwave.models.runtimes.torch_rt import TorchRuntime  # noqa: E402
+
+register_runtime(TorchRuntime)

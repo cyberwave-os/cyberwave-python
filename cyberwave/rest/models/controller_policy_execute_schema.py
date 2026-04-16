@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,12 +30,23 @@ class ControllerPolicyExecuteSchema(BaseModel):
     twin_uuid: StrictStr
     instruction: Optional[StrictStr] = None
     execution: Optional[StrictStr] = 'async'
+    mode: Optional[StrictStr] = None
     max_steps: Optional[StrictInt] = None
     target_left_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
     target_right_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
     current_joint_states: Optional[Dict[str, Dict[str, Union[StrictFloat, StrictInt]]]] = None
     server_mode: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["twin_uuid", "instruction", "execution", "max_steps", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode"]
+    __properties: ClassVar[List[str]] = ["twin_uuid", "instruction", "execution", "mode", "max_steps", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode"]
+
+    @field_validator('mode')
+    def mode_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['live', 'simulation']):
+            raise ValueError("must be one of enum values ('live', 'simulation')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +92,11 @@ class ControllerPolicyExecuteSchema(BaseModel):
         if self.instruction is None and "instruction" in self.model_fields_set:
             _dict['instruction'] = None
 
+        # set to None if mode (nullable) is None
+        # and model_fields_set contains the field
+        if self.mode is None and "mode" in self.model_fields_set:
+            _dict['mode'] = None
+
         # set to None if max_steps (nullable) is None
         # and model_fields_set contains the field
         if self.max_steps is None and "max_steps" in self.model_fields_set:
@@ -116,6 +132,7 @@ class ControllerPolicyExecuteSchema(BaseModel):
             "twin_uuid": obj.get("twin_uuid"),
             "instruction": obj.get("instruction"),
             "execution": obj.get("execution") if obj.get("execution") is not None else 'async',
+            "mode": obj.get("mode"),
             "max_steps": obj.get("max_steps"),
             "target_left_pos": obj.get("target_left_pos"),
             "target_right_pos": obj.get("target_right_pos"),
