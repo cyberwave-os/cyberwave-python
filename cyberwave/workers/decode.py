@@ -9,15 +9,11 @@ passing them to user hook callbacks.
 Handles two wire formats:
 1. SDK wire format (header + payload) from Python drivers
 2. Raw JPEG bytes from native C++ drivers
-
-Optional downscaling is applied when ``CYBERWAVE_WORKER_INPUT_RESOLUTION``
-is set (e.g. ``640x480``), resizing numpy image frames before dispatch.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from cyberwave.data.backend import Sample
@@ -26,37 +22,6 @@ from cyberwave.data.header import decode
 logger = logging.getLogger(__name__)
 
 _JPEG_SOI = b"\xff\xd8"
-
-# Parse target resolution once at import time.
-_TARGET_RESOLUTION: tuple[int, int] | None = None
-_raw_res = os.environ.get("CYBERWAVE_WORKER_INPUT_RESOLUTION")
-if _raw_res:
-    try:
-        parts = _raw_res.lower().split("x")
-        _TARGET_RESOLUTION = (int(parts[0]), int(parts[1]))
-        logger.info("Worker input resolution scaling enabled: %s", _TARGET_RESOLUTION)
-    except (ValueError, IndexError):
-        logger.warning(
-            "Invalid CYBERWAVE_WORKER_INPUT_RESOLUTION '%s'; expected WIDTHxHEIGHT (e.g. 640x480)",
-            _raw_res,
-        )
-
-
-def _maybe_resize(data: Any) -> Any:
-    """Downscale a numpy image array to ``_TARGET_RESOLUTION`` if configured."""
-    if _TARGET_RESOLUTION is None:
-        return data
-    import numpy as np
-
-    if not isinstance(data, np.ndarray) or data.ndim < 2:
-        return data
-    h, w = data.shape[:2]
-    tw, th = _TARGET_RESOLUTION
-    if w == tw and h == th:
-        return data
-    import cv2
-
-    return cv2.resize(data, (tw, th), interpolation=cv2.INTER_LINEAR)
 
 
 def _jpeg_to_ndarray(data: bytes) -> Any:
@@ -90,12 +55,8 @@ def _decode_payload(header: Any, payload: bytes) -> Any:
     return payload
 
 
-def decode_sample_payload(sample: Sample, *, content_hint: str = "") -> tuple[Any, float]:
+def decode_sample_payload(sample: Sample) -> tuple[Any, float]:
     """Decode a raw ``Sample`` into ``(decoded_data, timestamp)``.
-
-    When *content_hint* is ``"numpy"``, the JPEG fallback is tried
-    immediately if SDK header decode fails, and the JSON decode branch
-    is skipped — saving an import and parse attempt on every frame.
 
     Tries the SDK wire format first.  If that fails and the payload
     looks like a JPEG image (starts with ``\\xff\\xd8``), it is decoded
@@ -110,22 +71,14 @@ def decode_sample_payload(sample: Sample, *, content_hint: str = "") -> tuple[An
 
     try:
         header, payload = decode(raw)
-        if content_hint == "numpy":
-            from cyberwave.data.header import CONTENT_TYPE_NUMPY
-
-            if header.content_type == CONTENT_TYPE_NUMPY and header.shape and header.dtype:
-                import numpy as np
-
-                arr = np.frombuffer(payload, dtype=header.dtype).reshape(header.shape).copy()
-                return _maybe_resize(arr), header.ts
         decoded = _decode_payload(header, payload)
-        return _maybe_resize(decoded), header.ts
+        return decoded, header.ts
     except Exception:
         pass
 
     if len(raw) > 2 and raw[:2] == _JPEG_SOI:
         try:
-            return _maybe_resize(_jpeg_to_ndarray(raw)), ts_fallback
+            return _jpeg_to_ndarray(raw), ts_fallback
         except Exception:
             logger.warning("JPEG decode failed", exc_info=True)
 

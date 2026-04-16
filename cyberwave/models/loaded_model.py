@@ -93,48 +93,6 @@ class LoadedModel:
             self._publish_detections(result, input_data)
         return result
 
-    def warm_up(
-        self,
-        input_shape: tuple[int, ...] | None = None,
-        *,
-        confidence: float = 0.5,
-    ) -> tuple[float, float]:
-        """Run two dummy inferences to warm up JIT / allocations.
-
-        Returns ``(cold_ms, warm_ms)`` — the latency of the first and
-        second inference passes on a zero-filled input.
-        """
-        import numpy as np
-
-        shape = input_shape or (640, 640, 3)
-        dummy = np.zeros(shape, dtype=np.uint8)
-
-        t0 = time.monotonic()
-        try:
-            self._runtime.predict(
-                self._model_handle, dummy, confidence=confidence,
-            )
-        except Exception:
-            logger.debug("Warm-up cold pass raised (non-fatal)", exc_info=True)
-        cold_ms = (time.monotonic() - t0) * 1000.0
-
-        t1 = time.monotonic()
-        try:
-            self._runtime.predict(
-                self._model_handle, dummy, confidence=confidence,
-            )
-        except Exception:
-            logger.debug("Warm-up hot pass raised (non-fatal)", exc_info=True)
-        warm_ms = (time.monotonic() - t1) * 1000.0
-
-        logger.info(
-            "[%s] Warm-up complete: cold=%.1f ms, warm=%.1f ms",
-            self._name,
-            cold_ms,
-            warm_ms,
-        )
-        return cold_ms, warm_ms
-
     def inference_stats(self) -> dict[str, Any]:
         """Return inference latency statistics for monitoring.
 

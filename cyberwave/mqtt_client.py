@@ -460,6 +460,15 @@ class CyberwaveMQTTClient:
         """
         return self._client.subscribe(topic, handler, qos)
 
+    def unsubscribe(self, topic: str) -> None:
+        """
+        Unsubscribe from an MQTT topic and remove all its handlers.
+
+        Args:
+            topic: MQTT topic to unsubscribe from
+        """
+        return self._client.unsubscribe(topic)
+
     def publish(self, topic: str, message: Dict[str, Any], qos: int = 0):
         """
         Publish a message to any MQTT topic.

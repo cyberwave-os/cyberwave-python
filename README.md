@@ -794,26 +794,6 @@ for det in result.detections:
     print(f"{det.label}: {det.confidence:.2f}")
 ```
 
-### Model warm-up — *stub*
-
-Eliminate cold-start latency by calling `warm_up()` after loading:
-
-```python
-model = cw.models.load("yolov8n")
-cold_ms, warm_ms = model.warm_up()  # two dummy inferences
-# cold_ms ≈ 150 ms (JIT/allocation), warm_ms ≈ 8 ms (steady-state)
-```
-
-The worker runtime calls `warm_up()` automatically on startup for all loaded models.
-
-### Frame resolution scaling — *stub*
-
-Set `CYBERWAVE_WORKER_INPUT_RESOLUTION` to downscale frames before inference without changing the camera driver's publish resolution:
-
-```bash
-export CYBERWAVE_WORKER_INPUT_RESOLUTION=640x480  # 4K camera → 640x480 for YOLO nano
-```
-
 ### Automatic detection publishing
 
 When a loaded model produces detections, the SDK automatically publishes them to a `detections/<runtime>` Zenoh channel (e.g. `detections/ultralytics`, `detections/onnxruntime`) as structured JSON. Drivers that subscribe to `detections/*` (e.g. the OBSBOT camera driver) can draw bounding box overlays directly on the video stream — no extra worker code needed.

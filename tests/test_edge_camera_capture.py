@@ -21,7 +21,6 @@ def _make_mqtt_client():
     mqtt = MagicMock()
     mqtt.connected = True
 
-    # Track subscribed handlers so tests can trigger them
     _handlers: dict[str, callable] = {}
 
     def _subscribe(topic, handler, qos=0):
@@ -32,7 +31,7 @@ def _make_mqtt_client():
 
     mqtt.subscribe = MagicMock(side_effect=_subscribe)
     mqtt.unsubscribe = MagicMock(side_effect=_unsubscribe)
-    mqtt._test_handlers = _handlers  # expose for test injection
+    mqtt._test_handlers = _handlers
     return mqtt
 
 
@@ -45,14 +44,13 @@ def _make_twin_with_mqtt():
     twins_manager = MagicMock()
     twins_manager.get_latest_frame.return_value = FAKE_JPEG
 
-    # Inner client (what actually has subscribe/unsubscribe)
     inner_mqtt = _make_mqtt_client()
 
-    # Outer wrapper (delegates subscribe/publish to inner)
     outer_mqtt = MagicMock()
     outer_mqtt.connected = True
     outer_mqtt._client = inner_mqtt
     outer_mqtt.subscribe = MagicMock(side_effect=inner_mqtt.subscribe)
+    outer_mqtt.unsubscribe = MagicMock(side_effect=inner_mqtt.unsubscribe)
     outer_mqtt.publish = MagicMock(side_effect=inner_mqtt.publish)
 
     config = SimpleNamespace(topic_prefix="")
@@ -71,7 +69,6 @@ class TestEdgePhoto:
         twin, mqtt = _make_twin_with_mqtt()
         camera = TwinCameraHandle(twin)
 
-        # Simulate photo response in a background thread
         def respond():
             time.sleep(0.05)
             handler = mqtt._test_handlers.get(
@@ -93,7 +90,6 @@ class TestEdgePhoto:
         result = camera.edge_photo(format="bytes")
         t.join()
 
-        # Verify command was published
         mqtt.publish.assert_called_once()
         call_args = mqtt.publish.call_args
         topic = call_args[0][0]
@@ -136,7 +132,6 @@ class TestEdgePhoto:
         twin, mqtt = _make_twin_with_mqtt()
         camera = TwinCameraHandle(twin)
 
-        # No response sent — should timeout
         with pytest.raises(CyberwaveError, match="Timed out.*take_photo"):
             camera.edge_photo(timeout=0.2)
 
@@ -279,7 +274,6 @@ class TestEdgePhotos:
         twin, mqtt = _make_twin_with_mqtt()
         camera = TwinCameraHandle(twin)
 
-        # Use a polling responder that keeps trying until it finds a handler
         def poll_respond(stop_event):
             while not stop_event.is_set():
                 handler = mqtt._test_handlers.get(

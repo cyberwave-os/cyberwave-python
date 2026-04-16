@@ -427,6 +427,114 @@ class TwinCameraHandle:
             )
         self._twin.start_streaming(fps=fps, camera_id=camera_id)
 
+    def edge_photo(
+        self,
+        format: str = "bytes",
+        *,
+        timeout: float = 5.0,
+    ) -> Any:
+        """Request a photo from the edge device via MQTT.
+
+        Sends a ``take_photo`` command and waits for the edge to respond
+        on the ``camera/photo`` topic. Unlike :meth:`read` (which fetches
+        the latest cached frame via REST), this triggers a fresh capture on
+        the physical device.
+
+        Args:
+            format: Output format — ``"bytes"`` (default) or ``"numpy"``.
+            timeout: Seconds to wait for the edge response.
+
+        Returns:
+            Frame in the requested format.
+
+        Raises:
+            CyberwaveError: On timeout, edge error, or missing image data.
+        """
+        import base64
+
+        twin = self._twin
+        twin._connect_to_mqtt_if_not_connected()
+        mqtt = twin.client.mqtt
+
+        topic_prefix = twin.client.config.topic_prefix or ""
+        photo_topic = f"{topic_prefix}cyberwave/twin/{twin.uuid}/camera/photo"
+        command_topic = f"{topic_prefix}cyberwave/twin/{twin.uuid}/command"
+
+        result_holder: Dict[str, Any] = {}
+        event = threading.Event()
+
+        def _on_photo(payload_str: str) -> None:
+            try:
+                result_holder["data"] = json.loads(payload_str)
+            except Exception as exc:
+                result_holder["error"] = str(exc)
+            event.set()
+
+        mqtt.subscribe(photo_topic, _on_photo)
+        try:
+            mqtt.publish(
+                command_topic,
+                {
+                    "command": "take_photo",
+                    "source_type": "tele",
+                    "timestamp": time.time(),
+                },
+            )
+
+            if not event.wait(timeout):
+                raise CyberwaveError(
+                    f"Timed out waiting for take_photo response after {timeout}s"
+                )
+
+            if "error" in result_holder:
+                raise CyberwaveError(
+                    f"Failed to parse edge photo response: {result_holder['error']}"
+                )
+
+            data = result_holder["data"]
+
+            if data.get("status") == "error":
+                raise CyberwaveError(data.get("message", "Edge returned an error"))
+
+            if "image" not in data:
+                raise CyberwaveError(
+                    "Edge photo response missing 'image' field"
+                )
+
+            jpeg_bytes = base64.b64decode(data["image"])
+            return _decode_frame(jpeg_bytes, format)
+        finally:
+            mqtt.unsubscribe(photo_topic)
+
+    def edge_photos(
+        self,
+        count: int,
+        interval_ms: int = 100,
+        format: str = "bytes",
+        *,
+        timeout: float = 5.0,
+    ) -> List[Any]:
+        """Capture multiple photos from the edge device.
+
+        Calls :meth:`edge_photo` ``count`` times with ``interval_ms``
+        delay between each capture.
+
+        Args:
+            count: Number of photos to capture.
+            interval_ms: Delay between captures in milliseconds.
+            format: Output format (same as :meth:`edge_photo`).
+            timeout: Per-photo timeout in seconds.
+
+        Returns:
+            List of frames in the requested format.
+        """
+        frames: List[Any] = []
+        for i in range(count):
+            frames.append(self.edge_photo(format=format, timeout=timeout))
+            if i < count - 1:
+                time.sleep(interval_ms / 1000.0)
+        return frames
+
 
 class Twin:
     """

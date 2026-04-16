@@ -87,7 +87,6 @@ class WorkerRuntime:
         total = len(self._registry.hooks) + len(self._registry.synchronized_groups)
         logger.info("Worker runtime started with %d hook(s)", total)
 
-        self._warm_up_models()
         self._start_stats_publisher()
 
     def run(self) -> None:
@@ -132,25 +131,6 @@ class WorkerRuntime:
 
     # ── internals ────────────────────────────────────────────────
 
-    def _warm_up_models(self) -> None:
-        """Run warm-up inference on all loaded models to eliminate cold-start latency."""
-        models_mgr = getattr(self._cw, "models", None)
-        if models_mgr is None:
-            return
-        loaded_models: dict[str, Any] = getattr(models_mgr, "_loaded", {})
-        if not loaded_models:
-            return
-        logger.info("Warming up %d loaded model(s)...", len(loaded_models))
-        for model in loaded_models.values():
-            warm_up_fn = getattr(model, "warm_up", None)
-            if warm_up_fn is not None:
-                try:
-                    warm_up_fn()
-                except Exception:
-                    logger.warning(
-                        "Model warm-up failed for %s", getattr(model, "name", "?"), exc_info=True,
-                    )
-
     def _build_context(
         self,
         hook: HookRegistration,
@@ -193,7 +173,6 @@ class WorkerRuntime:
             ready.set()
 
         def dispatch_loop() -> None:
-            hint = hook.content_hint
             frames_processed = 0
             while not self._stop_event.is_set():
                 if not ready.wait(timeout=1.0):
@@ -202,7 +181,7 @@ class WorkerRuntime:
                 sample = slot[0]
                 if sample is None:
                     continue
-                decoded_data, wire_ts = decode_sample_payload(sample, content_hint=hint)
+                decoded_data, wire_ts = decode_sample_payload(sample)
                 ctx = self._build_context(hook, sample, wire_ts=wire_ts)
                 try:
                     hook.callback(decoded_data, ctx)
@@ -358,8 +337,7 @@ class WorkerRuntime:
 
         # Model inference stats.
         model_stats = []
-        models_mgr = getattr(self._cw, "models", None)
-        loaded_models: dict[str, Any] = getattr(models_mgr, "_loaded", {}) if models_mgr else {}
+        loaded_models: dict[str, Any] = getattr(self._cw.models, "_loaded", {})
         for model in loaded_models.values():
             fn = getattr(model, "inference_stats", None)
             if fn is not None:
