@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Example: fuzzy ML model search + single UUID resolution.
+Example: partial ML model search + single UUID resolution.
 
 Configuration:
     Required: CYBERWAVE_API_KEY (same as other examples; optional ``.env`` at repo root)
@@ -49,7 +49,7 @@ def main() -> int:
 
     cw = Cyberwave()
     try:
-        print(f"fuzzy query: {SEARCH_QUERY!r} (limit={SEARCH_LIMIT})")
+        print(f"partial query: {SEARCH_QUERY!r} (limit={SEARCH_LIMIT})")
         matches = search_ml_models(cw.api, SEARCH_QUERY, limit=SEARCH_LIMIT)
         if not matches:
             print("search_ml_models: no matches")
