@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 from .exceptions import CyberwaveError
 from .constants import SOURCE_TYPE_SIM, SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE
+from .universal_schema_camera import camera_sensor_ids_from_schema
 
 
 # Load capabilities cache for runtime class selection
@@ -1363,6 +1364,29 @@ class Twin:
             and j.get("type") in CONTROLLABLE_JOINT_TYPES
         ]
         return sorted(controllable)
+
+    def list_camera_sensor_ids(self, *, max_ids: int = 16) -> List[str]:
+        """
+        List camera sensor id strings from the live universal schema.
+
+        Use these values as ``sensor_id`` for :meth:`get_latest_frame` and
+        :meth:`capture_frame` when the twin exposes multiple cameras. The schema
+        is fetched via :meth:`get_schema` (same source as the platform editor).
+
+        Args:
+            max_ids: Maximum number of ids to return (default ``16``).
+
+        Returns:
+            Ordered unique ids from ``sensors`` and ``capabilities.sensors`` entries
+            whose ``type`` is camera-like.
+
+        Example:
+            >>> ids = twin.list_camera_sensor_ids()
+            >>> if ids:
+            ...     frame = twin.capture_frame(sensor_id=ids[0])
+        """
+        schema = self.get_schema()
+        return camera_sensor_ids_from_schema(schema, max_ids=max_ids)
 
     def get_schema(self, path: str = "") -> Any:
         """Get value at a specific JSON Pointer path in the twin's universal schema.
