@@ -112,7 +112,7 @@ class CallbackVideoTrack(BaseVideoTrack):
         video_frame.pts = self.frame_count
         video_frame.time_base = fractions.Fraction(1, int(self.fps))
 
-        self._send_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
         self.frame_count += 1
 
         return video_frame
