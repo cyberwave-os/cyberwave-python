@@ -33,6 +33,14 @@ class TestTimestampCapture:
     @pytest.mark.anyio(backends=["asyncio"])
     async def test_virtual_track_metadata_storage(self):
         """Test that virtual track stores per-frame metadata for the sync extension."""
+        pytest.importorskip(
+            "av",
+            reason="av not installed (install with extras: camera)",
+        )
+        pytest.importorskip(
+            "aiortc",
+            reason="aiortc not installed (install with extras: camera)",
+        )
         import numpy as np
         from cyberwave.sensor.camera_virtual import VirtualVideoTrack
 

@@ -5,6 +5,10 @@ import pytest
 
 def test_sdk_imports_without_cyberwave_video_sync():
     """SDK's base_video module imports without cyberwave_video_sync installed."""
+    pytest.importorskip(
+        "aiortc",
+        reason="aiortc not installed (install with extras: camera)",
+    )
     from cyberwave.sensor.base_video import BaseVideoTrack
     assert hasattr(BaseVideoTrack, "_store_frame_metadata_for_sync")
 
