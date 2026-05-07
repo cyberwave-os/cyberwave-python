@@ -31,6 +31,7 @@ class TwinSchema(BaseModel):
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
+    slug: Optional[StrictStr] = None
     asset_uuid: StrictStr
     environment_uuid: StrictStr
     created_at: datetime
@@ -65,8 +66,9 @@ class TwinSchema(BaseModel):
     attach_offset_rotation_y: Union[StrictFloat, StrictInt]
     attach_offset_rotation_z: Union[StrictFloat, StrictInt]
     fixed_base: StrictBool
+    supported_simulation_backends: Optional[List[StrictStr]] = None
     export_warnings: Optional[List[Dict[str, StrictStr]]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "export_warnings"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -107,6 +109,11 @@ class TwinSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if glb_file (nullable) is None
         # and model_fields_set contains the field
         if self.glb_file is None and "glb_file" in self.model_fields_set:
@@ -167,6 +174,7 @@ class TwinSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),
+            "slug": obj.get("slug"),
             "asset_uuid": obj.get("asset_uuid"),
             "environment_uuid": obj.get("environment_uuid"),
             "created_at": obj.get("created_at"),
@@ -201,6 +209,7 @@ class TwinSchema(BaseModel):
             "attach_offset_rotation_y": obj.get("attach_offset_rotation_y"),
             "attach_offset_rotation_z": obj.get("attach_offset_rotation_z"),
             "fixed_base": obj.get("fixed_base"),
+            "supported_simulation_backends": obj.get("supported_simulation_backends"),
             "export_warnings": obj.get("export_warnings")
         })
         return _obj

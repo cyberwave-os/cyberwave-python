@@ -9,10 +9,16 @@ Provides ergonomic wrappers around REST API endpoints for:
 
 from __future__ import annotations
 
+import logging
 import math
+import threading
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence
 
 from .navigation import NavigationPlan
+
+logger = logging.getLogger(__name__)
+
+_NAV_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "blocked"})
 
 if TYPE_CHECKING:
     from .twin import Twin
@@ -369,6 +375,63 @@ class TwinNavigationHandle:
         self._twin = twin
         self.uuid = twin.uuid
         self._controller_policy_uuid: Optional[str] = None
+        # Persistent subscription state for navigate/status so we
+        # don't race the REST call vs. the broker SUBACK.
+        self._status_lock = threading.Lock()
+        self._status_results: Dict[str, Dict[str, Any]] = {}
+        self._status_events: Dict[str, threading.Event] = {}
+        self._status_subscribed: bool = False
+
+    def _mqtt_client(self) -> Any | None:
+        return getattr(getattr(self._twin, "client", None), "mqtt", None)
+
+    def _status_topic(self) -> str:
+        mqtt = self._mqtt_client()
+        prefix = getattr(mqtt, "topic_prefix", "") if mqtt is not None else ""
+        prefix = prefix or ""
+        return f"{prefix}cyberwave/twin/{self.uuid}/navigate/status"
+
+    def _ensure_status_subscription(self) -> None:
+        """Subscribe once to this twin's navigate/status topic.
+
+        Registering eagerly (before the REST call that triggers the
+        action) ensures we don't miss a fast ``completed`` status on
+        simulated or teleop sources.
+        """
+        with self._status_lock:
+            if self._status_subscribed:
+                return
+            mqtt = self._mqtt_client()
+            if mqtt is None:
+                logger.warning(
+                    "navigation: no MQTT client available; skipping status subscription"
+                )
+                return
+            try:
+                mqtt.subscribe(self._status_topic(), self._on_status)
+                self._status_subscribed = True
+            except Exception as exc:
+                logger.warning(
+                    "navigation: failed to subscribe to %s: %s",
+                    self._status_topic(),
+                    exc,
+                )
+
+    def _on_status(self, payload: Any) -> None:
+        if not isinstance(payload, dict):
+            return
+        action_id = payload.get("action_id")
+        if not action_id:
+            return
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in _NAV_TERMINAL_STATUSES:
+            return
+        key = str(action_id)
+        with self._status_lock:
+            self._status_results[key] = {**payload, "status": status}
+            event = self._status_events.get(key)
+        if event is not None:
+            event.set()
 
     def use_controller(self, policy_uuid: str) -> "TwinNavigationHandle":
         """Set a default navigation controller policy UUID for future plans."""
@@ -446,6 +509,10 @@ class TwinNavigationHandle:
         if metadata:
             payload["metadata"] = metadata
 
+        # Subscribe to navigate/status before firing the REST call
+        # so a fast ``completed`` (e.g. sim_tele) cannot arrive before
+        # our handler is registered on the broker.
+        self._ensure_status_subscription()
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
     def follow_path(
@@ -500,6 +567,7 @@ class TwinNavigationHandle:
         if nav_metadata:
             payload["metadata"] = nav_metadata
 
+        self._ensure_status_subscription()
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
     def stop(
@@ -547,6 +615,65 @@ class TwinNavigationHandle:
             payload["source_type"] = source_type
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
+    def wait_for_completion(
+        self,
+        action_id: str,
+        *,
+        timeout: float = 120.0,
+        raise_on_failure: bool = True,
+    ) -> Dict[str, Any]:
+        """Block until the given navigation ``action_id`` reaches a terminal status.
+
+        Subscribes to ``cyberwave/twin/{twin_uuid}/navigate/status`` and
+        returns the first payload whose ``status`` is one of
+        ``completed``, ``failed``, ``cancelled`` or ``blocked`` and whose
+        ``action_id`` matches.
+
+        Args:
+            action_id: The ``action_id`` returned by ``follow_path``/``goto``.
+            timeout: Maximum seconds to wait before raising ``TimeoutError``.
+            raise_on_failure: When True, raise ``RuntimeError`` if the
+                terminal status is anything other than ``completed``.
+
+        Returns:
+            The terminal status payload dict.
+        """
+        if not action_id:
+            raise ValueError("wait_for_completion requires a non-empty action_id")
+
+        self._ensure_status_subscription()
+        key = str(action_id)
+
+        with self._status_lock:
+            cached = self._status_results.get(key)
+            if cached is not None:
+                result = cached
+            else:
+                event = self._status_events.get(key)
+                if event is None:
+                    event = threading.Event()
+                    self._status_events[key] = event
+                result = None
+
+        if result is None:
+            if not event.wait(timeout):
+                raise TimeoutError(
+                    f"navigation action {action_id} did not reach a terminal "
+                    f"status within {timeout}s (topic={self._status_topic()})"
+                )
+            with self._status_lock:
+                result = self._status_results.get(key, {})
+
+        with self._status_lock:
+            self._status_events.pop(key, None)
+
+        if raise_on_failure and result.get("status") != "completed":
+            raise RuntimeError(
+                f"navigation action {action_id} finished with status "
+                f"{result.get('status')!r}: {result.get('message')!r}"
+            )
+        return result
+
     def _send_command(
         self,
         payload: Dict[str, Any],
@@ -557,6 +684,20 @@ class TwinNavigationHandle:
         resolved_policy = controller_policy_uuid or self._controller_policy_uuid
         if resolved_policy:
             payload["controller_policy_uuid"] = resolved_policy
+
+        # Default source_type from the active ``cw.affect(...)`` mode when
+        # the caller didn't pin one explicitly. This mirrors how locomotion
+        # helpers (move_forward/turn_*) honor ``client.config`` via
+        # ``_default_control_source_type`` and ensures a single
+        # ``cw.affect("simulation")`` call at the top of a script (or
+        # generated worker) routes every downstream navigation command to
+        # the sim driver instead of the edge driver.
+        if "source_type" not in payload:
+            client_source_type = getattr(
+                getattr(self._twin.client, "config", None), "source_type", None
+            )
+            if client_source_type:
+                payload["source_type"] = client_source_type
 
         api_client = self._twin.client.api.api_client
 

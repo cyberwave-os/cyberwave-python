@@ -290,9 +290,8 @@ class RealSenseVideoTrack(BaseVideoTrack):
         else:
             color_image, depth_image = frames
 
-        # Read time reference to capture current timestamp at frame capture moment.
-        # This ensures video frame timestamps reflect actual capture time.
-        timestamp, timestamp_monotonic = self.time_reference.read()
+        # Capture current timestamp at frame capture moment for accuracy.
+        timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 
         # Store frame 0 timestamp for publishing
         if self.frame_count == 0:
@@ -302,10 +301,32 @@ class RealSenseVideoTrack(BaseVideoTrack):
         # Create video frame
         video_frame = VideoFrame.from_ndarray(color_image, format="bgr24")
         video_frame = video_frame.reformat(format="yuv420p")
+        
+        # Set media timestamps
+        # Current policy: pts = frame_index, time_base = 1/fps
         video_frame.pts = self.frame_count
-        video_frame.time_base = fractions.Fraction(1, int(self.color_fps))
+        time_base = fractions.Fraction(1, int(self.color_fps))
+        video_frame.time_base = time_base
 
-        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        # Store per-frame metadata for sync extension (if installed)
+        self._store_frame_metadata_for_sync(
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+            capture_wall_time=timestamp,
+            capture_monotonic=timestamp_monotonic,
+        )
+
+        # Capture sync frame metadata with explicit frame_index, pts, and time_base
+        self._capture_sync_frame(
+            timestamp,
+            timestamp_monotonic,
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+        )
 
         # Publish depth frame at configured interval
         if (
@@ -316,6 +337,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
             self._publish_depth_frame(depth_image, timestamp)
 
         self.frame_count += 1
+
         return video_frame
 
     def get_stream_attributes(self) -> dict:

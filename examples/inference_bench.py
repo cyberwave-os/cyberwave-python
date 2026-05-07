@@ -54,7 +54,7 @@ import numpy as np
 from cyberwave.data.api import DataBus
 from cyberwave.data.zenoh_backend import ZenohBackend
 
-TWIN_UUID = "aaaaaaaa-bench-4000-a000-000000000001"
+TWIN_UUID = "aaaaaaaa-aaaa-4000-a000-000000000001"
 FRAME_CHANNEL = "frames"
 
 _TS_DTYPE = np.dtype("<u8")

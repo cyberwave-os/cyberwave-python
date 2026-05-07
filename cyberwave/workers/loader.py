@@ -24,6 +24,7 @@ def load_workers(
     workers_path: str | Path,
     *,
     cw_instance: object,
+    loaded_modules: list[object] | None = None,
 ) -> int:
     """Import ``.py`` worker modules from *workers_path*.
 
@@ -74,6 +75,8 @@ def load_workers(
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
             spec.loader.exec_module(module)  # type: ignore[union-attr]
+            if loaded_modules is not None:
+                loaded_modules.append(module)
             loaded += 1
             logger.info("Loaded worker: %s", py_file.name)
         except Exception:

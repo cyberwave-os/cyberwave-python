@@ -110,6 +110,22 @@ environment = cw.environments.create(
 )
 ```
 
+### Managing Environment Waypoints
+
+```python
+waypoints = cw.environments.create_waypoint(
+    environment.uuid,
+    waypoint_id="dock-a",
+    name="Dock A",
+    position={"x": 1.0, "y": 2.0, "z": 0.0},
+    rotation={"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
+    metadata={"priority": "high"},
+)
+
+waypoints = cw.environments.get_waypoints(environment.uuid)
+waypoints = cw.environments.delete_waypoint(environment.uuid, "dock-a")
+```
+
 ### Managing Assets and Twins
 
 ```python
@@ -157,6 +173,49 @@ robot.add_to_environment("TARGET_ENVIRONMENT_UUID")
 `add_to_environment()` creates a deep copy of the twin in the target environment, marks the original twin as deleted, and also deletes the source environment if it has no twins left.
 
 `move()` and `rotate()` are deprecated. Use `move_forward()`, `move_backward()`, `turn_left()`, and `turn_right()` for locomotion commands, or `edit_rotation()` to directly set orientation.
+
+### Using Unified Slugs
+
+Every major entity (asset, twin, environment, workflow) has a **unified slug** — a human-readable identifier in the format `{workspace-slug}/{type-prefix}/{entity-slug}`. Slugs can be used interchangeably with UUIDs across the SDK.
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave()
+
+# Fetch a twin by its slug instead of UUID
+robot = cw.twin(twin_id="acme/twins/my-arm")
+
+# Create a twin using an asset slug
+robot = cw.twin("acme/catalog/so101")
+
+# Pass an environment slug
+robot = cw.twin("acme/catalog/so101", environment_id="acme/envs/production")
+
+# Fetch an environment by slug
+env = cw.environments.get_by_slug("acme/envs/production")
+
+# Fetch a workflow by slug and trigger it
+wf = cw.workflows.get_by_slug("acme/workflows/pick-and-place")
+run = cw.workflows.trigger("acme/workflows/pick-and-place", inputs={"speed": 1.0})
+
+# Check slug availability
+result = cw.assets.check_slug("acme/catalog/my-new-robot")
+if result["available"]:
+    print("Slug is available!")
+
+# Access an entity's slug
+print(robot.slug)  # e.g. "acme/twins/my-arm"
+```
+
+| Entity       | Type Prefix   | Slug Example                          |
+|------------- |-------------- |---------------------------------------|
+| Asset        | `catalog`     | `acme/catalog/my-robot-arm`           |
+| Twin         | `twins`       | `acme/twins/arm-station-1`            |
+| Environment  | `envs`        | `acme/envs/production-floor`          |
+| Workflow     | `workflows`   | `acme/workflows/pick-and-place`       |
+| ML Model     | `models`      | `acme/models/yolov8-custom`           |
+| Controller   | `controllers` | `acme/controllers/keyboard-teleop`    |
 
 ### Listing Primitive Assets (catalog assets with shortcuts)
 
@@ -634,6 +693,20 @@ The fingerprint is a stable identifier derived from the host hardware (hostname,
 
 List, trigger, and monitor workflows programmatically. Useful for building custom automations on top of Cyberwave's visual workflow engine.
 
+Generated `run_on_edge` workers with schedule triggers use
+`@cw.on_schedule(...)`. The edge worker runtime evaluates the cron locally and
+calls the generated `run(...)` entrypoint when the schedule is due.
+Install `cyberwave[schedule]` when running scheduled workers outside the
+standard Edge worker image.
+
+Custom edge workers can use the same scheduler directly:
+
+```python
+@cw.on_schedule("*/5 * * * *", timezone="UTC")
+def every_five_minutes(ctx):
+    print("schedule fired", ctx.timestamp)
+```
+
 ```python
 cw = Cyberwave()
 
@@ -711,6 +784,53 @@ alert.update(severity="critical")
 alert.delete()
 ```
 
+### Datasets
+
+Import and manage robotics datasets from HuggingFace or local files. Supports LeRobot and RLDS formats.
+
+```python
+# Import a dataset from HuggingFace
+ds = cw.datasets.add("lerobot/pusht", name="pusht")
+print(f"Dataset {ds.uuid} is {ds.processing_status}")
+
+# Import with specific revision/subset
+ds = cw.datasets.add(
+    "lerobot/aloha_sim_insertion_human",
+    name="aloha-insertion",
+    hf_revision="main",
+    hf_subset="default",
+)
+
+# Upload a local dataset (directory or zip)
+ds = cw.datasets.add("./my_lerobot_dataset", name="my-dataset")
+ds = cw.datasets.add("./recordings.zip", name="recordings")
+
+# List datasets with pagination and filters
+datasets = cw.datasets.list(limit=20, offset=0)
+datasets = cw.datasets.list(processing_status="completed")
+datasets = cw.datasets.list(environment="env-uuid")
+
+# Get and delete
+ds = cw.datasets.get("dataset-uuid")
+cw.datasets.delete("dataset-uuid")
+
+# Open in browser for visualization
+cw.datasets.visualize(ds)
+# Prints: View dataset at: https://cyberwave.com/acme/datasets/pusht
+
+# Poll for completion (HuggingFace imports are async)
+import time
+while ds.processing_status == "pending":
+    time.sleep(5)
+    ds = cw.datasets.get(ds.uuid)
+print(f"Dataset ready: {ds.processing_status}")
+```
+
+**Supported formats:**
+- **LeRobot v2.1** — HuggingFace datasets with `lerobot` metadata
+- **LeRobot v3** — Latest LeRobot format with parquet episodes  
+- **RLDS** — TensorFlow Datasets format (zip upload only)
+
 ## Data Layer (`cw.data`) — *stub*
 
 Transport-agnostic pub/sub for edge sensor data. Supports Zenoh (primary) and filesystem (fallback) backends.
@@ -780,6 +900,21 @@ def detect_collision(samples, ctx):
     # All three are within 50ms of each other
 ```
 
+**Cross-twin mode** — synchronize channels from different twins (e.g. stereo cameras):
+
+```python
+@cw.on_synchronized(
+    twin_channels={
+        "left": (CAMERA_LEFT, "frames/default"),
+        "right": (CAMERA_RIGHT, "frames/default"),
+    },
+    tolerance_ms=50.0,
+)
+def on_stereo_pair(samples, ctx):
+    left = samples["left"]   # Sample from CAMERA_LEFT
+    right = samples["right"] # Sample from CAMERA_RIGHT
+```
+
 See the [synchronized hooks docs](https://docs.cyberwave.com/sdks/data-synchronized-hooks) for details.
 
 ## ML Models (`cw.models`) — *stub*
@@ -794,11 +929,83 @@ for det in result.detections:
     print(f"{det.label}: {det.confidence:.2f}")
 ```
 
+YOLO ONNX postprocessing applies per-class non-max suppression with the same default IoU threshold (`0.7`) as Ultralytics' `YOLO.predict`, so swapping `yolov8s.pt` for `yolov8s.onnx` produces the same number of boxes per object instead of a cluster of overlapping anchors. Tune via `model.predict(frame, iou=0.5)` (stricter) or pass `iou=1.0` to disable NMS entirely (raw output for custom trackers).
+
+### Model warm-up — *stub*
+
+Eliminate cold-start latency by calling `warm_up()` after loading:
+
+```python
+model = cw.models.load("yolov8n")
+cold_ms, warm_ms = model.warm_up()  # two dummy inferences
+# cold_ms ≈ 150 ms (JIT/allocation), warm_ms ≈ 8 ms (steady-state)
+```
+
+The worker runtime calls `warm_up()` automatically on startup for all loaded models.
+
+### Frame resolution scaling — *stub*
+
+Set `CYBERWAVE_WORKER_INPUT_RESOLUTION` to downscale frames before inference without changing the camera driver's publish resolution:
+
+```bash
+export CYBERWAVE_WORKER_INPUT_RESOLUTION=640x480  # 4K camera → 640x480 for YOLO nano
+```
+
 ### Automatic detection publishing
 
-When a loaded model produces detections, the SDK automatically publishes them to a `detections/<runtime>` Zenoh channel (e.g. `detections/ultralytics`, `detections/onnxruntime`) as structured JSON. Drivers that subscribe to `detections/*` (e.g. the OBSBOT camera driver) can draw bounding box overlays directly on the video stream — no extra worker code needed.
+Every call to `model.predict()` automatically publishes its result to a `detections/<runtime>` Zenoh channel (e.g. `detections/ultralytics`, `detections/onnxruntime`) as structured JSON. Empty results are published as `{"detections": []}` heartbeats at the worker's inference cadence so overlay consumers (e.g. the OBSBOT camera driver) see a steady signal and don't fall into their staleness cutoff when the scene transiently has nothing to detect. Drivers that subscribe to `detections/*` can draw bounding box overlays directly on the video stream — no extra worker code needed.
+
+**Multi-camera routing:** Pass `twin_uuid=ctx.twin_uuid` to `model.predict()` to route detections to the correct twin when handling multiple cameras:
+
+```python
+@cw.on_frame(CAMERA_A)
+def on_cam_a(frame, ctx):
+    model.predict(frame, confidence=0.5, twin_uuid=ctx.twin_uuid)
+```
+
+Omitting `sensor=` subscribes to `frames/**` on the twin, so the hook picks
+up whatever sensor name the driver publishes (e.g. `color_camera`,
+`depth_camera`). `ctx.sensor_name` is populated from the observed key, so
+a single handler can disambiguate multi-sensor twins. Pass
+`sensor="<name>"` explicitly when you need to target one specific sensor.
 
 This requires a Zenoh data bus (`pip install cyberwave[zenoh]` and `CYBERWAVE_TWIN_UUID` set). If unavailable, auto-publish is silently skipped.
+
+### Privacy-preserving workers — *stub*
+
+Use `cyberwave.vision.anonymize_frame()` together with a pose model (e.g. `yolov8n-pose-onnx`) to **obscure every person** in the stream and overlay a colour-coded pose skeleton **before** the frame leaves the edge:
+
+```python
+from cyberwave.vision import anonymize_frame
+
+model = cw.models.load("yolov8n-pose-onnx")
+
+from cyberwave.data import FILTERED_FRAME_CHANNEL
+
+@cw.on_frame(cw.config.twin_uuid, sensor="default")
+def anonymise(frame, ctx):
+    result = model.predict(frame, classes=["person"], confidence=0.4)
+    # Defaults: pixelate mosaic + per-bodypart skeleton palette.
+    # mode={"pixelate"|"redact"|"blur"|"bbox"}, pixel_size=int|None,
+    # blur_kernel=int, color=BGR (used by bbox + redact, and as the
+    # small-ROI fallback fill for any mode).
+    out = anonymize_frame(frame, result.detections)
+    cw.data.publish(FILTERED_FRAME_CHANNEL, out, twin_uuid=ctx.twin_uuid)
+```
+
+For a runnable end-to-end demo against your local webcam — useful for tuning the mode / threshold knobs interactively — see [`examples/webcam_pose_anonymize.py`](./examples/webcam_pose_anonymize.py).
+
+Pair the worker with a generic-camera driver configured to consult `frames/processed` (`CYBERWAVE_DRIVER_FRAME_FILTER=frames/processed`); the driver substitutes the obscured frame into the WebRTC stream before encoding. Raw `frames/*` channels stay local — they are not forwarded over MQTT by default.
+
+> **Privacy note:** the default `pixelate` mode is intended for casual visual obscuring, not as a cryptographic anonymisation primitive — modern depixelation networks can recover recognisable faces from low-density mosaics. For stronger guarantees use `mode="blur"` (heavier irreversible degradation), `mode="redact"` (grid of solid `color` blocks with visible separators — the "censored document" look), or `mode="bbox"` (single solid fill, destroys the underlying pixels entirely). See the `cyberwave.vision.anonymize` module docstring for the full caveat.
+
+> **Note:** the driver-side `frames/processed` consumer and the
+> `CYBERWAVE_DRIVER_FRAME_FILTER` knob ship in the follow-up PRs (driver
+> wiring + end-to-end example). This snippet shows the eventual shape of
+> the API; today, only the SDK building blocks (`anonymize_frame`,
+> `draw_skeleton`, the return-aware `frame_callback`) are wired up.
+
+A complete two-camera example lives at [`examples/security_pipeline/`](./examples/security_pipeline). See the [Security Pipeline](https://docs.cyberwave.com/edge/drivers/security-pipeline) and [Frame Filters](https://docs.cyberwave.com/edge/drivers/frame-filters) docs for the full picture.
 
 ## Zenoh-MQTT Bridge (`cyberwave.zenoh_mqtt`) — *stub*
 

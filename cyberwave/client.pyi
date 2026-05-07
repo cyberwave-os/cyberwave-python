@@ -392,7 +392,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["SZ-DJI-Technology/DJI-Mini-4-Pro"],
+        asset_key: Literal["SZ-DJI-Technology/DJI-Mini-4-Pro-old"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -419,7 +419,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["sz-dji-technology/DJI-Mavic-3-Enterprise"],
+        asset_key: Literal["dji/mavic-3-enterprise"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -797,6 +797,15 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["cyberwave/aloha-2"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["intel/realsensed455"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -825,6 +834,24 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["orbbec/gemini-355"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> DepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["neura-robotics/maira7s"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> DepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["neura-robotics/maira6m"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

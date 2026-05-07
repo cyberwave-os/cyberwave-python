@@ -103,6 +103,9 @@ class TestDetectRuntime:
             ("yolov11s", "ultralytics"),
             ("YOLO-custom", "ultralytics"),
             ("yolov5m", "ultralytics"),
+            ("yolov8n-pose-onnx", "onnxruntime"),
+            ("yolov8n-onnx", "onnxruntime"),
+            ("custom-detector-onnx", "onnxruntime"),
             ("haar-face", "opencv"),
             ("background-subtraction-mog2", "opencv"),
             ("cascade-classifier", "opencv"),
@@ -151,6 +154,14 @@ class TestDetectRuntimeFromExtension:
 
 
 class TestDetectDevice:
+    @pytest.fixture(autouse=True)
+    def _reset_probe_cache(self):
+        from cyberwave.models import manager as mgr_mod
+
+        mgr_mod._CUDA_PROBE_CACHE = None
+        yield
+        mgr_mod._CUDA_PROBE_CACHE = None
+
     def test_cpu_when_torch_unavailable(self):
         with patch.dict("sys.modules", {"torch": None}):
             assert ModelManager._detect_device() == "cpu"
@@ -161,11 +172,59 @@ class TestDetectDevice:
         with patch.dict("sys.modules", {"torch": mock_torch}):
             assert ModelManager._detect_device() == "cpu"
 
-    def test_cuda_when_available(self):
+    def test_cuda_when_available_and_probe_ok(self):
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
         with patch.dict("sys.modules", {"torch": mock_torch}):
             assert ModelManager._detect_device() == "cuda:0"
+
+        mock_torch.nn.functional.conv2d.assert_called_once()
+        zeros_calls = mock_torch.zeros.call_args_list
+        assert len(zeros_calls) == 2, (
+            "probe must allocate exactly two tensors (input + weights)"
+        )
+        assert zeros_calls[0].args == (1, 3, 8, 8)
+        assert zeros_calls[1].args == (1, 3, 3, 3)
+        mock_torch.cuda.synchronize.assert_called_once()
+        mock_torch.nn.functional.conv2d.return_value.cpu.assert_called_once()
+
+    def test_cuda_is_available_itself_raising(self):
+        """If torch.cuda.is_available() raises, we must still return cpu."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.side_effect = RuntimeError("driver broken")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cpu"
+        mock_torch.nn.functional.conv2d.assert_not_called()
+
+    def test_cpu_when_conv2d_probe_fails(self, caplog):
+        """cuDNN with no engine for the host GPU → fall back to CPU + warn."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (6, 1)
+        mock_torch.cuda.get_device_name.return_value = "Quadro P3200"
+        mock_torch.cuda.get_arch_list.return_value = ["sm_75", "sm_90"]
+        mock_torch.backends.cudnn.version.return_value = 90100
+        mock_torch.nn.functional.conv2d.side_effect = RuntimeError(
+            "GET was unable to find an engine to execute this computation"
+        )
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            with caplog.at_level("WARNING", logger="cyberwave.models.manager"):
+                assert ModelManager._detect_device() == "cpu"
+
+        assert any(
+            "falling back to CPU" in rec.message for rec in caplog.records
+        ), "expected a warning explaining the CPU fallback"
+
+    def test_probe_result_is_cached(self):
+        """_detect_device must only run the conv2d probe once per process."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.nn.functional.conv2d.side_effect = RuntimeError("no engine")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            ModelManager._detect_device()
+            ModelManager._detect_device()
+            ModelManager._detect_device()
+        assert mock_torch.nn.functional.conv2d.call_count == 1
 
 
 # ---------------------------------------------------------------------------

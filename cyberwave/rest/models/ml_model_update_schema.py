@@ -37,12 +37,15 @@ class MLModelUpdateSchema(BaseModel):
     mapped_model_id: Optional[StrictStr] = None
     output_format: Optional[StrictStr] = None
     deployment: Optional[StrictStr] = None
+    is_trainable: Optional[StrictBool] = None
+    supported_level: Optional[StrictStr] = None
     can_take_video_as_input: Optional[StrictBool] = None
     can_take_audio_as_input: Optional[StrictBool] = None
     can_take_image_as_input: Optional[StrictBool] = None
     can_take_text_as_input: Optional[StrictBool] = None
     can_take_action_as_input: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
+    edge_runtime: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "edge_runtime"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -133,6 +136,16 @@ class MLModelUpdateSchema(BaseModel):
         if self.deployment is None and "deployment" in self.model_fields_set:
             _dict['deployment'] = None
 
+        # set to None if is_trainable (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_trainable is None and "is_trainable" in self.model_fields_set:
+            _dict['is_trainable'] = None
+
+        # set to None if supported_level (nullable) is None
+        # and model_fields_set contains the field
+        if self.supported_level is None and "supported_level" in self.model_fields_set:
+            _dict['supported_level'] = None
+
         # set to None if can_take_video_as_input (nullable) is None
         # and model_fields_set contains the field
         if self.can_take_video_as_input is None and "can_take_video_as_input" in self.model_fields_set:
@@ -158,6 +171,11 @@ class MLModelUpdateSchema(BaseModel):
         if self.can_take_action_as_input is None and "can_take_action_as_input" in self.model_fields_set:
             _dict['can_take_action_as_input'] = None
 
+        # set to None if edge_runtime (nullable) is None
+        # and model_fields_set contains the field
+        if self.edge_runtime is None and "edge_runtime" in self.model_fields_set:
+            _dict['edge_runtime'] = None
+
         return _dict
 
     @classmethod
@@ -180,11 +198,14 @@ class MLModelUpdateSchema(BaseModel):
             "mapped_model_id": obj.get("mapped_model_id"),
             "output_format": obj.get("output_format"),
             "deployment": obj.get("deployment"),
+            "is_trainable": obj.get("is_trainable"),
+            "supported_level": obj.get("supported_level"),
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),
             "can_take_image_as_input": obj.get("can_take_image_as_input"),
             "can_take_text_as_input": obj.get("can_take_text_as_input"),
-            "can_take_action_as_input": obj.get("can_take_action_as_input")
+            "can_take_action_as_input": obj.get("can_take_action_as_input"),
+            "edge_runtime": obj.get("edge_runtime")
         })
         return _obj
 

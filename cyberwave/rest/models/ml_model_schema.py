@@ -31,6 +31,7 @@ class MLModelSchema(BaseModel):
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
+    slug: Optional[StrictStr] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[StrictStr] = None
@@ -44,6 +45,8 @@ class MLModelSchema(BaseModel):
     mapped_model_id: Optional[StrictStr] = None
     output_format: Optional[StrictStr] = None
     deployment: StrictStr
+    is_trainable: StrictBool
+    supported_level: StrictStr
     can_take_video_as_input: StrictBool
     can_take_audio_as_input: StrictBool
     can_take_image_as_input: StrictBool
@@ -51,7 +54,14 @@ class MLModelSchema(BaseModel):
     can_take_action_as_input: StrictBool
     is_edge_compatible: StrictBool
     is_cloud_compatible: StrictBool
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible"]
+    playground_kind: Optional[StrictStr] = None
+    output_family: Optional[StrictStr] = None
+    allowed_structured_tasks: Optional[List[StrictStr]] = None
+    execution_surfaces: Optional[List[StrictStr]] = None
+    sdk_load_id: Optional[StrictStr] = None
+    edge_catalog_id: Optional[StrictStr] = None
+    edge_runtime: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -92,6 +102,11 @@ class MLModelSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -112,6 +127,31 @@ class MLModelSchema(BaseModel):
         if self.output_format is None and "output_format" in self.model_fields_set:
             _dict['output_format'] = None
 
+        # set to None if playground_kind (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_kind is None and "playground_kind" in self.model_fields_set:
+            _dict['playground_kind'] = None
+
+        # set to None if output_family (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_family is None and "output_family" in self.model_fields_set:
+            _dict['output_family'] = None
+
+        # set to None if sdk_load_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.sdk_load_id is None and "sdk_load_id" in self.model_fields_set:
+            _dict['sdk_load_id'] = None
+
+        # set to None if edge_catalog_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.edge_catalog_id is None and "edge_catalog_id" in self.model_fields_set:
+            _dict['edge_catalog_id'] = None
+
+        # set to None if edge_runtime (nullable) is None
+        # and model_fields_set contains the field
+        if self.edge_runtime is None and "edge_runtime" in self.model_fields_set:
+            _dict['edge_runtime'] = None
+
         return _dict
 
     @classmethod
@@ -127,6 +167,7 @@ class MLModelSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),
+            "slug": obj.get("slug"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),
@@ -140,13 +181,22 @@ class MLModelSchema(BaseModel):
             "mapped_model_id": obj.get("mapped_model_id"),
             "output_format": obj.get("output_format"),
             "deployment": obj.get("deployment"),
+            "is_trainable": obj.get("is_trainable"),
+            "supported_level": obj.get("supported_level"),
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),
             "can_take_image_as_input": obj.get("can_take_image_as_input"),
             "can_take_text_as_input": obj.get("can_take_text_as_input"),
             "can_take_action_as_input": obj.get("can_take_action_as_input"),
             "is_edge_compatible": obj.get("is_edge_compatible"),
-            "is_cloud_compatible": obj.get("is_cloud_compatible")
+            "is_cloud_compatible": obj.get("is_cloud_compatible"),
+            "playground_kind": obj.get("playground_kind"),
+            "output_family": obj.get("output_family"),
+            "allowed_structured_tasks": obj.get("allowed_structured_tasks"),
+            "execution_surfaces": obj.get("execution_surfaces"),
+            "sdk_load_id": obj.get("sdk_load_id"),
+            "edge_catalog_id": obj.get("edge_catalog_id"),
+            "edge_runtime": obj.get("edge_runtime")
         })
         return _obj
 

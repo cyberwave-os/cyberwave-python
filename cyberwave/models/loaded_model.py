@@ -69,9 +69,15 @@ class LoadedModel:
         *,
         confidence: float = 0.5,
         classes: list[str] | None = None,
+        twin_uuid: str | None = None,
         **kwargs: Any,
     ) -> PredictionResult:
-        """Run inference on *input_data*."""
+        """Run inference on *input_data*.
+
+        Args:
+            twin_uuid: Optional override to route published detections to a
+                specific twin instead of the default one bound to the data bus.
+        """
         t0 = time.monotonic()
         result = self._runtime.predict(
             self._model_handle,
@@ -90,8 +96,57 @@ class LoadedModel:
                 f"{d.label} {d.confidence:.0%}" for d in result.detections
             )
             logger.info("[%s] %d detection(s): %s", self._name, len(result.detections), summary)
-            self._publish_detections(result, input_data)
+
+        # Publish every inference — including empty batches — so overlay
+        # consumers (e.g. the camera driver's detection cache) see a
+        # heartbeat at the worker's inference cadence and don't fall into
+        # their staleness cutoff when the scene transiently has nothing
+        # to detect.  Empty payloads naturally render as "no box" without
+        # phantom last-known overlays lingering past object loss.
+        self._publish_detections(result, input_data, twin_uuid=twin_uuid)
         return result
+
+    def warm_up(
+        self,
+        input_shape: tuple[int, ...] | None = None,
+        *,
+        confidence: float = 0.5,
+    ) -> tuple[float, float]:
+        """Run two dummy inferences to warm up JIT / allocations.
+
+        Returns ``(cold_ms, warm_ms)`` — the latency of the first and
+        second inference passes on a zero-filled input.
+        """
+        import numpy as np
+
+        shape = input_shape or (640, 640, 3)
+        dummy = np.zeros(shape, dtype=np.uint8)
+
+        t0 = time.monotonic()
+        try:
+            self._runtime.predict(
+                self._model_handle, dummy, confidence=confidence,
+            )
+        except Exception:
+            logger.debug("Warm-up cold pass raised (non-fatal)", exc_info=True)
+        cold_ms = (time.monotonic() - t0) * 1000.0
+
+        t1 = time.monotonic()
+        try:
+            self._runtime.predict(
+                self._model_handle, dummy, confidence=confidence,
+            )
+        except Exception:
+            logger.debug("Warm-up hot pass raised (non-fatal)", exc_info=True)
+        warm_ms = (time.monotonic() - t1) * 1000.0
+
+        logger.info(
+            "[%s] Warm-up complete: cold=%.1f ms, warm=%.1f ms",
+            self._name,
+            cold_ms,
+            warm_ms,
+        )
+        return cold_ms, warm_ms
 
     def inference_stats(self) -> dict[str, Any]:
         """Return inference latency statistics for monitoring.
@@ -117,7 +172,13 @@ class LoadedModel:
             "p99_ms": round(p99, 2),
         }
 
-    def _publish_detections(self, result: PredictionResult, input_data: Any) -> None:
+    def _publish_detections(
+        self,
+        result: PredictionResult,
+        input_data: Any,
+        *,
+        twin_uuid: str | None = None,
+    ) -> None:
         """Publish detection results via Zenoh so the driver can draw overlays."""
         if self._data_bus is None:
             return
@@ -150,7 +211,7 @@ class LoadedModel:
 
             raw_bytes = _json.dumps(payload_dict, separators=(",", ":")).encode()
             topic = f"detections/{self._runtime.name}"
-            self._data_bus.publish_raw(topic, raw_bytes)
+            self._data_bus.publish_raw(topic, raw_bytes, twin_uuid=twin_uuid)
         except Exception:
             logger.debug("Failed to publish detections via data bus", exc_info=True)
 

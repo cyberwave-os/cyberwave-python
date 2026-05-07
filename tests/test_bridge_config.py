@@ -17,12 +17,33 @@ class TestBridgeConfig:
             cfg = BridgeConfig()
             assert cfg.enabled is False
             assert cfg.outbound_channels == ["model_output", "event", "model_health"]
-            assert cfg.inbound_topics == ["commands/sync_workflows"]
+            assert cfg.inbound_topics == ["commands/sync_workflows", "alert"]
             assert cfg.zenoh_key_prefix == "cw"
             assert cfg.mqtt_topic_prefix == ""
             assert cfg.queue_max_bytes == 50 * 1024 * 1024
             assert cfg.drain_batch_size == 64
             assert cfg.mqtt_qos == 1
+
+    def test_frames_channels_excluded_from_default_outbound(self):
+        """Privacy boundary: raw camera ``frames/*`` channels MUST stay local.
+
+        The privacy-preserving security pipeline (CYB-1716) and similar
+        scenarios depend on camera frames never leaking off-device by
+        default. Forwarding raw video over MQTT is also impractical for
+        bandwidth reasons. Operators can opt in explicitly via
+        ``CYBERWAVE_BRIDGE_OUTBOUND_CHANNELS`` if they really want it.
+        """
+        with patch.dict(os.environ, {}, clear=True):
+            for key in list(os.environ):
+                if key.startswith("CYBERWAVE_BRIDGE") or key.startswith("CYBERWAVE_MQTT"):
+                    os.environ.pop(key, None)
+            cfg = BridgeConfig()
+            for channel in cfg.outbound_channels:
+                assert not channel.startswith("frames"), (
+                    f"Default outbound channels must not include any 'frames*' "
+                    f"entry; got {cfg.outbound_channels!r}. Forwarding raw "
+                    "frames over MQTT breaks the privacy-by-design boundary."
+                )
 
     def test_enabled_from_env(self):
         with patch.dict(os.environ, {"CYBERWAVE_BRIDGE_ENABLED": "true"}):

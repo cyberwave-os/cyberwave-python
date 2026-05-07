@@ -3742,9 +3742,9 @@
     "registry_id": "SZ-DJI-Technology/DJI-Mini-3-Pro",
     "registry_id_alias": null
   },
-  "SZ-DJI-Technology/DJI-Mini-4-Pro": {
+  "SZ-DJI-Technology/DJI-Mini-4-Pro-old": {
     "uuid": "39bc32a4-b0fe-422f-8b20-ce8d9af63fa4",
-    "name": "DJI Mini 4 Pro",
+    "name": "DJI Mini 4 Pro old",
     "capabilities": {
       "has_joints": false,
       "can_actuate": false,
@@ -3790,13 +3790,16 @@
           "parameters": {
             "width": 4096,
             "height": 2160,
-            "update_rate": 30.0,
-            "fovy": 60.0
+            "update_rate": 30,
+            "fov_degrees": 60,
+            "fovy": 60,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
           }
         }
       ]
     },
-    "registry_id": "SZ-DJI-Technology/DJI-Mini-4-Pro",
+    "registry_id": "SZ-DJI-Technology/DJI-Mini-4-Pro-old",
     "registry_id_alias": null
   },
   "Holybro/PX4Vision": {
@@ -4148,9 +4151,9 @@
           "parent_link": "base_link",
           "offset": {
             "position": {
-              "x": -0.0583,
-              "y": 0,
-              "z": -0.01
+              "x": 0.059,
+              "y": -0.0023,
+              "z": 0.2023049285888672
             },
             "rotation": {
               "w": 0.5,
@@ -5161,7 +5164,7 @@
     "registry_id": "pollen-robotics/reachy-mini",
     "registry_id_alias": null
   },
-  "sz-dji-technology/DJI-Mavic-3-Enterprise": {
+  "dji/mavic-3-enterprise": {
     "uuid": "e1aac6c3-e125-428c-988b-5f182040ee0f",
     "name": "DJI Mavic 3 Enterprise",
     "capabilities": {
@@ -5195,9 +5198,9 @@
           "parent_link": "base_link",
           "offset": {
             "position": {
-              "x": 0,
-              "y": -0.1836,
-              "z": 0.0856
+              "x": 0.04780001910034407,
+              "y": -0.005199824420760973,
+              "z": -0.031240998744964596
             },
             "rotation": {
               "w": 0.6986,
@@ -5217,7 +5220,7 @@
         }
       ]
     },
-    "registry_id": "sz-dji-technology/DJI-Mavic-3-Enterprise",
+    "registry_id": "dji/mavic-3-enterprise",
     "registry_id_alias": null
   },
   "sam-wilcocks-workspace/d500-lidar-2": {
@@ -5277,6 +5280,211 @@
       ]
     },
     "registry_id": "sam-wilcocks-workspace/d500-lidar-2",
+    "registry_id_alias": null
+  },
+  "cyberwave/aloha-2": {
+    "uuid": "d7797fb9-fe7e-47a4-97ba-4391ad163b51",
+    "name": "ALOHA",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": true,
+      "manipulator_count": 2,
+      "payload_capacity_kg": 0.75,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "left_wrist",
+          "name": "left_wrist",
+          "type": "rgb",
+          "model": null,
+          "parent_link": "left/gripper_base",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
+          }
+        },
+        {
+          "id": "right_wrist",
+          "name": "right_wrist",
+          "type": "rgb",
+          "model": null,
+          "parent_link": "right/gripper_base",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
+          }
+        }
+      ]
+    },
+    "registry_id": "cyberwave/aloha-2",
+    "registry_id_alias": null
+  },
+  "neura-robotics/maira7s": {
+    "uuid": "312228e4-4a02-496e-897c-58bdc54ad76b",
+    "name": "Maira7s",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 15,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "semi_autonomous",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "front-camera",
+          "name": "front-camera",
+          "type": "depth",
+          "model": null,
+          "parent_link": "maira7S_link6",
+          "offset": {
+            "position": {
+              "x": 1.8182365259938882e-07,
+              "y": 0.06749981816551626,
+              "z": -0.0495058973301253
+            },
+            "rotation": {
+              "w": -0.03225127129856878,
+              "x": 0.012148757173388258,
+              "y": -0.704348638707772,
+              "z": 0.7089513159232281
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60,
+            "min_depth": 0.1,
+            "max_depth": 10
+          }
+        }
+      ]
+    },
+    "registry_id": "neura-robotics/maira7s",
+    "registry_id_alias": null
+  },
+  "neura-robotics/maira6m": {
+    "uuid": "14ae3861-b3ae-4892-864e-6f62bf05f19e",
+    "name": "Maira6M",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 6,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "semi_autonomous",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "front camera",
+          "name": "front camera",
+          "type": "depth",
+          "model": null,
+          "parent_link": "maira6M_link6",
+          "offset": {
+            "position": {
+              "x": 0.0830000609746448,
+              "y": -0.030800060986276696,
+              "z": -0.016606333340014955
+            },
+            "rotation": {
+              "w": -0.000751268727419015,
+              "x": 0.017948706115832602,
+              "y": -0.7087487033561474,
+              "z": 0.7052513346566929
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60,
+            "min_depth": 0.1,
+            "max_depth": 10
+          }
+        }
+      ]
+    },
+    "registry_id": "neura-robotics/maira6m",
     "registry_id_alias": null
   }
 }

@@ -61,17 +61,37 @@ LATEST_VALUE_CHANNELS: frozenset[str] = frozenset(
 COMMAND_CHANNELS: frozenset[str] = frozenset(
     {
         "commands",  # wildcard parent — subscribe with build_wildcard(channel="commands")
-        "commands/velocity",        # {linear_x, linear_y, linear_z, angular_x, angular_y, angular_z}
-        "commands/joint_positions", # {positions: [float], names: [str], velocities?: [float]}
+        "commands/velocity",  # {linear_x, linear_y, linear_z, angular_x, angular_y, angular_z}
+        "commands/joint_positions",  # {positions: [float], names: [str], velocities?: [float]}
         "commands/end_effector_pose",  # {x, y, z, qx, qy, qz, qw}
-        "commands/gripper",         # {opening: float, force?: float}
-        "commands/navigate",        # {goal_type: "goto"|"path", position?: {x,y,z}, waypoints?: [...]}
-        "commands/pose",            # {pose: "stand"|"sit"|"recovery"}
-        "commands/led",             # {action: "toggle"|"on"|"off", color?: str}
+        "commands/gripper",  # {opening: float, force?: float}
+        "commands/navigate",  # {goal_type: "goto"|"path", position?: {x,y,z}, waypoints?: [...]}
+        "commands/pose",  # {pose: "stand"|"sit"|"recovery"}
+        "commands/led",  # {action: "toggle"|"on"|"off", color?: str}
     }
 )
 
-WELL_KNOWN_CHANNELS: frozenset[str] = STREAM_CHANNELS | LATEST_VALUE_CHANNELS | COMMAND_CHANNELS
+WELL_KNOWN_CHANNELS: frozenset[str] = (
+    STREAM_CHANNELS | LATEST_VALUE_CHANNELS | COMMAND_CHANNELS
+)
+
+# ── Privacy / frame-filter pipeline ─────────────────────────────────
+# Wire-contract channel for the worker-processed frame filter (see
+# ``docs.cyberwave.com/edge/drivers/frame-filters``). The generic-camera
+# driver subscribes to this channel only when the per-twin
+# ``frame_filter_enabled`` metadata flag is true; workers publish
+# anonymised / redacted full frames to it for substitution into the
+# WebRTC stream. Per-twin isolation is automatic because the DataBus
+# injects the twin UUID into the Zenoh key.
+FILTERED_FRAME_CHANNEL: str = "frames/filtered"
+
+# Wire-contract channel for non-substituting overlay metadata (boxes,
+# labels, style hints) — JSON, not pixels. The camera driver subscribes
+# to this channel unconditionally and composites the overlay onto the
+# frame before WebRTC encode, regardless of ``frame_filter_enabled``.
+# This is the path the ``annotate`` workflow node publishes to so
+# annotation no longer depends on the privacy/substitution gate.
+FRAME_OVERLAY_CHANNEL: str = "frames/overlay"
 
 # ── Validation patterns ─────────────────────────────────────────────
 

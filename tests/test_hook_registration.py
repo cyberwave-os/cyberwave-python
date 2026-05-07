@@ -10,7 +10,7 @@ import threading
 
 import pytest
 
-from cyberwave.workers.hooks import HookRegistration, HookRegistry
+from cyberwave.workers.hooks import WILDCARD_SENSOR, HookRegistration, HookRegistry
 
 
 # ── Fixtures ──────────────────────────────────────────────────────
@@ -27,17 +27,34 @@ def registry() -> HookRegistry:
 
 
 def test_on_frame_registers_hook(registry: HookRegistry) -> None:
+    """Without an explicit ``sensor=``, ``on_frame`` registers a wildcard hook
+    that matches whatever sensor name the driver publishes under."""
+
     @registry.on_frame(TWIN_UUID)
     def handler(sample, ctx):
         pass
 
     assert len(registry.hooks) == 1
     h = registry.hooks[0]
-    assert h.channel == "frames/default"
+    assert h.channel == "frames"
     assert h.twin_uuid == TWIN_UUID
     assert h.hook_type == "frame"
-    assert h.sensor_name == "default"
+    assert h.sensor_name == WILDCARD_SENSOR
+    assert h.is_wildcard_sensor
     assert h.callback is handler
+
+
+def test_on_frame_explicit_wildcard(registry: HookRegistry) -> None:
+    """``sensor="*"`` is equivalent to omitting the kwarg."""
+
+    @registry.on_frame(TWIN_UUID, sensor="*")
+    def handler(sample, ctx):
+        pass
+
+    h = registry.hooks[0]
+    assert h.channel == "frames"
+    assert h.sensor_name == WILDCARD_SENSOR
+    assert h.is_wildcard_sensor
 
 
 def test_on_frame_custom_sensor(registry: HookRegistry) -> None:
@@ -48,6 +65,7 @@ def test_on_frame_custom_sensor(registry: HookRegistry) -> None:
     h = registry.hooks[0]
     assert h.channel == "frames/front"
     assert h.sensor_name == "front"
+    assert not h.is_wildcard_sensor
 
 
 def test_on_frame_with_fps(registry: HookRegistry) -> None:
@@ -82,7 +100,8 @@ def test_on_depth_registers_hook(registry: HookRegistry) -> None:
         pass
 
     h = registry.hooks[0]
-    assert h.channel == "depth/default"
+    assert h.channel == "depth"
+    assert h.sensor_name == WILDCARD_SENSOR
     assert h.hook_type == "depth"
 
 
@@ -101,7 +120,8 @@ def test_on_audio_registers_hook(registry: HookRegistry) -> None:
         pass
 
     h = registry.hooks[0]
-    assert h.channel == "audio/default"
+    assert h.channel == "audio"
+    assert h.sensor_name == WILDCARD_SENSOR
     assert h.hook_type == "audio"
 
 
@@ -111,7 +131,8 @@ def test_on_pointcloud_registers_hook(registry: HookRegistry) -> None:
         pass
 
     h = registry.hooks[0]
-    assert h.channel == "pointcloud/default"
+    assert h.channel == "pointcloud"
+    assert h.sensor_name == WILDCARD_SENSOR
     assert h.hook_type == "pointcloud"
 
 
@@ -221,7 +242,8 @@ def test_on_lidar_registers_hook(registry: HookRegistry) -> None:
         pass
 
     h = registry.hooks[0]
-    assert h.channel == "lidar/default"
+    assert h.channel == "lidar"
+    assert h.sensor_name == WILDCARD_SENSOR
     assert h.hook_type == "lidar"
 
 
@@ -303,11 +325,11 @@ _STATELESS_DECORATORS = [
 ]
 
 _SENSOR_DECORATORS = [
-    ("on_frame", "frames/default", "frame"),
-    ("on_depth", "depth/default", "depth"),
-    ("on_audio", "audio/default", "audio"),
-    ("on_pointcloud", "pointcloud/default", "pointcloud"),
-    ("on_lidar", "lidar/default", "lidar"),
+    ("on_frame", "frames", "frame"),
+    ("on_depth", "depth", "depth"),
+    ("on_audio", "audio", "audio"),
+    ("on_pointcloud", "pointcloud", "pointcloud"),
+    ("on_lidar", "lidar", "lidar"),
 ]
 
 
@@ -454,7 +476,7 @@ def test_hook_registration_repr(registry: HookRegistry) -> None:
         pass
 
     r = repr(registry.hooks[0])
-    assert "frames/default" in r
+    assert "'frames'" in r
     assert TWIN_UUID in r
     assert "frame" in r
     assert "fps" in r

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import cyberwave.workers.runtime as worker_runtime
 from cyberwave.workers.hooks import HookRegistry
 from cyberwave.workers.runtime import WorkerRuntime
 
@@ -28,6 +29,10 @@ class FakeCw:
         if self._data_bus is None:
             raise Exception("Data backend not available")
         return self._data_bus
+
+    @property
+    def on_schedule(self):
+        return self._hook_registry.on_schedule
 
 
 @pytest.fixture(autouse=True)
@@ -150,7 +155,11 @@ def test_runtime_hook_dispatch_calls_callback():
     payload, ctx = call_log[0]
     assert payload == b"raw-frame-bytes"
     assert ctx.timestamp == 12345.0
-    assert ctx.channel == "frames/default"
+    # Wildcard hook channel is just "frames"; the actual wire key would
+    # travel on Sample.channel, but the MagicMock doesn't set it, so the
+    # runtime falls back to the "default" sensor_name placeholder.
+    assert ctx.channel == "frames"
+    assert ctx.sensor_name == "default"
     assert ctx.twin_uuid == TEST_TWIN_UUID
     assert ctx.metadata == {"width": 640}
 
@@ -240,3 +249,116 @@ def test_runtime_drop_oldest_under_backpressure():
 
     # frame-1 was processed first; frame-2 was replaced by frame-3
     assert received_payloads == [b"frame-1", b"frame-3"]
+
+
+def test_runtime_dispatches_generated_schedule_manifest(tmp_path, monkeypatch):
+    monkeypatch.setattr(worker_runtime, "_cron_matches", lambda _cron, _now: True)
+    fake_cw = FakeCw()
+    fake_cw.scheduled_run = threading.Event()
+    fake_cw.schedule_calls = []
+    (tmp_path / "wf_scheduled.py").write_text(
+        "SCHEDULE_TRIGGERS = ["
+        "{'node_uuid': 'schedule-node', 'cron': '* * * * *', 'timezone': 'UTC'}"
+        "]\n"
+        "def run(client=None):\n"
+        "    client.schedule_calls.append('schedule-node')\n"
+        "    client.scheduled_run.set()\n"
+    )
+
+    runtime = WorkerRuntime(fake_cw)
+    assert runtime.load(str(tmp_path)) == 1
+    runtime.start()
+
+    try:
+        assert fake_cw.scheduled_run.wait(timeout=2.0)
+        assert fake_cw.schedule_calls == ["schedule-node"]
+    finally:
+        runtime.stop()
+
+
+def test_runtime_dispatches_on_schedule_hook(tmp_path, monkeypatch):
+    monkeypatch.setattr(worker_runtime, "_cron_matches", lambda _cron, _now: True)
+    fake_cw = FakeCw()
+    fake_cw.scheduled_run = threading.Event()
+    fake_cw.schedule_contexts = []
+    (tmp_path / "scheduled_worker.py").write_text(
+        "@cw.on_schedule('* * * * *', timezone='UTC')\n"
+        "def every_minute(ctx):\n"
+        "    cw.schedule_contexts.append(ctx)\n"
+        "    cw.scheduled_run.set()\n"
+    )
+
+    runtime = WorkerRuntime(fake_cw)
+    assert runtime.load(str(tmp_path)) == 1
+    runtime.start()
+
+    try:
+        assert fake_cw.scheduled_run.wait(timeout=2.0)
+        assert len(fake_cw.schedule_contexts) == 1
+        ctx = fake_cw.schedule_contexts[0]
+        assert ctx.channel == "schedule"
+        assert ctx.metadata["cron"] == "* * * * *"
+        assert ctx.metadata["timezone"] == "UTC"
+    finally:
+        runtime.stop()
+
+
+def test_runtime_stop_waits_for_scheduled_run_before_disconnect(tmp_path, monkeypatch):
+    monkeypatch.setattr(worker_runtime, "_cron_matches", lambda _cron, _now: True)
+    fake_cw = FakeCw()
+    fake_cw.scheduled_run_started = threading.Event()
+    fake_cw.release_scheduled_run = threading.Event()
+    fake_cw.disconnect_called = threading.Event()
+
+    def disconnect():
+        fake_cw.disconnect_called.set()
+
+    fake_cw.disconnect = disconnect
+    (tmp_path / "scheduled_worker.py").write_text(
+        "@cw.on_schedule('* * * * *', timezone='UTC')\n"
+        "def every_minute(ctx):\n"
+        "    cw.scheduled_run_started.set()\n"
+        "    cw.release_scheduled_run.wait(timeout=2.0)\n"
+    )
+
+    runtime = WorkerRuntime(fake_cw)
+    assert runtime.load(str(tmp_path)) == 1
+    runtime.start()
+    assert fake_cw.scheduled_run_started.wait(timeout=2.0)
+
+    stop_returned = threading.Event()
+
+    def stop_runtime():
+        runtime.stop()
+        stop_returned.set()
+
+    stop_thread = threading.Thread(target=stop_runtime, daemon=True)
+    stop_thread.start()
+
+    assert not fake_cw.disconnect_called.wait(timeout=0.2)
+    assert not stop_returned.is_set()
+
+    fake_cw.release_scheduled_run.set()
+    assert stop_returned.wait(timeout=2.0)
+    assert fake_cw.disconnect_called.is_set()
+    stop_thread.join(timeout=1.0)
+
+
+def test_runtime_start_count_includes_schedule_hooks(tmp_path, caplog):
+    fake_cw = FakeCw()
+    (tmp_path / "scheduled_worker.py").write_text(
+        "@cw.on_schedule('* * * * *', timezone='UTC')\n"
+        "def every_minute(ctx):\n"
+        "    pass\n"
+    )
+
+    runtime = WorkerRuntime(fake_cw)
+    assert runtime.load(str(tmp_path)) == 1
+
+    with caplog.at_level("INFO", logger="cyberwave.workers.runtime"):
+        runtime.start()
+
+    try:
+        assert "Worker runtime started with 1 hook(s)" in caplog.text
+    finally:
+        runtime.stop()

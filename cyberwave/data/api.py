@@ -108,6 +108,7 @@ class DataBus:
         sample: Any,
         *,
         metadata: dict[str, Any] | None = None,
+        twin_uuid: str | None = None,
     ) -> None:
         """Publish a typed sample to *channel*.
 
@@ -126,9 +127,14 @@ class DataBus:
         ``seq`` are updated per sample.  **Metadata is bound at template
         creation time**; passing a different *metadata* on later calls to
         the same channel is a no-op (a warning is logged).
+
+        Args:
+            twin_uuid: Optional override to route the publish to a different
+                twin than the one this bus is scoped to.
         """
+        effective_twin = twin_uuid if twin_uuid is not None else self._twin_uuid
         key = build_key(
-            self._twin_uuid,
+            effective_twin,
             channel,
             self._sensor_name,
             prefix=self._key_prefix,
@@ -142,15 +148,22 @@ class DataBus:
         self,
         channel: str,
         payload: bytes,
+        *,
+        twin_uuid: str | None = None,
     ) -> None:
         """Publish raw *payload* bytes to *channel* without wire-format headers.
 
         Use this for payloads that are already serialized (e.g. JSON detection
         results) where the standard header + envelope would be unexpected by
         the subscriber.
+
+        Args:
+            twin_uuid: Optional override to route the publish to a different
+                twin than the one this bus is scoped to.
         """
+        effective_twin = twin_uuid if twin_uuid is not None else self._twin_uuid
         key = build_key(
-            self._twin_uuid,
+            effective_twin,
             channel,
             self._sensor_name,
             prefix=self._key_prefix,

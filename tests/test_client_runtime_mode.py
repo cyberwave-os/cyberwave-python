@@ -1,9 +1,42 @@
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from cyberwave import Cyberwave
 from cyberwave.constants import SOURCE_TYPE_EDGE, SOURCE_TYPE_SIM
 from cyberwave.twin import LocomoteTwin
+
+
+@pytest.fixture(autouse=True)
+def _stub_manager_modules(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResourceManager:
+        def __init__(self, api_client, client=None):
+            self.api = api_client
+            self.client = client
+
+    class _FakeWorkflowManager:
+        def __init__(self, client):
+            self.client = client
+
+    fake_resources = SimpleNamespace(
+        WorkspaceManager=_FakeResourceManager,
+        ProjectManager=_FakeResourceManager,
+        EnvironmentManager=_FakeResourceManager,
+        AttachmentManager=_FakeResourceManager,
+        AssetManager=_FakeResourceManager,
+        DatasetManager=_FakeResourceManager,
+        EdgeManager=_FakeResourceManager,
+        TwinManager=_FakeResourceManager,
+    )
+    fake_workflows = SimpleNamespace(
+        WorkflowManager=_FakeWorkflowManager,
+        WorkflowRunManager=_FakeWorkflowManager,
+    )
+
+    monkeypatch.setitem(sys.modules, "cyberwave.resources", fake_resources)
+    monkeypatch.setitem(sys.modules, "cyberwave.workflows", fake_workflows)
 
 
 def test_client_defaults_to_live_mode() -> None:
@@ -70,6 +103,22 @@ def test_affect_updates_state_source_type_to_match_runtime() -> None:
     assert client.config.source_type == SOURCE_TYPE_EDGE
 
 
+def test_affect_same_runtime_keeps_existing_mqtt_client() -> None:
+    with patch("cyberwave.mqtt.mqtt.Client"):
+        client = Cyberwave(
+            base_url="http://localhost:8000",
+            api_key="test_key",
+            mode="simulation",
+        )
+        mqtt_client = client.mqtt
+        mqtt_client.disconnect = MagicMock()
+
+        client.affect("simulation")
+
+        assert client.mqtt is mqtt_client
+        mqtt_client.disconnect.assert_not_called()
+
+
 def test_affect_changes_emitted_command_and_state_source_types() -> None:
     with patch("cyberwave.mqtt.mqtt.Client"):
         client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
@@ -129,3 +178,22 @@ def test_rest_client_injects_authorization_for_generated_public_endpoint() -> No
 
     headers = client._api_client.rest_client.request.call_args.kwargs["headers"]
     assert headers["Authorization"] == "Bearer test_key"
+
+
+def test_configure_rebuilds_managers_against_new_rest_client() -> None:
+    client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
+
+    original_api = client.api
+    original_mlmodels_client = client.mlmodels
+    original_assets_api = client.assets.api
+
+    client.configure(base_url="http://localhost:9000", api_key="new_key")
+
+    assert client.api is not original_api
+    assert client.mlmodels is not original_mlmodels_client
+    assert client.mlmodels._api_client is client._api_client
+    assert client.models._mlmodels_client is client.mlmodels
+    # Resource managers must also follow the rebuilt DefaultApi instead of
+    # keeping the stale instance from __init__.
+    assert client.assets.api is client.api
+    assert client.assets.api is not original_assets_api

@@ -592,6 +592,15 @@ class Twin:
         )
 
     @property
+    def slug(self) -> str:
+        """Get the twin's unified slug (e.g. ``acme/twins/arm-station-1``)."""
+        if hasattr(self._data, "slug"):
+            return str(self._data.slug or "")
+        if isinstance(self._data, dict):
+            return str(self._data.get("slug", ""))
+        return ""
+
+    @property
     def asset_id(self) -> str:
         """Get asset ID"""
         return (

@@ -55,7 +55,8 @@ class TwinCreateSchema(BaseModel):
     attach_offset_rotation_y: Optional[Union[StrictFloat, StrictInt]] = None
     attach_offset_rotation_z: Optional[Union[StrictFloat, StrictInt]] = None
     fixed_base: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "kinematics_override", "joint_calibration", "metadata", "controller_policy_uuid", "attach_to_twin_uuid", "attach_to_link", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base"]
+    supported_simulation_backends: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "kinematics_override", "joint_calibration", "metadata", "controller_policy_uuid", "attach_to_twin_uuid", "attach_to_link", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -236,6 +237,11 @@ class TwinCreateSchema(BaseModel):
         if self.fixed_base is None and "fixed_base" in self.model_fields_set:
             _dict['fixed_base'] = None
 
+        # set to None if supported_simulation_backends (nullable) is None
+        # and model_fields_set contains the field
+        if self.supported_simulation_backends is None and "supported_simulation_backends" in self.model_fields_set:
+            _dict['supported_simulation_backends'] = None
+
         return _dict
 
     @classmethod
@@ -275,7 +281,8 @@ class TwinCreateSchema(BaseModel):
             "attach_offset_rotation_x": obj.get("attach_offset_rotation_x"),
             "attach_offset_rotation_y": obj.get("attach_offset_rotation_y"),
             "attach_offset_rotation_z": obj.get("attach_offset_rotation_z"),
-            "fixed_base": obj.get("fixed_base")
+            "fixed_base": obj.get("fixed_base"),
+            "supported_simulation_backends": obj.get("supported_simulation_backends")
         })
         return _obj
 

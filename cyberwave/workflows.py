@@ -397,10 +397,15 @@ class WorkflowManager:
         return [Workflow(self._client, item) for item in items]
 
     def get(self, workflow_id: str) -> Workflow:
-        """Get a single workflow by UUID.
+        """Get a single workflow by UUID or unified slug.
+
+        When *workflow_id* looks like a UUID it is used directly. Otherwise
+        the method tries the ``/by-slug`` endpoint (full unified slug such as
+        ``acme/workflows/pick-and-place``), then falls back to the legacy
+        ``/{uuid}`` path.
 
         Args:
-            workflow_id: The workflow UUID.
+            workflow_id: UUID or full unified slug.
 
         Returns:
             A :class:`Workflow` instance.
@@ -408,22 +413,38 @@ class WorkflowManager:
         data = _get_workflow(self._client, workflow_id)
         return Workflow(self._client, data)
 
-    def get_by_slug(self, workspace_id: str, slug: str) -> Optional[Workflow]:
-        """Get a workflow by workspace-scoped slug.
+    def get_by_slug(self, slug: str, workspace_id: Optional[str] = None) -> Optional[Workflow]:
+        """Get a workflow by its unified slug.
+
+        Supports two calling conventions:
+
+        1. **Full unified slug** (recommended):
+           ``cw.workflows.get_by_slug("acme/workflows/pick-and-place")``
+        2. **Legacy workspace-scoped slug** (backward-compatible):
+           ``cw.workflows.get_by_slug("pick-and-place", workspace_id="ws-uuid")``
+
+        When a *workspace_id* is provided the method uses the list endpoint
+        with a ``slug`` query filter (legacy behaviour).  Otherwise it hits
+        the dedicated ``GET /workflows/by-slug`` endpoint.
 
         Args:
-            workspace_id: Workspace UUID that scopes the slug lookup.
-            slug: Workflow slug unique within the workspace.
+            slug: Full unified slug or legacy workspace-scoped slug.
+            workspace_id: Optional workspace UUID for the legacy lookup.
 
         Returns:
             A :class:`Workflow` instance if found, otherwise ``None``.
         """
-        items = _list_workflows(
-            self._client, workspace_id=workspace_id, slug=slug
-        )
-        if not items:
+        if workspace_id:
+            items = _list_workflows(
+                self._client, workspace_id=workspace_id, slug=slug
+            )
+            if not items:
+                return None
+            return Workflow(self._client, items[0])
+        data = _get_workflow_by_slug(self._client, slug)
+        if data is None:
             return None
-        return Workflow(self._client, items[0])
+        return Workflow(self._client, data)
 
     def trigger(
         self,
@@ -433,13 +454,20 @@ class WorkflowManager:
         """Trigger a workflow run.
 
         Args:
-            workflow_id: UUID of the workflow to trigger.
+            workflow_id: UUID or unified slug of the workflow to trigger.
+                When a slug is provided (e.g.
+                ``"acme/workflows/pick-and-place"``), the method first
+                resolves the workflow UUID via the ``/by-slug`` endpoint.
             inputs: Payload passed to the workflow.
 
         Returns:
             A :class:`WorkflowRun` representing the started execution.
         """
-        data = _trigger_workflow(self._client, workflow_id, inputs)
+        resolved_id = workflow_id
+        if not _is_uuid(workflow_id) and "/" in workflow_id:
+            wf = self.get(workflow_id)
+            resolved_id = wf.uuid
+        data = _trigger_workflow(self._client, resolved_id, inputs)
         return WorkflowRun(self._client, data)
 
     def is_running(self, workflow_id: str) -> bool:
@@ -549,6 +577,16 @@ def _list_workflows(
         raise CyberwaveError(f"Failed to list workflows: {e}") from e
 
 
+def _is_uuid(value: str) -> bool:
+    """Check whether *value* looks like a UUID."""
+    try:
+        import uuid as _uuid_mod
+        _uuid_mod.UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
 def _get_workflow(client: "Cyberwave", workflow_id: str) -> Any:
     try:
         _param = _api(client).param_serialize(
@@ -564,7 +602,30 @@ def _get_workflow(client: "Cyberwave", workflow_id: str) -> Any:
             response_types_map={"200": "WorkflowSchema"},
         ).data
     except Exception as e:
+        if not _is_uuid(workflow_id) and "/" in workflow_id:
+            result = _get_workflow_by_slug(client, workflow_id)
+            if result is not None:
+                return result
         raise CyberwaveError(f"Failed to get workflow {workflow_id}: {e}") from e
+
+
+def _get_workflow_by_slug(client: "Cyberwave", slug: str) -> Any:
+    """Fetch a workflow by its full unified slug via ``GET /workflows/by-slug``."""
+    try:
+        _param = _api(client).param_serialize(
+            method="GET",
+            resource_path="/api/v1/workflows/by-slug",
+            query_params=[("slug", slug)],
+            auth_settings=_AUTH,
+        )
+        response = _api(client).call_api(*_param)
+        response.read()
+        return _api(client).response_deserialize(
+            response_data=response,
+            response_types_map={"200": "WorkflowSchema"},
+        ).data
+    except Exception:
+        return None
 
 
 def _trigger_workflow(

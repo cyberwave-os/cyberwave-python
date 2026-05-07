@@ -10,7 +10,38 @@ import hashlib
 import os
 import platform
 import socket
+from typing import Callable
 from uuid import getnode
+
+
+def _resolve_hostname() -> str:
+    """Best-effort hostname with a couple of fallbacks.
+
+    ``socket.gethostname()`` returns ``""`` on some minimal images (and
+    has been observed to do so on freshly-flashed Raspberry Pis where the
+    hostname has not been written to ``/etc/hostname`` yet). We fall back
+    to ``platform.node()`` (which reads from ``uname``) and then to the
+    ``HOSTNAME`` env var. Returning ``""`` is fine for callers — they're
+    expected to substitute their own placeholder — but we never want to
+    raise from here just because the OS is unhelpful.
+    """
+    candidates = (
+        _safe(socket.gethostname),
+        _safe(platform.node),
+        os.environ.get("HOSTNAME", ""),
+    )
+    for candidate in candidates:
+        cleaned = (candidate or "").strip()
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _safe(fn: Callable[[], str]) -> str:
+    try:
+        return fn() or ""
+    except Exception:
+        return ""
 
 
 def get_device_info() -> dict:
@@ -19,7 +50,8 @@ def get_device_info() -> dict:
     
     Returns:
         Dictionary with device details:
-        - hostname: Machine hostname
+        - hostname: Machine hostname (best-effort, empty string if no
+          source resolves; see :func:`_resolve_hostname`)
         - platform: OS and architecture (e.g., "Darwin-arm64")
         - python_version: Python version string
         - mac_address: Primary MAC address
@@ -29,7 +61,7 @@ def get_device_info() -> dict:
     mac = ':'.join(f'{mac_int:012x}'[i:i+2] for i in range(0, 12, 2))
     
     return {
-        "hostname": socket.gethostname(),
+        "hostname": _resolve_hostname(),
         "platform": f"{platform.system()}-{platform.machine()}",
         "python_version": platform.python_version(),
         "mac_address": mac,

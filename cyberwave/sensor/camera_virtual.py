@@ -21,7 +21,7 @@ import asyncio
 import fractions
 import logging
 import time
-from typing import TYPE_CHECKING, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
 from av import VideoFrame
@@ -111,14 +111,8 @@ class VirtualVideoTrack(BaseVideoTrack):
                 await asyncio.sleep(wait)
         self._last_time = time.time()
 
-        # Update time reference to capture current timestamp at frame capture moment.
-        # This ensures video frame timestamps reflect actual capture time, not
-        # a potentially stale timestamp from the teleop loop.
-        if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.read()
-        else:
-            timestamp = time.time()
-            timestamp_monotonic = time.monotonic()
+        # Capture current timestamp at frame capture moment for accuracy.
+        timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 
         # Store first frame timestamp
         if self.frame_count == 0:
@@ -182,11 +176,32 @@ class VirtualVideoTrack(BaseVideoTrack):
                 pass
 
         video_frame = video_frame.reformat(format=self.output_format)
-        video_frame.pts = self.frame_count
-        video_frame.time_base = fractions.Fraction(1, self.fps)
 
-        # Capture sync frame data for MQTT camera_sync_frame message
-        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        # Set media timestamps
+        # Current policy: pts = frame_index, time_base = 1/fps
+        video_frame.pts = self.frame_count
+        time_base = fractions.Fraction(1, self.fps)
+        video_frame.time_base = time_base
+
+        # Store per-frame metadata for sync extension (if installed)
+        self._store_frame_metadata_for_sync(
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+            capture_wall_time=timestamp,
+            capture_monotonic=timestamp_monotonic,
+        )
+
+        # Capture sync frame metadata with explicit frame_index, pts, and time_base
+        self._capture_sync_frame(
+            timestamp,
+            timestamp_monotonic,
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+        )
         self.frame_count += 1
 
         return video_frame

@@ -501,6 +501,8 @@ class CyberwaveMQTTClient:
                 message["fps"] = metadata["fps"]
             if "observations" in metadata:
                 message["observations"] = metadata["observations"]
+            if "camera_participants" in metadata:
+                message["camera_participants"] = metadata["camera_participants"]
         logger.info(
             f"Publishing telemetry start message for twin {twin_uuid}: {message}"
         )
@@ -518,7 +520,7 @@ class CyberwaveMQTTClient:
 
         Args:
             twin_uuid: UUID of the twin
-            metadata: Optional dict (e.g. {"fps": 100, "observations": {...}})
+            metadata: Optional dict (e.g. fps, observations, camera_participants)
         """
         with self._telemetry_lock:
             if twin_uuid not in self.twin_uuids:
@@ -555,7 +557,33 @@ class CyberwaveMQTTClient:
         Also clears the telemetry tracking state for this twin, allowing
         subsequent publish_telemetry_start calls to work properly when
         a new operation (teleoperate/remoteoperate) is started.
+
+        This method is idempotent: if telemetry_end was already published for
+        this twin (i.e., twin is no longer in tracking list), this call is a
+        no-op to avoid sending duplicate telemetry_end messages.
         """
+        # Check and clear tracking state atomically to ensure idempotency.
+        # Only publish if the twin was still being tracked (telemetry_start was sent).
+        with self._telemetry_lock:
+            was_in_list = twin_uuid in self.twin_uuids_with_telemetry_start
+            if was_in_list:
+                self.twin_uuids_with_telemetry_start.remove(twin_uuid)
+            logger.info(
+                "publish_telemetry_end: twin %s was_in_tracking_list=%s, "
+                "remaining_tracked_twins=%s",
+                twin_uuid,
+                was_in_list,
+                self.twin_uuids_with_telemetry_start,
+            )
+
+        # Skip publishing if already ended (idempotent behavior)
+        if not was_in_list:
+            logger.debug(
+                "publish_telemetry_end: skipping duplicate for twin %s (already ended)",
+                twin_uuid,
+            )
+            return
+
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
         message = {
             "type": "telemetry_end",
@@ -568,20 +596,6 @@ class CyberwaveMQTTClient:
         if stream_instance_id:
             message["stream_instance_id"] = stream_instance_id
         self.publish(topic, message)
-
-        # Clear tracking state so next publish_telemetry_start will fire
-        # Use lock for thread safety (consistent with _handle_twin_update_with_telemetry)
-        with self._telemetry_lock:
-            was_in_list = twin_uuid in self.twin_uuids_with_telemetry_start
-            if was_in_list:
-                self.twin_uuids_with_telemetry_start.remove(twin_uuid)
-            logger.info(
-                "publish_telemetry_end: twin %s was_in_tracking_list=%s, "
-                "remaining_tracked_twins=%s",
-                twin_uuid,
-                was_in_list,
-                self.twin_uuids_with_telemetry_start,
-            )
 
     def publish_connected(self, twin_uuid: str):
         """Publish connected message via MQTT.
@@ -773,6 +787,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Update multiple joints at once via MQTT.
@@ -797,7 +812,10 @@ class CyberwaveMQTTClient:
                "timestamp": 1709123456.789,
                "source_subtype": "openvla",
                "workload_uuid": "uuid-here",
-               "session_id": "session-id"
+               "session_id": "session-id",
+               "camera_frame_counters": {
+                   "<track_id>": {"frame_count": 1234, "sensor_id": "wrist"}
+               }
            }
            ```
 
@@ -813,6 +831,9 @@ class CyberwaveMQTTClient:
             source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
             workload_uuid: Optional UUID of the workload generating this update
             session_id: Optional session ID for grouping related updates
+            camera_frame_counters: Optional dict mapping camera track_id to frame info.
+                Each value is a dict with "frame_count" (int) and "sensor_id" (str).
+                Used for robot-camera synchronization. Only included in aggregated format.
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
@@ -831,6 +852,7 @@ class CyberwaveMQTTClient:
             or source_subtype is not None
             or workload_uuid is not None
             or session_id is not None
+            or camera_frame_counters is not None
         )
 
         if use_aggregated:
@@ -849,6 +871,8 @@ class CyberwaveMQTTClient:
                 message["workload_uuid"] = workload_uuid
             if session_id:
                 message["session_id"] = session_id
+            if camera_frame_counters:
+                message["camera_frame_counters"] = camera_frame_counters
 
             logger.debug(
                 f"Publishing aggregated joint state for {twin_uuid}: "
@@ -878,6 +902,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Alias for update_joints_state with aggregated format.
@@ -899,6 +924,7 @@ class CyberwaveMQTTClient:
             source_subtype=source_subtype,
             workload_uuid=workload_uuid,
             session_id=session_id,
+            camera_frame_counters=camera_frame_counters,
         )
 
     def publish_initial_observation(

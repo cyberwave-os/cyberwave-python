@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -36,7 +36,12 @@ class AssetUpdateSchema(BaseModel):
     registry_id_alias: Optional[StrictStr] = None
     fixed_base: Optional[StrictBool] = None
     universal_schema: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "registry_id_alias", "fixed_base", "universal_schema"]
+    supported_simulation_backends: Optional[List[StrictStr]] = None
+    purchase_price: Optional[Union[StrictFloat, StrictInt]] = None
+    monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
+    is_purchasable: Optional[StrictBool] = None
+    is_rentable: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "registry_id_alias", "fixed_base", "universal_schema", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -122,6 +127,31 @@ class AssetUpdateSchema(BaseModel):
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
             _dict['universal_schema'] = None
 
+        # set to None if supported_simulation_backends (nullable) is None
+        # and model_fields_set contains the field
+        if self.supported_simulation_backends is None and "supported_simulation_backends" in self.model_fields_set:
+            _dict['supported_simulation_backends'] = None
+
+        # set to None if purchase_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.purchase_price is None and "purchase_price" in self.model_fields_set:
+            _dict['purchase_price'] = None
+
+        # set to None if monthly_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.monthly_price is None and "monthly_price" in self.model_fields_set:
+            _dict['monthly_price'] = None
+
+        # set to None if is_purchasable (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_purchasable is None and "is_purchasable" in self.model_fields_set:
+            _dict['is_purchasable'] = None
+
+        # set to None if is_rentable (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_rentable is None and "is_rentable" in self.model_fields_set:
+            _dict['is_rentable'] = None
+
         return _dict
 
     @classmethod
@@ -142,7 +172,12 @@ class AssetUpdateSchema(BaseModel):
             "registry_id": obj.get("registry_id"),
             "registry_id_alias": obj.get("registry_id_alias"),
             "fixed_base": obj.get("fixed_base"),
-            "universal_schema": obj.get("universal_schema")
+            "universal_schema": obj.get("universal_schema"),
+            "supported_simulation_backends": obj.get("supported_simulation_backends"),
+            "purchase_price": obj.get("purchase_price"),
+            "monthly_price": obj.get("monthly_price"),
+            "is_purchasable": obj.get("is_purchasable"),
+            "is_rentable": obj.get("is_rentable")
         })
         return _obj
 

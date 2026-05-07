@@ -30,7 +30,9 @@ class MLTrainingDeploySchema(BaseModel):
     twin_uuids: List[StrictStr]
     environment_uuid: StrictStr
     mlmodel_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["twin_uuids", "environment_uuid", "mlmodel_uuid"]
+    robot_twin_uuids: Optional[List[StrictStr]] = None
+    camera_bindings_by_role: Optional[Dict[str, StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["twin_uuids", "environment_uuid", "mlmodel_uuid", "robot_twin_uuids", "camera_bindings_by_role"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,6 +78,16 @@ class MLTrainingDeploySchema(BaseModel):
         if self.mlmodel_uuid is None and "mlmodel_uuid" in self.model_fields_set:
             _dict['mlmodel_uuid'] = None
 
+        # set to None if robot_twin_uuids (nullable) is None
+        # and model_fields_set contains the field
+        if self.robot_twin_uuids is None and "robot_twin_uuids" in self.model_fields_set:
+            _dict['robot_twin_uuids'] = None
+
+        # set to None if camera_bindings_by_role (nullable) is None
+        # and model_fields_set contains the field
+        if self.camera_bindings_by_role is None and "camera_bindings_by_role" in self.model_fields_set:
+            _dict['camera_bindings_by_role'] = None
+
         return _dict
 
     @classmethod
@@ -90,7 +102,9 @@ class MLTrainingDeploySchema(BaseModel):
         _obj = cls.model_validate({
             "twin_uuids": obj.get("twin_uuids"),
             "environment_uuid": obj.get("environment_uuid"),
-            "mlmodel_uuid": obj.get("mlmodel_uuid")
+            "mlmodel_uuid": obj.get("mlmodel_uuid"),
+            "robot_twin_uuids": obj.get("robot_twin_uuids"),
+            "camera_bindings_by_role": obj.get("camera_bindings_by_role")
         })
         return _obj
 

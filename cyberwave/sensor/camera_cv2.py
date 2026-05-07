@@ -11,6 +11,7 @@ Supports:
 import fractions
 import logging
 import os
+import platform
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import cv2
@@ -28,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 # Default pixel format for local V4L2/USB when ``fourcc`` is omitted (see ``CV2VideoTrack``).
 _DEFAULT_LOCAL_FOURCC = "MJPG"
+
+
+def _capture_buffersize() -> int:
+    # BUFFERSIZE=1 halves uvcvideo throughput (30fps MJPG -> 15fps); widen
+    # the ring to 2 on Linux to restore native rate while keeping latency
+    # low.  macOS/Windows backends don't show the quirk.
+    return 2 if platform.system() == "Linux" else 1
 
 
 def _get_default_keyframe_interval() -> Optional[int]:
@@ -102,7 +110,9 @@ class CV2VideoTrack(BaseVideoTrack):
         resolution: Union[Resolution, tuple[int, int]] = Resolution.VGA,
         time_reference: Optional["TimeReference"] = None,
         keyframe_interval: Optional[int] = None,
-        frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        frame_callback: Optional[
+            Callable[[np.ndarray, int], Optional[np.ndarray]]
+        ] = None,
         fourcc: Optional[str] = None,
     ):
         """Initialize the CV2 video stream track.
@@ -119,8 +129,13 @@ class CV2VideoTrack(BaseVideoTrack):
                 CYBERWAVE_KEYFRAME_INTERVAL env var, or disables forced keyframes.
                 Recommended: fps * 2 (e.g., 60 for 30fps = keyframe every 2 seconds)
             frame_callback: Optional callback called for each frame.
-                Signature: callback(frame: np.ndarray, frame_count: int) -> None
-                Called after frame normalization, before encoding.
+                Signature: ``callback(frame, frame_count) -> Optional[np.ndarray]``.
+                Called after frame normalization, before encoding. Returning
+                ``None`` keeps the original frame; returning a numpy array
+                that **matches the input frame's shape and dtype exactly**
+                replaces the frame before encoding (e.g. an anonymised or
+                filtered version). Wrong-shape / wrong-dtype returns are
+                rejected with a rate-limited warning.
             fourcc: Optional FOURCC for local USB/V4L2 cameras (e.g. ``'MJPG'``, ``'YUYV'``).
                 If omitted for a **local** device, the SDK tries ``MJPG`` by default for better
                 bandwidth/FPS; if that does not stick, it reopens the device without a FOURCC
@@ -144,6 +159,10 @@ class CV2VideoTrack(BaseVideoTrack):
             else _get_default_keyframe_interval()
         )
         self._frames_since_keyframe = 0
+        # Counter for misbehaving ``frame_callback`` results / exceptions; used
+        # to rate-limit the warning so a chronically-broken callback doesn't
+        # flood the log at the camera frame rate.
+        self._frame_callback_warn_count = 0
 
         # Frame format warning flags (log once)
         self._logged_frame_info = False
@@ -288,12 +307,96 @@ class CV2VideoTrack(BaseVideoTrack):
         cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
 
         try:
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, _capture_buffersize())
         except Exception:
             pass
 
+    def _should_use_atomic_v4l2_open(self) -> bool:
+        """Whether to negotiate via the atomic ``CAP_V4L2`` open-time params path.
+
+        OpenCV's V4L2 backend has two bugs that make sequential ``cap.set()``
+        negotiation unreliable on uvcvideo devices:
+
+        * After ``cap.set(CAP_PROP_FOURCC, ...)`` the subsequent
+          ``cap.get(CAP_PROP_FOURCC)`` often returns ``0`` even though the
+          pixel format was applied, which causes our fallback logic to
+          misinterpret a successful MJPG set as a failure.
+        * Sequential ``cap.set(WIDTH/HEIGHT)`` at HD resolutions can leave
+          the capture in an unresponsive state.
+
+        Using the ``cv2.VideoCapture(src, CAP_V4L2, [params...])`` constructor
+        applies FOURCC, resolution, and FPS atomically at open time, which
+        avoids both issues.  Only Linux local devices take this path;
+        macOS (AVFoundation), Windows (MSMF/DSHOW), and URL/RTSP streams
+        keep the legacy sequential path.  ``_open_local_v4l2_atomic``
+        guards against builds that lack ``CAP_V4L2`` or the params overload.
+        """
+        if platform.system() != "Linux":
+            return False
+        if self._is_url_stream(self.camera_id):
+            return False
+        return True
+
+    def _open_local_v4l2_atomic(
+        self, fourcc_str: Optional[str]
+    ) -> Optional[cv2.VideoCapture]:
+        """Open ``self.camera_id`` via ``CAP_V4L2`` with atomic FOURCC + geometry + FPS.
+
+        Returns the opened capture, or ``None`` if the OpenCV build lacks
+        the ``(src, backend, params)`` overload / ``CAP_V4L2`` symbol, or
+        the device refuses the requested parameters.
+        """
+        params: list[int] = []
+        if fourcc_str:
+            try:
+                params.extend(
+                    [
+                        cv2.CAP_PROP_FOURCC,
+                        cv2.VideoWriter_fourcc(*fourcc_str[:4]),
+                    ]
+                )
+            except Exception as e:
+                logger.debug(
+                    "Could not encode FOURCC %r for atomic open: %s", fourcc_str, e
+                )
+        params.extend(
+            [
+                cv2.CAP_PROP_FRAME_WIDTH,
+                self.requested_width,
+                cv2.CAP_PROP_FRAME_HEIGHT,
+                self.requested_height,
+                cv2.CAP_PROP_FPS,
+                self.fps,
+            ]
+        )
+
+        try:
+            cap = cv2.VideoCapture(self.camera_id, cv2.CAP_V4L2, params)
+        except Exception as e:
+            logger.debug("Atomic V4L2 open unavailable: %s: %s", type(e).__name__, e)
+            return None
+
+        if not cap.isOpened():
+            try:
+                cap.release()
+            except Exception:
+                pass
+            return None
+
+        cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, _capture_buffersize())
+        except Exception:
+            pass
+        return cap
+
     def _negotiate_and_configure_capture(self) -> None:
-        """Try FOURCC negotiation for local cameras; reopen without FOURCC if it fails."""
+        """Apply FOURCC + geometry + FPS to the capture.
+
+        On Linux local V4L2 devices we prefer the atomic open-time params
+        path; elsewhere we keep sequential ``cap.set()`` negotiation with a
+        reopen-without-FOURCC fallback if the requested FOURCC does not stick.
+        """
         is_local = not self._is_url_stream(self.camera_id)
         user_tag = (self.fourcc or "").strip()
         user_fourcc = user_tag[:4] if user_tag else None
@@ -306,6 +409,9 @@ class CV2VideoTrack(BaseVideoTrack):
                 effective_try = _DEFAULT_LOCAL_FOURCC
                 self._fourcc_auto_mjpg = True
 
+        if effective_try:
+            self._fourcc_attempted = effective_try
+
         if logger.isEnabledFor(logging.DEBUG):
             c = self.cap
             logger.debug(
@@ -317,40 +423,88 @@ class CV2VideoTrack(BaseVideoTrack):
                 self._fourcc_from_cap(c),
             )
 
-        if effective_try:
-            self._fourcc_attempted = effective_try
-            self._apply_capture_geometry_and_buffer(self.cap, fourcc_str=effective_try)
-            got = self._fourcc_from_cap(self.cap)
-            if not self._fourcc_tags_match(effective_try, got):
-                logger.warning(
-                    "Camera FOURCC did not stick: tried %r, got %r; reopening without "
-                    "FOURCC override",
-                    effective_try,
-                    got or "(empty)",
+        configured = False
+        atomic_success = False
+
+        # Fast path: atomic V4L2 open on Linux local devices.
+        if effective_try and self._should_use_atomic_v4l2_open():
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+            atomic_cap = self._open_local_v4l2_atomic(effective_try)
+            if atomic_cap is not None:
+                self.cap = atomic_cap
+                configured = True
+                atomic_success = True
+            else:
+                logger.info(
+                    "Atomic V4L2 open unavailable for camera %r; falling back to "
+                    "sequential cap.set() negotiation",
+                    self.camera_id,
                 )
-                try:
-                    self.cap.release()
-                except Exception:
-                    pass
                 self.cap = self._open_capture(self.camera_id)
                 if not self.cap.isOpened():
                     raise RuntimeError(f"Failed to reopen camera {self.camera_id}")
-                self._fourcc_fallback_reopen = True
-                self._apply_capture_geometry_and_buffer(self.cap, fourcc_str=None)
-        else:
-            self._apply_capture_geometry_and_buffer(self.cap, fourcc_str=None)
+
+        if not configured:
+            # Legacy path: sequential cap.set() on the current capture. Used
+            # on macOS/Windows, URL streams, Linux builds without CAP_V4L2,
+            # or as a retry after an atomic open failure.
+            self._apply_capture_geometry_and_buffer(self.cap, fourcc_str=effective_try)
+            if effective_try:
+                got = self._fourcc_from_cap(self.cap)
+                if not self._fourcc_tags_match(effective_try, got):
+                    # uvcvideo often reports empty/0 for CAP_PROP_FOURCC even when the
+                    # pixel format is active. If the caller set ``fourcc=`` (e.g. from
+                    # setup.json), do not reopen without FOURCC — that drops to the
+                    # driver default (often YUYV @ 1080p @ 5 fps on USB2).
+                    if user_fourcc and not (got or "").strip():
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(
+                                "Camera FOURCC readback empty after user-requested %r; "
+                                "keeping capture (uvcvideo quirk)",
+                                effective_try,
+                            )
+                    else:
+                        logger.warning(
+                            "Camera FOURCC did not stick: tried %r, got %r; reopening "
+                            "without FOURCC override",
+                            effective_try,
+                            got or "(empty)",
+                        )
+                        try:
+                            self.cap.release()
+                        except Exception:
+                            pass
+                        self.cap = self._open_capture(self.camera_id)
+                        if not self.cap.isOpened():
+                            raise RuntimeError(
+                                f"Failed to reopen camera {self.camera_id}"
+                            )
+                        self._fourcc_fallback_reopen = True
+                        self._apply_capture_geometry_and_buffer(
+                            self.cap, fourcc_str=None
+                        )
 
         neg = self._fourcc_from_cap(self.cap)
+        if not neg and effective_try and (atomic_success or user_fourcc):
+            # CAP_V4L2 atomic open either applies the requested FOURCC or
+            # fails the open, so an empty readback afterwards is a uvcvideo
+            # reporting quirk — trust the requested value. Same for explicit
+            # user ``fourcc=`` on the legacy path when readback is empty.
+            neg = effective_try[:4].upper()
         self._negotiated_fourcc_ascii = neg or None
 
         logger.debug(
             "CV2 FOURCC negotiation: user_fourcc=%r attempted=%r negotiated=%r "
-            "auto_mjpg=%s fallback_reopen=%s",
+            "auto_mjpg=%s fallback_reopen=%s atomic_success=%s",
             user_fourcc,
             self._fourcc_attempted,
             self._negotiated_fourcc_ascii,
             self._fourcc_auto_mjpg,
             self._fourcc_fallback_reopen,
+            atomic_success,
         )
 
     def _get_actual_settings(self) -> tuple[int, int, float]:
@@ -412,6 +566,20 @@ class CV2VideoTrack(BaseVideoTrack):
         if self._fourcc_fallback_reopen:
             attrs["fourcc_fallback_open_cv_default"] = True
         return attrs
+
+    def _warn_frame_callback(self, msg: str, *args: object) -> None:
+        """Log a frame-callback warning, rate-limited to avoid log floods.
+
+        A misbehaving callback would otherwise emit one warning per frame
+        (30+ lines/sec on a typical stream). We log the first occurrence and
+        every Nth thereafter, plus the running count, so operators still see
+        the problem without drowning in noise.
+        """
+        n = self._frame_callback_warn_count
+        self._frame_callback_warn_count = n + 1
+        # 1, 2, 100, 200, 300, ... — chatty enough to catch fast, then quiet.
+        if n < 2 or n % 100 == 0:
+            logger.warning("Frame callback " + msg + " (count=%d)", *args, n + 1)
 
     def _normalize_frame(self, frame: np.ndarray) -> np.ndarray:
         """Normalize frame to BGR24 format for encoding.
@@ -559,9 +727,8 @@ class CV2VideoTrack(BaseVideoTrack):
             logger.error("Failed to read frame from camera")
             return None
 
-        # Read time reference to capture current timestamp at frame capture moment.
-        # This ensures video frame timestamps reflect actual capture time.
-        timestamp, timestamp_monotonic = self.time_reference.read()
+        # Timestamp at capture: shared TimeReference.read() if provided, else OS time.
+        timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 
         # Store frame 0 timestamp for publishing
         if self.frame_count == 0:
@@ -571,12 +738,34 @@ class CV2VideoTrack(BaseVideoTrack):
         # Normalize frame format
         frame = self._normalize_frame(frame)
 
-        # Call frame callback if set (for ML inference, etc.)
+        # Call frame callback if set (for ML inference, transforms, etc.).
+        # Backward-compatible contract: returning ``None`` keeps the original
+        # frame; returning a ``numpy.ndarray`` matching ``frame`` in shape AND
+        # dtype replaces the frame before encoding. Anything else is rejected
+        # so the WebRTC encoder never sees a wrong-resolution or wrong-type
+        # buffer (which would either break the stream or raise downstream).
         if self.frame_callback:
             try:
-                self.frame_callback(frame, self.frame_count)
+                replacement = self.frame_callback(frame, self.frame_count)
+                if replacement is not None:
+                    if (
+                        isinstance(replacement, np.ndarray)
+                        and replacement.shape == frame.shape
+                        and replacement.dtype == frame.dtype
+                    ):
+                        frame = replacement
+                    else:
+                        self._warn_frame_callback(
+                            "returned incompatible value (type=%s, shape=%s, dtype=%s); "
+                            "expected ndarray shape=%s dtype=%s. Keeping original frame.",
+                            type(replacement).__name__,
+                            getattr(replacement, "shape", None),
+                            getattr(replacement, "dtype", None),
+                            frame.shape,
+                            frame.dtype,
+                        )
             except Exception as e:
-                logger.warning(f"Frame callback error: {e}")
+                self._warn_frame_callback("error: %s", e)
 
         # Create video frame
         video_frame = VideoFrame.from_ndarray(frame, format="bgr24")
@@ -607,10 +796,33 @@ class CV2VideoTrack(BaseVideoTrack):
                 pass
 
         video_frame = video_frame.reformat(format="yuv420p")
-        video_frame.pts = self.frame_count
-        video_frame.time_base = fractions.Fraction(1, int(self.actual_fps or self.fps))
 
-        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        # Set media timestamps
+        # Current policy: pts = frame_index, time_base = 1/fps
+        # This is mathematically valid but conflates frame numbering with media pts units.
+        video_frame.pts = self.frame_count
+        time_base = fractions.Fraction(1, int(self.actual_fps or self.fps))
+        video_frame.time_base = time_base
+
+        # Store per-frame metadata for sync extension (if installed)
+        self._store_frame_metadata_for_sync(
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+            capture_wall_time=timestamp,
+            capture_monotonic=timestamp_monotonic,
+        )
+
+        # Capture sync frame metadata with explicit frame_index, pts, and time_base
+        self._capture_sync_frame(
+            timestamp,
+            timestamp_monotonic,
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+        )
         self.frame_count += 1
 
         return video_frame
@@ -672,7 +884,9 @@ class CV2CameraStreamer(BaseVideoStreamer):
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
         keyframe_interval: Optional[int] = None,
-        frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        frame_callback: Optional[
+            Callable[[np.ndarray, int], Optional[np.ndarray]]
+        ] = None,
         camera_name: Optional[str] = None,
         fourcc: Optional[str] = None,
     ):
@@ -693,8 +907,11 @@ class CV2CameraStreamer(BaseVideoStreamer):
             keyframe_interval: Force a keyframe every N frames for better streaming start.
                 If None, uses CYBERWAVE_KEYFRAME_INTERVAL env var, or disables forced keyframes.
                 Recommended: fps * 2 (e.g., 60 for 30fps = keyframe every 2 seconds)
-            frame_callback: Optional callback for each frame (ML inference, etc.).
-                Signature: callback(frame: np.ndarray, frame_count: int) -> None
+            frame_callback: Optional callback for each frame (ML inference,
+                anonymisation, etc.). Signature:
+                ``callback(frame: np.ndarray, frame_count: int) -> Optional[np.ndarray]``.
+                Returning ``None`` keeps the original frame; returning a
+                same-shape ndarray replaces it before encoding.
             camera_name: Optional sensor identifier for multi-stream twins. Use the sensor
                 id from twin capabilities (e.g. "head_camera") when the twin has multiple cameras.
             fourcc: Optional FOURCC for local USB/V4L2 (e.g. ``'MJPG'``). If omitted,
@@ -726,7 +943,9 @@ class CV2CameraStreamer(BaseVideoStreamer):
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
         keyframe_interval: Optional[int] = None,
-        frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        frame_callback: Optional[
+            Callable[[np.ndarray, int], Optional[np.ndarray]]
+        ] = None,
         camera_name: Optional[str] = None,
     ) -> "CV2CameraStreamer":
         """Create streamer from CameraConfig.

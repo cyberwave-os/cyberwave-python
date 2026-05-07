@@ -25,13 +25,9 @@ class BoundingBox:
 
     def __post_init__(self) -> None:
         if self.x2 < self.x1:
-            raise ValueError(
-                f"Inverted x coordinates: x1={self.x1} > x2={self.x2}"
-            )
+            raise ValueError(f"Inverted x coordinates: x1={self.x1} > x2={self.x2}")
         if self.y2 < self.y1:
-            raise ValueError(
-                f"Inverted y coordinates: y1={self.y1} > y2={self.y2}"
-            )
+            raise ValueError(f"Inverted y coordinates: y1={self.y1} > y2={self.y2}")
 
     @property
     def width(self) -> float:
@@ -61,7 +57,12 @@ class Detection:
         area_ratio: Bounding-box area divided by frame area (``0.0`` if
             frame dimensions are unknown).
         mask: Optional segmentation mask (numpy array).
-        keypoints: Optional pose keypoints.
+        keypoints: Optional pose keypoints from a pose model.
+            Shape: ``(K, 3)`` ``(x, y, visibility)`` for the standard
+            export, or ``(K, 2)`` ``(x, y)`` for visibility-less variants.
+            Coordinates are in the **original image's pixel space** so
+            consumers like :func:`cyberwave.vision.draw_skeleton` can
+            render them directly without rescaling.
         metadata: Arbitrary extra fields.
 
     Raises :class:`ValueError` if *confidence* is outside ``[0, 1]``.
@@ -72,14 +73,16 @@ class Detection:
     bbox: BoundingBox
     area_ratio: float = 0.0
     mask: Any | None = None
+    # Typed as ``Any`` rather than ``np.ndarray`` to keep numpy an optional
+    # dependency for SDK consumers that never touch detections; producers and
+    # consumers in this repo both treat it as ``np.ndarray | None`` of the
+    # shape documented above.
     keypoints: Any | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.confidence <= 1.0:
-            raise ValueError(
-                f"confidence must be in [0, 1], got {self.confidence}"
-            )
+            raise ValueError(f"confidence must be in [0, 1], got {self.confidence}")
 
 
 @dataclass

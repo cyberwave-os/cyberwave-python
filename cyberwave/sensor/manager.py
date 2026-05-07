@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ..client import Cyberwave
     from ..twin import CameraTwin, DepthCameraTwin
     from ..utils import TimeReference
+    from .base_video import BaseVideoStreamer
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +146,20 @@ def _run_streamer_in_thread(
     stop_event: threading.Event,
     time_reference: "TimeReference",
     command_callback: Optional[Callable[[str, str], None]] = None,
+    streamer_registry: Optional[Dict[str, "BaseVideoStreamer"]] = None,
+    registry_lock: Optional[threading.Lock] = None,
 ) -> None:
-    """Run a single camera streamer in a thread with run_with_auto_reconnect."""
+    """Run a single camera streamer in a thread with run_with_auto_reconnect.
+
+    Args:
+        client: Cyberwave client instance
+        config: Camera configuration dict
+        stop_event: Threading event to signal stop
+        time_reference: Time reference for sync
+        command_callback: Optional callback for command responses
+        streamer_registry: Optional dict to register the streamer (keyed by twin_uuid)
+        registry_lock: Lock for thread-safe registry access
+    """
     from . import CV2CameraStreamer, RealSenseStreamer
     from .config import Resolution
 
@@ -172,7 +185,7 @@ def _run_streamer_in_thread(
             depth_resolution[0], depth_resolution[1]
         ) or Resolution.closest(depth_resolution[0], depth_resolution[1])
     depth_publish_interval = config.get("depth_publish_interval", 30)
-    camera_name = config.get("camera_name")
+    camera_name = config.get("camera_name") or "default"
     fourcc = config.get("fourcc")
     keyframe_interval = config.get("keyframe_interval")
 
@@ -223,6 +236,12 @@ def _run_streamer_in_thread(
                 f"Unsupported camera type: {camera_type}. Use 'cv2' or 'realsense'."
             )
 
+        # Register streamer for external access (e.g., frame counter reads)
+        # Key by twin_uuid (unique) instead of camera_name (can have duplicates)
+        if streamer_registry is not None and registry_lock is not None:
+            with registry_lock:
+                streamer_registry[twin_uuid] = streamer
+
         async def monitor_stop():
             while not stop_event.is_set():
                 await asyncio.sleep(0.1)
@@ -230,13 +249,10 @@ def _run_streamer_in_thread(
 
         monitor_task = asyncio.create_task(monitor_stop())
 
-        # Wrap callback to inject camera_name for per-camera status tracking
-        cam_name = camera_name or "default"
-
         def wrapped_callback(s: str, m: str) -> None:
             if command_callback:
                 try:
-                    command_callback(s, m, cam_name)
+                    command_callback(s, m, camera_name)
                 except TypeError:
                     command_callback(s, m)
 
@@ -246,6 +262,10 @@ def _run_streamer_in_thread(
                 command_callback=wrapped_callback,
             )
         finally:
+            # Unregister streamer on exit
+            if streamer_registry is not None and registry_lock is not None:
+                with registry_lock:
+                    streamer_registry.pop(camera_name, None)
             monitor_task.cancel()
             try:
                 await monitor_task
@@ -297,6 +317,9 @@ class CameraStreamManager:
         ...     command_callback=callback,
         ... )
         >>> manager.start()
+        >>> # In teleop loop, read frame counters for joint updates
+        >>> counters = manager.get_frame_counters()
+        >>> # counters = {"track-uuid": {"frame_count": 123, "sensor_id": "wrist"}, ...}
         >>> # ... run teleop loop ...
         >>> stop_event.set()
         >>> manager.join()
@@ -335,6 +358,10 @@ class CameraStreamManager:
         self.command_callback = command_callback
         self._threads: List[threading.Thread] = []
 
+        # Thread-safe registry of active streamers (keyed by twin_uuid for uniqueness)
+        self._streamer_registry: Dict[str, "BaseVideoStreamer"] = {}
+        self._registry_lock = threading.Lock()
+
     def start(self) -> None:
         """Start all camera streams in background threads."""
         for config in self._configs:
@@ -346,6 +373,8 @@ class CameraStreamManager:
                     self.stop_event,
                     self.time_reference,
                     self.command_callback,
+                    self._streamer_registry,
+                    self._registry_lock,
                 ),
                 daemon=True,
             )
@@ -358,3 +387,51 @@ class CameraStreamManager:
         for t in self._threads:
             t.join(timeout=timeout)
         self._threads.clear()
+
+    def get_frame_counters(self) -> Dict[str, Dict[str, Any]]:
+        """Get current frame counters from all active camera streams.
+
+        Returns a dict suitable for inclusion in MQTT joint payloads:
+        {
+            "<track_id>": {"frame_count": N, "sensor_id": "camera_name"},
+            ...
+        }
+
+        This method reads directly from the streamer objects, providing
+        an atomic snapshot of all camera frame counters at call time.
+
+        Returns:
+            Dictionary mapping track_id to frame info dict.
+            Empty dict if no streamers are registered or tracks aren't ready.
+        """
+        result: Dict[str, Dict[str, Any]] = {}
+        with self._registry_lock:
+            # Registry is keyed by twin_uuid (unique per camera)
+            for _twin_uuid, streamer in self._streamer_registry.items():
+                # streamer.streamer is the BaseVideoTrack instance (set by _setup_webrtc)
+                # track.id is the WebRTC track UUID (from aiortc VideoStreamTrack)
+                # track.frame_count is our counter (starts at 0, increments per frame)
+                track = getattr(streamer, "streamer", None)
+                if track is None:
+                    # Track not yet initialized (WebRTC setup in progress)
+                    continue
+                track_id = getattr(track, "id", None)
+                if not track_id:
+                    continue
+                frame_count = getattr(track, "frame_count", 0)
+                # Get camera_name from streamer (sensor_id in the result)
+                camera_name = getattr(streamer, "camera_name", "default")
+                result[track_id] = {
+                    "frame_count": frame_count,
+                    "sensor_id": camera_name,
+                }
+        return result
+
+    @property
+    def streamers(self) -> Dict[str, "BaseVideoStreamer"]:
+        """Get a snapshot of active streamers (keyed by twin_uuid).
+
+        Returns a copy of the registry to avoid external mutation.
+        """
+        with self._registry_lock:
+            return dict(self._streamer_registry)

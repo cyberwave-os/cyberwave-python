@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -31,11 +31,18 @@ class EdgeSchema(BaseModel):
     uuid: StrictStr
     fingerprint: Optional[StrictStr]
     name: StrictStr
+    workspace_uuid: Optional[StrictStr]
+    hostname: StrictStr
+    platform: StrictStr
+    status: StrictStr
+    is_online: StrictBool
+    last_heartbeat: Optional[StrictStr]
+    last_ip_address: Optional[StrictStr]
     created_at: datetime
     updated_at: datetime
     organization_uuid: Optional[StrictStr]
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "fingerprint", "name", "created_at", "updated_at", "organization_uuid", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "fingerprint", "name", "workspace_uuid", "hostname", "platform", "status", "is_online", "last_heartbeat", "last_ip_address", "created_at", "updated_at", "organization_uuid", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +88,21 @@ class EdgeSchema(BaseModel):
         if self.fingerprint is None and "fingerprint" in self.model_fields_set:
             _dict['fingerprint'] = None
 
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
+        # set to None if last_heartbeat (nullable) is None
+        # and model_fields_set contains the field
+        if self.last_heartbeat is None and "last_heartbeat" in self.model_fields_set:
+            _dict['last_heartbeat'] = None
+
+        # set to None if last_ip_address (nullable) is None
+        # and model_fields_set contains the field
+        if self.last_ip_address is None and "last_ip_address" in self.model_fields_set:
+            _dict['last_ip_address'] = None
+
         # set to None if organization_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.organization_uuid is None and "organization_uuid" in self.model_fields_set:
@@ -101,6 +123,13 @@ class EdgeSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "fingerprint": obj.get("fingerprint"),
             "name": obj.get("name"),
+            "workspace_uuid": obj.get("workspace_uuid"),
+            "hostname": obj.get("hostname"),
+            "platform": obj.get("platform"),
+            "status": obj.get("status"),
+            "is_online": obj.get("is_online"),
+            "last_heartbeat": obj.get("last_heartbeat"),
+            "last_ip_address": obj.get("last_ip_address"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "organization_uuid": obj.get("organization_uuid"),

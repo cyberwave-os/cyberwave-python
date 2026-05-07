@@ -55,8 +55,13 @@ __all__ = [
     "AttachmentCreateSchema",
     "AttachmentSchema",
     "AvailableFeaturesSchema",
+    "BatchDeleteRecordingsSchema",
+    "BillingDetailsSchema",
+    "BillingDetailsUpdateSchema",
     "BulkJointStatesUpdateSchema",
     "CameraConfigUpdateSchema",
+    "CameraIntrinsicsSchema",
+    "CameraPoseSchema",
     "CatalogSeedGroupSchema",
     "CatalogSeedItemSchema",
     "CatalogSeedOptionSchema",
@@ -103,10 +108,24 @@ __all__ = [
     "CreateMissionSchema",
     "CreateTaskSchema",
     "DatasetCreateSchema",
+    "DatasetDebugInfoSchema",
+    "DatasetEpisodeCameraVideoSchema",
+    "DatasetEpisodeFileSchema",
+    "DatasetEpisodeManifestSchema",
+    "DatasetHubFilesSchema",
+    "DatasetImportCompleteSchema",
+    "DatasetImportInitSchema",
+    "DatasetImportInitiatedSchema",
+    "DatasetImportQueuedSchema",
+    "DatasetListQuerySchema",
+    "DatasetListResponseSchema",
     "DatasetSchema",
     "DatasetUpdateSchema",
     "DatasetZipUrlSchema",
     "DeferredTaskExecutionResponseSchema",
+    "DeliveryAddressCreateSchema",
+    "DeliveryAddressSchema",
+    "DeliveryAddressUpdateSchema",
     "DiscoveryResponseSchema",
     "EdgeCoreRestartResponseSchema",
     "EdgeCreateSchema",
@@ -115,14 +134,20 @@ __all__ = [
     "EnableGlobalFeatureRequest",
     "EnableOrgFeatureRequest",
     "EndSessionResponseSchema",
+    "EnvironmentAssistantCreateResponseSchema",
+    "EnvironmentAssistantCreateSchema",
     "EnvironmentAssistantRequestSchema",
     "EnvironmentAssistantResponseSchema",
+    "EnvironmentCloneSchema",
     "EnvironmentCreateSchema",
     "EnvironmentNavigationSettingsPatchSchema",
     "EnvironmentSchema",
     "EnvironmentSnapshotCreateSchema",
     "EnvironmentSnapshotSchema",
     "EnvironmentUniversalSchemaPatchSchema",
+    "EnvironmentWaypointBulkCreateSchema",
+    "EnvironmentWaypointCreateSchema",
+    "EnvironmentWaypointSchema",
     "EpisodeCreateSchema",
     "EpisodeSchema",
     "EpisodeUpdateSchema",
@@ -132,6 +157,7 @@ __all__ = [
     "FeatureStatusSchema",
     "GlobalFeatureSchema",
     "GrantUserFeatureRequest",
+    "HistoryTurnSchema",
     "ImageBytes",
     "ImageBytes1",
     "ImportResultSchema",
@@ -153,11 +179,20 @@ __all__ = [
     "LinkShareRevokeSchema",
     "LinkShareSchema",
     "MLModelCreateSchema",
+    "MLModelEdgeRuntimeListSchema",
+    "MLModelEdgeRuntimeOption",
+    "MLModelEvaluateSchema",
+    "MLModelFrameSchema",
+    "MLModelRunQueuedSchema",
+    "MLModelRunResultSchema",
+    "MLModelRunSchema",
     "MLModelSchema",
     "MLModelUpdateSchema",
     "MLTrainingCreateSchema",
     "MLTrainingDeploySchema",
     "MLTrainingFailedCreationSchema",
+    "MLTrainingMetricsLogSchema",
+    "MLTrainingMetricsUpdateSchema",
     "MLTrainingSchema",
     "MLTrainingUpdateSchema",
     "MapCreateSchema",
@@ -168,6 +203,7 @@ __all__ = [
     "Metadata",
     "MissionExecutionSchema",
     "MissionSchema",
+    "MotionEpisodeSchema",
     "MotionPlanSchema",
     "MotionPlanStepSchema",
     "MyFeaturesResponseSchema",
@@ -203,29 +239,47 @@ __all__ = [
     "ProjectSchema",
     "ProjectShareResponseSchema",
     "PublicUserSchema",
+    "QuaternionSchema",
+    "RecordingDetailSchema",
     "RecordingGenerationRequestSchema",
     "RecordingGenerationRequestSchemaByDate",
     "RecordingGenerationResponseSchema",
+    "RecordingListItem",
+    "RecordingListResponse",
+    "RecordingSourcesEnvelopeSchema",
+    "RecordingSourcesSchema",
     "ReloadCapabilitiesBulkSchema",
     "RemoveMemberResponse",
     "ReplayTimelineEventSchema",
     "ReplayTimelineEventsResponseSchema",
     "Response",
     "RevokeUserFeatureRequest",
+    "RobotContextSchema",
     "RobotDescriptionSchema",
+    "RobotStateSchema",
     "ShareSchema",
     "SharesResponseSchema",
     "SimulationStartSchema",
     "SlugAvailabilitySchema",
+    "SlugCheckSchema",
+    "SpatialFilterZoneSchema",
     "SyncWithAssetSchema",
     "TaggedFramesCreateSchema",
     "TaggedFramesSchema",
     "TaggedFramesUpdateSchema",
+    "TargetPoseSchema",
     "TaskExecutionSchema",
     "TaskSchema",
     "TaskStepSchema",
     "TeamMemberResponse",
     "TeamShareSchema",
+    "TemplateEnvironmentSchema",
+    "TemplateTwinSummarySchema",
+    "TemplateWorkflowSummarySchema",
+    "TrajectoryActionSchema",
+    "TrajectoryFromActionRequestSchema",
+    "TrajectoryInitialStateSchema",
+    "TrajectoryRecipeSchema",
     "TwinActionRequestSchema",
     "TwinActionResponseSchema",
     "TwinActionStatusSchema",
@@ -242,6 +296,7 @@ __all__ = [
     "TwinRelationshipSchema",
     "TwinSchema",
     "TwinStateUpdateSchema",
+    "TwinSyncWorkflowsResponseSchema",
     "TwinTelemetryMetadataSchema",
     "TwinUniversalSchemaPatchSchema",
     "URDFProjectCreateSchema",
@@ -260,21 +315,27 @@ __all__ = [
     "VLMGenerationSchema",
     "VLMResponseSchema",
     "Value",
+    "Vector3Schema",
     "VendorDescriptionSchema",
+    "VendorPublicContentSchema",
     "Visibility",
+    "WorkflowCloneSchema",
     "WorkflowConnectionCreateSchema",
     "WorkflowConnectionSchema",
     "WorkflowCreateSchema",
     "WorkflowExecuteSchema",
     "WorkflowExecutionSchema",
+    "WorkflowNodeCategorySchema",
     "WorkflowNodeCreateSchema",
     "WorkflowNodeExecutionSchema",
     "WorkflowNodeSchema",
     "WorkflowNodeUpdateSchema",
     "WorkflowRunSchema",
     "WorkflowSchema",
+    "WorkflowTemplateSchema",
     "WorkflowTriggerSchema",
     "WorkflowUpdateSchema",
+    "WorkflowsConfigSchema",
     "WorkspaceCreateSchema",
     "WorkspaceResponseSchema",
     "WorkspaceSchema",
@@ -325,8 +386,13 @@ from cyberwave.rest.models.asset_update_schema import AssetUpdateSchema as Asset
 from cyberwave.rest.models.attachment_create_schema import AttachmentCreateSchema as AttachmentCreateSchema
 from cyberwave.rest.models.attachment_schema import AttachmentSchema as AttachmentSchema
 from cyberwave.rest.models.available_features_schema import AvailableFeaturesSchema as AvailableFeaturesSchema
+from cyberwave.rest.models.batch_delete_recordings_schema import BatchDeleteRecordingsSchema as BatchDeleteRecordingsSchema
+from cyberwave.rest.models.billing_details_schema import BillingDetailsSchema as BillingDetailsSchema
+from cyberwave.rest.models.billing_details_update_schema import BillingDetailsUpdateSchema as BillingDetailsUpdateSchema
 from cyberwave.rest.models.bulk_joint_states_update_schema import BulkJointStatesUpdateSchema as BulkJointStatesUpdateSchema
 from cyberwave.rest.models.camera_config_update_schema import CameraConfigUpdateSchema as CameraConfigUpdateSchema
+from cyberwave.rest.models.camera_intrinsics_schema import CameraIntrinsicsSchema as CameraIntrinsicsSchema
+from cyberwave.rest.models.camera_pose_schema import CameraPoseSchema as CameraPoseSchema
 from cyberwave.rest.models.catalog_seed_group_schema import CatalogSeedGroupSchema as CatalogSeedGroupSchema
 from cyberwave.rest.models.catalog_seed_item_schema import CatalogSeedItemSchema as CatalogSeedItemSchema
 from cyberwave.rest.models.catalog_seed_option_schema import CatalogSeedOptionSchema as CatalogSeedOptionSchema
@@ -373,10 +439,24 @@ from cyberwave.rest.models.create_mission_execution_schema import CreateMissionE
 from cyberwave.rest.models.create_mission_schema import CreateMissionSchema as CreateMissionSchema
 from cyberwave.rest.models.create_task_schema import CreateTaskSchema as CreateTaskSchema
 from cyberwave.rest.models.dataset_create_schema import DatasetCreateSchema as DatasetCreateSchema
+from cyberwave.rest.models.dataset_debug_info_schema import DatasetDebugInfoSchema as DatasetDebugInfoSchema
+from cyberwave.rest.models.dataset_episode_camera_video_schema import DatasetEpisodeCameraVideoSchema as DatasetEpisodeCameraVideoSchema
+from cyberwave.rest.models.dataset_episode_file_schema import DatasetEpisodeFileSchema as DatasetEpisodeFileSchema
+from cyberwave.rest.models.dataset_episode_manifest_schema import DatasetEpisodeManifestSchema as DatasetEpisodeManifestSchema
+from cyberwave.rest.models.dataset_hub_files_schema import DatasetHubFilesSchema as DatasetHubFilesSchema
+from cyberwave.rest.models.dataset_import_complete_schema import DatasetImportCompleteSchema as DatasetImportCompleteSchema
+from cyberwave.rest.models.dataset_import_init_schema import DatasetImportInitSchema as DatasetImportInitSchema
+from cyberwave.rest.models.dataset_import_initiated_schema import DatasetImportInitiatedSchema as DatasetImportInitiatedSchema
+from cyberwave.rest.models.dataset_import_queued_schema import DatasetImportQueuedSchema as DatasetImportQueuedSchema
+from cyberwave.rest.models.dataset_list_query_schema import DatasetListQuerySchema as DatasetListQuerySchema
+from cyberwave.rest.models.dataset_list_response_schema import DatasetListResponseSchema as DatasetListResponseSchema
 from cyberwave.rest.models.dataset_schema import DatasetSchema as DatasetSchema
 from cyberwave.rest.models.dataset_update_schema import DatasetUpdateSchema as DatasetUpdateSchema
 from cyberwave.rest.models.dataset_zip_url_schema import DatasetZipUrlSchema as DatasetZipUrlSchema
 from cyberwave.rest.models.deferred_task_execution_response_schema import DeferredTaskExecutionResponseSchema as DeferredTaskExecutionResponseSchema
+from cyberwave.rest.models.delivery_address_create_schema import DeliveryAddressCreateSchema as DeliveryAddressCreateSchema
+from cyberwave.rest.models.delivery_address_schema import DeliveryAddressSchema as DeliveryAddressSchema
+from cyberwave.rest.models.delivery_address_update_schema import DeliveryAddressUpdateSchema as DeliveryAddressUpdateSchema
 from cyberwave.rest.models.discovery_response_schema import DiscoveryResponseSchema as DiscoveryResponseSchema
 from cyberwave.rest.models.edge_core_restart_response_schema import EdgeCoreRestartResponseSchema as EdgeCoreRestartResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema as EdgeCreateSchema
@@ -385,14 +465,20 @@ from cyberwave.rest.models.edge_schema import EdgeSchema as EdgeSchema
 from cyberwave.rest.models.enable_global_feature_request import EnableGlobalFeatureRequest as EnableGlobalFeatureRequest
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest as EnableOrgFeatureRequest
 from cyberwave.rest.models.end_session_response_schema import EndSessionResponseSchema as EndSessionResponseSchema
+from cyberwave.rest.models.environment_assistant_create_response_schema import EnvironmentAssistantCreateResponseSchema as EnvironmentAssistantCreateResponseSchema
+from cyberwave.rest.models.environment_assistant_create_schema import EnvironmentAssistantCreateSchema as EnvironmentAssistantCreateSchema
 from cyberwave.rest.models.environment_assistant_request_schema import EnvironmentAssistantRequestSchema as EnvironmentAssistantRequestSchema
 from cyberwave.rest.models.environment_assistant_response_schema import EnvironmentAssistantResponseSchema as EnvironmentAssistantResponseSchema
+from cyberwave.rest.models.environment_clone_schema import EnvironmentCloneSchema as EnvironmentCloneSchema
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema as EnvironmentCreateSchema
 from cyberwave.rest.models.environment_navigation_settings_patch_schema import EnvironmentNavigationSettingsPatchSchema as EnvironmentNavigationSettingsPatchSchema
 from cyberwave.rest.models.environment_schema import EnvironmentSchema as EnvironmentSchema
 from cyberwave.rest.models.environment_snapshot_create_schema import EnvironmentSnapshotCreateSchema as EnvironmentSnapshotCreateSchema
 from cyberwave.rest.models.environment_snapshot_schema import EnvironmentSnapshotSchema as EnvironmentSnapshotSchema
 from cyberwave.rest.models.environment_universal_schema_patch_schema import EnvironmentUniversalSchemaPatchSchema as EnvironmentUniversalSchemaPatchSchema
+from cyberwave.rest.models.environment_waypoint_bulk_create_schema import EnvironmentWaypointBulkCreateSchema as EnvironmentWaypointBulkCreateSchema
+from cyberwave.rest.models.environment_waypoint_create_schema import EnvironmentWaypointCreateSchema as EnvironmentWaypointCreateSchema
+from cyberwave.rest.models.environment_waypoint_schema import EnvironmentWaypointSchema as EnvironmentWaypointSchema
 from cyberwave.rest.models.episode_create_schema import EpisodeCreateSchema as EpisodeCreateSchema
 from cyberwave.rest.models.episode_schema import EpisodeSchema as EpisodeSchema
 from cyberwave.rest.models.episode_update_schema import EpisodeUpdateSchema as EpisodeUpdateSchema
@@ -402,6 +488,7 @@ from cyberwave.rest.models.feature_metadata_schema import FeatureMetadataSchema 
 from cyberwave.rest.models.feature_status_schema import FeatureStatusSchema as FeatureStatusSchema
 from cyberwave.rest.models.global_feature_schema import GlobalFeatureSchema as GlobalFeatureSchema
 from cyberwave.rest.models.grant_user_feature_request import GrantUserFeatureRequest as GrantUserFeatureRequest
+from cyberwave.rest.models.history_turn_schema import HistoryTurnSchema as HistoryTurnSchema
 from cyberwave.rest.models.image_bytes import ImageBytes as ImageBytes
 from cyberwave.rest.models.image_bytes1 import ImageBytes1 as ImageBytes1
 from cyberwave.rest.models.import_result_schema import ImportResultSchema as ImportResultSchema
@@ -423,11 +510,20 @@ from cyberwave.rest.models.link_share_create_schema import LinkShareCreateSchema
 from cyberwave.rest.models.link_share_revoke_schema import LinkShareRevokeSchema as LinkShareRevokeSchema
 from cyberwave.rest.models.link_share_schema import LinkShareSchema as LinkShareSchema
 from cyberwave.rest.models.ml_model_create_schema import MLModelCreateSchema as MLModelCreateSchema
+from cyberwave.rest.models.ml_model_edge_runtime_list_schema import MLModelEdgeRuntimeListSchema as MLModelEdgeRuntimeListSchema
+from cyberwave.rest.models.ml_model_edge_runtime_option import MLModelEdgeRuntimeOption as MLModelEdgeRuntimeOption
+from cyberwave.rest.models.ml_model_evaluate_schema import MLModelEvaluateSchema as MLModelEvaluateSchema
+from cyberwave.rest.models.ml_model_frame_schema import MLModelFrameSchema as MLModelFrameSchema
+from cyberwave.rest.models.ml_model_run_queued_schema import MLModelRunQueuedSchema as MLModelRunQueuedSchema
+from cyberwave.rest.models.ml_model_run_result_schema import MLModelRunResultSchema as MLModelRunResultSchema
+from cyberwave.rest.models.ml_model_run_schema import MLModelRunSchema as MLModelRunSchema
 from cyberwave.rest.models.ml_model_schema import MLModelSchema as MLModelSchema
 from cyberwave.rest.models.ml_model_update_schema import MLModelUpdateSchema as MLModelUpdateSchema
 from cyberwave.rest.models.ml_training_create_schema import MLTrainingCreateSchema as MLTrainingCreateSchema
 from cyberwave.rest.models.ml_training_deploy_schema import MLTrainingDeploySchema as MLTrainingDeploySchema
 from cyberwave.rest.models.ml_training_failed_creation_schema import MLTrainingFailedCreationSchema as MLTrainingFailedCreationSchema
+from cyberwave.rest.models.ml_training_metrics_log_schema import MLTrainingMetricsLogSchema as MLTrainingMetricsLogSchema
+from cyberwave.rest.models.ml_training_metrics_update_schema import MLTrainingMetricsUpdateSchema as MLTrainingMetricsUpdateSchema
 from cyberwave.rest.models.ml_training_schema import MLTrainingSchema as MLTrainingSchema
 from cyberwave.rest.models.ml_training_update_schema import MLTrainingUpdateSchema as MLTrainingUpdateSchema
 from cyberwave.rest.models.map_create_schema import MapCreateSchema as MapCreateSchema
@@ -438,6 +534,7 @@ from cyberwave.rest.models.map_stream_stop_schema import MapStreamStopSchema as 
 from cyberwave.rest.models.metadata import Metadata as Metadata
 from cyberwave.rest.models.mission_execution_schema import MissionExecutionSchema as MissionExecutionSchema
 from cyberwave.rest.models.mission_schema import MissionSchema as MissionSchema
+from cyberwave.rest.models.motion_episode_schema import MotionEpisodeSchema as MotionEpisodeSchema
 from cyberwave.rest.models.motion_plan_schema import MotionPlanSchema as MotionPlanSchema
 from cyberwave.rest.models.motion_plan_step_schema import MotionPlanStepSchema as MotionPlanStepSchema
 from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponseSchema as MyFeaturesResponseSchema
@@ -473,29 +570,47 @@ from cyberwave.rest.models.project_create_schema import ProjectCreateSchema as P
 from cyberwave.rest.models.project_schema import ProjectSchema as ProjectSchema
 from cyberwave.rest.models.project_share_response_schema import ProjectShareResponseSchema as ProjectShareResponseSchema
 from cyberwave.rest.models.public_user_schema import PublicUserSchema as PublicUserSchema
+from cyberwave.rest.models.quaternion_schema import QuaternionSchema as QuaternionSchema
+from cyberwave.rest.models.recording_detail_schema import RecordingDetailSchema as RecordingDetailSchema
 from cyberwave.rest.models.recording_generation_request_schema import RecordingGenerationRequestSchema as RecordingGenerationRequestSchema
 from cyberwave.rest.models.recording_generation_request_schema_by_date import RecordingGenerationRequestSchemaByDate as RecordingGenerationRequestSchemaByDate
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema as RecordingGenerationResponseSchema
+from cyberwave.rest.models.recording_list_item import RecordingListItem as RecordingListItem
+from cyberwave.rest.models.recording_list_response import RecordingListResponse as RecordingListResponse
+from cyberwave.rest.models.recording_sources_envelope_schema import RecordingSourcesEnvelopeSchema as RecordingSourcesEnvelopeSchema
+from cyberwave.rest.models.recording_sources_schema import RecordingSourcesSchema as RecordingSourcesSchema
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema as ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse as RemoveMemberResponse
 from cyberwave.rest.models.replay_timeline_event_schema import ReplayTimelineEventSchema as ReplayTimelineEventSchema
 from cyberwave.rest.models.replay_timeline_events_response_schema import ReplayTimelineEventsResponseSchema as ReplayTimelineEventsResponseSchema
 from cyberwave.rest.models.response import Response as Response
 from cyberwave.rest.models.revoke_user_feature_request import RevokeUserFeatureRequest as RevokeUserFeatureRequest
+from cyberwave.rest.models.robot_context_schema import RobotContextSchema as RobotContextSchema
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema as RobotDescriptionSchema
+from cyberwave.rest.models.robot_state_schema import RobotStateSchema as RobotStateSchema
 from cyberwave.rest.models.share_schema import ShareSchema as ShareSchema
 from cyberwave.rest.models.shares_response_schema import SharesResponseSchema as SharesResponseSchema
 from cyberwave.rest.models.simulation_start_schema import SimulationStartSchema as SimulationStartSchema
 from cyberwave.rest.models.slug_availability_schema import SlugAvailabilitySchema as SlugAvailabilitySchema
+from cyberwave.rest.models.slug_check_schema import SlugCheckSchema as SlugCheckSchema
+from cyberwave.rest.models.spatial_filter_zone_schema import SpatialFilterZoneSchema as SpatialFilterZoneSchema
 from cyberwave.rest.models.sync_with_asset_schema import SyncWithAssetSchema as SyncWithAssetSchema
 from cyberwave.rest.models.tagged_frames_create_schema import TaggedFramesCreateSchema as TaggedFramesCreateSchema
 from cyberwave.rest.models.tagged_frames_schema import TaggedFramesSchema as TaggedFramesSchema
 from cyberwave.rest.models.tagged_frames_update_schema import TaggedFramesUpdateSchema as TaggedFramesUpdateSchema
+from cyberwave.rest.models.target_pose_schema import TargetPoseSchema as TargetPoseSchema
 from cyberwave.rest.models.task_execution_schema import TaskExecutionSchema as TaskExecutionSchema
 from cyberwave.rest.models.task_schema import TaskSchema as TaskSchema
 from cyberwave.rest.models.task_step_schema import TaskStepSchema as TaskStepSchema
 from cyberwave.rest.models.team_member_response import TeamMemberResponse as TeamMemberResponse
 from cyberwave.rest.models.team_share_schema import TeamShareSchema as TeamShareSchema
+from cyberwave.rest.models.template_environment_schema import TemplateEnvironmentSchema as TemplateEnvironmentSchema
+from cyberwave.rest.models.template_twin_summary_schema import TemplateTwinSummarySchema as TemplateTwinSummarySchema
+from cyberwave.rest.models.template_workflow_summary_schema import TemplateWorkflowSummarySchema as TemplateWorkflowSummarySchema
+from cyberwave.rest.models.trajectory_action_schema import TrajectoryActionSchema as TrajectoryActionSchema
+from cyberwave.rest.models.trajectory_from_action_request_schema import TrajectoryFromActionRequestSchema as TrajectoryFromActionRequestSchema
+from cyberwave.rest.models.trajectory_initial_state_schema import TrajectoryInitialStateSchema as TrajectoryInitialStateSchema
+from cyberwave.rest.models.trajectory_recipe_schema import TrajectoryRecipeSchema as TrajectoryRecipeSchema
 from cyberwave.rest.models.twin_action_request_schema import TwinActionRequestSchema as TwinActionRequestSchema
 from cyberwave.rest.models.twin_action_response_schema import TwinActionResponseSchema as TwinActionResponseSchema
 from cyberwave.rest.models.twin_action_status_schema import TwinActionStatusSchema as TwinActionStatusSchema
@@ -512,6 +627,7 @@ from cyberwave.rest.models.twin_navigation_command_schema import TwinNavigationC
 from cyberwave.rest.models.twin_relationship_schema import TwinRelationshipSchema as TwinRelationshipSchema
 from cyberwave.rest.models.twin_schema import TwinSchema as TwinSchema
 from cyberwave.rest.models.twin_state_update_schema import TwinStateUpdateSchema as TwinStateUpdateSchema
+from cyberwave.rest.models.twin_sync_workflows_response_schema import TwinSyncWorkflowsResponseSchema as TwinSyncWorkflowsResponseSchema
 from cyberwave.rest.models.twin_telemetry_metadata_schema import TwinTelemetryMetadataSchema as TwinTelemetryMetadataSchema
 from cyberwave.rest.models.twin_universal_schema_patch_schema import TwinUniversalSchemaPatchSchema as TwinUniversalSchemaPatchSchema
 from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSchema as URDFProjectCreateSchema
@@ -530,21 +646,27 @@ from cyberwave.rest.models.user_share_schema import UserShareSchema as UserShare
 from cyberwave.rest.models.vlm_generation_schema import VLMGenerationSchema as VLMGenerationSchema
 from cyberwave.rest.models.vlm_response_schema import VLMResponseSchema as VLMResponseSchema
 from cyberwave.rest.models.value import Value as Value
+from cyberwave.rest.models.vector3_schema import Vector3Schema as Vector3Schema
 from cyberwave.rest.models.vendor_description_schema import VendorDescriptionSchema as VendorDescriptionSchema
+from cyberwave.rest.models.vendor_public_content_schema import VendorPublicContentSchema as VendorPublicContentSchema
 from cyberwave.rest.models.visibility import Visibility as Visibility
+from cyberwave.rest.models.workflow_clone_schema import WorkflowCloneSchema as WorkflowCloneSchema
 from cyberwave.rest.models.workflow_connection_create_schema import WorkflowConnectionCreateSchema as WorkflowConnectionCreateSchema
 from cyberwave.rest.models.workflow_connection_schema import WorkflowConnectionSchema as WorkflowConnectionSchema
 from cyberwave.rest.models.workflow_create_schema import WorkflowCreateSchema as WorkflowCreateSchema
 from cyberwave.rest.models.workflow_execute_schema import WorkflowExecuteSchema as WorkflowExecuteSchema
 from cyberwave.rest.models.workflow_execution_schema import WorkflowExecutionSchema as WorkflowExecutionSchema
+from cyberwave.rest.models.workflow_node_category_schema import WorkflowNodeCategorySchema as WorkflowNodeCategorySchema
 from cyberwave.rest.models.workflow_node_create_schema import WorkflowNodeCreateSchema as WorkflowNodeCreateSchema
 from cyberwave.rest.models.workflow_node_execution_schema import WorkflowNodeExecutionSchema as WorkflowNodeExecutionSchema
 from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema as WorkflowNodeSchema
 from cyberwave.rest.models.workflow_node_update_schema import WorkflowNodeUpdateSchema as WorkflowNodeUpdateSchema
 from cyberwave.rest.models.workflow_run_schema import WorkflowRunSchema as WorkflowRunSchema
 from cyberwave.rest.models.workflow_schema import WorkflowSchema as WorkflowSchema
+from cyberwave.rest.models.workflow_template_schema import WorkflowTemplateSchema as WorkflowTemplateSchema
 from cyberwave.rest.models.workflow_trigger_schema import WorkflowTriggerSchema as WorkflowTriggerSchema
 from cyberwave.rest.models.workflow_update_schema import WorkflowUpdateSchema as WorkflowUpdateSchema
+from cyberwave.rest.models.workflows_config_schema import WorkflowsConfigSchema as WorkflowsConfigSchema
 from cyberwave.rest.models.workspace_create_schema import WorkspaceCreateSchema as WorkspaceCreateSchema
 from cyberwave.rest.models.workspace_response_schema import WorkspaceResponseSchema as WorkspaceResponseSchema
 from cyberwave.rest.models.workspace_schema import WorkspaceSchema as WorkspaceSchema

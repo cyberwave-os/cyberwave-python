@@ -29,9 +29,8 @@ class DatasetCreateSchema(BaseModel):
     """ # noqa: E501
     episodes: List[StrictStr]
     name: Optional[StrictStr] = None
-    description: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["episodes", "name", "description", "metadata"]
+    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,11 +76,6 @@ class DatasetCreateSchema(BaseModel):
         if self.name is None and "name" in self.model_fields_set:
             _dict['name'] = None
 
-        # set to None if description (nullable) is None
-        # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
-
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -101,7 +95,6 @@ class DatasetCreateSchema(BaseModel):
         _obj = cls.model_validate({
             "episodes": obj.get("episodes"),
             "name": obj.get("name"),
-            "description": obj.get("description"),
             "metadata": obj.get("metadata")
         })
         return _obj

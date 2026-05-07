@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -35,7 +35,9 @@ class AssetListQuerySchema(BaseModel):
     search: Optional[StrictStr] = None
     metadata_key: Optional[StrictStr] = None
     metadata_value: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["limit", "offset", "registry_id", "registry_vendor", "owned", "search", "metadata_key", "metadata_value"]
+    min_price: Optional[Union[StrictFloat, StrictInt]] = None
+    max_price: Optional[Union[StrictFloat, StrictInt]] = None
+    __properties: ClassVar[List[str]] = ["limit", "offset", "registry_id", "registry_vendor", "owned", "search", "metadata_key", "metadata_value", "min_price", "max_price"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -116,6 +118,16 @@ class AssetListQuerySchema(BaseModel):
         if self.metadata_value is None and "metadata_value" in self.model_fields_set:
             _dict['metadata_value'] = None
 
+        # set to None if min_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.min_price is None and "min_price" in self.model_fields_set:
+            _dict['min_price'] = None
+
+        # set to None if max_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_price is None and "max_price" in self.model_fields_set:
+            _dict['max_price'] = None
+
         return _dict
 
     @classmethod
@@ -135,7 +147,9 @@ class AssetListQuerySchema(BaseModel):
             "owned": obj.get("owned"),
             "search": obj.get("search"),
             "metadata_key": obj.get("metadata_key"),
-            "metadata_value": obj.get("metadata_value")
+            "metadata_value": obj.get("metadata_value"),
+            "min_price": obj.get("min_price"),
+            "max_price": obj.get("max_price")
         })
         return _obj
 

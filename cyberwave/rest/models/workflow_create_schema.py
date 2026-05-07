@@ -32,9 +32,14 @@ class WorkflowCreateSchema(BaseModel):
     description: Optional[StrictStr] = ''
     is_active: Optional[StrictBool] = False
     workspace_uuid: Optional[StrictStr] = None
+    environment_uuid: Optional[StrictStr] = None
+    run_on_edge: Optional[StrictBool] = False
+    execution_target: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "workspace_uuid", "visibility", "metadata"]
+    tags: Optional[List[StrictStr]] = None
+    is_template: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "workspace_uuid", "environment_uuid", "run_on_edge", "execution_target", "visibility", "metadata", "tags", "is_template"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -85,10 +90,30 @@ class WorkflowCreateSchema(BaseModel):
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
 
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
+        # set to None if execution_target (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_target is None and "execution_target" in self.model_fields_set:
+            _dict['execution_target'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
+
+        # set to None if tags (nullable) is None
+        # and model_fields_set contains the field
+        if self.tags is None and "tags" in self.model_fields_set:
+            _dict['tags'] = None
+
+        # set to None if is_template (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_template is None and "is_template" in self.model_fields_set:
+            _dict['is_template'] = None
 
         return _dict
 
@@ -107,8 +132,13 @@ class WorkflowCreateSchema(BaseModel):
             "description": obj.get("description") if obj.get("description") is not None else '',
             "is_active": obj.get("is_active") if obj.get("is_active") is not None else False,
             "workspace_uuid": obj.get("workspace_uuid"),
+            "environment_uuid": obj.get("environment_uuid"),
+            "run_on_edge": obj.get("run_on_edge") if obj.get("run_on_edge") is not None else False,
+            "execution_target": obj.get("execution_target"),
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "tags": obj.get("tags"),
+            "is_template": obj.get("is_template")
         })
         return _obj
 

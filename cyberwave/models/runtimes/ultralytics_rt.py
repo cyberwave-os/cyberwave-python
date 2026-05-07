@@ -53,7 +53,19 @@ class UltralyticsRuntime(ModelRuntime):
                 os.chdir(old_cwd)
 
         if device:
-            model.to(device)
+            # ``model.to(device)`` raises ``TypeError`` for any non-PyTorch
+            # backend (ONNX, TensorRT, OpenVINO, …) loaded through the
+            # Ultralytics ``YOLO`` wrapper — those formats are inference-
+            # only and pin the device at export time. We still want
+            # ``cw.models.load('foo.onnx', runtime='ultralytics')`` to
+            # succeed (Ultralytics provides letterboxing + NMS that the
+            # raw onnxruntime adapter does not), so swallow the format
+            # mismatch and rely on the per-call ``device=`` kwarg in
+            # ``predict()`` instead.
+            try:
+                model.to(device)
+            except TypeError:
+                pass
         return model
 
     @staticmethod
@@ -96,25 +108,38 @@ class UltralyticsRuntime(ModelRuntime):
 
         for result in results:
             frame_area = (
-                result.orig_shape[0] * result.orig_shape[1]
-                if result.orig_shape
-                else 1
+                result.orig_shape[0] * result.orig_shape[1] if result.orig_shape else 1
             )
             if result.boxes is None:
                 continue
-            for box in result.boxes:
+            # Pose models (e.g. yolov8n-pose) attach keypoints aligned to boxes.
+            kp_data = None
+            if getattr(result, "keypoints", None) is not None:
+                try:
+                    kp_data = result.keypoints.data.cpu().numpy()
+                except AttributeError:
+                    kp_data = None
+            for i, box in enumerate(result.boxes):
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 label = result.names[int(box.cls[0])]
                 conf = float(box.conf[0])
                 if classes and label not in classes:
                     continue
                 bbox = BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
+                # Ultralytics aligns ``boxes[i]`` with ``keypoints.data[i]``
+                # by index, so this lookup should always succeed when
+                # ``kp_data`` is present. The ``i < len(kp_data)`` guard is
+                # defensive against future Ultralytics releases that might
+                # decouple the two arrays (e.g. NMS dropping a few rows from
+                # one but not the other).
+                kps = kp_data[i] if kp_data is not None and i < len(kp_data) else None
                 detections.append(
                     Detection(
                         label=label,
                         confidence=conf,
                         bbox=bbox,
                         area_ratio=bbox.area / frame_area if frame_area else 0.0,
+                        keypoints=kps,
                     )
                 )
 

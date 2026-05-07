@@ -16,6 +16,7 @@ import pytest
 from cyberwave.data.api import DataBus
 from cyberwave.data.backend import Sample
 from cyberwave.data.filesystem_backend import FilesystemBackend
+from cyberwave.data.keys import build_key
 
 TWIN_UUID = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -208,3 +209,17 @@ class TestContextManager:
         be = FilesystemBackend(base_dir=tmp_path)
         with DataBus(be, TWIN_UUID) as bus:
             bus.publish("cm_ch", b"data")
+            assert bus.latest("cm_ch") == b"data"
+
+
+class TestPublishRaw:
+    def test_publish_raw_keeps_payload_headerless(self, bus: DataBus, backend):
+        payload = b'{"detections":[{"label":"person"}],"frame_width":640}'
+
+        bus.publish_raw("detections/yolo", payload)
+
+        key = build_key(TWIN_UUID, "detections/yolo", prefix="cw")
+        sample = backend.latest(key)
+
+        assert sample is not None
+        assert sample.payload == payload

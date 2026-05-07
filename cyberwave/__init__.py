@@ -108,6 +108,25 @@ from .manifest import ManifestSchema, detect_dispatch_mode, validate_manifest
 # Model API
 from .models import ModelManager, LoadedModel, Detection, BoundingBox, PredictionResult
 
+# Cloud Playground ML model API (``cw.mlmodels``; see module docstring for
+# the split between edge ``cw.models`` and cloud ``cw.mlmodels``).
+from .mlmodels import (
+    MLModelRunResult,
+    MLModelSummary,
+    MLModelsClient,
+    STRUCTURED_ACTIONS,
+    StructuredAction,
+)
+
+# Image helpers (base64 encoding + annotated-image saving).
+from . import image
+from .image import (
+    decode_image_base64,
+    encode_image_base64,
+    read_annotated_metadata,
+    save_annotated_image,
+)
+
 # MQTT client (optional, for direct MQTT access)
 from .mqtt import CyberwaveMQTTClient
 
@@ -170,7 +189,13 @@ from .constants import (
 )
 
 # Worker API
-from .workers import HookContext, HookRegistration, HookRegistry, SynchronizedGroup
+from .workers import (
+    HookContext,
+    HookRegistration,
+    HookRegistry,
+    ScheduleRegistration,
+    SynchronizedGroup,
+)
 
 # Model output types
 from .models import BoundingBox, Detection, PredictionResult
@@ -255,12 +280,24 @@ __all__ = [
     "EdgeController",
     # Worker API
     "HookContext",
-    # Model API
+    # Model API (edge runtime)
     "ModelManager",
     "LoadedModel",
     "Detection",
     "BoundingBox",
     "PredictionResult",
+    # ML Model API (cloud playground)
+    "MLModelRunResult",
+    "MLModelSummary",
+    "MLModelsClient",
+    "STRUCTURED_ACTIONS",
+    "StructuredAction",
+    # Image helpers
+    "image",
+    "encode_image_base64",
+    "decode_image_base64",
+    "save_annotated_image",
+    "read_annotated_metadata",
     # Constants
     "SOURCE_TYPE_EDGE",
     "SOURCE_TYPE_EDGE_FOLLOWER",
@@ -280,6 +317,7 @@ __all__ = [
     "HookContext",
     "HookRegistration",
     "HookRegistry",
+    "ScheduleRegistration",
     "SynchronizedGroup",
     # Model output types
     "BoundingBox",

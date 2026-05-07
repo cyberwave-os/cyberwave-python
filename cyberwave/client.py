@@ -2,34 +2,33 @@
 Main Cyberwave client that integrates REST and MQTT APIs
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import time
 import warnings
-from typing import Any, Callable, Optional
-
-logger = logging.getLogger(__name__)
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from cyberwave.config import (
     CyberwaveConfig,
     DEFAULT_BASE_URL,
 )
-from cyberwave.controller import EdgeController
-from cyberwave.models.manager import ModelManager
-from cyberwave.mqtt_client import CyberwaveMQTTClient
-from cyberwave.workers.hooks import HookRegistry
-from cyberwave.twin import Twin, create_twin
-from cyberwave.utils import TimeReference
-from cyberwave.exceptions import (
-    CyberwaveError,
-    CyberwaveAPIError,
-    UnauthorizedException,
-)
 from cyberwave.constants import (
     SOURCE_TYPE_EDGE,
     SOURCE_TYPE_SIM,
 )
+from cyberwave.controller import EdgeController
 from cyberwave.data.api import DataBus
+from cyberwave.exceptions import (
+    CyberwaveAPIError,
+    CyberwaveError,
+    UnauthorizedException,
+)
+from cyberwave.models.manager import ModelManager
+from cyberwave.mqtt_client import CyberwaveMQTTClient
+from cyberwave.twin import Twin, create_twin
+from cyberwave.utils import TimeReference
 from cyberwave.workers.hooks import HookRegistry
 
 # Import camera streamers with optional dependency handling
@@ -48,6 +47,12 @@ try:
 except ImportError:
     _has_realsense = False
     RealSenseStreamer = None
+
+if TYPE_CHECKING:
+    from cyberwave.scene import Scene
+
+
+logger = logging.getLogger(__name__)
 
 
 _RUNTIME_MODE_MAP = {
@@ -171,28 +176,7 @@ class Cyberwave:
         self._mqtt_client: Optional[CyberwaveMQTTClient] = None
         self._data_bus: Optional[DataBus] = None
         self._hook_registry = HookRegistry()
-
-        self._hook_registry = HookRegistry()
-        self.models = ModelManager(data_bus=lambda: self._try_get_data_bus())
-
-        from cyberwave.resources import (
-            WorkspaceManager,
-            ProjectManager,
-            EnvironmentManager,
-            AssetManager,
-            EdgeManager,
-            TwinManager,
-        )
-        from cyberwave.workflows import WorkflowManager, WorkflowRunManager
-
-        self.workspaces = WorkspaceManager(self.api)
-        self.projects = ProjectManager(self.api)
-        self.environments = EnvironmentManager(self.api)
-        self.assets = AssetManager(self.api)
-        self.edges = EdgeManager(self.api)
-        self.twins = TwinManager(self.api, client=self)
-        self.workflows = WorkflowManager(self)
-        self.workflow_runs = WorkflowRunManager(self)
+        self._init_managers()
 
     def _setup_rest_client(self):
         """Setup the REST API client with authentication"""
@@ -257,6 +241,54 @@ class Cyberwave:
         self._api_client = api_client
 
         self._wrap_api_methods()
+
+    def _init_managers(self) -> None:
+        """(Re)build high-level managers that hold REST client references.
+
+        ``configure()`` can rebuild ``self._api_client`` and ``self.api`` with a
+        new base URL or API key. Any manager instantiated before that point
+        would otherwise keep talking to the stale backend. Centralizing manager
+        setup here lets ``__init__`` and ``configure()`` refresh every surface
+        consistently.
+        """
+        # Cloud Playground client (``cw.mlmodels``) — companion to the edge
+        # ``cw.models`` manager. See ``cyberwave.mlmodels`` for details.
+        from cyberwave.mlmodels import MLModelsClient
+        from cyberwave.resources import (
+            AttachmentManager,
+            AssetManager,
+            DatasetManager,
+            EdgeManager,
+            EnvironmentManager,
+            ProjectManager,
+            TwinManager,
+            WorkspaceManager,
+        )
+        from cyberwave.workflow_executions import WorkflowExecutionManager
+        from cyberwave.workflows import WorkflowManager, WorkflowRunManager
+
+        self.mlmodels = MLModelsClient(self._api_client)
+        # ``cw.models`` is the *unified* surface: ``cw.models.load("yolov8n")``
+        # returns a local LoadedModel, ``cw.models.load("acme/models/sam-3.1")``
+        # returns a CloudLoadedModel. Both share a ``.predict(image, ...)``
+        # API so snippets and user code don't need to branch on where the
+        # model is hosted. The ModelManager holds a reference to the
+        # Playground client to do the routing.
+        self.models = ModelManager(
+            data_bus=lambda: self._try_get_data_bus(),
+            mlmodels_client=self.mlmodels,
+        )
+        self.workspaces = WorkspaceManager(self.api)
+        self.projects = ProjectManager(self.api)
+        self.environments = EnvironmentManager(self.api)
+        self.attachments = AttachmentManager(self.api)
+        self.assets = AssetManager(self.api)
+        self.datasets = DatasetManager(self.api)
+        self.edges = EdgeManager(self.api)
+        self.twins = TwinManager(self.api, client=self)
+        self.workflows = WorkflowManager(self)
+        self.workflow_runs = WorkflowRunManager(self)
+        self.workflow_executions = WorkflowExecutionManager(self)
 
     def _wrap_api_methods(self):
         """Wrap API methods to provide better error messages for authentication failures"""
@@ -352,6 +384,55 @@ class Cyberwave:
     _QUICKSTART_PROJECT_NAME = "Quickstart Project"
     _QUICKSTART_ENV_NAME = "Quickstart Environment"
 
+    _WEB_BASE_URL = "https://cyberwave.com"
+
+    def _build_environment_url(self, env_id: str) -> str:
+        """Build a user-facing URL for an environment.
+
+        Uses the environment's unified slug when available, falling back to
+        the UUID-based URL.
+        """
+        try:
+            env = self.environments.get(env_id)
+            slug = getattr(env, "slug", None)
+            if slug:
+                return f"{self._WEB_BASE_URL}/{slug}"
+        except Exception:
+            pass
+        return f"{self._WEB_BASE_URL}/environments/{env_id}"
+
+    def _resolve_environment_id(self, env_id: str) -> str:
+        """Resolve an environment slug to its UUID if needed.
+
+        When *env_id* contains slashes (looks like a slug), the environment
+        is fetched by slug and its UUID is returned.  Otherwise *env_id* is
+        returned unchanged.
+        """
+        if "/" in env_id:
+            try:
+                env = self.environments.get_by_slug(env_id)
+                if env is not None:
+                    return str(env.uuid)
+            except Exception:
+                pass
+        return env_id
+
+    def _build_twin_url(self, twin_data: Any) -> str:
+        """Build a user-facing URL for a twin.
+
+        Uses the twin's unified slug when available, falling back to
+        the UUID-based URL.
+        """
+        slug = getattr(twin_data, "slug", None)
+        if isinstance(twin_data, dict):
+            slug = twin_data.get("slug", slug)
+        if slug:
+            return f"{self._WEB_BASE_URL}/{slug}"
+        twin_uuid = getattr(twin_data, "uuid", None)
+        if isinstance(twin_data, dict):
+            twin_uuid = twin_data.get("uuid", twin_uuid)
+        return f"{self._WEB_BASE_URL}/twins/{twin_uuid}"
+
     def _get_or_create_quickstart_env(self) -> tuple[str, bool]:
         """Return (env_uuid, created) for the quickstart environment.
 
@@ -437,18 +518,25 @@ class Cyberwave:
         - LocomoteTwin: For assets that can locomote (has move(), etc.)
 
         Args:
-            asset_key: Asset identifier (e.g., "the-robot-studio/so101"). Required for creation, optional when twin_id is provided.
-            environment_id: Environment ID (uses default if not provided)
-            twin_id: Existing twin ID to fetch (skips creation)
+            asset_key: Asset identifier — accepts a registry ID
+                (e.g. ``"the-robot-studio/so101"``), a full unified slug
+                (e.g. ``"acme/catalog/my-robot-arm"``), or a plain alias.
+                Required for creation, optional when *twin_id* is provided.
+            environment_id: Environment UUID or unified slug
+                (e.g. ``"acme/envs/production-floor"``).  Uses the default
+                environment when not provided.
+            twin_id: Existing twin UUID or unified slug
+                (e.g. ``"acme/twins/arm-station-1"``) to fetch (skips creation).
             **kwargs: Additional twin creation parameters
 
         Returns:
             Twin instance (or appropriate subclass based on capabilities)
 
         Example:
-            >>> robot = client.twin("unitree/go2")  # Create new twin
-            >>> robot = client.twin(twin_id="uuid")  # Fetch existing twin by ID
-            >>> robot.start_streaming(fps=15)  # Available because of RGB sensor
+            >>> robot = client.twin("unitree/go2")  # Create by registry ID
+            >>> robot = client.twin("acme/catalog/go2")  # Create by slug
+            >>> robot = client.twin(twin_id="acme/twins/my-go2")  # Fetch by slug
+            >>> robot = client.twin(twin_id="uuid")  # Fetch by UUID
             >>> robot.edit_position(x=1, y=0, z=0.5)
         """
         if twin_id:
@@ -467,7 +555,7 @@ class Cyberwave:
         if not env_id:
             env_id, created = self._get_or_create_quickstart_env()
             self.config.environment_id = env_id
-            env_url = f"https://cyberwave.com/environments/{env_id}"
+            env_url = self._build_environment_url(env_id)
             if created:
                 print(
                     f"[Cyberwave] No environment specified — created a new '{self._QUICKSTART_ENV_NAME}'.\n"
@@ -480,6 +568,8 @@ class Cyberwave:
                     f"  View it at: {env_url}\n"
                     "  Tip: set environment_id= (or CYBERWAVE_ENVIRONMENT_ID) to skip this step."
                 )
+        else:
+            env_id = self._resolve_environment_id(env_id)
 
         asset = self.assets.get_by_registry_id(asset_key)
         if asset is None:
@@ -531,8 +621,16 @@ class Cyberwave:
             >>> rover.move_forward(1.0, source_type="tele")
         """
         runtime_mode = _resolve_runtime_mode(mode)
+        source_type = _default_state_source_type(runtime_mode)
+
+        if (
+            self.config.runtime_mode == runtime_mode
+            and self.config.source_type == source_type
+        ):
+            return self
+
         self.config.runtime_mode = runtime_mode
-        self.config.source_type = _default_state_source_type(runtime_mode)
+        self.config.source_type = source_type
 
         if self._mqtt_client:
             self._mqtt_client.disconnect()
@@ -582,6 +680,7 @@ class Cyberwave:
                 setattr(self.config, key, value)
 
         self._setup_rest_client()
+        self._init_managers()
 
         if self._mqtt_client:
             self._mqtt_client.disconnect()
@@ -865,6 +964,10 @@ class Cyberwave:
         return self._hook_registry.on_battery
 
     @property
+    def on_alert(self) -> Callable:
+        return self._hook_registry.on_alert
+
+    @property
     def on_temperature(self) -> Callable:
         return self._hook_registry.on_temperature
 
@@ -875,6 +978,10 @@ class Cyberwave:
     @property
     def on_data(self) -> Callable:
         return self._hook_registry.on_data
+
+    @property
+    def on_schedule(self) -> Callable:
+        return self._hook_registry.on_schedule
 
     @property
     def on_synchronized(self) -> Callable:
@@ -893,7 +1000,7 @@ class Cyberwave:
         """Publish a business event via MQTT.
 
         Payload shape matches ``BaseEdgeNode.publish_event()`` and the
-        backend ``mqtt_consumer.handle_business_event()``::
+        backend ``mqtt_consumer.handle_twin_event_message()``::
 
             {"event_type": ..., "source": ..., "data": ..., "timestamp": ...}
         """
@@ -913,6 +1020,66 @@ class Cyberwave:
                 "timestamp": time.time(),
             },
         )
+
+    def publish_alert(
+        self,
+        twin_uuid: str,
+        name: str,
+        *,
+        description: str = "",
+        alert_type: str = "",
+        severity: str = "info",
+        category: str = "business",
+        force: bool = False,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Create a business alert via the REST API.
+
+        This is a fire-and-forget convenience used by generated edge workers
+        to surface detection events as operator-visible alerts.  The backend
+        handles deduplication, MQTT relay, and notification dispatch.
+
+        Args:
+            twin_uuid: UUID of the twin the alert is attached to.
+            name: Human-readable alert title.
+            description: Optional details (model name, confidence, etc.).
+            alert_type: Machine-readable type code (e.g. ``person_detected``).
+            severity: One of ``info``, ``warning``, ``error``, ``critical``.
+            category: ``business`` (default) or ``technical``.
+            force: If True, bypass backend alert deduplication.
+            metadata: Optional dict of extra data stored on the alert.
+        """
+        from cyberwave.alerts import _create_alert
+
+        payload: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "alert_type": alert_type,
+            "severity": severity.lower(),
+            "source_type": "edge",
+            "category": category,
+            "twin_uuid": twin_uuid,
+        }
+        if self.config.workspace_id:
+            payload["workspace_uuid"] = self.config.workspace_id
+        if force:
+            payload["force"] = True
+        if metadata is not None:
+            payload["metadata"] = metadata
+
+        try:
+            _create_alert(self, payload)
+            logger.info(
+                "publish_alert: created alert type=%s for twin=%s",
+                alert_type,
+                twin_uuid[:8] + "...",
+            )
+        except Exception:
+            logger.exception(
+                "publish_alert: failed to create alert type=%s for twin=%s",
+                alert_type,
+                twin_uuid[:8] + "...",
+            )
 
     def run_edge_workers(self, workers_dir: str | None = None) -> None:
         """Start the edge worker runtime: load workers, activate hooks, block.

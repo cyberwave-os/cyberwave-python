@@ -72,6 +72,8 @@ from .header import (
 )
 from .keys import (
     COMMAND_CHANNELS,
+    FILTERED_FRAME_CHANNEL,
+    FRAME_OVERLAY_CHANNEL,
     LATEST_VALUE_CHANNELS,
     STREAM_CHANNELS,
     WELL_KNOWN_CHANNELS,
@@ -127,6 +129,8 @@ __all__ = [
     "STREAM_CHANNELS",
     "LATEST_VALUE_CHANNELS",
     "WELL_KNOWN_CHANNELS",
+    "FILTERED_FRAME_CHANNEL",
+    "FRAME_OVERLAY_CHANNEL",
     # Recording / replay
     "RecordingSession",
     "ReplayResult",

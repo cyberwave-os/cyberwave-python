@@ -72,19 +72,90 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
         self.sync_frame_pts: Optional[int] = None
         self.sync_frame_timestamp: Optional[float] = None
         self.sync_frame_timestamp_monotonic: Optional[float] = None
+        self.sync_frame_time_base_num: Optional[int] = None
+        self.sync_frame_time_base_den: Optional[int] = None
+
+        # Sync metadata, populated by extension if present
+        self._sync_enabled: bool = False
+        self._current_frame_index: int = 0
+        self._current_pts: int = 0
+        self._current_time_base_num: int = 1
+        self._current_time_base_den: int = 30
+        self._current_capture_wall_time: float = 0.0
+        self._current_capture_monotonic: float = 0.0
+
+    def _store_frame_metadata_for_sync(
+        self,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
+        capture_wall_time: float,
+        capture_monotonic: float,
+    ):
+        """Store per-frame metadata for sync extension (if installed).
+
+        This metadata is read by the sync extension when active.
+        Called by concrete track implementations before returning the frame.
+
+        Args:
+            frame_index: Sender frame counter (0-indexed)
+            pts: Media presentation timestamp
+            time_base_num: Time base numerator
+            time_base_den: Time base denominator
+            capture_wall_time: Wall-clock timestamp (seconds)
+            capture_monotonic: Monotonic timestamp (seconds)
+        """
+        self._current_frame_index = frame_index
+        self._current_pts = pts
+        self._current_time_base_num = time_base_num
+        self._current_time_base_den = time_base_den
+        self._current_capture_wall_time = capture_wall_time
+        self._current_capture_monotonic = capture_monotonic
+
+    def _capture_timestamp(
+        self, time_reference: Optional["TimeReference"] = None
+    ) -> tuple[float, float]:
+        """Timestamp at frame production: shared reference if provided, else OS clocks.
+
+        When a ``TimeReference`` is supplied, returns its last ``update()`` snapshot
+        (``read()`` is lock-free). Otherwise uses ``time.time()`` and ``time.monotonic()``.
+
+        Returns:
+            Tuple of (wall_clock_timestamp, monotonic_timestamp)
+        """
+        if time_reference is not None:
+            return time_reference.read()
+        return time.time(), time.monotonic()
 
     def _capture_sync_frame(
-        self, timestamp: float, timestamp_monotonic: float, pts: int
+        self,
+        timestamp: float,
+        timestamp_monotonic: float,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
     ):
         """Capture sync frame data at the exact moment of frame capture.
 
         This is used for the MQTT camera_sync_frame message which provides
         the anchor point for video/robot synchronization.
+
+        Args:
+            timestamp: Wall-clock timestamp when frame was captured
+            timestamp_monotonic: Monotonic timestamp when frame was captured
+            frame_index: Sender frame counter (0-indexed)
+            pts: Media presentation timestamp (units depend on time_base)
+            time_base_num: Time base numerator (e.g., 1 for 1/fps)
+            time_base_den: Time base denominator (e.g., fps for 1/fps)
         """
-        if pts == self.sync_frame_target and self.sync_frame_pts is None:
+        if frame_index == self.sync_frame_target and self.sync_frame_pts is None:
             self.sync_frame_pts = pts
             self.sync_frame_timestamp = timestamp
             self.sync_frame_timestamp_monotonic = timestamp_monotonic
+            self.sync_frame_time_base_num = time_base_num
+            self.sync_frame_time_base_den = time_base_den
 
     def get_stream_attributes(self) -> Dict[str, Any]:
         """Get streaming attributes for the offer payload.
@@ -198,14 +269,26 @@ class BaseVideoStreamer(abc.ABC):
         self._bad_connection_checks = 0
 
     def _publish_camera_sync_frame(
-        self, pts: int, timestamp: float, timestamp_monotonic: float
+        self,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
+        timestamp: float,
+        timestamp_monotonic: float,
     ):
         """Publish a camera sync frame via MQTT.
 
         This sync frame is sent after ~1 second of streaming when the connection
-        has stabilized. It provides an anchor point for video/robot synchronization:
-        - pts: The edge frame counter at this sync point
-        - timestamp: Wall-clock time when this frame was captured
+        has stabilized. It provides an anchor point for video/robot synchronization.
+
+        Args:
+            frame_index: Sender frame counter (0-indexed)
+            pts: Media presentation timestamp (units depend on time_base)
+            time_base_num: Time base numerator (e.g., 1 for 1/fps)
+            time_base_den: Time base denominator (e.g., fps for 1/fps)
+            timestamp: Wall-clock time when this frame was captured
+            timestamp_monotonic: Monotonic time when this frame was captured
 
         During recording processing, the video is trimmed to start at this sync frame,
         and the timestamp becomes the video's start time. No interpolation needed.
@@ -216,7 +299,10 @@ class BaseVideoStreamer(abc.ABC):
         payload = {
             "type": "camera_sync_frame",
             "sender": "edge",
+            "frame_index": frame_index,
             "pts": pts,
+            "time_base_num": time_base_num,
+            "time_base_den": time_base_den,
             "timestamp": timestamp,
             "timestamp_monotonic": timestamp_monotonic,
             "track_id": self.streamer.id if self.streamer else None,
@@ -225,11 +311,12 @@ class BaseVideoStreamer(abc.ABC):
         }
         self._publish_message(topic, payload)
         logger.info(
-            f"Published camera_sync_frame: pts={pts}, timestamp={timestamp:.3f}"
+            f"Published camera_sync_frame: frame_index={frame_index}, pts={pts}, "
+            f"time_base={time_base_num}/{time_base_den}, timestamp={timestamp:.3f}"
         )
 
     async def _wait_and_publish_camera_sync_frame(
-        self, sync_frame: int = 30, timeout: float = 10.0
+        self, sync_frame: int | None = None, timeout: float = 10.0
     ):
         """Wait for the sync frame to be captured and publish it via MQTT.
 
@@ -243,6 +330,14 @@ class BaseVideoStreamer(abc.ABC):
         accurate video/robot synchronization.
         """
         if self.streamer:
+            if sync_frame is None:
+                stream_fps = getattr(self.streamer, "fps", None)
+                if isinstance(stream_fps, (int, float)) and stream_fps > 0:
+                    # Use roughly one second of video as the sync point so low-FPS
+                    # virtual streams don't always time out waiting for frame 30.
+                    sync_frame = max(1, int(round(float(stream_fps))))
+                else:
+                    sync_frame = 30
             self.streamer.sync_frame_target = sync_frame
 
         start_time = time.time()
@@ -257,13 +352,21 @@ class BaseVideoStreamer(abc.ABC):
             await asyncio.sleep(0.05)
 
         if self.streamer and self.streamer.sync_frame_pts is not None:
+            frame_index = self.streamer.sync_frame_target
             pts = self.streamer.sync_frame_pts
             timestamp = self.streamer.sync_frame_timestamp
             timestamp_monotonic = self.streamer.sync_frame_timestamp_monotonic
+            time_base_num = self.streamer.sync_frame_time_base_num
+            time_base_den = self.streamer.sync_frame_time_base_den
 
-            if timestamp is not None:
+            if timestamp is not None and time_base_num is not None and time_base_den is not None:
                 self._publish_camera_sync_frame(
-                    pts, timestamp, timestamp_monotonic or 0.0
+                    frame_index,
+                    pts,
+                    time_base_num,
+                    time_base_den,
+                    timestamp,
+                    timestamp_monotonic or 0.0,
                 )
 
     # -------------------------------------------------------------------------
@@ -422,7 +525,14 @@ class BaseVideoStreamer(abc.ABC):
 
     async def _setup_webrtc(self):
         """Initialize WebRTC peer connection and video track."""
-        self.streamer = self.initialize_track()
+        # Install sync extension hooks if available
+        try:
+            import cyberwave_video_sync
+            cyberwave_video_sync.install()
+            self.streamer = self.initialize_track()
+            self.streamer._sync_enabled = True
+        except ImportError:
+            self.streamer = self.initialize_track()
 
         ice_servers = [RTCIceServer(**server) for server in self.turn_servers]
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))

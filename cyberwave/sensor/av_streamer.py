@@ -566,14 +566,23 @@ class MultimediaStreamer:
     # ------------------------------------------------------------------
 
     def _publish_camera_sync_frame(
-        self, pts: int, timestamp: float, timestamp_monotonic: float
+        self,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
+        timestamp: float,
+        timestamp_monotonic: float,
     ) -> None:
         prefix = self.client.topic_prefix
         topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/telemetry"
         payload = {
             "type": "camera_sync_frame",
             "sender": "edge",
+            "frame_index": frame_index,
             "pts": pts,
+            "time_base_num": time_base_num,
+            "time_base_den": time_base_den,
             "timestamp": timestamp,
             "timestamp_monotonic": timestamp_monotonic,
             "track_id": self.video_track.id if self.video_track else None,
@@ -582,7 +591,8 @@ class MultimediaStreamer:
         }
         self.client.publish(topic, payload, qos=2)
         logger.info(
-            "Published camera_sync_frame: pts=%s, timestamp=%.3f", pts, timestamp
+            f"Published camera_sync_frame: frame_index={frame_index}, pts={pts}, "
+            f"time_base={time_base_num}/{time_base_den}, timestamp={timestamp:.3f}"
         )
 
     async def _wait_and_publish_camera_sync_frame(
@@ -605,12 +615,24 @@ class MultimediaStreamer:
             await asyncio.sleep(0.05)
 
         if self.video_track and self.video_track.sync_frame_pts is not None:
+            frame_index = self.video_track.sync_frame_target
             pts = self.video_track.sync_frame_pts
             timestamp = self.video_track.sync_frame_timestamp
             timestamp_monotonic = self.video_track.sync_frame_timestamp_monotonic
-            if timestamp is not None:
+            time_base_num = self.video_track.sync_frame_time_base_num
+            time_base_den = self.video_track.sync_frame_time_base_den
+            if (
+                timestamp is not None
+                and time_base_num is not None
+                and time_base_den is not None
+            ):
                 self._publish_camera_sync_frame(
-                    pts, timestamp, timestamp_monotonic or 0.0
+                    frame_index,
+                    pts,
+                    time_base_num,
+                    time_base_den,
+                    timestamp,
+                    timestamp_monotonic or 0.0,
                 )
 
     # ------------------------------------------------------------------

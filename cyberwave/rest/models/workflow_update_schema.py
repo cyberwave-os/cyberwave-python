@@ -32,8 +32,13 @@ class WorkflowUpdateSchema(BaseModel):
     description: Optional[StrictStr] = None
     is_active: Optional[StrictBool] = None
     visibility: Optional[StrictStr] = None
+    environment_uuid: Optional[StrictStr] = None
+    run_on_edge: Optional[StrictBool] = None
+    execution_target: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "metadata"]
+    tags: Optional[List[StrictStr]] = None
+    is_template: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "environment_uuid", "run_on_edge", "execution_target", "metadata", "tags", "is_template"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -99,10 +104,35 @@ class WorkflowUpdateSchema(BaseModel):
         if self.visibility is None and "visibility" in self.model_fields_set:
             _dict['visibility'] = None
 
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
+        # set to None if run_on_edge (nullable) is None
+        # and model_fields_set contains the field
+        if self.run_on_edge is None and "run_on_edge" in self.model_fields_set:
+            _dict['run_on_edge'] = None
+
+        # set to None if execution_target (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_target is None and "execution_target" in self.model_fields_set:
+            _dict['execution_target'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
+
+        # set to None if tags (nullable) is None
+        # and model_fields_set contains the field
+        if self.tags is None and "tags" in self.model_fields_set:
+            _dict['tags'] = None
+
+        # set to None if is_template (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_template is None and "is_template" in self.model_fields_set:
+            _dict['is_template'] = None
 
         return _dict
 
@@ -121,7 +151,12 @@ class WorkflowUpdateSchema(BaseModel):
             "description": obj.get("description"),
             "is_active": obj.get("is_active"),
             "visibility": obj.get("visibility"),
-            "metadata": obj.get("metadata")
+            "environment_uuid": obj.get("environment_uuid"),
+            "run_on_edge": obj.get("run_on_edge"),
+            "execution_target": obj.get("execution_target"),
+            "metadata": obj.get("metadata"),
+            "tags": obj.get("tags"),
+            "is_template": obj.get("is_template")
         })
         return _obj
 

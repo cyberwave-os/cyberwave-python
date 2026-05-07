@@ -94,7 +94,11 @@ def test_quickstart_env_logs_reused_message(capsys):
     """twin() without environment_id prints a 'reusing' message when env exists."""
     client = _make_client_with_mocked_managers()
 
-    existing_env = SimpleNamespace(uuid="existing-env-uuid", name="Quickstart Environment")
+    existing_env = SimpleNamespace(
+        uuid="existing-env-uuid",
+        name="Quickstart Environment",
+        slug="ws/envs/quickstart-environment",
+    )
     existing_project = SimpleNamespace(uuid="proj-uuid", name="Quickstart Project")
     existing_workspace = SimpleNamespace(uuid="ws-uuid", name="Quickstart Workspace")
     existing_twin = SimpleNamespace(
@@ -105,6 +109,7 @@ def test_quickstart_env_logs_reused_message(capsys):
     client.workspaces.list.return_value = [existing_workspace]
     client.projects.list.return_value = [existing_project]
     client.environments.list.return_value = [existing_env]
+    client.environments.get.return_value = existing_env
     client.twins.list.return_value = [existing_twin]
     client.assets.get_by_registry_id.return_value = asset
 
@@ -113,7 +118,7 @@ def test_quickstart_env_logs_reused_message(capsys):
 
     captured = capsys.readouterr()
     assert "reusing existing" in captured.out.lower()
-    assert "existing-env-uuid" in captured.out
+    assert "ws/envs/quickstart-environment" in captured.out
 
 
 def test_quickstart_env_logs_created_message(capsys):
@@ -122,7 +127,11 @@ def test_quickstart_env_logs_created_message(capsys):
 
     existing_project = SimpleNamespace(uuid="proj-uuid", name="Quickstart Project")
     existing_workspace = SimpleNamespace(uuid="ws-uuid", name="Quickstart Workspace")
-    new_env = SimpleNamespace(uuid="new-env-uuid", name="Quickstart Environment")
+    new_env = SimpleNamespace(
+        uuid="new-env-uuid",
+        name="Quickstart Environment",
+        slug="ws/envs/quickstart-environment",
+    )
     new_twin = SimpleNamespace(uuid="twin-uuid", asset_uuid="asset-uuid", name="twin")
     asset = SimpleNamespace(uuid="asset-uuid", registry_id="vendor/robot")
 
@@ -130,6 +139,7 @@ def test_quickstart_env_logs_created_message(capsys):
     client.projects.list.return_value = [existing_project]
     client.environments.list.return_value = []
     client.environments.create.return_value = new_env
+    client.environments.get.return_value = new_env
     client.twins.list.return_value = []
     client.twins.create.return_value = new_twin
     client.assets.get_by_registry_id.return_value = asset
@@ -139,7 +149,7 @@ def test_quickstart_env_logs_created_message(capsys):
 
     captured = capsys.readouterr()
     assert "created a new" in captured.out.lower()
-    assert "new-env-uuid" in captured.out
+    assert "ws/envs/quickstart-environment" in captured.out
 
 
 def test_quickstart_env_no_log_when_env_id_specified(capsys):
