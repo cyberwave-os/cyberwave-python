@@ -169,6 +169,9 @@ from .controller import EdgeController
 # Utils
 from .utils import TimeReference
 
+# ML model lookup helpers
+from .ml_model_lookup import MLModelLookupError, MLModelMatch, search_ml_models, resolve_ml_model_uuid
+
 # Device fingerprinting (for edge devices)
 from .fingerprint import (
     generate_fingerprint,
@@ -309,6 +312,11 @@ __all__ = [
     "SOURCE_TYPES",
     # Utils
     "TimeReference",
+    # ML model lookup
+    "MLModelLookupError",
+    "MLModelMatch",
+    "search_ml_models",
+    "resolve_ml_model_uuid",
     # Device fingerprinting
     "generate_fingerprint",
     "get_device_info",
