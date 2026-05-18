@@ -1,37 +1,37 @@
 {
-  "camera_config": {
-    "camera_id": "depth-0",
-    "camera_type": "realsense",
-    "enabled": true,
-    "fps": 30,
-    "resolution": "640x480",
-    "source": "0"
-  },
+  "type": "edge_health",
   "edge_id": "twin-fixture",
-  "healthy_streams": 2,
+  "twin_uuid": "twin-fixture",
   "stream_count": 2,
+  "healthy_streams": 2,
   "streams": {
     "depth-0": {
       "camera_id": "depth-0",
       "stream_config": {
-        "camera_type": "realsense",
-        "fps": 30,
         "kind": "camera",
+        "source": "0",
         "resolution": "640x480",
-        "source": "0"
+        "fps": 30,
+        "camera_type": "realsense"
       }
     },
     "rgb-0": {
       "camera_id": "rgb-0",
       "stream_config": {
-        "camera_type": "realsense",
-        "fps": 30,
         "kind": "camera",
+        "source": "0",
         "resolution": "1280x720",
-        "source": "0"
+        "fps": 30,
+        "camera_type": "realsense"
       }
     }
   },
-  "twin_uuid": "twin-fixture",
-  "type": "edge_health"
+  "camera_config": {
+    "camera_id": "depth-0",
+    "camera_type": "realsense",
+    "source": "0",
+    "fps": 30,
+    "resolution": "640x480",
+    "enabled": true
+  }
 }

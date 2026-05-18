@@ -27,7 +27,14 @@ from cyberwave.edge.health import EdgeHealthCheck
 
 
 # The shared fixtures live one level above the Python SDK so the C++
-# SDK can reference the same files without either tree owning them.
+# SDK can reference the same files without either tree owning them
+# (`cyberwave-sdks/test-fixtures/edge_health/`). This path only
+# resolves in the monorepo — when the SDK is cloned standalone
+# (e.g. the open-source `cyberwave-os/cyberwave-python` mirror) the
+# directory does not exist and the test gracefully skips. See the
+# "TODO — cross-language wire-format fixtures" entry in
+# `cyberwave-sdks/README.md` for the long-term plan to ship them with
+# the OSS mirrors.
 _SDKS_ROOT = Path(__file__).resolve().parents[2]
 _FIXTURES_DIR = _SDKS_ROOT / "test-fixtures" / "edge_health"
 
@@ -153,6 +160,13 @@ def test_python_publisher_matches_shared_fixture(
     heartbeat.
     """
     fixture_path = _FIXTURES_DIR / fixture_name
+    if not fixture_path.is_file():
+        pytest.skip(
+            f"edge_health wire fixture {fixture_name!r} not present at "
+            f"{fixture_path} — only ships with the monorepo, see "
+            f"cyberwave-sdks/README.md (TODO: cross-language wire-format "
+            f"fixtures) for the open-source-mirror plan."
+        )
     fixture_payload = json.loads(fixture_path.read_text())
 
     checker = EdgeHealthCheck(

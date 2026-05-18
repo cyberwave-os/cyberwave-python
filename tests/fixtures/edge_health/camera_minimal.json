@@ -1,27 +1,27 @@
 {
-  "camera_config": {
-    "camera_id": "stream",
-    "camera_type": "cv2",
-    "enabled": true,
-    "fps": 15,
-    "resolution": "1280x720",
-    "source": "/dev/video0"
-  },
+  "type": "edge_health",
   "edge_id": "twin-fixture",
-  "healthy_streams": 1,
+  "twin_uuid": "twin-fixture",
   "stream_count": 1,
+  "healthy_streams": 1,
   "streams": {
     "stream": {
       "camera_id": "stream",
       "stream_config": {
-        "camera_type": "cv2",
-        "fps": 15,
         "kind": "camera",
+        "source": "/dev/video0",
         "resolution": "1280x720",
-        "source": "/dev/video0"
+        "fps": 15,
+        "camera_type": "cv2"
       }
     }
   },
-  "twin_uuid": "twin-fixture",
-  "type": "edge_health"
+  "camera_config": {
+    "camera_id": "stream",
+    "camera_type": "cv2",
+    "source": "/dev/video0",
+    "fps": 15,
+    "resolution": "1280x720",
+    "enabled": true
+  }
 }
