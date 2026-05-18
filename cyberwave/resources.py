@@ -53,8 +53,6 @@ from cyberwave.rest import (
     AttachmentSchema,
     CompleteLargeUploadSchema,
     DatasetSchema,
-    DatasetDownloadProcessingSchema,
-    DatasetDownloadReadySchema,
     DatasetImportInitSchema,
     DatasetImportCompleteSchema,
     TwinSchema,
