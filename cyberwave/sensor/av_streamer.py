@@ -328,6 +328,7 @@ class MultimediaStreamer:
             },
             "sensor": self.camera_name,
             "track_id": self.video_track.id if self.video_track else None,
+            "audio_track_id": self.audio_track.id if self.audio_track else None,
             "session_id": f"{self.client.client_id}_multimedia",
         }
         self.client.publish(topic, offer_payload, qos=2)

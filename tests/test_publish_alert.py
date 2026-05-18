@@ -79,6 +79,68 @@ def test_publish_alert_sets_force_when_requested(cw_client):
     assert payload["force"] is True
 
 
+def test_publish_alert_forwards_workflow_uuid_top_level(cw_client):
+    """``workflow_uuid`` must reach the backend as a top-level field so the
+    ``Alert.workflow`` FK is set and ``?workflow_uuid=...`` filtering works."""
+    with patch(
+        "cyberwave.alerts._create_alert", return_value={"uuid": "alert-uuid"}
+    ) as mock_create:
+        cw_client.publish_alert(
+            "twin-uuid",
+            "Person detected",
+            workflow_uuid="wf-uuid",
+            workflow_node_uuid="node-uuid",
+            workflow_execution_uuid="exec-uuid",
+        )
+
+    _, payload = mock_create.call_args.args
+    assert payload["workflow_uuid"] == "wf-uuid"
+    assert payload["metadata"] == {
+        "workflow_uuid": "wf-uuid",
+        "workflow_node_uuid": "node-uuid",
+        "workflow_execution_uuid": "exec-uuid",
+    }
+
+
+def test_publish_alert_merges_workflow_provenance_into_user_metadata(cw_client):
+    """User-supplied ``metadata`` is preserved and provenance keys are added
+    automatically; user keys win on conflict."""
+    with patch(
+        "cyberwave.alerts._create_alert", return_value={"uuid": "alert-uuid"}
+    ) as mock_create:
+        cw_client.publish_alert(
+            "twin-uuid",
+            "Person detected",
+            metadata={"label": "person", "workflow_uuid": "user-override"},
+            workflow_uuid="wf-uuid",
+            workflow_node_uuid="node-uuid",
+        )
+
+    _, payload = mock_create.call_args.args
+    assert payload["workflow_uuid"] == "wf-uuid"
+    assert payload["metadata"] == {
+        # provenance auto-added
+        "workflow_node_uuid": "node-uuid",
+        # user-supplied keys (including override of workflow_uuid in metadata)
+        # win when there is a clash
+        "label": "person",
+        "workflow_uuid": "user-override",
+    }
+
+
+def test_publish_alert_omits_workflow_uuid_when_not_provided(cw_client):
+    """Backwards-compatible: callers that don't pass workflow info keep the
+    previous payload shape (no ``workflow_uuid`` and no synthetic metadata)."""
+    with patch(
+        "cyberwave.alerts._create_alert", return_value={"uuid": "alert-uuid"}
+    ) as mock_create:
+        cw_client.publish_alert("twin-uuid", "Heartbeat")
+
+    _, payload = mock_create.call_args.args
+    assert "workflow_uuid" not in payload
+    assert "metadata" not in payload
+
+
 def test_publish_alert_swallows_backend_errors(cw_client):
     with (
         patch("cyberwave.alerts._create_alert", side_effect=RuntimeError("boom")),

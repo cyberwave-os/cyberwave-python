@@ -20,7 +20,7 @@ from uuid import uuid4
 import pytest
 
 from cyberwave.exceptions import CyberwaveAPIError, CyberwaveModelIntegrityError
-from cyberwave.mlmodels.types import MLModelSummary
+from cyberwave.rest.models.ml_model_schema import MLModelSchema
 from cyberwave.models.cloud import CloudLoadedModel
 from cyberwave.models.loaded_model import LoadedModel
 from cyberwave.models.manager import MODEL_METADATA_FILENAME, ModelManager
@@ -87,7 +87,7 @@ def _register_fake_runtime():
 
 
 class _FakeMLModelsClient:
-    """In-memory stand-in for :class:`cyberwave.mlmodels.MLModelsClient`.
+    """In-memory stand-in for :class:`cyberwave.models.playground.PlaygroundClient`.
 
     Records calls to ``get()`` and ``fetch_weights_url()``; the latter
     can be configured to raise a ``CyberwaveAPIError`` (e.g. a 404) to
@@ -96,7 +96,7 @@ class _FakeMLModelsClient:
 
     def __init__(
         self,
-        summary: MLModelSummary,
+        summary: MLModelSchema,
         *,
         weights_payload: dict[str, Any] | None = None,
         weights_error: Exception | None = None,
@@ -109,9 +109,9 @@ class _FakeMLModelsClient:
         }
         self._weights_error = weights_error
         self.get_calls: list[str] = []
-        self.fetch_weights_calls: list[str | MLModelSummary] = []
+        self.fetch_weights_calls: list[str | MLModelSchema] = []
 
-    def get(self, model_ref: str) -> MLModelSummary:
+    def get(self, model_ref: str) -> MLModelSchema:
         self.get_calls.append(model_ref)
         return self._summary
 
@@ -127,27 +127,45 @@ def _summary(
     slug: str = "acme/models/sam-3.1",
     uuid_str: str | None = None,
     checksum: str | None = None,
-) -> MLModelSummary:
+) -> MLModelSchema:
     metadata: dict[str, Any] = {}
     if checksum:
         metadata["checksum_sha256"] = checksum
-    data = {
-        "uuid": uuid_str or str(uuid4()),
-        "slug": slug,
-        "name": "SAM 3.1",
-        "model_external_id": "sam-3.1",
-        "model_provider_name": "custom",
-        "output_format": "json",
-        "deployment": "cloud",
-        "can_take_image_as_input": True,
-        "can_take_text_as_input": True,
-        "playground_kind": "vlm-spatial-reasoner",
-        "allowed_structured_tasks": ["segment", "free"],
-        "execution_surfaces": ["playground", "edge"],
-        "metadata": metadata,
-        "tags": ["segmentation"],
-    }
-    return MLModelSummary.from_api(data)
+    return MLModelSchema(
+        uuid=uuid_str or str(uuid4()),
+        slug=slug,
+        name="SAM 3.1",
+        description="",
+        model_external_id="sam-3.1",
+        model_provider_name="custom",
+        output_format="json",
+        deployment="cloud",
+        workspace_uuid=str(uuid4()),
+        metadata=metadata,
+        visibility="public",
+        tags=["segmentation"],
+        is_trainable=False,
+        supported_level="stable",
+        can_take_video_as_input=False,
+        can_take_audio_as_input=False,
+        can_take_image_as_input=True,
+        can_take_text_as_input=True,
+        can_take_action_as_input=False,
+        is_edge_compatible=True,
+        is_cloud_compatible=True,
+        allowed_structured_tasks=["segment", "free"],
+        execution_surfaces=["playground", "edge"],
+        created_at="2024-01-01T00:00:00Z",  # type: ignore[arg-type]
+        updated_at="2024-01-01T00:00:00Z",  # type: ignore[arg-type]
+    )
+
+
+def _mgr(client=None, model_dir: str | None = None) -> ModelManager:
+    """Create a ModelManager with an optional fake cloud client."""
+    mgr = ModelManager(model_dir=model_dir)
+    if client is not None:
+        mgr._mlmodels_client = client
+    return mgr
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +202,7 @@ class TestDownloadHappyPath:
     ) -> None:
         summary = _summary()
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         # Stub the download so we never hit the network: just write a
         # small file to the target path.
@@ -216,7 +234,7 @@ class TestDownloadHappyPath:
         """
         summary = _summary()
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         # Pre-populate the cache as if a prior ``download=True`` had
         # already written the artefact.
@@ -252,7 +270,7 @@ class TestDownloadHappyPath:
         return the same :class:`LoadedModel` instance."""
         summary = _summary()
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         def fake_stream(url: str, dest: Path) -> None:
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -275,7 +293,7 @@ class TestDownloadErrors:
                 "GET /mlmodels/abc/weights failed: HTTP 404", status_code=404
             ),
         )
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         # Hard failure: never touch the stream helper if the backend 404s.
         monkeypatch.setattr(
@@ -292,7 +310,7 @@ class TestDownloadErrors:
     def test_missing_cloud_client_raises_runtime_error(self, tmp_path) -> None:
         """A bare ``ModelManager()`` has no way to reach the API — we
         should surface a direct error rather than silently 404-ing."""
-        mgr = ModelManager(model_dir=str(tmp_path))  # no mlmodels_client
+        mgr = _mgr(model_dir=str(tmp_path))  # no cloud client
         with pytest.raises(RuntimeError, match="no cloud client is attached"):
             mgr.load("acme/models/sam-3.1", download=True)
 
@@ -302,7 +320,7 @@ class TestDownloadErrors:
         expected = hashlib.sha256(b"good-bytes").hexdigest()
         summary = _summary(checksum=expected)
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         # "Download" the wrong bytes so verification fails.
         def fake_stream(url: str, dest: Path) -> None:
@@ -327,7 +345,7 @@ class TestDownloadErrors:
         checksum = hashlib.sha256(good_bytes).hexdigest()
         summary = _summary(checksum=checksum)
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         monkeypatch.setattr(
             ModelManager,
@@ -354,7 +372,7 @@ class TestDownloadErrors:
         client = _FakeMLModelsClient(
             summary, weights_payload={"expires_at": "2026-04-22T00:00:00+00:00"}
         )
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         with pytest.raises(RuntimeError, match="no signed_url"):
             mgr.load("acme/models/sam-3.1", download=True)
@@ -366,7 +384,7 @@ class TestForceDownload:
     ) -> None:
         summary = _summary()
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         cache_dir = tmp_path / "acme__models__sam-3.1"
         cache_dir.mkdir(parents=True)
@@ -410,19 +428,30 @@ class TestFilenameInference:
         assert name == "weights.pt"
 
     def test_uses_summary_metadata_filename_as_tertiary(self) -> None:
-        summary = MLModelSummary.from_api(
-            {
-                "uuid": str(uuid4()),
-                "slug": None,
-                "name": "x",
-                "model_external_id": "x",
-                "model_provider_name": "custom",
-                "output_format": None,
-                "deployment": "cloud",
-                "can_take_image_as_input": True,
-                "can_take_text_as_input": True,
-                "metadata": {"filename": "policy.pt"},
-            }
+        summary = MLModelSchema(
+            uuid=str(uuid4()),
+            slug=None,  # type: ignore[arg-type]
+            name="x",
+            description="",
+            model_external_id="x",
+            model_provider_name="custom",
+            output_format=None,  # type: ignore[arg-type]
+            deployment="cloud",
+            workspace_uuid=str(uuid4()),
+            metadata={"filename": "policy.pt"},
+            visibility="public",
+            tags=[],
+            is_trainable=False,
+            supported_level="stable",
+            can_take_video_as_input=False,
+            can_take_audio_as_input=False,
+            can_take_image_as_input=True,
+            can_take_text_as_input=True,
+            can_take_action_as_input=False,
+            is_edge_compatible=False,
+            is_cloud_compatible=True,
+            created_at="2024-01-01T00:00:00Z",  # type: ignore[arg-type]
+            updated_at="2024-01-01T00:00:00Z",  # type: ignore[arg-type]
         )
         name = ModelManager._filename_for_download({}, summary=summary)
         assert name == "policy.pt"
@@ -441,7 +470,7 @@ class TestCacheFirstDispatch:
     def test_cache_hit_trumps_cloud_routing(self, tmp_path) -> None:
         summary = _summary()
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         (tmp_path / "acme__models__sam-3.1").mkdir(parents=True)
         (tmp_path / "acme__models__sam-3.1" / "checkpoint.pt").write_bytes(b"x")
@@ -455,7 +484,7 @@ class TestCacheFirstDispatch:
         """A leftover empty dir must not fool the cache-hit check."""
         summary = _summary()
         client = _FakeMLModelsClient(summary)
-        mgr = ModelManager(mlmodels_client=client, model_dir=str(tmp_path))
+        mgr = _mgr(client, model_dir=str(tmp_path))
 
         (tmp_path / "acme__models__sam-3.1").mkdir(parents=True)
 
@@ -465,56 +494,50 @@ class TestCacheFirstDispatch:
 
 
 # ---------------------------------------------------------------------------
-# MLModelsClient.fetch_weights_url — thin but important
+# PlaygroundClient.fetch_weights_url — thin but important
 # ---------------------------------------------------------------------------
 
 
 class TestFetchWeightsUrl:
     def test_calls_weights_endpoint_with_uuid(self) -> None:
-        from cyberwave.mlmodels.client import MLModelsClient
+        """PlaygroundClient.fetch_weights_url resolves a UUID slug and calls
+        the generated weights endpoint on DefaultApi."""
+        from cyberwave.models.playground import PlaygroundClient
 
-        captured: dict[str, Any] = {}
-
-        class _FakeApiClient:
-            def param_serialize(self, **kwargs):
-                captured.update(kwargs)
-                return ("serialized",)
-
-            def call_api(self, *args):
-                class _Resp:
-                    status = 200
-                    data = json.dumps(
-                        {
-                            "signed_url": "https://signed.example.com/x.pt",
-                            "expires_at": "2026-04-22T00:00:00+00:00",
-                            "checkpoint_path": "ml_models/abc/x.pt",
-                        }
-                    ).encode("utf-8")
-
-                    def read(self):
-                        return None
-
-                return _Resp()
-
-        client = MLModelsClient(_FakeApiClient())
         uid = str(uuid4())
+        summary = _summary(uuid_str=uid)
+        captured_uuid: list[str] = []
 
-        payload = client.fetch_weights_url(uid)
+        class _FakeDefaultApi:
+            def src_app_api_mlmodels_get_mlmodel_weights(self, uuid: str) -> dict:
+                captured_uuid.append(uuid)
+                return {
+                    "signed_url": "https://signed.example.com/x.pt",
+                    "expires_at": "2026-04-22T00:00:00+00:00",
+                    "checkpoint_path": "ml_models/abc/x.pt",
+                }
 
-        assert captured["resource_path"] == f"/api/v1/mlmodels/{uid}/weights"
-        assert captured["method"] == "GET"
+        client = PlaygroundClient(_FakeDefaultApi())  # type: ignore[arg-type]
+        payload = client.fetch_weights_url(summary)
+
+        assert captured_uuid == [uid]
         assert payload["signed_url"].startswith("https://")
 
-    def test_raises_on_blank_string(self) -> None:
-        from cyberwave.mlmodels.client import MLModelsClient
+    def test_resolves_slug_before_fetching(self) -> None:
+        """When given a slug string, the client resolves to an MLModelSchema first."""
+        from cyberwave.models.playground import PlaygroundClient
 
-        client = MLModelsClient(api_client=object())
-        with pytest.raises(ValueError, match="non-empty string"):
-            client.fetch_weights_url("")
+        uid = str(uuid4())
+        summary = _summary(uuid_str=uid)
 
-    def test_raises_on_wrong_type(self) -> None:
-        from cyberwave.mlmodels.client import MLModelsClient
+        class _FakeDefaultApi:
+            def src_app_api_mlmodels_get_mlmodel_by_slug(self, slug: str) -> MLModelSchema:
+                return summary
 
-        client = MLModelsClient(api_client=object())
-        with pytest.raises(TypeError, match="string or MLModelSummary"):
-            client.fetch_weights_url(123)  # type: ignore[arg-type]
+            def src_app_api_mlmodels_get_mlmodel_weights(self, uuid: str) -> dict:
+                return {"signed_url": f"https://s3.example.com/{uuid}.pt"}
+
+        client = PlaygroundClient(_FakeDefaultApi())  # type: ignore[arg-type]
+        payload = client.fetch_weights_url("acme/models/sam-3.1")
+
+        assert payload["signed_url"].endswith(f"{uid}.pt")

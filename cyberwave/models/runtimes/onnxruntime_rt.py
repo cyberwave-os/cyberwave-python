@@ -4,10 +4,23 @@ Supports ``.onnx`` models exported from frameworks like Ultralytics,
 PyTorch, or TensorFlow.  Automatically selects CUDA or CPU execution
 providers based on the requested device.
 
-Expected ONNX output tensor layout (YOLO-style object detection):
-  ``[batch, num_detections, 4 + num_classes]``
-where the first four values per detection are ``cx, cy, w, h`` and
-the remaining columns are per-class confidence scores.
+Two YOLO-family output layouts are handled:
+
+1. Anchor / one-to-many head (YOLOv5 … YOLO11, plus YOLO26 exported
+   with ``end2end=False``):
+   ``[batch, 4 + num_classes (+ K*kp_dim), num_anchors]`` where the
+   leading four values per anchor are ``cx, cy, w, h`` and the
+   remaining columns are per-class confidence scores (optionally
+   followed by ``K*kp_dim`` keypoint values for pose models).
+   These exports require greedy per-class NMS post-processing, which
+   :func:`_postprocess` applies.
+
+2. End-to-end / one-to-one head (YOLO26 default export, YOLOv10):
+   ``[batch, max_det, 6]`` where each row is
+   ``[x1, y1, x2, y2, conf, class_id]``.  Suppression is folded into
+   the model graph by consistent dual-assignment training, so the
+   runtime returns the boxes verbatim — no anchor decoding, no NMS.
+   :func:`_postprocess_e2e` handles this layout.
 """
 
 from __future__ import annotations
@@ -160,6 +173,140 @@ def _parse_kpt_shape(meta: Any) -> tuple[int, int]:
     return 0, 0
 
 
+def _is_e2e_layout(preds: np.ndarray, class_names: dict[int, str]) -> bool:
+    """Detect YOLO26 / YOLOv10 NMS-free output: ``(N, 6)``.
+
+    The end-to-end one-to-one head emits ``[x1, y1, x2, y2, conf, class_id]``
+    per detection, capped at ``max_det`` (300 in Ultralytics' default
+    export).  Layout collides with a YOLOv8 anchor output that happens
+    to have exactly two classes (also ``feat_dim == 6``); we
+    disambiguate using two signals in priority order:
+
+    1. **Class-count vs feat-dim mismatch** — an anchor detect output
+       has ``feat_dim == 4 + len(class_names)``, so for a ``(N, 6)``
+       array the only consistent anchor class count is 2.  When
+       ``names`` metadata is embedded and ``len(class_names) != 2``,
+       the shape can't possibly be an anchor output for that model —
+       it must be e2e.  Covers every seeded YOLO26 model in the
+       catalog (80-class COCO) and any 1-class retrained model that
+       embedded ``names``.
+
+    2. **Data check** (used only when ``class_names`` is empty or
+       exactly two entries — the cases where shape alone is
+       ambiguous).  Column 5 in e2e is a non-negative integer class id
+       and at least one row reports a class id > 1.  A YOLOv8 2-class
+       anchor output puts a continuous probability in column 5 —
+       fractional in practice, always in ``[0, 1]``.
+
+    Picks up YOLOv8 exports with embedded NMS (``end2end=True`` /
+    ``nms=True``) as a side effect — they produce the same ``(N, 6)``
+    shape and the e2e parser handles them correctly.
+
+    The single edge case we deliberately misclassify is a YOLO26 e2e
+    export with empty ``names`` metadata that only ever produces
+    class-0 or class-1 detections (e.g. a 2-class retrained model that
+    also failed to embed names).  The data check returns ``False`` for
+    that case to stay safe; users who hit it should re-export with
+    ``names`` set, which then flips on signal 1.
+    """
+    if preds.ndim != 2 or preds.shape[1] != 6:
+        return False
+    # Signal 1: shape disagrees with anchor's expected feat_dim for the
+    # advertised class count.  Anchor detect: feat_dim = 4 + |class_names|.
+    if class_names and (4 + len(class_names)) != 6:
+        return True
+    col5 = preds[:, 5]
+    if col5.size == 0:
+        return False
+    # Signal 2: column 5 is a non-negative integer class id, with at
+    # least one row above class 1 (so we can rule out a 2-class
+    # anchor's continuous probability output).
+    is_int = bool(np.all(np.equal(np.mod(col5, 1.0), 0.0)))
+    non_negative = bool(np.all(col5 >= 0))
+    has_class_above_one = bool(np.any(col5 > 1.5))
+    return is_int and non_negative and has_class_above_one
+
+
+def _postprocess_e2e(
+    preds: np.ndarray,
+    *,
+    confidence: float,
+    classes: list[str] | None,
+    class_names: dict[int, str],
+    img_w: int,
+    img_h: int,
+    input_shape: list[Any],
+) -> list[Detection]:
+    """Parse YOLO26 / YOLOv10 NMS-free output ``(N, 6)``.
+
+    Each row is ``[x1, y1, x2, y2, conf, class_id]`` in model-input
+    coordinates.  Suppression is already applied by the model's
+    one-to-one head, so the only work here is the confidence filter
+    (which also removes the zero-padded slots Ultralytics emits up to
+    ``max_det``), coordinate rescaling, and label lookup.
+    """
+    if preds.size == 0:
+        return []
+
+    x1 = preds[:, 0].astype(np.float32, copy=False)
+    y1 = preds[:, 1].astype(np.float32, copy=False)
+    x2 = preds[:, 2].astype(np.float32, copy=False)
+    y2 = preds[:, 3].astype(np.float32, copy=False)
+    conf = preds[:, 4].astype(np.float32, copy=False)
+    class_ids = preds[:, 5].astype(np.int64)
+
+    mask = conf >= confidence
+    if not np.any(mask):
+        return []
+
+    x1, y1, x2, y2 = x1[mask], y1[mask], x2[mask], y2[mask]
+    conf = conf[mask]
+    class_ids = class_ids[mask]
+
+    static_h = (
+        input_shape[2]
+        if len(input_shape) >= 4
+        and isinstance(input_shape[2], int)
+        and input_shape[2] > 0
+        else None
+    )
+    static_w = (
+        input_shape[3]
+        if len(input_shape) >= 4
+        and isinstance(input_shape[3], int)
+        and input_shape[3] > 0
+        else None
+    )
+    if static_h is not None and static_w is not None and img_w > 0 and img_h > 0:
+        sx = img_w / static_w
+        sy = img_h / static_h
+        x1, x2 = x1 * sx, x2 * sx
+        y1, y2 = y1 * sy, y2 * sy
+
+    frame_area = img_w * img_h if img_w > 0 and img_h > 0 else 1
+
+    detections: list[Detection] = []
+    for i in range(len(x1)):
+        label = class_names.get(int(class_ids[i]), str(int(class_ids[i])))
+        if classes and label not in classes:
+            continue
+        bbox = BoundingBox(
+            x1=float(x1[i]),
+            y1=float(y1[i]),
+            x2=float(x2[i]),
+            y2=float(y2[i]),
+        )
+        detections.append(
+            Detection(
+                label=label,
+                confidence=float(conf[i]),
+                bbox=bbox,
+                area_ratio=bbox.area / frame_area if frame_area else 0.0,
+            )
+        )
+    return detections
+
+
 def _nms_per_class(
     x1: np.ndarray,
     y1: np.ndarray,
@@ -269,23 +416,33 @@ def _postprocess(
 ) -> list[Detection]:
     """Parse YOLO-style ONNX output into ``Detection`` objects.
 
-    Handles the common ``[1, 4+num_classes, num_detections]`` layout
-    produced by ``ultralytics`` ONNX exports (transposed relative to
-    the ``[1, num_detections, 4+num_classes]`` convention).
+    Handles two output layouts:
 
-    Pose models append ``K * kp_dim`` keypoint values per detection after
-    the class scores; layout becomes
-    ``[1, 4 + num_classes + kp_dim*K, num_detections]``. Standard exports
-    use ``kp_dim=3`` (``x, y, visibility``); some variants drop the
-    visibility column (``kp_dim=2``). Pass ``num_keypoints=K`` to enable
-    parsing.
+    1. Anchor / one-to-many head — ``[1, 4+num_classes, num_anchors]``
+       (or its ``[1, num_anchors, 4+num_classes]`` transpose) produced
+       by classic Ultralytics ONNX exports (YOLOv5 → YOLO11, plus
+       YOLO26 exported with ``end2end=False``).  Each row encodes
+       ``cx, cy, w, h`` plus per-class scores; YOLO emits one
+       prediction per anchor (≈8400 at 640x640), so per-class NMS is
+       applied here with a default IoU threshold of ``0.7``
+       (Ultralytics' :py:meth:`YOLO.predict` default).  Pass
+       ``iou=1.0`` to keep every surviving anchor.
 
-    YOLO ONNX exports emit one prediction per anchor (≈8400 for
-    ``yolov8`` at 640x640).  Without NMS each real object is reported as
-    a cluster of overlapping boxes — the symptom that motivated this
-    helper to apply per-class non-max suppression with a default IoU
-    threshold of ``0.7`` (Ultralytics' :py:meth:`YOLO.predict` default).
-    Pass ``iou=1.0`` to keep every surviving anchor.
+    2. End-to-end / one-to-one head — ``[1, max_det, 6]`` with rows
+       ``[x1, y1, x2, y2, conf, class_id]``, emitted by YOLO26's
+       default export and by YOLOv10.  The model itself folds NMS
+       into the graph, so this branch only filters by confidence,
+       rescales coordinates, and looks up labels.  ``iou`` is ignored
+       (no NMS to run).
+
+    Pose models extend layout 1 with ``K * kp_dim`` keypoint values
+    per detection after the class scores; layout becomes
+    ``[1, 4 + num_classes + kp_dim*K, num_anchors]``. Standard
+    exports use ``kp_dim=3`` (``x, y, visibility``); some variants
+    drop the visibility column (``kp_dim=2``). Pass ``num_keypoints=K``
+    to enable parsing.  End-to-end pose / segmentation exports have a
+    different column layout that this routine does not yet decode —
+    re-export with ``end2end=False`` until that branch lands.
     """
     preds = raw_output[0]  # drop batch dim
 
@@ -298,6 +455,21 @@ def _postprocess(
 
     if preds.ndim != 2 or preds.shape[1] < 5:
         return []
+
+    # YOLO26 / YOLOv10 end-to-end head: ``(N, 6) = (x1, y1, x2, y2, conf, cls)``.
+    # Detect-only — pose / segmentation e2e exports have a different
+    # column layout, so we restrict to ``num_keypoints == 0`` and let
+    # pose models continue through the anchor-decoding path below.
+    if num_keypoints == 0 and _is_e2e_layout(preds, class_names):
+        return _postprocess_e2e(
+            preds,
+            confidence=confidence,
+            classes=classes,
+            class_names=class_names,
+            img_w=img_w,
+            img_h=img_h,
+            input_shape=input_shape,
+        )
 
     feat_dim = preds.shape[1]
     # Pose models have known keypoint count; remaining columns are class scores.

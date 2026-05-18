@@ -73,3 +73,7 @@ register_runtime(TensorRTRuntime)
 from cyberwave.models.runtimes.torch_rt import TorchRuntime  # noqa: E402
 
 register_runtime(TorchRuntime)
+
+from cyberwave.models.runtimes.whisper_cpp_rt import WhisperCppRuntime  # noqa: E402
+
+register_runtime(WhisperCppRuntime)

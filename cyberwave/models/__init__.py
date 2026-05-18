@@ -29,11 +29,37 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from cyberwave.models.cascade import CascadeModel, CascadePredictionResult
 from cyberwave.models.cloud import CloudLoadedModel
 from cyberwave.models.loaded_model import LoadedModel
 from cyberwave.models.manager import ModelManager
+from cyberwave.models.playground import (
+    PlaygroundClient,
+    PlaygroundHandle,
+    STRUCTURED_ACTIONS,
+    StructuredAction,
+)
 from cyberwave.models.runtimes import available_runtimes, register_runtime
-from cyberwave.models.types import BoundingBox, Detection, PredictionResult
+from cyberwave.models.types import (
+    BoundingBox,
+    COCO_KEYPOINT_SCHEMA,
+    ClassificationCandidate,
+    ClassificationPrediction,
+    CustomResult,
+    Detection,
+    DetectionResult,
+    EmbeddingResult,
+    InstanceSegmentationResult,
+    Keypoint,
+    KeypointSet,
+    Mask,
+    ModelOutput,
+    OBBResult,
+    OrientedBoundingBox,
+    PoseResult,
+    PredictionResult,
+    SemanticSegmentationResult,
+)
 
 if TYPE_CHECKING:
     from cyberwave.client import Cyberwave
@@ -59,25 +85,50 @@ def _get_default_client() -> "Cyberwave":
     return _default_client
 
 
-def load(model_id: str, **kwargs: Any) -> LoadedModel | CloudLoadedModel:
+def load(
+    model_id: str | list[str], **kwargs: Any
+) -> LoadedModel | CloudLoadedModel | CascadeModel:
     """Module-level convenience matching ``cw.models.load(...)`` on a client.
 
     Routes cloud slugs (``workspace/models/name`` / UUIDs) through a
     lazily-constructed default :class:`~cyberwave.Cyberwave` client and
-    local catalog ids through the on-node weights cache — the same
+    local catalog IDs through the on-node weights cache — the same
     dispatch as :meth:`ModelManager.load`. Exists so the unified
     snippet in the Playground docs is copy-pasteable as written.
+
+    When *model_id* is a list a :class:`CascadeModel` is returned.
     """
     return _get_default_client().models.load(model_id, **kwargs)
 
 
 __all__ = [
     "BoundingBox",
+    "COCO_KEYPOINT_SCHEMA",
+    "CascadeModel",
+    "CascadePredictionResult",
+    "ClassificationCandidate",
+    "ClassificationPrediction",
     "CloudLoadedModel",
+    "CustomResult",
     "Detection",
+    "DetectionResult",
+    "EmbeddingResult",
+    "InstanceSegmentationResult",
+    "Keypoint",
+    "KeypointSet",
     "LoadedModel",
+    "Mask",
     "ModelManager",
+    "ModelOutput",
+    "OBBResult",
+    "OrientedBoundingBox",
+    "PlaygroundClient",
+    "PlaygroundHandle",
+    "PoseResult",
     "PredictionResult",
+    "STRUCTURED_ACTIONS",
+    "SemanticSegmentationResult",
+    "StructuredAction",
     "available_runtimes",
     "load",
     "register_runtime",

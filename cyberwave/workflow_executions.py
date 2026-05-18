@@ -99,13 +99,26 @@ class WorkflowExecutionReporter:
         *,
         input_data: Optional[List[Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        activation_index: int = 0,
+        caller_uuid: Optional[str] = None,
     ) -> None:
-        """Mark a node as running."""
+        """Mark a node as running.
+
+        ``activation_index`` and ``caller_uuid`` describe which
+        activation envelope this firing belongs to. Generated edge
+        workers thread these in for ``fan_in_mode='any'`` nodes so the
+        backend can persist one row per activation rather than
+        collapsing all firings onto a single row. Defaults match the
+        pre-activation behaviour, so non-fan-in callers don't have to
+        pass anything.
+        """
         self._send_node_event(
             node_uuid,
             status="running",
             input_data=input_data,
             metadata=metadata,
+            activation_index=activation_index,
+            caller_uuid=caller_uuid,
         )
 
     def node_finished(
@@ -115,6 +128,8 @@ class WorkflowExecutionReporter:
         output_data: Optional[List[Any]] = None,
         execution_time_ms: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        activation_index: int = 0,
+        caller_uuid: Optional[str] = None,
     ) -> None:
         """Mark a node as having finished successfully."""
         self._send_node_event(
@@ -123,6 +138,8 @@ class WorkflowExecutionReporter:
             output_data=output_data,
             execution_time_ms=execution_time_ms,
             metadata=metadata,
+            activation_index=activation_index,
+            caller_uuid=caller_uuid,
         )
 
     def node_error(
@@ -132,6 +149,8 @@ class WorkflowExecutionReporter:
         error: str,
         execution_time_ms: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        activation_index: int = 0,
+        caller_uuid: Optional[str] = None,
     ) -> None:
         """Mark a node as failed."""
         self._send_node_event(
@@ -140,6 +159,8 @@ class WorkflowExecutionReporter:
             error_message=str(error),
             execution_time_ms=execution_time_ms,
             metadata=metadata,
+            activation_index=activation_index,
+            caller_uuid=caller_uuid,
         )
 
     def node_skipped(
@@ -147,12 +168,16 @@ class WorkflowExecutionReporter:
         node_uuid: str,
         *,
         metadata: Optional[Dict[str, Any]] = None,
+        activation_index: int = 0,
+        caller_uuid: Optional[str] = None,
     ) -> None:
         """Mark a node as skipped (e.g. conditional branch not taken)."""
         self._send_node_event(
             node_uuid,
             status="skipped",
             metadata=metadata,
+            activation_index=activation_index,
+            caller_uuid=caller_uuid,
         )
 
     def finished(
@@ -216,11 +241,17 @@ class WorkflowExecutionReporter:
         error_message: Optional[str] = None,
         execution_time_ms: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        activation_index: int = 0,
+        caller_uuid: Optional[str] = None,
     ) -> None:
         valid = _NODE_TERMINAL_STATUSES | {"pending", "running"}
         if status not in valid:
             raise ValueError(
                 f"Invalid node status {status!r}. Expected one of {sorted(valid)}."
+            )
+        if not isinstance(activation_index, int) or activation_index < 0:
+            raise ValueError(
+                f"activation_index must be a non-negative int, got {activation_index!r}"
             )
         payload: Dict[str, Any] = {"status": status}
         if input_data is not None:
@@ -235,6 +266,12 @@ class WorkflowExecutionReporter:
             payload["metadata"] = dict(metadata)
         if self._source_type:
             payload["source_type"] = self._source_type
+        # Only emit the activation envelope when it's non-default so we
+        # don't bloat every legacy single-row workflow's MQTT payload.
+        if activation_index:
+            payload["activation_index"] = int(activation_index)
+        if caller_uuid is not None:
+            payload["caller_uuid"] = str(caller_uuid)
 
         topic = (
             f"cyberwave/workflow/{self._workflow_uuid}/execution/"

@@ -447,7 +447,7 @@ def save_annotated_image(
 
     Args:
         source: Original image (path / bytes / PIL.Image).
-        output: Result of ``cw.mlmodels.run(...)`` (dict or dataclass) OR a
+        output: Result of ``cw.models.playground("slug").run(...)`` (dict or dataclass) OR a
             bare list of points/boxes/masks with ``output_format`` passed
             explicitly.
         path: Destination file path (``.png``).

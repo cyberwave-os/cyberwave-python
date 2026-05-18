@@ -10,6 +10,7 @@ def test_sdk_imports_without_cyberwave_video_sync():
         reason="aiortc not installed (install with extras: camera)",
     )
     from cyberwave.sensor.base_video import BaseVideoTrack
+
     assert hasattr(BaseVideoTrack, "_store_frame_metadata_for_sync")
 
 

@@ -8,11 +8,13 @@ Supports:
 - RTSP streams: camera_id="rtsp://192.168.1.100:554/stream"
 """
 
+import asyncio
 import fractions
 import logging
 import os
 import platform
-from typing import TYPE_CHECKING, Callable, Optional, Union
+import re
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union
 
 import cv2
 import numpy as np
@@ -31,11 +33,141 @@ logger = logging.getLogger(__name__)
 _DEFAULT_LOCAL_FOURCC = "MJPG"
 
 
+# Matches the ``V4L/V4L2: YES`` row inside ``cv2.getBuildInformation()``.
+#
+# Spacing and casing differ across OpenCV builds: the manylinux PyPI wheels
+# emit uppercase ``V4L/V4L2:`` while Debian's ``python3-opencv`` 4.6.0
+# (bookworm) emits lowercase ``v4l/v4l2:                    YES
+# (linux/videodev2.h)``. We anchor on whitespace and pass ``re.IGNORECASE``
+# so both spellings match.
+_V4L2_BACKEND_RE = re.compile(
+    r"^\s*V4L/V4L2:\s+YES\b", re.MULTILINE | re.IGNORECASE
+)
+
+
+# Matches the userinfo segment of an RFC 3986 URI (``scheme://user:pass@``).
+# Deliberately permissive on the user/pass alphabet — RFC 3986 allows a
+# wide character set inside ``userinfo``, and we'd rather over-mask one
+# weird URL than under-mask a real credential.  Anchored to ``://`` so
+# we don't accidentally mangle email-shaped strings or filesystem paths
+# that contain an ``@`` (e.g. ``/dev/v4l/by-id/usb-...``).
+_URL_USERINFO_RE = re.compile(r"://[^@/?#]+@")
+
+
+def _mask_url_credentials(source: str) -> str:
+    """Strip ``user:pass@`` from any URL in ``source`` before it crosses the wire.
+
+    Applied to every ``stream_config.source`` field a driver publishes.
+    The ``edge_health`` payload is broadcast to every MQTT subscriber on
+    ``cyberwave/twin/+/edge_health``, persisted by Vector to
+    ``app_twintelemetry``, and cached in browser ``localStorage`` — none
+    of those should ever see plaintext RTSP credentials.
+
+    Non-URL sources (integer device indices coerced to ``str``, ``/dev/videoN``
+    paths) pass through unchanged because they don't match ``://x@``.
+    """
+    if not source:
+        return source
+    return _URL_USERINFO_RE.sub("://***@", source)
+
+
 def _capture_buffersize() -> int:
     # BUFFERSIZE=1 halves uvcvideo throughput (30fps MJPG -> 15fps); widen
     # the ring to 2 on Linux to restore native rate while keeping latency
     # low.  macOS/Windows backends don't show the quirk.
     return 2 if platform.system() == "Linux" else 1
+
+
+def _strict_geometry_enabled() -> bool:
+    """Whether to escalate camera-geometry mismatches from WARNING to error.
+
+    Off by default because some cameras legitimately round the requested
+    resolution to the nearest supported mode. Enable on edge images we
+    control so a silent 56x bandwidth blowup (the YUYV-1080p-fallback case
+    in CYB-1998) fails the driver instead of shipping a "working" stream.
+    """
+    return os.environ.get("CYBERWAVE_CAMERA_STRICT_GEOMETRY", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _v4l2_check_disabled() -> bool:
+    return os.environ.get("CYBERWAVE_CAMERA_SKIP_V4L2_CHECK", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _assert_v4l2_backend_or_raise() -> None:
+    """Fail-fast on Linux if OpenCV was built without the V4L2 backend.
+
+    Without V4L2, ``cv2.VideoCapture`` for ``/dev/video*`` routes through
+    FFmpeg's libavformat V4L2 demuxer. There ``cap.set(CAP_PROP_FOURCC)``
+    is effectively a no-op and ``cap.get(CAP_PROP_FOURCC)`` returns 0, so
+    the SDK's negotiator falls back to reopening without an override and
+    the camera lands on its kernel default (often YUYV 1920x1080 @ 5 fps
+    on USB 2.0). See CYB-1998.
+
+    Set ``CYBERWAVE_CAMERA_SKIP_V4L2_CHECK=1`` to bypass this check.
+    Non-Linux platforms never trigger it.
+    """
+    if platform.system() != "Linux":
+        return
+    if _v4l2_check_disabled():
+        return
+    info = cv2.getBuildInformation()
+    if _V4L2_BACKEND_RE.search(info):
+        return
+    raise RuntimeError(
+        "OpenCV is installed without the V4L2 backend. Local cameras "
+        "(/dev/video*) will silently fall back to FFmpeg's libavformat "
+        "V4L2 demuxer and downgrade to the camera's native default format "
+        "(often YUYV 1920x1080 @ 5 fps on USB 2.0). Install a V4L2-enabled "
+        "OpenCV — on Debian/Ubuntu: "
+        "`apt-get install python3-opencv libv4l-0 v4l-utils` "
+        "and remove the opencv-python pip wheel. Set "
+        "CYBERWAVE_CAMERA_SKIP_V4L2_CHECK=1 to bypass this check.\n\n"
+        f"cv2.getBuildInformation():\n{info}"
+    )
+
+
+_LOGGED_VIDEO_BACKENDS = False
+
+
+def _log_video_backends_once() -> None:
+    """Log one INFO line summarising OpenCV's compiled Video I/O backends.
+
+    Operators reading driver logs can identify a misbuilt OpenCV image
+    (FFmpeg-only on Linux, no V4L2) from this single line without needing
+    to ``docker exec`` into the container.
+    """
+    global _LOGGED_VIDEO_BACKENDS
+    if _LOGGED_VIDEO_BACKENDS:
+        return
+    _LOGGED_VIDEO_BACKENDS = True
+    try:
+        info = cv2.getBuildInformation()
+    except Exception as exc:  # pragma: no cover - cv2 build info shouldn't raise
+        logger.debug("Could not read cv2.getBuildInformation(): %s", exc)
+        return
+    backends = [
+        ("V4L2", r"V4L/V4L2:\s+YES"),
+        ("FFMPEG", r"FFMPEG:\s+YES"),
+        ("GStreamer", r"GStreamer:\s+YES"),
+        ("AVFoundation", r"AVFOUNDATION:\s+YES"),
+        ("DSHOW", r"DSHOW:\s+YES"),
+        ("MSMF", r"Media Foundation:\s+YES"),
+    ]
+    detected = [name for name, pat in backends if re.search(pat, info)]
+    logger.info(
+        "OpenCV Video I/O backends: %s",
+        ", ".join(detected) if detected else "(none detected)",
+    )
 
 
 def _get_default_keyframe_interval() -> Optional[int]:
@@ -67,6 +199,14 @@ class CV2VideoTrack(BaseVideoTrack):
     For **local** USB/V4L2 devices, if ``fourcc`` is omitted, the SDK tries ``MJPG``
     by default and reopens the device without a FOURCC override if negotiation fails.
 
+    **Source-side auto-reconnect.** ``recv()`` self-heals from upstream blips
+    (ffmpeg restart, USB unplug, IP-camera network flake) without dropping the
+    WebRTC connection. After ``_RECONNECT_TRIGGER_FAILURES`` consecutive
+    ``cap.read()`` failures, a background task reopens the capture with
+    exponential backoff while ``recv()`` returns the last successfully captured
+    frame (a freeze-frame fallback) so the encoder keeps a valid input. See
+    ``_reconnect_loop``.
+
     Example:
         >>> # Local USB camera
         >>> track = CV2VideoTrack(camera_id=0, fps=30, resolution=Resolution.HD)
@@ -78,6 +218,19 @@ class CV2VideoTrack(BaseVideoTrack):
         ...     resolution=Resolution.VGA
         ... )
     """
+
+    # Source-side auto-reconnect.
+    #
+    # If ``cap.read()`` fails for ``_RECONNECT_TRIGGER_FAILURES`` consecutive
+    # ticks, schedule a non-blocking background reopen. While the reopen runs,
+    # ``recv()`` returns the last successfully captured frame so the aiortc
+    # encoder keeps a valid input (the WebRTC stream freezes instead of dying).
+    # Without this, a single upstream blip (e.g. ffmpeg crash on macOS host,
+    # USB unplug, network flake on an IP camera) wedges the driver until a
+    # human restarts the container.
+    _RECONNECT_TRIGGER_FAILURES = 3
+    _RECONNECT_BACKOFF_INITIAL_S = 0.5
+    _RECONNECT_BACKOFF_MAX_S = 8.0
 
     @staticmethod
     def _is_url_stream(camera_id: Union[int, str]) -> bool:
@@ -169,6 +322,13 @@ class CV2VideoTrack(BaseVideoTrack):
         self._warned_frame_format = False
         self._warned_frame_dtype = False
 
+        # Source-side auto-reconnect state. ``_last_good_frame_bgr`` holds the
+        # most recent post-normalize, post-callback BGR ndarray so we can keep
+        # feeding the aiortc encoder a valid frame while the source is down.
+        self._consecutive_read_failures = 0
+        self._last_good_frame_bgr: Optional[np.ndarray] = None
+        self._reconnect_task: Optional[asyncio.Task] = None
+
         # Parse resolution
         if isinstance(resolution, Resolution):
             self.requested_width = resolution.width
@@ -177,6 +337,13 @@ class CV2VideoTrack(BaseVideoTrack):
         else:
             self.requested_width, self.requested_height = resolution
             self.resolution = Resolution.from_size(*resolution)
+
+        # Linux + local camera only: fail fast if OpenCV lacks V4L2. The
+        # alternative is a silent downgrade to YUYV 1080p @ 5 fps once
+        # negotiation fails through the FFmpeg V4L2 demuxer. See CYB-1998.
+        if not self._is_url_stream(camera_id):
+            _assert_v4l2_backend_or_raise()
+        _log_video_backends_once()
 
         # Initialize camera with appropriate backend
         self.cap = self._open_capture(camera_id)
@@ -190,11 +357,23 @@ class CV2VideoTrack(BaseVideoTrack):
             self._get_actual_settings()
         )
 
-        log_msg = (
-            f"Initialized CV2 camera {camera_id}: "
-            f"requested={self.requested_width}x{self.requested_height}@{fps}fps, "
-            f"actual={self.actual_width}x{self.actual_height}@{self.actual_fps}fps"
-        )
+        is_url = self._is_url_stream(camera_id)
+
+        if is_url:
+            log_msg = (
+                f"Initialized CV2 camera {camera_id}: "
+                f"source-served={self.actual_width}x{self.actual_height}"
+                f"@{self.actual_fps}fps "
+                f"(URL source — upstream dictates geometry; "
+                f"requested={self.requested_width}x{self.requested_height}@{fps}fps "
+                f"is informational only)"
+            )
+        else:
+            log_msg = (
+                f"Initialized CV2 camera {camera_id}: "
+                f"requested={self.requested_width}x{self.requested_height}@{fps}fps, "
+                f"actual={self.actual_width}x{self.actual_height}@{self.actual_fps}fps"
+            )
         if self.keyframe_interval:
             log_msg += f", keyframe_interval={self.keyframe_interval}"
         if self._negotiated_fourcc_ascii:
@@ -205,15 +384,39 @@ class CV2VideoTrack(BaseVideoTrack):
             log_msg += ", fourcc_fallback_reopen=True"
         logger.info(log_msg)
 
-        # Warn if actual differs from requested
+        # Surface resolution mismatch. On edge images where we control the
+        # environment we set CYBERWAVE_CAMERA_STRICT_GEOMETRY=1 so a silent
+        # downgrade (e.g. requested VGA, got 1080p) raises instead of
+        # shipping a "working" stream that is actually 56x over budget.
+        # Default off because some cameras legitimately round to the
+        # nearest supported mode.
+        #
+        # URL sources are exempt from the mismatch check entirely: the
+        # FFMPEG backend silently ignores ``cap.set(WIDTH/HEIGHT)`` for
+        # ``http://``/``rtsp://`` inputs, so any "mismatch" is just the
+        # source serving its native format. There is nothing the SDK
+        # could have done about it and warning would be misleading.
         if (
-            self.actual_width != self.requested_width
-            or self.actual_height != self.requested_height
+            not is_url
+            and (
+                self.actual_width != self.requested_width
+                or self.actual_height != self.requested_height
+            )
         ):
-            logger.warning(
-                f"Camera resolution mismatch: requested {self.requested_width}x{self.requested_height}, "
+            mismatch_msg = (
+                f"Camera resolution mismatch: requested "
+                f"{self.requested_width}x{self.requested_height}, "
                 f"got {self.actual_width}x{self.actual_height}"
             )
+            if _strict_geometry_enabled():
+                raise RuntimeError(
+                    f"{mismatch_msg} (CYBERWAVE_CAMERA_STRICT_GEOMETRY=1). "
+                    "This usually means OpenCV could not push the requested "
+                    "format to V4L2/AVFoundation and the camera fell back "
+                    "to its native default. Check the FOURCC / backend log "
+                    "line above."
+                )
+            logger.warning(mismatch_msg)
 
     def _select_capture_backends(self, camera_id: Union[int, str]) -> list[int]:
         """Select appropriate capture backends based on source type.
@@ -292,8 +495,19 @@ class CV2VideoTrack(BaseVideoTrack):
         *,
         fourcc_str: Optional[str],
     ) -> None:
-        """Set optional FOURCC (local sources only), then resolution, FPS, RGB, buffer."""
-        if fourcc_str and not self._is_url_stream(self.camera_id):
+        """Set optional FOURCC (local sources only), then resolution, FPS, RGB, buffer.
+
+        For URL sources (``http://``, ``https://``, ``rtsp://``) the FFMPEG
+        backend silently ignores ``cap.set(WIDTH/HEIGHT/FPS/FOURCC)`` — the
+        upstream server dictates the geometry. We skip those calls so the
+        ``Initialized CV2 camera`` log can report the source's actual
+        dimensions without claiming we chose them.  ``CONVERT_RGB`` and
+        ``BUFFERSIZE`` are still meaningful (they affect the OpenCV-side
+        decode and ring buffer) and are applied to URL sources too.
+        """
+        is_url = self._is_url_stream(self.camera_id)
+
+        if fourcc_str and not is_url:
             try:
                 fourcc_code = cv2.VideoWriter_fourcc(*fourcc_str[:4])
                 cap.set(cv2.CAP_PROP_FOURCC, fourcc_code)
@@ -301,9 +515,11 @@ class CV2VideoTrack(BaseVideoTrack):
             except Exception as e:
                 logger.warning("Failed to set FOURCC %s: %s", fourcc_str, e)
 
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.requested_width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.requested_height)
-        cap.set(cv2.CAP_PROP_FPS, self.fps)
+        if not is_url:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.requested_width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.requested_height)
+            cap.set(cv2.CAP_PROP_FPS, self.fps)
+
         cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
 
         try:
@@ -447,6 +663,15 @@ class CV2VideoTrack(BaseVideoTrack):
                 if not self.cap.isOpened():
                     raise RuntimeError(f"Failed to reopen camera {self.camera_id}")
 
+        # Track Linux-only geometry-based trust so the telemetry fallback
+        # below can surface the requested FOURCC even when there is no
+        # user_fourcc and the V4L2 backend reports CAP_PROP_FOURCC=0.
+        # macOS / Windows behavior remains EXACTLY as it was before
+        # CYB-1998: the long-standing cross-platform empty-readback guard
+        # for explicit user_fourcc is preserved, and the telemetry
+        # fallback condition is unchanged on those platforms.
+        linux_geometry_trust = False
+        is_linux = platform.system() == "Linux"
         if not configured:
             # Legacy path: sequential cap.set() on the current capture. Used
             # on macOS/Windows, URL streams, Linux builds without CAP_V4L2,
@@ -455,16 +680,49 @@ class CV2VideoTrack(BaseVideoTrack):
             if effective_try:
                 got = self._fourcc_from_cap(self.cap)
                 if not self._fourcc_tags_match(effective_try, got):
-                    # uvcvideo often reports empty/0 for CAP_PROP_FOURCC even when the
-                    # pixel format is active. If the caller set ``fourcc=`` (e.g. from
-                    # setup.json), do not reopen without FOURCC — that drops to the
-                    # driver default (often YUYV @ 1080p @ 5 fps on USB2).
-                    if user_fourcc and not (got or "").strip():
+                    # NEW (Linux-only): when the FOURCC readback is
+                    # uninformative (empty/0) but geometry matches the
+                    # requested resolution, trust that the requested
+                    # FOURCC took. Several V4L2 capture paths (uvcvideo
+                    # natively, and FFmpeg's libavformat V4L2 demuxer
+                    # used when OpenCV is built without native V4L2)
+                    # report CAP_PROP_FOURCC=0 even on a successful
+                    # negotiation; reopening would drop the device to
+                    # its kernel default (typically YUYV 1080p @ 5 fps
+                    # on USB 2.0). When the readback IS informative
+                    # (e.g. "YUYV"), the readback is the truth — we
+                    # respect it and reopen. macOS/Windows do not need
+                    # this because AVFoundation / MSMF / DSHOW report
+                    # FOURCC correctly. See CYB-1998.
+                    readback_empty = not (got or "").strip()
+                    geometry_match_trust = (
+                        is_linux
+                        and readback_empty
+                        and int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        == self.requested_width
+                        and int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        == self.requested_height
+                    )
+                    # PRESERVED (cross-platform): the long-standing
+                    # empty-readback guard for explicit user_fourcc.
+                    # Originally added for the uvcvideo quirk on Linux
+                    # but historically also active on Darwin/Windows,
+                    # so we keep it cross-platform to avoid changing
+                    # the macOS flow in CYB-1998.
+                    user_fourcc_empty_readback_trust = (
+                        bool(user_fourcc) and not (got or "").strip()
+                    )
+                    if geometry_match_trust or user_fourcc_empty_readback_trust:
+                        linux_geometry_trust = geometry_match_trust
                         if logger.isEnabledFor(logging.DEBUG):
                             logger.debug(
-                                "Camera FOURCC readback empty after user-requested %r; "
-                                "keeping capture (uvcvideo quirk)",
+                                "Camera FOURCC readback %r mismatched requested "
+                                "%r but %s; trusting requested FOURCC",
+                                got or "(empty)",
                                 effective_try,
+                                "Linux geometry matches"
+                                if geometry_match_trust
+                                else "user_fourcc readback empty (preserved cross-platform guard)",
                             )
                     else:
                         logger.warning(
@@ -488,11 +746,13 @@ class CV2VideoTrack(BaseVideoTrack):
                         )
 
         neg = self._fourcc_from_cap(self.cap)
-        if not neg and effective_try and (atomic_success or user_fourcc):
-            # CAP_V4L2 atomic open either applies the requested FOURCC or
-            # fails the open, so an empty readback afterwards is a uvcvideo
-            # reporting quirk — trust the requested value. Same for explicit
-            # user ``fourcc=`` on the legacy path when readback is empty.
+        # PRESERVED: ``atomic_success or user_fourcc`` is the original
+        # cross-platform telemetry-fallback condition. NEW (additive):
+        # ``linux_geometry_trust`` covers the Linux auto-MJPG case where
+        # we trusted on geometry without an explicit user_fourcc.
+        if not neg and effective_try and (
+            atomic_success or user_fourcc or linux_geometry_trust
+        ):
             neg = effective_try[:4].upper()
         self._negotiated_fourcc_ascii = neg or None
 
@@ -721,51 +981,76 @@ class CV2VideoTrack(BaseVideoTrack):
         return info
 
     async def recv(self):
-        """Receive and encode the next video frame."""
-        ret, frame = self.cap.read()
-        if not ret:
-            logger.error("Failed to read frame from camera")
-            return None
+        """Receive and encode the next video frame.
 
-        # Timestamp at capture: shared TimeReference.read() if provided, else OS time.
+        On ``cap.read()`` failure we schedule a non-blocking source reconnect
+        and return a freeze frame (last good capture) so the aiortc encoder
+        does not crash on ``None``. See ``_RECONNECT_TRIGGER_FAILURES`` and
+        ``_reconnect_loop``.
+        """
+        ret, frame = self.cap.read()
+
+        if ret:
+            self._consecutive_read_failures = 0
+        else:
+            self._consecutive_read_failures += 1
+            self._maybe_schedule_reconnect()
+            if self._last_good_frame_bgr is None:
+                if self._consecutive_read_failures == 1:
+                    logger.error(
+                        "Failed to read frame from camera (no cached frame "
+                        "to freeze on; dropping tick)"
+                    )
+                return None
+            # Freeze fallback: reuse the last good post-normalize, post-callback
+            # frame. We keep stamping fresh timestamps and bumping frame_count
+            # so the WebRTC pipeline keeps ticking; the picture stays still
+            # until the reconnect succeeds.
+            frame = self._last_good_frame_bgr
+
         timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 
-        # Store frame 0 timestamp for publishing
         if self.frame_count == 0:
             self.frame_0_timestamp = timestamp
             self.frame_0_timestamp_monotonic = timestamp_monotonic
 
-        # Normalize frame format
-        frame = self._normalize_frame(frame)
+        if ret:
+            # Normalize frame format
+            frame = self._normalize_frame(frame)
 
-        # Call frame callback if set (for ML inference, transforms, etc.).
-        # Backward-compatible contract: returning ``None`` keeps the original
-        # frame; returning a ``numpy.ndarray`` matching ``frame`` in shape AND
-        # dtype replaces the frame before encoding. Anything else is rejected
-        # so the WebRTC encoder never sees a wrong-resolution or wrong-type
-        # buffer (which would either break the stream or raise downstream).
-        if self.frame_callback:
-            try:
-                replacement = self.frame_callback(frame, self.frame_count)
-                if replacement is not None:
-                    if (
-                        isinstance(replacement, np.ndarray)
-                        and replacement.shape == frame.shape
-                        and replacement.dtype == frame.dtype
-                    ):
-                        frame = replacement
-                    else:
-                        self._warn_frame_callback(
-                            "returned incompatible value (type=%s, shape=%s, dtype=%s); "
-                            "expected ndarray shape=%s dtype=%s. Keeping original frame.",
-                            type(replacement).__name__,
-                            getattr(replacement, "shape", None),
-                            getattr(replacement, "dtype", None),
-                            frame.shape,
-                            frame.dtype,
-                        )
-            except Exception as e:
-                self._warn_frame_callback("error: %s", e)
+            # Call frame callback if set (for ML inference, transforms, etc.).
+            # Backward-compatible contract: returning ``None`` keeps the original
+            # frame; returning a ``numpy.ndarray`` matching ``frame`` in shape AND
+            # dtype replaces the frame before encoding. Anything else is rejected
+            # so the WebRTC encoder never sees a wrong-resolution or wrong-type
+            # buffer (which would either break the stream or raise downstream).
+            if self.frame_callback:
+                try:
+                    replacement = self.frame_callback(frame, self.frame_count)
+                    if replacement is not None:
+                        if (
+                            isinstance(replacement, np.ndarray)
+                            and replacement.shape == frame.shape
+                            and replacement.dtype == frame.dtype
+                        ):
+                            frame = replacement
+                        else:
+                            self._warn_frame_callback(
+                                "returned incompatible value (type=%s, shape=%s, dtype=%s); "
+                                "expected ndarray shape=%s dtype=%s. Keeping original frame.",
+                                type(replacement).__name__,
+                                getattr(replacement, "shape", None),
+                                getattr(replacement, "dtype", None),
+                                frame.shape,
+                                frame.dtype,
+                            )
+                except Exception as e:
+                    self._warn_frame_callback("error: %s", e)
+
+            # Cache the post-callback frame for freeze-frame fallback on
+            # subsequent read failures. Skip caching on freeze ticks so a
+            # long outage can't drift the cache.
+            self._last_good_frame_bgr = frame
 
         # Create video frame
         video_frame = VideoFrame.from_ndarray(frame, format="bgr24")
@@ -827,8 +1112,120 @@ class CV2VideoTrack(BaseVideoTrack):
 
         return video_frame
 
+    def _maybe_schedule_reconnect(self) -> None:
+        """Kick off a background source-reopen task if not already running.
+
+        Triggered from ``recv()`` after ``_RECONNECT_TRIGGER_FAILURES`` consecutive
+        ``cap.read()`` failures. Idempotent: re-entering with a task already in
+        flight is a no-op (everything runs on the asyncio thread, so the task
+        state alone is a sufficient guard).
+        """
+        if self._consecutive_read_failures < self._RECONNECT_TRIGGER_FAILURES:
+            return
+        if self._reconnect_task is not None and not self._reconnect_task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop (shouldn't happen from inside aiortc's recv, but
+            # be defensive — without a loop we just keep returning freeze
+            # frames; next recv() will retry scheduling).
+            return
+        logger.warning(
+            "Camera %r read failed %d times consecutively; scheduling source reconnect",
+            self.camera_id,
+            self._consecutive_read_failures,
+        )
+        self._reconnect_task = loop.create_task(self._reconnect_loop())
+
+    async def _reconnect_loop(self) -> None:
+        """Reopen the underlying ``cv2.VideoCapture`` with exponential backoff.
+
+        Runs blocking OpenCV calls in the default executor so the asyncio loop
+        (and therefore ``recv()`` itself) keeps ticking and freeze frames keep
+        flowing. Retries indefinitely until success or task cancellation; the
+        backoff caps at ``_RECONNECT_BACKOFF_MAX_S`` so we don't hammer a
+        permanently-dead source.
+        """
+        loop = asyncio.get_running_loop()
+        backoff = self._RECONNECT_BACKOFF_INITIAL_S
+        attempt = 0
+        try:
+            while True:
+                attempt += 1
+                await asyncio.sleep(backoff)
+                try:
+                    new_cap = await loop.run_in_executor(
+                        None, self._reopen_capture_blocking
+                    )
+                except Exception:
+                    logger.exception(
+                        "Camera %r reopen attempt %d raised", self.camera_id, attempt
+                    )
+                    new_cap = None
+                if new_cap is not None:
+                    old_cap = self.cap
+                    self.cap = new_cap
+                    self._consecutive_read_failures = 0
+                    logger.info(
+                        "Camera %r reconnected after %d attempt(s)",
+                        self.camera_id,
+                        attempt,
+                    )
+                    if old_cap is not None:
+                        try:
+                            old_cap.release()
+                        except Exception:
+                            logger.debug(
+                                "Releasing old capture after reconnect raised",
+                                exc_info=True,
+                            )
+                    return
+                backoff = min(backoff * 2, self._RECONNECT_BACKOFF_MAX_S)
+        except asyncio.CancelledError:
+            raise
+
+    def _reopen_capture_blocking(self) -> Optional[cv2.VideoCapture]:
+        """Open a new ``cv2.VideoCapture`` and reapply geometry/buffer/FOURCC.
+
+        Runs in a thread executor (``cv2.VideoCapture`` constructors are
+        blocking, especially over the network). Returns ``None`` on failure
+        so the caller can back off and retry. The captured FOURCC tag from
+        the original open is preserved across reconnects so a USB camera
+        that negotiated MJPG initially keeps MJPG after reconnect.
+
+        TODO(CYB-1998 follow-up): on Linux + local USB cameras the original
+        open uses ``_negotiate_and_configure_capture`` → ``_open_local_v4l2_atomic``,
+        which works around uvcvideo bugs that can otherwise leave the device
+        on the wrong FOURCC. Reopening here goes through the sequential
+        ``_open_capture`` + ``_apply_capture_geometry_and_buffer`` path instead,
+        so a USB unplug/replug reconnect could land on a degraded format
+        without surfacing it. Route the reopen through the atomic path before
+        we lean on this for local V4L2 sources in production.
+        """
+        cap: Optional[cv2.VideoCapture] = None
+        try:
+            cap = self._open_capture(self.camera_id)
+            if not cap.isOpened():
+                cap.release()
+                return None
+            self._apply_capture_geometry_and_buffer(
+                cap, fourcc_str=self._negotiated_fourcc_ascii
+            )
+            return cap
+        except Exception:
+            logger.exception("Camera %r reopen raised", self.camera_id)
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+            return None
+
     def close(self):
         """Release camera resources."""
+        if self._reconnect_task is not None and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
         if self.cap:
             self.cap.release()
             logger.info("CV2 camera released")
@@ -991,6 +1388,48 @@ class CV2CameraStreamer(BaseVideoStreamer):
             fourcc=self.fourcc,
         )
         return self.streamer
+
+    def _build_stream_config(self) -> Optional[Dict[str, Any]]:
+        """Advertise the cv2 camera config in every ``edge_health`` heartbeat.
+
+        Lets the Edge Details pane render ``resolution · fps · cv2`` from
+        the wire instead of inferring kind from the twin's asset spec —
+        the asset-spec fallback misclassifies single-sensor twins that
+        use the generic ``"stream"`` id when the asset's sensor id
+        doesn't match.
+
+        Resolution is normalised to ``"WxH"`` so the frontend can render
+        it verbatim.  ``fps`` is the runtime-negotiated rate once the
+        V4L2 stack has settled (``CV2VideoTrack.actual_fps``); we fall
+        back to the requested ``self.fps`` only before the first frame,
+        so the dashboard never claims a rate the camera literally
+        cannot deliver.  ``source`` is credential-masked: an RTSP URL
+        like ``rtsp://admin:hunter2@host`` becomes ``rtsp://***@host``
+        before it crosses the wire, so MQTT subscribers, Vector's
+        ``app_twintelemetry`` table, and the browser localStorage
+        cache never see secrets.
+        """
+        if isinstance(self.resolution, Resolution):
+            resolution_str = str(self.resolution)
+        elif isinstance(self.resolution, tuple) and len(self.resolution) == 2:
+            resolution_str = f"{self.resolution[0]}x{self.resolution[1]}"
+        else:
+            resolution_str = ""
+
+        track = self.streamer
+        actual_fps = getattr(track, "actual_fps", None) if track is not None else None
+        negotiated_fps = (
+            actual_fps if isinstance(actual_fps, (int, float)) and actual_fps > 0
+            else self.fps
+        )
+
+        return {
+            "kind": "camera",
+            "source": _mask_url_credentials(str(self.camera_id)),
+            "resolution": resolution_str,
+            "fps": negotiated_fps,
+            "camera_type": "cv2",
+        }
 
 
 # Backwards compatibility aliases

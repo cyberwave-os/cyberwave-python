@@ -18,6 +18,7 @@ Usage:
     >>> client = Cyberwave(api_key="...")
     >>> workspaces = client.workspaces.list()
     >>> twin = client.twins.get("uuid")
+    >>> client.ml_models.list()  # workspace + public ML catalog rows
 """
 
 import base64
@@ -26,9 +27,10 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import uuid as uuid_lib
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, NoReturn, Optional
 
 import urllib3
 
@@ -51,6 +53,8 @@ from cyberwave.rest import (
     AttachmentSchema,
     CompleteLargeUploadSchema,
     DatasetSchema,
+    DatasetDownloadProcessingSchema,
+    DatasetDownloadReadySchema,
     DatasetImportInitSchema,
     DatasetImportCompleteSchema,
     TwinSchema,
@@ -61,6 +65,7 @@ from cyberwave.rest import (
     JointStateUpdateSchema,
     JointStateSchema,
     EdgeSchema,
+    MLModelSchema,
 )
 from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
 
@@ -1659,6 +1664,58 @@ class EdgeManager(BaseResourceManager):
             self._handle_error(e, f"update edge {edge_id}")
             raise
 
+    def discover(
+        self,
+        fingerprint: str,
+        *,
+        hostname: str = "",
+        platform: str = "",
+        name: str = "",
+        host_facts: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Upsert an edge by fingerprint and return the twin bindings.
+
+        Mirrors ``POST /api/v1/edges/discover``: the backend auto-registers
+        unknown fingerprints, refreshes the matching ``Edge`` row (hostname,
+        platform, IP, optional ``metadata['host_facts']``) and returns every
+        twin whose metadata binds it to this fingerprint.
+
+        ``host_facts`` is a free-form dict (typically the JSON produced by
+        :meth:`cyberwave.edge.host_metrics.HostFacts.to_dict`) and is merged
+        into ``Edge.metadata['host_facts']`` server-side.
+
+        Returns the raw response dict (``edge_uuid``, ``fingerprint``,
+        ``twins``).  Callers that only care about the side-effect of
+        refreshing host facts can ignore the return value.
+        """
+        try:
+            payload: Dict[str, Any] = {"fingerprint": fingerprint}
+            if hostname:
+                payload["hostname"] = hostname
+            if platform:
+                payload["platform"] = platform
+            if name:
+                payload["name"] = name
+            if host_facts is not None:
+                payload["host_facts"] = host_facts
+
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/edges/discover",
+                body=payload,
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"discover edge {fingerprint}")
+            raise
+
     def delete(self, edge_id: str) -> Dict[str, bool]:
         """Delete an edge."""
         try:
@@ -2503,11 +2560,156 @@ class TwinManager(BaseResourceManager):
             raise
 
 
+class MLModelsResourceManager(BaseResourceManager):
+    """Workspace ML model records from ``GET/POST/DELETE /api/v1/mlmodels``.
+
+    Lists and fetches catalog metadata (names, slugs, ``sdk_load_id``,
+    deployment flags, etc.) so callers can choose what to pass to
+    :meth:`cyberwave.models.manager.ModelManager.load`.
+
+    This manager is intentionally **not** bound to ``Cyberwave.models`` — that
+    attribute stays the unified runtime loader (:class:`~cyberwave.models.manager.ModelManager`).
+    Playground inference is available via ``cw.models.playground("slug").run(...)``.
+
+    Methods :meth:`create` and :meth:`update` are stubs until the SDK grows
+    typed, high-level wrappers; use
+    ``client.api.src_app_api_mlmodels_create_mlmodel(...)`` /
+    ``client.api.src_app_api_mlmodels_update_mlmodel(...)`` for full control.
+    """
+
+    def list(
+        self,
+        *,
+        deployment: Optional[str] = None,
+        edge_compatible: Optional[bool] = None,
+        model_external_id: Optional[str] = None,
+        supported_level: Optional[str] = None,
+        is_trainable: Optional[bool] = None,
+        catalog_seed_id: Optional[str] = None,
+    ) -> List[MLModelSchema]:
+        """List ML models visible to the authenticated user (workspace + public).
+
+        Mirrors query parameters on :func:`list_mlmodels` in the backend router.
+        """
+        try:
+            return self.api.src_app_api_mlmodels_list_mlmodels(
+                deployment=deployment,
+                edge_compatible=edge_compatible,
+                model_external_id=model_external_id,
+                supported_level=supported_level,
+                is_trainable=is_trainable,
+                catalog_seed_id=catalog_seed_id,
+            )
+        except Exception as e:
+            self._handle_error(e, "list ml models")
+            raise
+
+    def list_public(
+        self,
+        *,
+        deployment: Optional[str] = None,
+    ) -> List[MLModelSchema]:
+        """List public ML models (open route; does not require membership)."""
+        try:
+            return self.api.src_app_api_mlmodels_list_public_mlmodels(
+                deployment=deployment,
+            )
+        except Exception as e:
+            self._handle_error(e, "list public ml models")
+            raise
+
+    def get_by_uuid(self, uuid: str) -> MLModelSchema:
+        """Fetch one model by UUID."""
+        try:
+            return self.api.src_app_api_mlmodels_get_mlmodel(uuid=str(uuid).strip())
+        except Exception as e:
+            self._handle_error(e, f"get ml model {uuid}")
+            raise
+
+    def get_by_slug(self, slug: str) -> MLModelSchema:
+        """Fetch one model by unified slug (``ws/models/name``)."""
+        try:
+            return self.api.src_app_api_mlmodels_get_mlmodel_by_slug(
+                slug=str(slug).strip()
+            )
+        except Exception as e:
+            self._handle_error(e, f"get ml model by slug {slug!r}")
+            raise
+
+    def get(self, model_id: str) -> MLModelSchema:
+        """Resolve *model_id* by slug (contains ``/``) or otherwise by UUID."""
+        mid = str(model_id).strip()
+        if _looks_like_slug(mid):
+            return self.get_by_slug(mid)
+        return self.get_by_uuid(mid)
+
+    def delete(self, uuid: str) -> Dict[str, bool]:
+        """Delete an ML model by UUID.
+
+        The generated OpenAPI binding returns ``None``; this wrapper matches
+        the HTTP JSON body and returns ``{"success": True}`` on completion.
+        """
+        uid = str(uuid).strip()
+        try:
+            self.api.src_app_api_mlmodels_delete_mlmodel(uuid=uid)
+        except Exception as e:
+            self._handle_error(e, f"delete ml model {uid}")
+            raise
+        return {"success": True}
+
+    def create(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Stub — not implemented in the SDK yet.
+
+        Raises:
+            NotImplementedError: Always, until a typed create helper lands.
+        """
+        raise NotImplementedError(
+            "MLModelsResourceManager.create() is not implemented yet — call "
+            "Cyberwave.api.src_app_api_mlmodels_create_mlmodel(ml_model_create_schema=...) "
+            "or upgrade the SDK once this wrapper is finalized."
+        )
+
+    def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Stub — not implemented in the SDK yet.
+
+        Raises:
+            NotImplementedError: Always, until a typed update helper lands.
+        """
+        raise NotImplementedError(
+            "MLModelsResourceManager.update() is not implemented yet — call "
+            "Cyberwave.api.src_app_api_mlmodels_update_mlmodel(uuid=..., ml_model_update_schema=...) "
+            "or upgrade the SDK once this wrapper is finalized."
+        )
+
+
+# Sentinel: distinguishes "caller did not pass on_poll" from "caller passed None".
+_DEFAULT_ON_POLL: object = object()
+
+# Terminal processing statuses returned by the backend.
+_DATASET_TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed"})
+
+
+def _default_on_import_poll(ds: "DatasetSchema") -> None:
+    """Built-in progress printer for :meth:`DatasetManager.wait_until_ready`."""
+    print(
+        f"[cyberwave] dataset {ds.uuid} status={ds.processing_status} "
+        f"episodes={ds.processed_episodes}/{ds.total_episodes} "
+        f"failed={ds.failed_episodes}"
+    )
+
+
+def _default_on_convert_poll(state: Any) -> None:
+    """Built-in progress printer for :meth:`DatasetManager.convert`."""
+    status = getattr(state, "status", None) or "ready"
+    print(f"[cyberwave] convert status={status}")
+
+
 class DatasetManager(BaseResourceManager):
     """Manager for dataset operations (import from HuggingFace or upload local).
 
     Example:
-        # HuggingFace import (string is not a local path)
+        # HuggingFace import (string is not a local path); idempotent — reuses
+        # an existing import for the same HF repo if one already exists.
         ds = cw.datasets.add("lerobot/pusht", name="pusht")
 
         # Local upload (path exists on disk; zipped first, then uploaded)
@@ -2515,8 +2717,11 @@ class DatasetManager(BaseResourceManager):
 
         ds.uuid, ds.processing_status, ds.is_ready
 
-        # Print the frontend URL to visualize in browser
-        cw.datasets.visualize(ds)
+        # Wait for async ingestion to finish (prints status each poll by default)
+        ds = cw.datasets.wait_until_ready(ds)
+
+        # Get the frontend URL to visualize in a browser
+        url = cw.datasets.visualize(ds)
     """
 
     # Loose check used as a hint when the path doesn't exist on disk.
@@ -2564,15 +2769,20 @@ class DatasetManager(BaseResourceManager):
             self._handle_error(e, f"get dataset {dataset_id}")
             raise  # For type checker
 
-    def delete(self, dataset_id: str) -> None:
-        """Delete a dataset by UUID."""
+    def delete(self, dataset_id: str) -> Dict[str, bool]:
+        """Delete a dataset by UUID.
+
+        Returns:
+            ``{"success": True}`` on success.
+        """
         try:
-            self.api.src_app_api_datasets_delete_dataset(dataset_id)
+            return self.api.src_app_api_datasets_delete_dataset(dataset_id)  # type: ignore[return-value]
         except Exception as e:
             self._handle_error(e, f"delete dataset {dataset_id}")
+            raise  # For type checker
 
     def visualize(self, dataset: "DatasetSchema | str") -> str:
-        """Print the URL to visualize this dataset in the Cyberwave frontend.
+        """Return the frontend URL to visualize this dataset in a browser.
 
         Args:
             dataset: A DatasetSchema object or a dataset UUID string.
@@ -2582,9 +2792,8 @@ class DatasetManager(BaseResourceManager):
 
         Example:
             >>> ds = cw.datasets.add("lerobot/pusht")
-            >>> cw.datasets.visualize(ds)
-            View dataset at: https://cyberwave.com/acme/datasets/pusht
-            'https://cyberwave.com/acme/datasets/pusht'
+            >>> print(cw.datasets.visualize(ds))
+            https://cyberwave.com/acme/datasets/pusht
         """
         if isinstance(dataset, str):
             ds = self.get(dataset)
@@ -2595,16 +2804,12 @@ class DatasetManager(BaseResourceManager):
         uuid = getattr(ds, "uuid", None)
 
         if slug:
-            url = f"{self._FRONTEND_URL}/{slug}"
-        elif uuid:
-            url = f"{self._FRONTEND_URL}/datasets/{uuid}"
-        else:
-            raise CyberwaveAPIError(
-                "Dataset has neither slug nor uuid; cannot construct URL."
-            )
-
-        print(f"View dataset at: {url}")
-        return url
+            return f"{self._FRONTEND_URL}/{slug}"
+        if uuid:
+            return f"{self._FRONTEND_URL}/datasets/{uuid}"
+        raise CyberwaveAPIError(
+            "Dataset has neither slug nor uuid; cannot construct URL."
+        )
 
     def add(
         self,
@@ -2614,6 +2819,7 @@ class DatasetManager(BaseResourceManager):
         hf_revision: Optional[str] = None,
         hf_subset: Optional[str] = None,
         content_type: str = "application/zip",
+        reuse_existing: bool = True,
     ) -> DatasetSchema:
         """Import a dataset from HuggingFace or upload a local folder/file.
 
@@ -2624,8 +2830,9 @@ class DatasetManager(BaseResourceManager):
         backend imports it directly.
 
         Returns the :class:`DatasetSchema` immediately so callers can read
-        ``uuid``, ``processing_status``, ``is_ready``, etc. Processing
-        continues asynchronously on the backend; use :meth:`get` to poll.
+        ``uuid``, ``processing_status``, ``is_ready``, etc. For HuggingFace
+        imports, processing continues asynchronously on the backend; call
+        :meth:`wait_until_ready` to block until ingestion finishes.
 
         Args:
             name_or_path: HuggingFace repo id (``"owner/repo"``) or local path.
@@ -2635,6 +2842,10 @@ class DatasetManager(BaseResourceManager):
             hf_subset: HuggingFace dataset subset/config (HF imports only).
             content_type: Content type used for the signed PUT (zip uploads
                 only). Defaults to ``application/zip``.
+            reuse_existing: When ``True`` (default), look up existing datasets
+                that were already imported from the same HF repo (+ revision/
+                subset) and return the first match instead of queuing a new
+                import. Pass ``False`` to always create a fresh import.
         """
         if os.path.exists(name_or_path):
             return self._add_from_path(
@@ -2647,6 +2858,7 @@ class DatasetManager(BaseResourceManager):
             name=name,
             hf_revision=hf_revision,
             hf_subset=hf_subset,
+            reuse_existing=reuse_existing,
         )
 
     @staticmethod
@@ -2669,6 +2881,7 @@ class DatasetManager(BaseResourceManager):
         name: Optional[str],
         hf_revision: Optional[str],
         hf_subset: Optional[str],
+        reuse_existing: bool,
     ) -> DatasetSchema:
         if not self._HF_REPO_PATTERN.match(repo_id):
             raise CyberwaveAPIError(
@@ -2676,6 +2889,13 @@ class DatasetManager(BaseResourceManager):
                 "HuggingFace repo id (expected 'owner/repo'). "
                 "Pass an existing path to upload, or a valid HF repo id."
             )
+
+        if reuse_existing:
+            existing = self._find_existing_hf_import(
+                repo_id, hf_revision=hf_revision, hf_subset=hf_subset
+            )
+            if existing is not None:
+                return existing
 
         dataset_name = (name or self._default_name_from_repo(repo_id)).strip()
         try:
@@ -2693,6 +2913,115 @@ class DatasetManager(BaseResourceManager):
         except Exception as e:
             self._handle_error(e, f"import dataset from HuggingFace '{repo_id}'")
             raise  # For type checker
+
+    def _find_existing_hf_import(
+        self,
+        repo_id: str,
+        *,
+        hf_revision: Optional[str],
+        hf_subset: Optional[str],
+    ) -> Optional[DatasetSchema]:
+        """Return the first existing dataset imported from *repo_id* (same revision/subset), or ``None``."""
+        offset = 0
+        page_size = 200
+        while True:
+            page = self.list(limit=page_size, offset=offset)
+            for ds in page:
+                meta = getattr(ds, "metadata", None) or {}
+                import_info = meta.get("import") if isinstance(meta, dict) else None
+                if not isinstance(import_info, dict):
+                    continue
+                if import_info.get("source") != "hf":
+                    continue
+                if import_info.get("hf_repo_id") != repo_id:
+                    continue
+                if hf_revision is not None and import_info.get("hf_revision") != hf_revision:
+                    continue
+                if hf_subset is not None and import_info.get("hf_subset") != hf_subset:
+                    continue
+                return ds
+            if len(page) < page_size:
+                break
+            offset += page_size
+        return None
+
+    def wait_until_ready(
+        self,
+        dataset: "DatasetSchema | str",
+        *,
+        poll_interval: float = 5.0,
+        timeout: float = 1800.0,
+        on_poll: "Callable[[DatasetSchema], None] | None" = _DEFAULT_ON_POLL,  # type: ignore[assignment]
+    ) -> DatasetSchema:
+        """Poll ``GET /datasets/{uuid}`` until processing is terminal.
+
+        HuggingFace imports are asynchronous (HTTP 202 from :meth:`add`).
+        Call this method to block until ingestion completes or fails.
+
+        Args:
+            dataset: A :class:`~cyberwave.rest.DatasetSchema` or dataset UUID.
+            poll_interval: Seconds between polling attempts (default 5 s).
+            timeout: Maximum seconds to wait before raising
+                :class:`~cyberwave.exceptions.CyberwaveAPIError` (default
+                1800 s = 30 min).
+            on_poll: Called with the fresh :class:`~cyberwave.rest.DatasetSchema`
+                after every fetch, including the terminal one.
+
+                - **Omitted** (default): uses a built-in printer that writes a
+                  one-line status to stdout.
+                - **``None``**: fully silent.
+                - **callable**: your own progress handler.
+
+        Returns:
+            The final :class:`~cyberwave.rest.DatasetSchema` once
+            ``processing_status`` is ``"completed"`` or ``"failed"``.
+
+        Raises:
+            CyberwaveAPIError: If ``processing_status`` is ``"failed"`` or the
+                timeout expires before a terminal status is reached.
+
+        Example:
+            ds = cw.datasets.add("lerobot/pusht")
+            ds = cw.datasets.wait_until_ready(ds)
+            print(ds.is_ready)
+        """
+        cb: Optional[Callable[["DatasetSchema"], None]] = (
+            _default_on_import_poll  # type: ignore[assignment]
+            if on_poll is _DEFAULT_ON_POLL
+            else on_poll
+        )
+
+        dataset_uuid = dataset if isinstance(dataset, str) else str(dataset.uuid)
+        deadline = time.monotonic() + timeout
+
+        while True:
+            ds = self.get(dataset_uuid)
+            if cb is not None:
+                cb(ds)
+
+            status = getattr(ds, "processing_status", None) or ""
+            if status in _DATASET_TERMINAL_STATUSES:
+                if status == "failed":
+                    failed_uuids = getattr(ds, "failed_episode_uuids", []) or []
+                    detail = (
+                        f" Failed episodes: {', '.join(failed_uuids)}"
+                        if failed_uuids
+                        else ""
+                    )
+                    raise CyberwaveAPIError(
+                        f"Dataset '{dataset_uuid}' ingestion failed.{detail}",
+                        status_code=None,
+                    )
+                return ds
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CyberwaveAPIError(
+                    f"Dataset '{dataset_uuid}' ingestion did not complete within "
+                    f"{timeout:.0f}s (last status: {status!r}).",
+                    status_code=None,
+                )
+            time.sleep(min(poll_interval, remaining))
 
     def _add_from_path(
         self,
@@ -2788,6 +3117,181 @@ class DatasetManager(BaseResourceManager):
             root_dir=staging,
         )
         return archive_path, True
+
+    # ------------------------------------------------------------------
+    # Conversion and download
+    # ------------------------------------------------------------------
+
+    # Formats the backend can produce today.
+    WRITABLE_FORMATS: frozenset[str] = frozenset(
+        {"parquet", "lerobot3", "lerobot21", "rlds", "openvla", "robodm"}
+    )
+
+    def convert(
+        self,
+        dataset: "DatasetSchema | str",
+        format: str,  # noqa: A002
+        *,
+        poll_interval: float = 5.0,
+        timeout: float = 3600.0,
+        on_poll: "Callable[[Any], None] | None" = _DEFAULT_ON_POLL,  # type: ignore[assignment]
+    ) -> str:
+        """Trigger cloud conversion of a dataset and block until the artifact is ready.
+
+        Calls ``GET /datasets/{uuid}/download?format={format}`` (idempotent) and
+        polls every *poll_interval* seconds until the backend returns HTTP 200
+        (conversion finished). Mirrors the frontend ``useDatasetDownload`` hook.
+
+        Args:
+            dataset: A :class:`~cyberwave.rest.DatasetSchema` or a dataset UUID string.
+            format: Target format. Supported values: ``"parquet"``, ``"lerobot3"``,
+                ``"lerobot21"``, ``"rlds"``, ``"openvla"``, ``"robodm"``.
+                Deprecated aliases ``"lerobot"`` and ``"plain"`` are normalised
+                server-side.
+            poll_interval: Seconds between polling attempts (default 5 s).
+            timeout: Maximum seconds to wait for the conversion before raising
+                :class:`~cyberwave.exceptions.CyberwaveAPIError` (default 3600 s).
+            on_poll: Called with the raw backend response object after every
+                poll iteration (the object has ``.status``, ``.signed_url``,
+                ``.expires_at`` attributes depending on the state).
+
+                - **Omitted** (default): uses a built-in printer that writes
+                  the current ``status`` to stdout.
+                - **``None``**: fully silent. Replaces the old ``verbose=False``.
+                - **callable**: your own progress handler.
+
+        Returns:
+            The signed download URL (valid for 24 h).
+
+        Raises:
+            CyberwaveAPIError: If the format is invalid, the backend returns an
+                error, or the conversion does not complete within *timeout*.
+
+        Example:
+            url = cw.datasets.convert("my-dataset-uuid", "lerobot3")
+            print(f"Download at: {url}")
+        """
+        cb: Optional[Callable[[Any], None]] = (
+            _default_on_convert_poll  # type: ignore[assignment]
+            if on_poll is _DEFAULT_ON_POLL
+            else on_poll
+        )
+
+        dataset_uuid = dataset if isinstance(dataset, str) else str(dataset.uuid)
+        format_lower = format.strip().lower()
+
+        deadline = time.monotonic() + timeout
+
+        while True:
+            try:
+                result = self.api.src_app_api_datasets_download_dataset(
+                    dataset_uuid, format_lower
+                )
+            except Exception as e:
+                self._handle_error(
+                    e, f"request conversion of dataset {dataset_uuid} to '{format_lower}'"
+                )
+                raise  # For type checker
+
+            if cb is not None:
+                cb(result)
+
+            # Detect response type by the presence of discriminating fields.
+            # "ready" responses carry a `signed_url`; "processing" responses carry
+            # `poll_url`.  We duck-type rather than isinstance-check so both the
+            # auto-generated Pydantic models and plain SimpleNamespace mocks work.
+            signed_url = getattr(result, "signed_url", None)
+            if signed_url:
+                return str(signed_url)
+
+            status = getattr(result, "status", "queued")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CyberwaveAPIError(
+                    f"Dataset conversion to '{format_lower}' did not complete within "
+                    f"{timeout:.0f}s (last status: {status}).",
+                    status_code=None,
+                )
+            time.sleep(min(poll_interval, remaining))
+
+    def download(
+        self,
+        dataset: "DatasetSchema | str",
+        format: str,  # noqa: A002
+        dest: Optional[str] = None,
+        *,
+        poll_interval: float = 5.0,
+        timeout: float = 3600.0,
+        on_poll: "Callable[[Any], None] | None" = _DEFAULT_ON_POLL,  # type: ignore[assignment]
+    ) -> str:
+        """Convert a dataset to *format* and download the artifact to disk.
+
+        Convenience wrapper around :meth:`convert`: triggers conversion (or
+        reuses an existing artifact) and streams the resulting zip file to
+        *dest*.
+
+        Args:
+            dataset: A :class:`~cyberwave.rest.DatasetSchema` or a dataset UUID string.
+            format: Target format (same values as :meth:`convert`).
+            dest: Destination path on disk.  If ``None`` (default), the file is
+                saved to the current working directory as
+                ``{dataset_uuid}_{format}.zip``.  If *dest* is a directory the
+                filename is auto-derived inside that directory.
+            poll_interval: Polling interval forwarded to :meth:`convert`.
+            timeout: Timeout forwarded to :meth:`convert`.
+            on_poll: Progress callback forwarded to :meth:`convert`.
+                Omit for default stdout printing; pass ``None`` to silence.
+
+        Returns:
+            The absolute path to the saved file.
+
+        Raises:
+            CyberwaveAPIError: If conversion fails or the HTTP download fails.
+
+        Example:
+            path = cw.datasets.download("my-dataset-uuid", "lerobot3", dest="./data")
+            print(f"Saved to {path}")
+        """
+        dataset_uuid = dataset if isinstance(dataset, str) else str(dataset.uuid)
+        format_lower = format.strip().lower()
+
+        signed_url = self.convert(
+            dataset_uuid,
+            format_lower,
+            poll_interval=poll_interval,
+            timeout=timeout,
+            on_poll=on_poll,
+        )
+
+        # Resolve destination path.
+        filename = f"{dataset_uuid}_{format_lower}.zip"
+        if dest is None:
+            file_path = os.path.abspath(filename)
+        elif os.path.isdir(dest):
+            file_path = os.path.join(os.path.abspath(dest), filename)
+        else:
+            file_path = os.path.abspath(dest)
+
+        http = urllib3.PoolManager()
+        response = http.request("GET", signed_url, preload_content=False)
+        try:
+            status = response.status
+            if status >= 400:
+                response.release_conn()
+                raise CyberwaveAPIError(
+                    f"Dataset download failed with HTTP {status}",
+                    status_code=status,
+                )
+            with open(file_path, "wb") as fh:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+        finally:
+            response.release_conn()
+
+        return file_path
 
     @staticmethod
     def _put_zip_to_signed_url(

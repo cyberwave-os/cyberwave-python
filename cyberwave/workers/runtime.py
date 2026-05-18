@@ -20,7 +20,7 @@ from cyberwave.data.keys import build_key, build_wildcard, parse_key
 from cyberwave.exceptions import CyberwaveError
 from cyberwave.workers.constants import MONITOR_STATS_KEY
 from cyberwave.workers.context import HookContext
-from cyberwave.workers.decode import decode_sample_payload
+from cyberwave.workers.decode import decode_sample_payload, extract_wire_metadata
 from cyberwave.workers.hooks import (
     SENSOR_BEARING_CHANNELS,
     WILDCARD_SENSOR,
@@ -395,6 +395,7 @@ class WorkerRuntime:
         sample: Any,
         *,
         wire_ts: float | None = None,
+        wire_metadata: dict[str, Any] | None = None,
     ) -> HookContext:
         # Prefer the sensor name carried by the sample (wire key) so that
         # wildcard hooks see the *actual* sensor that published the frame
@@ -413,12 +414,19 @@ class WorkerRuntime:
                 else "default"
             )
         ts = wire_ts if wire_ts is not None else getattr(sample, "timestamp", 0.0)
+        # Merge wire header metadata (sample_rate_hz, channels, encoding, etc.)
+        # with any metadata already on the Sample object.
+        metadata = getattr(sample, "metadata", None) or {}
+        if wire_metadata:
+            merged = dict(wire_metadata)
+            merged.update(metadata)
+            metadata = merged
         return HookContext(
             timestamp=ts,
             channel=hook.channel,
             sensor_name=sensor_name,
             twin_uuid=hook.twin_uuid,
-            metadata=getattr(sample, "metadata", None) or {},
+            metadata=metadata,
         )
 
     @staticmethod
@@ -448,7 +456,17 @@ class WorkerRuntime:
         hook can process it, the newest sample silently replaces the
         previous one (drop-oldest).  This keeps the hook working on
         the most recent data without unbounded queue growth.
+
+        ``mqtt`` hooks (registered via :meth:`HookRegistry.on_mqtt`)
+        bypass the data bus entirely and subscribe directly through
+        ``client.mqtt.subscribe`` because the corresponding twin
+        subtopic is not bridged into Zenoh by default. This keeps the
+        ``@cw.on_mqtt`` decorator usable on any twin subtopic without
+        having to extend the bridge configuration first.
         """
+        if hook.hook_type == "mqtt":
+            self._subscribe_mqtt_hook(hook)
+            return
         ready = threading.Event()
         slot: list[Any] = [None]
         hook_name = hook.callback.__name__
@@ -475,7 +493,8 @@ class WorkerRuntime:
                 if sample is None:
                     continue
                 decoded_data, wire_ts = decode_sample_payload(sample, content_hint=hint)
-                ctx = self._build_context(hook, sample, wire_ts=wire_ts)
+                wire_meta = extract_wire_metadata(sample)
+                ctx = self._build_context(hook, sample, wire_ts=wire_ts, wire_metadata=wire_meta)
                 try:
                     hook.callback(decoded_data, ctx)
                     frames_processed += 1
@@ -523,6 +542,93 @@ class WorkerRuntime:
                 "enable the data layer.",
                 hook.callback.__name__,
                 hook.channel,
+            )
+
+    def _subscribe_mqtt_hook(self, hook: HookRegistration) -> None:
+        """Subscribe a ``@cw.on_mqtt`` hook directly via the MQTT client.
+
+        Mirrors the alert-trigger flow in spirit (the SDK owns the
+        subscription lifecycle so the worker module stays declarative)
+        but uses the raw MQTT broker because user-defined twin
+        subtopics are not part of the Zenoh-MQTT bridge inbound
+        defaults. Hooks register interest, the runtime resolves the
+        full prefixed topic, and dispatch invokes
+        ``hook.callback(payload, topic, ctx)``.
+        """
+        subtopic = str(hook.options.get("subtopic") or "").strip()
+        qos = int(hook.options.get("qos") or 0)
+        if not subtopic:
+            logger.warning(
+                "Skipping MQTT hook '%s': missing subtopic option",
+                hook.callback.__name__,
+            )
+            return
+        if not hook.twin_uuid:
+            logger.warning(
+                "Skipping MQTT hook '%s': missing twin_uuid",
+                hook.callback.__name__,
+            )
+            return
+
+        try:
+            mqtt_client = self._cw.mqtt
+        except Exception:
+            logger.exception(
+                "Skipping MQTT hook '%s': MQTT client unavailable on Cyberwave instance",
+                hook.callback.__name__,
+            )
+            return
+
+        if not getattr(mqtt_client, "connected", False):
+            try:
+                mqtt_client.connect()
+            except Exception:
+                logger.exception(
+                    "Failed to connect MQTT client for hook '%s'",
+                    hook.callback.__name__,
+                )
+                return
+
+        prefix = getattr(mqtt_client, "topic_prefix", "") or ""
+        full_topic = f"{prefix}cyberwave/twin/{hook.twin_uuid}/{subtopic}"
+        hook_name = hook.callback.__name__
+
+        with self._hook_stats_lock:
+            self._hook_stats[hook_name] = {"frames": 0, "drops": 0}
+
+        def on_message(payload: Any) -> None:
+            try:
+                ctx = HookContext(
+                    timestamp=time.time(),
+                    channel=hook.channel,
+                    twin_uuid=hook.twin_uuid,
+                    metadata={"subtopic": subtopic, "topic": full_topic, "qos": qos},
+                )
+                hook.callback(payload, full_topic, ctx)
+                with self._hook_stats_lock:
+                    entry = self._hook_stats.get(hook_name)
+                    if entry is not None:
+                        entry["frames"] += 1
+            except Exception:
+                logger.exception(
+                    "Error in MQTT hook %s for topic %s",
+                    hook_name,
+                    full_topic,
+                )
+
+        try:
+            mqtt_client.subscribe(full_topic, on_message, qos=qos)
+            logger.info(
+                "Subscribed MQTT hook '%s' to topic %s (qos=%d)",
+                hook_name,
+                full_topic,
+                qos,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to subscribe MQTT hook '%s' to topic %s",
+                hook_name,
+                full_topic,
             )
 
     # ── multi-channel synchronized dispatch ──────────────────────

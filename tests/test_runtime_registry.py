@@ -21,7 +21,9 @@ class _AvailableRuntime(ModelRuntime):
     def load(self, model_path, *, device=None, **kwargs):
         return None
 
-    def predict(self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs):
+    def predict(
+        self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs
+    ):
         return PredictionResult()
 
 
@@ -34,7 +36,9 @@ class _UnavailableRuntime(ModelRuntime):
     def load(self, model_path, *, device=None, **kwargs):
         return None
 
-    def predict(self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs):
+    def predict(
+        self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs
+    ):
         return PredictionResult()
 
 
@@ -69,5 +73,13 @@ class TestRuntimeRegistry:
         assert "test_unavailable" not in avail
 
     def test_builtin_runtimes_are_registered(self):
-        for name in ("ultralytics", "onnxruntime", "opencv", "tflite", "tensorrt", "torch"):
+        for name in (
+            "ultralytics",
+            "onnxruntime",
+            "opencv",
+            "tflite",
+            "tensorrt",
+            "torch",
+            "whisper_cpp",
+        ):
             assert name in _RUNTIME_REGISTRY, f"runtime '{name}' not registered"

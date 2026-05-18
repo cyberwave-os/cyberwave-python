@@ -6,13 +6,12 @@ with ``.predict(image, **kwargs) -> PredictionResult`` — the edge case
 uses a local runtime, the cloud case funnels through the Playground
 ``/mlmodels/{uuid}/run`` endpoint.
 
-Why this lives under ``cyberwave.models`` instead of ``cyberwave.mlmodels``
-===========================================================================
+Why this lives under ``cyberwave.models`` instead of a separate module
+=======================================================================
 
-``cyberwave.mlmodels.MLModelsClient`` is the full-fidelity cloud client —
-it exposes every playground knob (``structured_task``, ``frames``,
-``depth_base64``, ``camera_intrinsics``, async polling, annotated-image
-export). We keep it as the power-user surface.
+``cw.models.playground`` is the full-fidelity cloud surface for direct
+inference — it exposes every playground knob (``structured_task``, ``frames``,
+``depth_base64``, ``camera_intrinsics``, async polling, annotated-image export).
 
 ``CloudLoadedModel`` is the thin adapter that lets cloud models show up
 in the same code snippet as edge models::
@@ -22,9 +21,9 @@ in the same code snippet as edge models::
     result = model.predict("scene.jpg", prompt="cups", structured_task="detect_points")
 
 It's a ~100-LoC class — not a second client. All HTTP and schema work
-happens inside ``MLModelsClient``; this file only does the translation
+happens inside ``PlaygroundClient``; this file only does the translation
 between the edge ``.predict(x, **kw)`` shape and the cloud
-``mlmodels.run(x, **kw)`` shape.
+``playground(...).run(**kw)`` shape.
 """
 
 from __future__ import annotations
@@ -36,8 +35,8 @@ from typing import TYPE_CHECKING, Any
 from cyberwave.models.types import BoundingBox, Detection, PredictionResult
 
 if TYPE_CHECKING:
-    from cyberwave.mlmodels.client import MLModelsClient
-    from cyberwave.mlmodels.types import MLModelRunResult, MLModelSummary
+    from cyberwave.models.playground import PlaygroundClient
+    from cyberwave.rest import MLModelRunResultSchema, MLModelRunQueuedSchema, MLModelSchema
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +47,14 @@ class CloudLoadedModel:
     Mirrors the public surface of :class:`cyberwave.models.LoadedModel`
     (``name``, ``runtime``, ``device``, ``predict``) so calling code can
     stay agnostic of whether the model lives on an edge node or the
-    Playground. Exposes the underlying :class:`MLModelRunResult` on
-    ``.last_result`` for callers that need async polling, raw JSON,
-    or :meth:`MLModelRunResult.save_annotated_image`.
+    Playground. Exposes the underlying run result on
+    ``.last_result`` for callers that need async polling or raw JSON.
     """
 
-    def __init__(self, *, summary: MLModelSummary, client: MLModelsClient) -> None:
+    def __init__(self, *, summary: MLModelSchema, client: PlaygroundClient) -> None:
         self._summary = summary
         self._client = client
-        self._last_result: MLModelRunResult | None = None
+        self._last_result: MLModelRunResultSchema | MLModelRunQueuedSchema | None = None
 
     # ------------------------------------------------------------------
     # Public surface mirroring LoadedModel
@@ -80,17 +78,16 @@ class CloudLoadedModel:
         return "cloud"
 
     @property
-    def summary(self) -> MLModelSummary:
-        """The :class:`MLModelSummary` returned by ``/mlmodels/by-slug``."""
+    def summary(self) -> MLModelSchema:
+        """The :class:`~cyberwave.rest.MLModelSchema` returned by ``/mlmodels/by-slug``."""
         return self._summary
 
     @property
-    def last_result(self) -> MLModelRunResult | None:
-        """Full :class:`MLModelRunResult` from the most recent ``predict()`` call.
+    def last_result(self) -> MLModelRunResultSchema | MLModelRunQueuedSchema | None:
+        """Full run result from the most recent ``predict()`` call.
 
-        Useful for async cloud-node workloads (``is_queued()``), raw
-        provider text (``.raw``), or calling
-        :meth:`MLModelRunResult.save_annotated_image`.
+        Useful for async cloud-node workloads, raw provider text, or calling
+        :meth:`PlaygroundHandle.save_annotated_image`.
         """
         return self._last_result
 
@@ -109,8 +106,8 @@ class CloudLoadedModel:
 
         Extra kwargs (``frames``, ``depth_base64``, ``camera_intrinsics``,
         ``camera_pose``, ``history``, ``params``) are forwarded verbatim
-        to :meth:`MLModelsClient.run` so power-user features stay
-        reachable without dropping to ``client.mlmodels.run()``.
+        to :meth:`PlaygroundClient.run` so power-user features stay
+        reachable without dropping to ``cw.models.playground(...).run()``.
 
         ``confidence`` and ``classes`` are accepted for signature parity
         with :class:`LoadedModel`. Cloud providers do not share a universal
@@ -143,7 +140,7 @@ class CloudLoadedModel:
             **kwargs,
         )
         self._last_result = result
-        return _to_prediction_result(result)
+        return _to_prediction_result(result, model_slug=self._summary.slug)
 
     def __repr__(self) -> str:
         return (
@@ -158,8 +155,12 @@ class CloudLoadedModel:
 # ---------------------------------------------------------------------------
 
 
-def _to_prediction_result(result: MLModelRunResult) -> PredictionResult:
-    """Convert the cloud ``MLModelRunResult`` into the edge ``PredictionResult``.
+def _to_prediction_result(
+    result: MLModelRunResultSchema | MLModelRunQueuedSchema,
+    *,
+    model_slug: str | None = None,
+) -> PredictionResult:
+    """Convert a cloud run result into the edge ``PredictionResult``.
 
     Every :class:`PredictionResult` flowing out of this adapter has the
     full provider payload reachable on ``.metadata["mlmodel_run_result"]``
@@ -184,11 +185,20 @@ def _to_prediction_result(result: MLModelRunResult) -> PredictionResult:
     empty and let the caller reach through ``metadata`` — forcing those
     shapes into ``Detection`` would lose structure.
     """
+    from cyberwave.rest.models.ml_model_run_queued_schema import MLModelRunQueuedSchema as _Queued
+
     detections: list[Detection] = []
-    output = result.output
+    is_queued = isinstance(result, _Queued)
+
+    if is_queued:
+        output = None
+        output_format: str | None = None
+    else:
+        output = result.output  # type: ignore[union-attr]
+        output_format = result.output_format  # type: ignore[union-attr]
 
     if isinstance(output, list):
-        fmt = (result.output_format or "").lower()
+        fmt = (output_format or "").lower()
         if fmt == "boxes":
             detections = [_detection_from_box(item) for item in output if _is_dict(item)]
             detections = [d for d in detections if d is not None]  # type: ignore[misc]
@@ -201,13 +211,12 @@ def _to_prediction_result(result: MLModelRunResult) -> PredictionResult:
 
     metadata: dict[str, Any] = {
         "mlmodel_run_result": result,
-        "output_format": result.output_format,
-        "model_slug": result.model_slug,
-        "structured_task": result.structured_task,
+        "output_format": output_format,
+        "model_slug": model_slug,
     }
-    if result.is_queued():
-        metadata["workload_uuid"] = result.workload_uuid
-        metadata["poll_url"] = result.poll_url
+    if is_queued:
+        metadata["workload_uuid"] = result.workload_uuid  # type: ignore[union-attr]
+        metadata["poll_url"] = result.poll_url  # type: ignore[union-attr]
 
     return PredictionResult(
         detections=detections,

@@ -26,6 +26,8 @@ from .twin import (
 from .camera import CameraStreamer
 from .controller import EdgeController
 from .mqtt_client import CyberwaveMQTTClient
+from .models.manager import ModelManager
+from .models.playground import PlaygroundClient, PlaygroundHandle, StructuredAction
 from .resources import (
     WorkspaceManager,
     ProjectManager,
@@ -48,6 +50,7 @@ class Cyberwave:
     assets: AssetManager
     edges: EdgeManager
     twins: TwinManager
+    models: ModelManager
     
     def __init__(
         self,
@@ -329,6 +332,15 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["cyberwave/epal"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["anybotics/anymal-b"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -365,7 +377,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["SZ-DJI-Technology/DJI-Tello"],
+        asset_key: Literal["dji/DJI-Tello"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -383,16 +395,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["SZ-DJI-Technology/DJI-Mini-3-Pro"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> FlyingCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["SZ-DJI-Technology/DJI-Mini-4-Pro-old"],
+        asset_key: Literal["dji/DJI-Mini-3-Pro"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -420,6 +423,15 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["dji/mavic-3-enterprise"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> FlyingCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["dji/dji-mini-4-pro"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -789,15 +801,6 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["rt-net/sciurus17"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["cyberwave/aloha-2"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

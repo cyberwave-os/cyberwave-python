@@ -1,9 +1,29 @@
-"""Model manager — loading, caching, and runtime/device detection.
+"""Model manager — loading, caching, runtime detection, and catalog CRUD.
 
-Exposed as ``cw.models`` on the ``Cyberwave`` client.  Searches the
-local model cache (populated by Edge Core), detects the appropriate
-runtime backend, and returns a ``LoadedModel`` with a stable
-``.predict()`` API.
+Exposed as ``cw.models`` on the ``Cyberwave`` client.  Three surfaces:
+
+* **Runtime** — ``cw.models.load(id)`` searches the local model cache
+  (populated by Edge Core), detects the appropriate runtime backend, and
+  returns a :class:`~cyberwave.models.loaded_model.LoadedModel` with a
+  stable ``.predict()`` API.  Cloud slugs are transparently routed to the
+  Playground and a :class:`~cyberwave.models.cloud.CloudLoadedModel` is
+  returned instead.
+
+* **Catalog** — ``cw.models.list()``, ``.get()``, ``.delete()`` mirror the
+  REST ``/api/v1/mlmodels`` endpoints so you can browse available models and
+  pick one to pass to :meth:`load`::
+
+      for m in cw.models.list(deployment="edge"):
+          print(m.slug, m.model_external_id)
+      model = cw.models.load(m)          # pass entry directly — no field inspection needed
+      pred  = model.predict(frame)
+
+* **Playground** — ``cw.models.playground("slug")`` returns a
+  :class:`~cyberwave.models.playground.PlaygroundHandle` for cloud inference::
+
+      result = cw.models.playground("acme/models/gemini-robotics-er").run(
+          image="scene.jpg", prompt="cups", structured_task="detect_points",
+      )
 """
 
 from __future__ import annotations
@@ -13,13 +33,18 @@ import json
 import logging
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from cyberwave.exceptions import CyberwaveAPIError, CyberwaveModelIntegrityError
 from cyberwave.models.cloud import CloudLoadedModel
 from cyberwave.models.loaded_model import LoadedModel
 from cyberwave.models.runtimes import get_runtime
+
+if TYPE_CHECKING:
+    from cyberwave.models.cascade import CascadeModel
+    from cyberwave.rest import MLModelSchema
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +56,58 @@ FALLBACK_MODEL_DIR = os.path.expanduser("~/.cyberwave/models")
 _DOWNLOAD_CHUNK_SIZE = 1 << 20  # 1 MiB — matches the edge-core streaming buffer.
 _DOWNLOAD_TIMEOUT_SECS = 300.0
 
+# ---------------------------------------------------------------------------
+# Filter shorthand helpers for list()
+# ---------------------------------------------------------------------------
+
+# Maps shorthand string → predicate over MLModelSchema (duck-typed via getattr
+# so this file has zero import dependency on the generated REST schema).
+_FILTER_PREDICATES: dict[str, Callable[[Any], bool]] = {
+    "edge": lambda m: bool(getattr(m, "is_edge_compatible", False)),
+    "cloud": lambda m: bool(getattr(m, "is_cloud_compatible", False)),
+    "hybrid": lambda m: getattr(m, "deployment", "") == "hybrid",
+    "image": lambda m: bool(getattr(m, "can_take_image_as_input", False)),
+    "image_input": lambda m: bool(getattr(m, "can_take_image_as_input", False)),
+    "video": lambda m: bool(getattr(m, "can_take_video_as_input", False)),
+    "video_input": lambda m: bool(getattr(m, "can_take_video_as_input", False)),
+    "text": lambda m: bool(getattr(m, "can_take_text_as_input", False)),
+    "text_input": lambda m: bool(getattr(m, "can_take_text_as_input", False)),
+    "audio": lambda m: bool(getattr(m, "can_take_audio_as_input", False)),
+    "audio_input": lambda m: bool(getattr(m, "can_take_audio_as_input", False)),
+    "action": lambda m: bool(getattr(m, "can_take_action_as_input", False)),
+    "action_input": lambda m: bool(getattr(m, "can_take_action_as_input", False)),
+    "trainable": lambda m: bool(getattr(m, "is_trainable", False)),
+    "public": lambda m: getattr(m, "visibility", "") == "public",
+}
+
+
+def _apply_filter_shorthands(
+    models: list[Any],
+    filters: list[str],
+) -> list[Any]:
+    """Apply shorthand filter strings to a list of MLModelSchema objects.
+
+    Known shorthands (see :data:`_FILTER_PREDICATES`) map directly to schema
+    boolean / string fields.  Unknown strings are treated as **tag checks** —
+    the entry must have at least one tag that contains the filter string
+    (case-insensitive).  Multiple filters are ANDed together.
+    """
+    predicates: list[Callable[[Any], bool]] = []
+    for f in filters:
+        lower = f.lower()
+        if lower in _FILTER_PREDICATES:
+            predicates.append(_FILTER_PREDICATES[lower])
+        else:
+            # Unknown → tag substring check (capture loop var explicitly)
+            predicates.append(
+                lambda m, tag=lower: any(
+                    tag in t.lower() for t in getattr(m, "tags", [])
+                )
+            )
+    if not predicates:
+        return models
+    return [m for m in models if all(p(m) for p in predicates)]
+
 
 class ModelManager:
     """Manages model loading, caching, and runtime selection."""
@@ -41,15 +118,24 @@ class ModelManager:
         model_dir: str | None = None,
         default_device: str | None = None,
         data_bus: Any | None = None,
-        mlmodels_client: Any | None = None,
+        api_client: Any | None = None,
     ) -> None:
-        # ``mlmodels_client`` is the :class:`MLModelsClient` owned by the
-        # parent :class:`Cyberwave` client. When present, ``load()`` can
-        # route cloud-slug references (``ws/models/name`` / UUID) to the
-        # Playground API instead of the local file cache, so snippets like
-        # ``cw.models.load("acme/models/sam-3.1").predict(image)`` work
-        # identically to ``cw.models.load("yolov8n").predict(frame)``.
-        self._mlmodels_client = mlmodels_client
+        # ``api_client`` is the :class:`~cyberwave.rest.DefaultApi` instance.
+        # When present:
+        #   - catalog methods (list/get/delete) delegate via MLModelsResourceManager
+        #   - ``self.playground`` (PlaygroundClient) is wired up for cloud inference
+        #   - ``self._mlmodels_client`` is set to the same PlaygroundClient so
+        #     CloudLoadedModel can call .get() / .run() / .fetch_weights_url()
+        self._catalog: Any | None = None
+        self._mlmodels_client: Any | None = None
+        self.playground: Any | None = None
+        if api_client is not None:
+            from cyberwave.models.playground import PlaygroundClient
+            from cyberwave.resources import MLModelsResourceManager
+
+            self._catalog = MLModelsResourceManager(api_client)
+            self.playground = PlaygroundClient(api_client)
+            self._mlmodels_client = self.playground
 
         dir_from_env = os.environ.get("CYBERWAVE_MODEL_DIR")
         if model_dir:
@@ -83,28 +169,258 @@ class ModelManager:
         self._resolved_data_bus: Any | None = None
 
     # ------------------------------------------------------------------
-    # Public API
+    # Catalog API  (REST /api/v1/mlmodels)
     # ------------------------------------------------------------------
 
-    def load(
+    def _require_catalog(self) -> Any:
+        if self._catalog is None:
+            raise CyberwaveAPIError(
+                "cw.models catalog operations require an API connection. "
+                "Use 'cw = Cyberwave(api_key=...)' instead of constructing "
+                "ModelManager directly without an api_client."
+            )
+        return self._catalog
+
+    def list(
         self,
-        model_id: str,
+        *,
+        filters: list[str] | None = None,
+        deployment: str | None = None,
+        edge_compatible: bool | None = None,
+        model_external_id: str | None = None,
+        supported_level: str | None = None,
+        is_trainable: bool | None = None,
+        catalog_seed_id: str | None = None,
+    ) -> list[MLModelSchema]:
+        """List ML model records visible to the authenticated user.
+
+        Returns workspace-scoped models plus any public ones.
+
+        Args:
+            filters: Shorthand filter strings applied **client-side** after the
+                server response.  Multiple strings are ANDed together.  Built-in
+                shorthands:
+
+                * capability: ``"image"`` / ``"image_input"``, ``"video"``,
+                  ``"text"``, ``"audio"``, ``"action"``
+                * deployment: ``"edge"``, ``"cloud"``, ``"hybrid"``
+                * misc: ``"trainable"``, ``"public"``
+                * unknown strings → tag substring check
+
+                Example — edge models that accept image input::
+
+                    edge_image_models = cw.models.list(filters=["edge", "image"])
+
+            deployment: Server-side ``deployment`` filter (``"edge"``,
+                ``"cloud"``, ``"hybrid"``).  Use ``filters=["edge"]`` for the
+                equivalent client-side shorthand.
+            model_external_id: Exact match on the external weight filename.
+
+        Returns:
+            List of :class:`~cyberwave.rest.MLModelSchema` objects.
+
+        Example::
+
+            for m in cw.models.list(deployment="edge"):
+                print(m.slug, m.model_external_id)
+        """
+        results = self._require_catalog().list(
+            deployment=deployment,
+            edge_compatible=edge_compatible,
+            model_external_id=model_external_id,
+            supported_level=supported_level,
+            is_trainable=is_trainable,
+            catalog_seed_id=catalog_seed_id,
+        )
+        if filters:
+            results = _apply_filter_shorthands(results, filters)
+        return results
+
+    def list_public(self, *, deployment: str | None = None) -> list[MLModelSchema]:
+        """List public ML models (no workspace membership required)."""
+        return self._require_catalog().list_public(deployment=deployment)
+
+    def get(self, model_id: str) -> MLModelSchema:
+        """Fetch a catalog record by slug (``ws/models/name``) or UUID."""
+        return self._require_catalog().get(model_id)
+
+    def get_by_uuid(self, uuid: str) -> MLModelSchema:
+        """Fetch a catalog record by UUID."""
+        return self._require_catalog().get_by_uuid(uuid)
+
+    def get_by_slug(self, slug: str) -> MLModelSchema:
+        """Fetch a catalog record by unified slug (``ws/models/name``)."""
+        return self._require_catalog().get_by_slug(slug)
+
+    def delete(self, uuid: str) -> dict[str, bool]:
+        """Delete an ML model record by UUID.
+
+        Returns ``{"success": True}`` on success.
+        """
+        return self._require_catalog().delete(uuid)
+
+    def create(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Stub — not yet implemented.
+
+        Use ``cw.api.src_app_api_mlmodels_create_mlmodel(...)`` directly,
+        or wait for a typed wrapper to land in a future SDK release.
+        """
+        raise NotImplementedError(
+            "cw.models.create() is not implemented yet. "
+            "Call cw.api.src_app_api_mlmodels_create_mlmodel(ml_model_create_schema=...) directly."
+        )
+
+    def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Stub — not yet implemented.
+
+        Use ``cw.api.src_app_api_mlmodels_update_mlmodel(...)`` directly,
+        or wait for a typed wrapper to land in a future SDK release.
+        """
+        raise NotImplementedError(
+            "cw.models.update() is not implemented yet. "
+            "Call cw.api.src_app_api_mlmodels_update_mlmodel(uuid=..., ml_model_update_schema=...) directly."
+        )
+
+    # ------------------------------------------------------------------
+    # Runtime API
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_to_model_id(model_entry: str | MLModelSchema) -> str:
+        """Normalise a raw string or :class:`~cyberwave.rest.MLModelSchema` entry to a load-able ID.
+
+        Resolution priority for catalog entries:
+
+        1. ``sdk_load_id`` — explicitly set by the backend as the canonical
+           local/edge load key (e.g. ``"yolo26n.pt"``).
+        2. ``slug`` — unified cloud slug (``ws/models/name``), routes through
+           the Playground.
+        3. ``uuid`` — fallback; also cloud-routes via the UUID path.
+
+        This lets callers pass a record straight out of ``cw.models.list()``
+        without manually inspecting which field to use::
+
+            for m in cw.models.list(deployment="edge"):
+                model = cw.models.load(m)   # uses m.sdk_load_id
+        """
+        if isinstance(model_entry, str):
+            return model_entry
+        sdk_load_id = getattr(model_entry, "sdk_load_id", None)
+        if sdk_load_id:
+            return sdk_load_id
+        slug = getattr(model_entry, "slug", None)
+        if slug:
+            return slug
+        uuid = getattr(model_entry, "uuid", None)
+        if uuid:
+            return uuid
+        raise TypeError(
+            f"model_entry must be a str or MLModelSchema, got {type(model_entry).__name__!r}"
+        )
+
+    def _load_cascade(
+        self,
+        entries: list[str | MLModelSchema],
         *,
         runtime: str | None = None,
         device: str | None = None,
         download: bool = False,
         force_download: bool = False,
+        download_url: str | None = None,
+        store_input: bool = False,
         **kwargs: Any,
-    ) -> LoadedModel | CloudLoadedModel:
-        """Load a model by catalog ID.
+    ) -> CascadeModel:
+        """Load multiple model entries and wrap them in a :class:`~cyberwave.models.cascade.CascadeModel`.
+
+        Each entry is loaded with the shared kwargs (``runtime``, ``device``,
+        etc.).  The ``store_input`` flag is forwarded to the cascade so that
+        :meth:`~cyberwave.models.cascade.CascadePredictionResult.draw_on_top`
+        can be called without an explicit image argument.
+        """
+        from cyberwave.models.cascade import CascadeModel
+
+        if not entries:
+            raise ValueError("Cannot create a cascade from an empty list.")
+
+        models: list[LoadedModel | CloudLoadedModel] = []
+        names: list[str] = []
+        for entry in entries:
+            # Prefer the human-readable catalog name; fall back to the load ID.
+            name: str = getattr(entry, "name", None) or (
+                entry if isinstance(entry, str) else repr(entry)
+            )
+            loaded = self.load(
+                entry,
+                runtime=runtime,
+                device=device,
+                download=download,
+                force_download=force_download,
+                download_url=download_url,
+                **kwargs,
+            )
+            models.append(loaded)
+            names.append(name)
+
+        return CascadeModel(models, names, store_input=store_input)
+
+    def load(
+        self,
+        model_id: str | MLModelSchema | list[str | MLModelSchema],
+        *,
+        runtime: str | None = None,
+        device: str | None = None,
+        download: bool = False,
+        force_download: bool = False,
+        download_url: str | None = None,
+        store_input: bool = False,
+        **kwargs: Any,
+    ) -> LoadedModel | CloudLoadedModel | CascadeModel:
+        """Load a model (or a cascade of models) by catalog ID or catalog entry.
+
+        ``model_id`` can be:
+
+        * A **string** — local weight filename (``"yolo26n.pt"``) or a
+          Cyberwave catalog slug / UUID.
+        * An :class:`~cyberwave.rest.MLModelSchema` record returned by
+          ``cw.models.list()`` or ``cw.models.get()``.  The right load key
+          is resolved automatically (``sdk_load_id`` → ``slug`` → ``uuid``),
+          so you can pass the entry directly without inspecting its fields::
+
+              for m in cw.models.list(deployment="edge"):
+                  model = cw.models.load(m)
+                  pred  = model.predict(frame)
+
+        * A **list** of strings or :class:`~cyberwave.rest.MLModelSchema`
+          records.  In this case a :class:`~cyberwave.models.cascade.CascadeModel`
+          is returned.  Every model in the list receives the same input
+          independently when :meth:`~cyberwave.models.cascade.CascadeModel.predict`
+          is called, and results are collected into a
+          :class:`~cyberwave.models.cascade.CascadePredictionResult` keyed by
+          model display name::
+
+              edge_models = cw.models.list(filters=["edge", "image"])
+              cascade = cw.models.load(
+                  [edge_models[0], edge_models[1]],
+                  store_input=True,
+              )
+              pred = cascade.predict(image)
+              print(pred[edge_models[0].name])   # PredictionResult for first model
+              output_image = pred.draw_on_top()  # overlay all predictions
 
         Returns a cached instance on repeated calls with the same
         arguments. The runtime is auto-detected from the model ID when
         not specified.
 
+        Args:
+            store_input: When loading a **list** (cascade), store the input
+                frame inside each :class:`~cyberwave.models.cascade.CascadePredictionResult`
+                so :meth:`~cyberwave.models.cascade.CascadePredictionResult.draw_on_top`
+                can be called without an explicit image argument.  Ignored for
+                single-model loads.  Defaults to ``False``.
+
         Cloud routing
         -------------
-        When ``model_id`` looks like a Cyberwave catalog slug
+        When the resolved ID looks like a Cyberwave catalog slug
         (``workspace/models/name``) or a UUID — and when this manager
         was constructed with a cloud client attached (the default when
         accessed via ``cw.models``) — the call is routed to the
@@ -137,6 +453,20 @@ class ModelManager:
         once, every future ``cw.models.load(slug)`` call in the same
         environment loads the cached file.
         """
+        # Cascade path — list of entries
+        if isinstance(model_id, list):
+            return self._load_cascade(
+                model_id,
+                runtime=runtime,
+                device=device,
+                download=download,
+                force_download=force_download,
+                download_url=download_url,
+                store_input=store_input,
+                **kwargs,
+            )
+
+        model_id = self._resolve_to_model_id(model_id)
         looks_cloud = self._looks_like_cloud_ref(model_id)
         wants_local_download = download or force_download
 
@@ -181,7 +511,11 @@ class ModelManager:
             return cached
 
         rt = get_runtime(resolved_runtime)
-        model_path = self._resolve_model_path(model_id, resolved_runtime)
+        model_path = self._resolve_model_path(
+            model_id,
+            resolved_runtime,
+            download_url=download_url,
+        )
 
         self._verify_model_checksum(model_id, model_path)
 
@@ -242,7 +576,13 @@ class ModelManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _resolve_model_path(self, model_id: str, runtime: str) -> Path:
+    def _resolve_model_path(
+        self,
+        model_id: str,
+        runtime: str,
+        *,
+        download_url: str | None = None,
+    ) -> Path:
         """Resolve a catalog model ID to a local file path."""
         exact = self._model_dir / model_id
         if exact.is_file():
@@ -267,6 +607,15 @@ class ModelManager:
             self._model_dir.mkdir(parents=True, exist_ok=True)
             return self._model_dir / model_id
 
+        if download_url is not None and download_url.strip():
+            logger.info(
+                "Downloading public weights for %r into %s",
+                model_id,
+                exact,
+            )
+            self._stream_download_to(download_url.strip(), exact)
+            return exact
+
         raise FileNotFoundError(
             f"Model '{model_id}' not found in {self._model_dir}. "
             f"Ensure edge core has downloaded the model weights, "
@@ -286,7 +635,7 @@ class ModelManager:
         HF-style ``{org}/{name}`` strings here to avoid hijacking what
         might be a future local-catalog namespace — the backend
         ``/mlmodels/by-slug`` call still accepts those if seeded, but
-        the caller has to opt in via ``client.mlmodels.get(...)``
+        the caller has to opt in via ``client.models.playground(...).resolve()``
         explicitly.
         """
         if not isinstance(model_id, str) or not model_id:
@@ -407,7 +756,9 @@ class ModelManager:
     ) -> LoadedModel:
         """Common tail for download-path and cache-hit: run the local runtime."""
         effective_device = device or self._default_device or self._detect_device()
-        resolved_runtime = runtime or self._detect_runtime_from_extension(model_path.suffix)
+        resolved_runtime = runtime or self._detect_runtime_from_extension(
+            model_path.suffix
+        )
 
         cache_key = f"{model_id}:{resolved_runtime}:{effective_device}"
         cached = self._loaded.get(cache_key)
@@ -436,9 +787,7 @@ class ModelManager:
         self._loaded[cache_key] = loaded
         return loaded
 
-    def _download_checkpoint(
-        self, model_id: str, summary: Any
-    ) -> Path:
+    def _download_checkpoint(self, model_id: str, summary: Any) -> Path:
         """Fetch the signed URL, stream-download, verify checksum, return path.
 
         The download happens in two steps so the retry story matches
@@ -515,9 +864,7 @@ class ModelManager:
         return dest
 
     @staticmethod
-    def _filename_for_download(
-        payload: dict[str, Any], summary: Any
-    ) -> str:
+    def _filename_for_download(payload: dict[str, Any], summary: Any) -> str:
         """Pick a reasonable filename for the downloaded checkpoint.
 
         Priority:
@@ -563,13 +910,7 @@ class ModelManager:
         and if it has expired the caller should re-enter
         :meth:`_download_checkpoint` to mint a fresh one.
         """
-        try:
-            import httpx  # noqa: PLC0415 — keep httpx as an opt-in import
-        except ImportError as exc:
-            raise RuntimeError(
-                "download=True requires the 'httpx' package. Install it with "
-                "pip install httpx (or pip install cyberwave[ml])."
-            ) from exc
+        from urllib.request import urlopen
 
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp_fd, tmp_path_str = tempfile.mkstemp(
@@ -579,12 +920,15 @@ class ModelManager:
         try:
             with (
                 os.fdopen(tmp_fd, "wb") as fh,
-                httpx.stream(
-                    "GET", url, timeout=_DOWNLOAD_TIMEOUT_SECS, follow_redirects=True
+                urlopen(  # noqa: S310
+                    url,
+                    timeout=_DOWNLOAD_TIMEOUT_SECS,
                 ) as resp,
             ):
-                resp.raise_for_status()
-                for chunk in resp.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_SIZE):
+                while True:
+                    chunk = resp.read(_DOWNLOAD_CHUNK_SIZE)
+                    if not chunk:
+                        break
                     fh.write(chunk)
             tmp_path.replace(dest)
         except Exception:
@@ -637,6 +981,8 @@ class ModelManager:
             return "ultralytics"
         if any(k in lower for k in ("background-subtraction", "haar", "cascade")):
             return "opencv"
+        if lower.endswith((".gguf", ".bin")) and "whisper" in lower:
+            return "whisper_cpp"
         if lower.endswith(".tflite"):
             return "tflite"
         if lower.endswith((".engine", ".trt")):
@@ -673,6 +1019,7 @@ class ModelManager:
             "tflite": [".tflite"],
             "torch": [".pt", ".pth"],
             "tensorrt": [".engine", ".trt"],
+            "whisper_cpp": [".gguf", ".bin"],
         }
         return mapping.get(runtime, [".pt"])
 
@@ -709,7 +1056,9 @@ class ModelManager:
             try:
                 self._resolved_data_bus = self._data_bus_factory()
             except Exception:
-                logger.debug("Data bus not available for detection publishing", exc_info=True)
+                logger.debug(
+                    "Data bus not available for detection publishing", exc_info=True
+                )
         return self._resolved_data_bus
 
     @staticmethod

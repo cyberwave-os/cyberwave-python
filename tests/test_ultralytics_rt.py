@@ -37,6 +37,11 @@ def _result_mock(
     result.orig_shape = orig_shape
     result.boxes = boxes
     result.names = names
+    # Explicit None for every task-dispatch attribute so the runtime does not
+    # mistake a MagicMock truthy value for a real probs/obb/masks object.
+    result.probs = None
+    result.obb = None
+    result.masks = None
     if keypoints_data is None:
         result.keypoints = None
     else:
@@ -142,6 +147,9 @@ class TestUltralyticsPredictPose:
         result.orig_shape = (480, 640)
         result.boxes = [_box_mock([10.0, 20.0, 110.0, 220.0], cls=0, conf=0.9)]
         result.names = {0: "person"}
+        result.probs = None
+        result.obb = None
+        result.masks = None
         result.keypoints = _NoData()
         model = MagicMock(return_value=[result])
 

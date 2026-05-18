@@ -28,6 +28,17 @@ The official Python SDK for Cyberwave. Create, control, and simulate robotics wi
 pip install cyberwave
 ```
 
+## Try on Google Colab
+
+These notebooks use **`pip install "cyberwave[ml]"`** and walk through **`cw.models` / `cyberwave.models`**: local YOLO weights, **`PredictionResult`**, overlays, and (in the minimal notebook) a **live twin** JPEG → predict flow.
+
+| Notebook | Open in Colab | In this repo |
+| --- | --- | --- |
+| **YOLO26 tasks** — detection, segmentation, pose, classification, cascade demos | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cyberwave-os/cyberwave-python/blob/main/examples/ai/yolo.ipynb) | [`examples/ai/yolo.ipynb`](examples/ai/yolo.ipynb) |
+| **Minimal twin** — `Twin.get_latest_frame()` → predict → table + overlay | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cyberwave-os/cyberwave-python/blob/main/examples/ai/yolo_minimal_on_twin.ipynb) | [`examples/ai/yolo_minimal_on_twin.ipynb`](examples/ai/yolo_minimal_on_twin.ipynb) |
+
+On Colab, run the install cell first, then set **`CYBERWAVE_API_KEY`** (or use **`cyberwave login --token`** as in the twin notebook). The twin notebook needs a camera twin with Edge Core and a publishing driver; the YOLO task notebook is self-contained offline once weights are downloaded.
+
 ## Quick Start
 
 ### 1. Get Your API Key
@@ -397,30 +408,35 @@ finally:
 
 Stream microphone audio to a digital twin over WebRTC (Opus, 48 kHz mono). Use a `get_audio()` callback that returns 20 ms of s16 mono audio (1920 bytes) or `None` for silence.
 
+Install host microphone dependencies:
+
+```bash
+pip install cyberwave[microphone]
+```
+
 ```python
 import asyncio
 from cyberwave import Cyberwave
-from cyberwave.sensor.microphone import MicrophoneAudioStreamer
+from cyberwave.sensor.microphone import HostMicrophoneCapture, MicrophoneAudioStreamer
 
-def get_audio() -> bytes | None:
-    # Return 20 ms s16 mono 48 kHz (1920 bytes), or None for silence
-    # e.g. read from PyAudio, sounddevice, or robot WebRTC (Go2)
-    return bytes(1920)  # or your capture
+capture = HostMicrophoneCapture()
+capture.start()
 
 cw = Cyberwave()
 streamer = MicrophoneAudioStreamer(
     cw.mqtt,
-    get_audio,
+    capture.get_audio,
     twin_uuid="your-twin-uuid",
-    sensor_name="mic",
+    mic_name="mic",
 )
 await streamer.start()
 # ... run until done ...
 await streamer.stop()
+capture.stop()
 cw.disconnect()
 ```
 
-For Unitree Go2 robot microphone streaming, see [examples/audio_stream.py](examples/audio_stream.py) (requires `unitree_webrtc_connect`). For combined video + audio, see [examples/multimedia_stream.py](examples/multimedia_stream.py).
+For custom or robot-provided sources, pass your own `get_audio()` callback. For Unitree Go2 robot microphone streaming, see [examples/audio_stream.py](examples/audio_stream.py) (requires `unitree_webrtc_connect`). For combined video + audio, see [examples/multimedia_stream.py](examples/multimedia_stream.py).
 
 ### Drones and Flying Twins
 
@@ -522,6 +538,20 @@ shoulder_joint            0.7854 rad      45.00 °
 
 To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
 
+### Saved Movements and Poses
+
+Replay saved poses and movements on a twin without thinking about which scope owns them. `run_movement` sends the movement action contract, `move_to_pose` snaps the twin to a saved pose, and `list_movements` enumerates everything available.
+
+```python
+robot = cw.twin("the-robot-studio/so101")
+
+robot.list_movements()              # twin, asset, and environment scopes
+robot.run_movement("Wave")          # plays whichever scope owns "Wave"
+robot.move_to_pose("Stand")         # snaps to the saved pose by name
+```
+
+> Note: `run_movement`, `move_to_pose`, and `list_movements` default to `scope="auto"`, so the backend resolves the name across the twin/asset/environment scopes. Pass `scope="twin"`, `scope="asset"`, or `scope="environment"` to pin the lookup to a specific scope.
+
 ### Simulation vs. Live
 
 Use `mode="simulation"` when you want a simulator-first client with simulation defaults for state publishing, or use `cw.affect()` to switch locomotion/control commands between the simulation and the live robot on an existing client.
@@ -557,6 +587,62 @@ Runtime mode defaults:
 For lower-level integrations you can still pass `source_type` explicitly or use the `CYBERWAVE_SOURCE_TYPE` environment variable. Accepted raw values are `"sim"`, `"sim_tele"`, `"tele"`, `"edge"`, and `"edit"`. Legacy locomotion calls that pass `"sim"` are still accepted and normalized to `"sim_tele"` for simulator control commands.
 
 This same mode selection is also used by camera frame grabs (`get_latest_frame()` and `capture_frame()`), so frame retrieval stays consistent with the mode your script is affecting.
+
+### Agent SDK
+
+The SDK exposes typed agent namespaces under `cw.agents`. Use direct resource APIs for deterministic commands, and agent APIs when you want backend planning, previews, setup guidance, or explicit dispatch.
+
+- `cw.agents.environment`: environment editor agent messages and agent-created environments.
+- `cw.agents.workflow`: workflow planning, preview, setup-and-draft, and constrained workflow edits.
+- `cw.agents.control`: control surfaces, route/action planning, route resolution, and explicit dispatch.
+- `cw.agents.embodiment`: server-built embodiment context for an environment or twin.
+
+`cw.control` is a convenience alias for `cw.agents.control`.
+
+```python
+cw = Cyberwave(mode="simulation")
+
+surfaces = cw.agents.control.surfaces("environment-uuid")
+print(surfaces[0]["capabilities"])
+
+plan = cw.agents.control.plan(
+    "environment-uuid",
+    "Move the Go2 to Waypoint A",
+    twin_uuid="twin-uuid",
+    mode="simulation",
+)
+
+response = cw.control.dispatch(
+    "environment-uuid",
+    plan["dispatchable_actions"][0],
+    confirmed=True,
+)
+
+status = cw.actions.wait(
+    response["action_id"],
+    twin_uuid="twin-uuid",
+    timeout=60,
+)
+```
+
+Workflow and environment agents follow the same plan/preview/apply shape:
+
+```python
+draft = cw.agents.workflow.plan(
+    "environment-uuid",
+    "inspect every pallet and alert if damage is detected",
+)
+
+preview = cw.agents.workflow.preview(
+    "environment-uuid",
+    "inspect every pallet and alert if damage is detected",
+)
+
+context = cw.agents.embodiment.context(
+    "environment-uuid",
+    twin_uuid="twin-uuid",
+)
+```
 
 ### Camera & Sensor discovery
 
@@ -786,10 +872,12 @@ alert.delete()
 
 ### Datasets
 
-Import and manage robotics datasets from HuggingFace or local files. Supports LeRobot and RLDS formats.
+Import, manage, and export robotics datasets from HuggingFace or local files.
 
 ```python
-# Import a dataset from HuggingFace
+# Import a dataset from HuggingFace.
+# Idempotent by default: if the same repo was already imported it is reused.
+# Pass reuse_existing=False to force a fresh import.
 ds = cw.datasets.add("lerobot/pusht", name="pusht")
 print(f"Dataset {ds.uuid} is {ds.processing_status}")
 
@@ -810,26 +898,65 @@ datasets = cw.datasets.list(limit=20, offset=0)
 datasets = cw.datasets.list(processing_status="completed")
 datasets = cw.datasets.list(environment="env-uuid")
 
-# Get and delete
+# Get, visualize URL, delete
 ds = cw.datasets.get("dataset-uuid")
+url = cw.datasets.visualize(ds)   # returns frontend URL (does not print)
+print(url)                         # https://cyberwave.com/acme/datasets/pusht
 cw.datasets.delete("dataset-uuid")
 
-# Open in browser for visualization
-cw.datasets.visualize(ds)
-# Prints: View dataset at: https://cyberwave.com/acme/datasets/pusht
-
-# Poll for completion (HuggingFace imports are async)
-import time
-while ds.processing_status == "pending":
-    time.sleep(5)
-    ds = cw.datasets.get(ds.uuid)
-print(f"Dataset ready: {ds.processing_status}")
+# Wait for async HuggingFace import to complete.
+# Prints one status line per poll by default; pass on_poll=None to silence.
+ds = cw.datasets.wait_until_ready(ds)
+# With custom callback:
+ds = cw.datasets.wait_until_ready(
+    ds,
+    poll_interval=5.0,
+    timeout=1800,
+    on_poll=lambda d: print(f"{d.processing_status} {d.processed_episodes}/{d.total_episodes}"),
+)
+# Fully silent (for libraries/production):
+ds = cw.datasets.wait_until_ready(ds, on_poll=None)
 ```
 
-**Supported formats:**
-- **LeRobot v2.1** — HuggingFace datasets with `lerobot` metadata
-- **LeRobot v3** — Latest LeRobot format with parquet episodes  
-- **RLDS** — TensorFlow Datasets format (zip upload only)
+Available properties on `DatasetSchema`: `uuid`, `name`, `slug`, `processing_status`,
+`is_ready`, `total_episodes`, `processed_episodes`, `failed_episodes`,
+`failed_episode_uuids`, `source`, `source_format`, `visibility`, `metadata`.
+
+**Supported import source formats:**
+- **LeRobot v3** (`lerobot3`) — Latest LeRobot format with parquet episodes
+- **LeRobot v2.1** (`lerobot21`) — Normalised to LeRobot v3 automatically
+- **RLDS** — TensorFlow Datasets / Open-X-Embodiment (zip upload)
+- **Cyberwave Parquet** — Native format for natively generated datasets
+
+### Export / download a converted format
+
+Both calls are idempotent — if a conversion artifact already exists it is returned immediately; otherwise conversion is kicked off automatically.
+
+```python
+# Block until backend conversion is done, return the signed URL.
+# Default on_poll prints one status line per poll; pass on_poll=None to silence.
+url = cw.datasets.convert(ds, "rlds")
+print(url)   # signed URL valid for 24 h
+
+# Convert AND stream the zip to disk in one call.
+path = cw.datasets.download(ds, "rlds", dest="./data")
+print(path)  # absolute path to saved file
+
+# Silence both:
+url = cw.datasets.convert(ds, "rlds", on_poll=None)
+path = cw.datasets.download(ds, "rlds", dest="./data", on_poll=None)
+```
+
+**Supported output formats:**
+
+| `format` | Description |
+|---|---|
+| `parquet` | Cyberwave joined-parquet zip (native) |
+| `lerobot3` | LeRobot v3 — recommended for LeRobot training pipelines |
+| `lerobot21` | LeRobot v2.1 |
+| `rlds` | RLDS / TF-Record (Open-X-Embodiment) |
+| `openvla` | Cyberwave OpenVLA TFDS bundle |
+| `robodm` | Berkeley `.vla` format |
 
 ## Data Layer (`cw.data`) — *stub*
 
@@ -917,19 +1044,48 @@ def on_stereo_pair(samples, ctx):
 
 See the [synchronized hooks docs](https://docs.cyberwave.com/sdks/data-synchronized-hooks) for details.
 
-## ML Models (`cw.models`) — *stub*
+## ML Models (`cw.models`)
 
-Load and run ML models on edge devices. Models are loaded via `cw.models.load()` and expose a `predict()` method.
+Unified catalog, edge/cloud runtime, optional cascade inference, and a typed playground client bound to **`POST /api/v1/mlmodels/{uuid}/run`**. Vision / Ultralytics backends need the **`[ml]`** extra: `pip install cyberwave[ml]`.
+
+**Catalog** (authenticated client): `cw.models.list()` with optional **`deployment`** (server-side) and **`filters`** (client-side shorthands — `edge`, `cloud`, `image`, unknown strings match tags), **`get` / `get_by_uuid` / `get_by_slug`**, **`delete`**. **`cw.models.create()` / `cw.models.update()`** are still stubs — use REST or generated `cw.api.*` helpers.
+
+**Runtime**: `cw.models.load(id_or_entry)` resolves **`sdk_load_id` → slug → UUID** when you pass an **`MLModelSchema`**. **`load([a, b, ...])`** returns a **`CascadeModel`** (same kwargs to every sub-model; **`CascadePredictionResult.draw_on_top()`** overlays all heads). **`predict()`** returns **`PredictionResult`**: prefer **`pred.describe()`** for a human summary across detection, classification, pose, segmentation, OBB; iterate detections with **`for d in pred:`** when the output is detection-shaped; use **`pred.output`** / helpers like **`pred.pose`** for typed fields. Legacy **`pred.describe_detections_text()`** is bbox-only shorthand.
+
+**Playground**: `cw.models.playground(slug).run(prompt=..., structured_task=...)` → **`MLModelRunResultSchema`** or **`MLModelRunQueuedSchema`**, not **`PredictionResult`**.
 
 ```python
 cw = Cyberwave()
 model = cw.models.load("yolov8n")
 result = model.predict(frame)
-for det in result.detections:
+print(result.describe())
+for det in result:  # when output is DetectionResult-backed
     print(f"{det.label}: {det.confidence:.2f}")
 ```
 
 YOLO ONNX postprocessing applies per-class non-max suppression with the same default IoU threshold (`0.7`) as Ultralytics' `YOLO.predict`, so swapping `yolov8s.pt` for `yolov8s.onnx` produces the same number of boxes per object instead of a cluster of overlapping anchors. Tune via `model.predict(frame, iou=0.5)` (stricter) or pass `iou=1.0` to disable NMS entirely (raw output for custom trackers).
+
+NMS-free / end-to-end exports (YOLO26's default one-to-one head, YOLOv10) are detected automatically and routed through a separate decoder that parses the `[max_det, 6] = [x1, y1, x2, y2, conf, class_id]` layout directly. The `iou` knob is ignored on that path — suppression is already applied inside the model graph by consistent dual-assignment training. End-to-end pose and segmentation exports aren't decoded yet; re-export those tasks with `end2end=False` until the e2e pose branch lands.
+
+### Edge speech-to-text — *stub*
+
+The SDK includes a `whisper_cpp` runtime for local STT on devices like Raspberry Pi 4. Install the STT extra on the edge device, then load a Whisper.cpp GGML/GGUF checkpoint:
+
+```bash
+pip install "cyberwave[ml-stt]"
+```
+
+```python
+model = cw.models.load(
+    "models/whisper/ggml-tiny.en-q5_1.bin",
+    runtime="whisper_cpp",
+    download_url="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin",
+)
+result = model.predict(audio, sample_rate_hz=16000, channels=1, language="en")
+print(result.raw["text"])
+```
+
+Workflow-generated `Audio Track -> Call Model` edge workers pass the seeded `download_url` automatically, so the first run downloads the Whisper weights into the local Cyberwave model cache and later runs reuse the cached file.
 
 ### Model warm-up — *stub*
 

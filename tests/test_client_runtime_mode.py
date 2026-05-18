@@ -29,6 +29,8 @@ def _stub_manager_modules(monkeypatch: pytest.MonkeyPatch) -> None:
         DatasetManager=_FakeResourceManager,
         EdgeManager=_FakeResourceManager,
         TwinManager=_FakeResourceManager,
+        # ModelManager imports this lazily; must be present in the fake module.
+        MLModelsResourceManager=_FakeResourceManager,
     )
     fake_workflows = SimpleNamespace(
         WorkflowManager=_FakeWorkflowManager,
@@ -184,16 +186,17 @@ def test_configure_rebuilds_managers_against_new_rest_client() -> None:
     client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
 
     original_api = client.api
-    original_mlmodels_client = client.mlmodels
+    original_playground = client.models.playground
     original_assets_api = client.assets.api
 
     client.configure(base_url="http://localhost:9000", api_key="new_key")
 
     assert client.api is not original_api
-    assert client.mlmodels is not original_mlmodels_client
-    assert client.mlmodels._api_client is client._api_client
-    assert client.models._mlmodels_client is client.mlmodels
+    assert client.models.playground is not original_playground
+    assert client.models._mlmodels_client is client.models.playground
     # Resource managers must also follow the rebuilt DefaultApi instead of
     # keeping the stale instance from __init__.
     assert client.assets.api is client.api
     assert client.assets.api is not original_assets_api
+    # ModelManager catalog is rebuilt with the new DefaultApi after configure()
+    assert client.models._catalog is not None

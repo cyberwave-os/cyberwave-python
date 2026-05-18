@@ -344,6 +344,66 @@ def test_runtime_stop_waits_for_scheduled_run_before_disconnect(tmp_path, monkey
     stop_thread.join(timeout=1.0)
 
 
+def test_runtime_subscribes_mqtt_hook_via_client_mqtt():
+    """``@cw.on_mqtt`` hooks must subscribe directly through ``client.mqtt``.
+
+    The MQTT trigger emitter assumes the runtime owns the subscription
+    so the worker module stays declarative (mirroring how ``on_alert``
+    flows through the Zenoh-MQTT bridge). Edge workflows whose trigger
+    is ``mqtt`` rely on this path being separate from the data-bus
+    subscription used by every other hook type.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    received = []
+
+    def handler(payload, topic, ctx):
+        received.append((payload, topic, ctx))
+
+    fake_cw._hook_registry.on_mqtt(
+        TEST_TWIN_UUID, subtopic="status", qos=1
+    )(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        assert len(fake_mqtt.subscriptions) == 1
+        topic, registered_handler, qos = fake_mqtt.subscriptions[0]
+        assert topic == f"localcyberwave/twin/{TEST_TWIN_UUID}/status"
+        assert qos == 1
+
+        registered_handler({"alert_type": "motor_overheat"})
+        assert len(received) == 1
+        payload, recv_topic, ctx = received[0]
+        assert payload == {"alert_type": "motor_overheat"}
+        assert recv_topic == topic
+        assert ctx.channel == "mqtt/status"
+        assert ctx.twin_uuid == TEST_TWIN_UUID
+        assert ctx.metadata["subtopic"] == "status"
+        assert ctx.metadata["qos"] == 1
+
+        # ``on_mqtt`` hooks should not double-up via the data bus path.
+        assert len(runtime._subscriptions) == 0
+        assert len(runtime._dispatch_threads) == 0
+    finally:
+        runtime.stop()
+
+
 def test_runtime_start_count_includes_schedule_hooks(tmp_path, caplog):
     fake_cw = FakeCw()
     (tmp_path / "scheduled_worker.py").write_text(

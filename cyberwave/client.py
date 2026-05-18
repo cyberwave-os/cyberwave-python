@@ -251,9 +251,8 @@ class Cyberwave:
         setup here lets ``__init__`` and ``configure()`` refresh every surface
         consistently.
         """
-        # Cloud Playground client (``cw.mlmodels``) — companion to the edge
-        # ``cw.models`` manager. See ``cyberwave.mlmodels`` for details.
-        from cyberwave.mlmodels import MLModelsClient
+        from cyberwave.actions import ActionsClient
+        from cyberwave.agents import AgentManager
         from cyberwave.resources import (
             AttachmentManager,
             AssetManager,
@@ -267,16 +266,15 @@ class Cyberwave:
         from cyberwave.workflow_executions import WorkflowExecutionManager
         from cyberwave.workflows import WorkflowManager, WorkflowRunManager
 
-        self.mlmodels = MLModelsClient(self._api_client)
-        # ``cw.models`` is the *unified* surface: ``cw.models.load("yolov8n")``
-        # returns a local LoadedModel, ``cw.models.load("acme/models/sam-3.1")``
-        # returns a CloudLoadedModel. Both share a ``.predict(image, ...)``
-        # API so snippets and user code don't need to branch on where the
-        # model is hosted. The ModelManager holds a reference to the
-        # Playground client to do the routing.
+        # ``cw.models`` is the unified surface for runtime, catalog, and playground:
+        #   cw.models.load("yolov8n")              → edge LoadedModel
+        #   cw.models.load("acme/models/sam-3.1")  → CloudLoadedModel (Playground)
+        #   cw.models.list(deployment="edge")       → catalog records
+        #   cw.models.get("acme/models/yolo26n")    → single catalog record
+        #   cw.models.playground("acme/models/gemini-robotics-er").run(image=...)
         self.models = ModelManager(
             data_bus=lambda: self._try_get_data_bus(),
-            mlmodels_client=self.mlmodels,
+            api_client=self.api,
         )
         self.workspaces = WorkspaceManager(self.api)
         self.projects = ProjectManager(self.api)
@@ -286,6 +284,9 @@ class Cyberwave:
         self.datasets = DatasetManager(self.api)
         self.edges = EdgeManager(self.api)
         self.twins = TwinManager(self.api, client=self)
+        self.actions = ActionsClient(self._api_client)
+        self.agents = AgentManager(self._api_client)
+        self.control = self.agents.control
         self.workflows = WorkflowManager(self)
         self.workflow_runs = WorkflowRunManager(self)
         self.workflow_executions = WorkflowExecutionManager(self)
@@ -968,6 +969,10 @@ class Cyberwave:
         return self._hook_registry.on_alert
 
     @property
+    def on_mqtt(self) -> Callable:
+        return self._hook_registry.on_mqtt
+
+    @property
     def on_temperature(self) -> Callable:
         return self._hook_registry.on_temperature
 
@@ -1032,6 +1037,9 @@ class Cyberwave:
         category: str = "business",
         force: bool = False,
         metadata: Optional[dict[str, Any]] = None,
+        workflow_uuid: Optional[str] = None,
+        workflow_node_uuid: Optional[str] = None,
+        workflow_execution_uuid: Optional[str] = None,
     ) -> None:
         """Create a business alert via the REST API.
 
@@ -1048,6 +1056,14 @@ class Cyberwave:
             category: ``business`` (default) or ``technical``.
             force: If True, bypass backend alert deduplication.
             metadata: Optional dict of extra data stored on the alert.
+            workflow_uuid: UUID of the workflow that produced the alert. When
+                provided the backend sets ``Alert.workflow`` so the alert is
+                queryable via ``GET /api/v1/alerts?workflow_uuid=...``.
+            workflow_node_uuid: UUID of the workflow node (e.g. ``send_alert``)
+                that produced the alert. Stored under ``metadata`` for
+                provenance — does not require a schema change on the backend.
+            workflow_execution_uuid: UUID of the workflow execution that
+                produced the alert. Stored under ``metadata`` for provenance.
         """
         from cyberwave.alerts import _create_alert
 
@@ -1062,10 +1078,24 @@ class Cyberwave:
         }
         if self.config.workspace_id:
             payload["workspace_uuid"] = self.config.workspace_id
+        if workflow_uuid:
+            payload["workflow_uuid"] = workflow_uuid
         if force:
             payload["force"] = True
+
+        # Auto-merge workflow node/execution provenance into metadata so callers
+        # don't have to remember; explicit user-supplied keys win.
+        merged_metadata: dict[str, Any] = {}
+        if workflow_uuid:
+            merged_metadata["workflow_uuid"] = workflow_uuid
+        if workflow_node_uuid:
+            merged_metadata["workflow_node_uuid"] = workflow_node_uuid
+        if workflow_execution_uuid:
+            merged_metadata["workflow_execution_uuid"] = workflow_execution_uuid
         if metadata is not None:
-            payload["metadata"] = metadata
+            merged_metadata.update(metadata)
+        if merged_metadata:
+            payload["metadata"] = merged_metadata
 
         try:
             _create_alert(self, payload)

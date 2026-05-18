@@ -169,11 +169,34 @@ class CyberwaveMQTTClient:
         self._last_update_times[key] = current_time
         return False
 
-    def _add_handler(self, topic: str, handler: Callable):
-        """Add event handler for a specific topic."""
-        if topic not in self._handlers:
-            self._handlers[topic] = []
-        self._handlers[topic].append(handler)
+    def _add_handler(self, topic: str, handler: Callable) -> bool:
+        """Register a handler for ``topic``.
+
+        Single-handler-per-topic semantics: if a handler is already
+        registered for ``topic``, it is **replaced** (not appended). This
+        prevents handler accumulation when callers re-subscribe the same
+        topic — most notably the WebRTC streaming flow, which calls
+        ``BaseVideoStreamer._subscribe_to_answer()`` on every
+        auto-reconnect cycle. Under the old append semantics a single
+        SFU answer would fan out into N stale closures (one per
+        reconnect), and the matching ``webrtc-candidate`` subscription
+        would inject the same ICE candidate into the peer connection N
+        times — which destabilises aioice's checklist and produces a
+        "connected but no media" zombie state.
+
+        Returns ``True`` when this is the first handler for the topic
+        (caller should issue a broker-level SUBSCRIBE), ``False`` when
+        an existing handler was replaced (broker subscription is still
+        live, no SUBSCRIBE round-trip is needed).
+        """
+        is_new = topic not in self._handlers
+        if not is_new:
+            logger.debug(
+                "Replacing existing handler for topic %s (idempotent re-subscribe)",
+                topic,
+            )
+        self._handlers[topic] = [handler]
+        return is_new
 
     def unsubscribe(self, topic: str) -> None:
         """Unsubscribe from an MQTT topic and remove all its handlers.
@@ -467,9 +490,24 @@ class CyberwaveMQTTClient:
             logger.error(f"Error publishing to {topic}: {e}")
 
     def subscribe(self, topic: str, handler: Optional[Callable] = None, qos: int = 0):
-        """Subscribe to MQTT topic."""
+        """Subscribe to MQTT topic.
+
+        Idempotent w.r.t. ``handler``: re-registering a handler for a
+        topic the client is already subscribed to replaces the prior
+        handler in-place and skips the broker-level SUBSCRIBE round-trip
+        (no extra ``mid`` / SUBACK pair). See :meth:`_add_handler` for
+        the rationale — without this, every camera auto-reconnect cycle
+        added another stale closure to the ``webrtc-answer`` /
+        ``webrtc-candidate`` topics, and a single SFU answer fanned out
+        into N "Processing answer" log lines plus N duplicate
+        ``addIceCandidate`` calls.
+        """
+        is_new_topic = True
         if handler:
-            self._add_handler(topic, handler)
+            is_new_topic = self._add_handler(topic, handler)
+
+        if not is_new_topic:
+            return
 
         if self.connected:
             result = self.client.subscribe(topic, qos=qos)

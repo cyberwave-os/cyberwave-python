@@ -465,10 +465,10 @@ class ComauedoTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class SzDjiTechnologydjiTelloTwin(Twin):
+class DjidjiTelloTwin(Twin):
     """
     Digital twin for DJI Tello
-    Registry ID: SZ-DJI-Technology/DJI-Tello
+    Registry ID: dji/DJI-Tello
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -853,22 +853,10 @@ class CyberwavesubstationTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
 
-class SzDjiTechnologydjiMini3ProTwin(Twin):
+class DjidjiMini3ProTwin(Twin):
     """
     Digital twin for DJI Mini 3 Pro
-    Registry ID: SZ-DJI-Technology/DJI-Mini-3-Pro
-    """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
-
-class SzDjiTechnologydjiMini4ProOldTwin(Twin):
-    """
-    Digital twin for DJI Mini 4 Pro old
-    Registry ID: SZ-DJI-Technology/DJI-Mini-4-Pro-old
+    Registry ID: dji/DJI-Mini-3-Pro
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1180,16 +1168,6 @@ class SamWilcocksWorkspaced500Lidar2Twin(Twin):
     """
     pass
 
-class Cyberwavealoha2Twin(Twin):
-    """
-    Digital twin for ALOHA
-    Registry ID: cyberwave/aloha-2
-    """
-    @property
-    def joints(self) -> JointController:
-        """Controller for robot joints"""
-        ...
-
 class NeuraRoboticsmaira7sTwin(Twin):
     """
     Digital twin for Maira7s
@@ -1208,6 +1186,34 @@ class NeuraRoboticsmaira6mTwin(Twin):
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
+        ...
+
+class DjidjiMini4ProTwin(Twin):
+    """
+    Digital twin for DJI Mini 4 Pro
+    Registry ID: dji/dji-mini-4-pro
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class CyberwaveepalTwin(Twin):
+    """
+    Digital twin for  EPAL Euro Pallet
+    Registry ID: cyberwave/epal
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
         ...
 
 # Asset registry mapping registry_id to Twin class
@@ -1247,7 +1253,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "kinova-robotics/kortex-gen3": KinovaRoboticskortexGen3Twin,
     "anybotics/anymal-c": AnyboticsanymalCTwin,
     "comau/edo": ComauedoTwin,
-    "SZ-DJI-Technology/DJI-Tello": SzDjiTechnologydjiTelloTwin,
+    "dji/DJI-Tello": DjidjiTelloTwin,
     "bitcraze/crazyflie-2": Bitcrazecrazyflie2Twin,
     "fourier/fftai-gr1t1": FourierfftaiGr1t1Twin,
     "fourier/fftai-gr1t2": FourierfftaiGr1t2Twin,
@@ -1283,8 +1289,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "prox-dynamics/black-hornet-nano": ProxDynamicsblackHornetNanoTwin,
     "cyberwave/generic-auv": CyberwavegenericAuvTwin,
     "cyberwave/substation": CyberwavesubstationTwin,
-    "SZ-DJI-Technology/DJI-Mini-3-Pro": SzDjiTechnologydjiMini3ProTwin,
-    "SZ-DJI-Technology/DJI-Mini-4-Pro-old": SzDjiTechnologydjiMini4ProOldTwin,
+    "dji/DJI-Mini-3-Pro": DjidjiMini3ProTwin,
     "Holybro/PX4Vision": Holybropx4visionTwin,
     "hoverspect/Avientory-Platform": HoverspectavientoryPlatformTwin,
     "apeiroon/bx100": Apeiroonbx100Twin,
@@ -1317,7 +1322,8 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "pollen-robotics/reachy-mini": PollenRoboticsreachyMiniTwin,
     "dji/mavic-3-enterprise": Djimavic3EnterpriseTwin,
     "sam-wilcocks-workspace/d500-lidar-2": SamWilcocksWorkspaced500Lidar2Twin,
-    "cyberwave/aloha-2": Cyberwavealoha2Twin,
     "neura-robotics/maira7s": NeuraRoboticsmaira7sTwin,
     "neura-robotics/maira6m": NeuraRoboticsmaira6mTwin,
+    "dji/dji-mini-4-pro": DjidjiMini4ProTwin,
+    "cyberwave/epal": CyberwaveepalTwin,
 }

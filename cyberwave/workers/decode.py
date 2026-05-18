@@ -141,3 +141,26 @@ def decode_sample_payload(sample: Sample, *, content_hint: str = "") -> tuple[An
             pass
 
     return raw, ts_fallback
+
+
+def extract_wire_metadata(sample: Sample) -> dict[str, Any]:
+    """Extract wire-header metadata from a raw ``Sample`` payload.
+
+    Returns the header JSON fields (sample_rate_hz, channels, encoding,
+    layout, etc.) that the publisher attached on the first publish.
+    Returns an empty dict if the payload does not contain a valid SDK
+    wire header.
+    """
+    raw = sample.payload
+    try:
+        header, _ = decode(raw)
+        meta: dict[str, Any] = {}
+        if header.metadata:
+            meta.update(header.metadata)
+        if header.content_type:
+            meta.setdefault("content_type", header.content_type)
+        if header.dtype:
+            meta.setdefault("dtype", header.dtype)
+        return meta
+    except Exception:
+        return {}

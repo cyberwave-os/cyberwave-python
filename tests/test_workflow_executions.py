@@ -164,6 +164,75 @@ class TestNodeAndFinishEvents:
         assert payload["status"] == "error"
         assert payload["error_message"] == "boom"
 
+    def test_node_event_omits_activation_envelope_by_default(self):
+        """Legacy single-shot calls must not bloat the MQTT payload.
+
+        Most workflows have no fan-in nodes; they call
+        ``node_finished`` without activation kwargs and the wire
+        format should stay byte-identical to the pre-activation
+        shape. Keeps payload size and downstream consumers happy.
+        """
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+        client.mqtt.publish.reset_mock()
+
+        reporter.node_finished(NODE_UUID, output_data=[{"ok": True}])
+
+        payload = _payloads(client)[0]
+        assert "activation_index" not in payload
+        assert "caller_uuid" not in payload
+
+    def test_node_event_threads_activation_envelope_when_provided(self):
+        """Generated edge workers report fan_in_mode='any' firings.
+
+        When the worker passes the per-activation kwargs the SDK
+        must surface them on the wire so the backend ingress can
+        persist one ``WorkflowNodeExecution`` row per activation
+        instead of collapsing all firings onto a single row.
+        """
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+        client.mqtt.publish.reset_mock()
+        caller = "11111111-1111-1111-1111-111111111111"
+
+        reporter.node_started(
+            NODE_UUID,
+            input_data=[{"x": 1}],
+            activation_index=2,
+            caller_uuid=caller,
+        )
+        reporter.node_finished(
+            NODE_UUID,
+            output_data=[{"ok": True}],
+            activation_index=2,
+            caller_uuid=caller,
+        )
+        reporter.node_error(
+            NODE_UUID,
+            error="kaboom",
+            activation_index=3,
+            caller_uuid=caller,
+        )
+
+        started, finished, errored = _payloads(client)
+        for payload in (started, finished, errored):
+            assert payload["caller_uuid"] == caller
+        assert started["activation_index"] == 2
+        assert finished["activation_index"] == 2
+        assert errored["activation_index"] == 3
+
+    def test_node_event_rejects_negative_activation_index(self):
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+        with pytest.raises(ValueError, match="activation_index"):
+            reporter.node_started(NODE_UUID, activation_index=-1)
+
     def test_finished_publishes_terminal_status(self):
         client = _make_client()
         reporter = WorkflowExecutionManager(client).start(

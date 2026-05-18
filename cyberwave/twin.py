@@ -82,6 +82,81 @@ def _default_control_source_type(client: Any) -> str:
     return SOURCE_TYPE_SIM_TELE if runtime_mode == "simulation" else SOURCE_TYPE_TELE
 
 
+# Teleop policies with these ``metadata["input_device"]`` values are used when
+# auto-attaching a controller for ``joints.set`` (see ``_ensure_controller_ready``).
+_SDK_JOINT_INPUT_DEVICES: frozenset[str] = frozenset({"sdk", "keyboard"})
+
+
+def _sdk_auto_attach_controller_enabled() -> bool:
+    """When false (``CYBERWAVE_SDK_AUTO_ATTACH_CONTROLLER=0``), skip REST controller assignment."""
+    raw = os.environ.get("CYBERWAVE_SDK_AUTO_ATTACH_CONTROLLER", "1")
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _policy_is_sdk_joint_teleop_candidate(policy: Any) -> bool:
+    """Teleop policies suitable for SDK joint MQTT (sdk or keyboard input_device)."""
+    ctype = getattr(policy, "controller_type", None) or ""
+    if str(ctype).lower() != "teleop":
+        return False
+    meta = policy.metadata if isinstance(policy.metadata, dict) else {}
+    device = meta.get("input_device")
+    return isinstance(device, str) and device in _SDK_JOINT_INPUT_DEVICES
+
+
+def _pick_default_sdk_joint_policy_uuid(candidates: List[Any]) -> str:
+    """Prefer ``input_device`` sdk, then keyboard; else stable tie-break by policy uuid."""
+    if not candidates:
+        raise CyberwaveError("Internal error: empty SDK joint controller candidates")
+
+    def _rank(pol: Any) -> tuple[int, str]:
+        meta = pol.metadata if isinstance(pol.metadata, dict) else {}
+        dev = meta.get("input_device")
+        if dev == "sdk":
+            return (0, str(pol.uuid))
+        if dev == "keyboard":
+            return (1, str(pol.uuid))
+        return (2, str(pol.uuid))
+
+    return str(sorted(candidates, key=_rank)[0].uuid)
+
+
+def _check_controller_ready_live() -> bool:
+    """Whether the robot edge path is ready to accept live teleop joint commands.
+
+    TODO: Infer readiness from edge telemetry (e.g. joint_states / heartbeat flowing).
+    """
+    logger.debug(
+        "Live controller readiness check is stubbed True; "
+        "TODO: verify robot/edge connectivity before joint commands."
+    )
+    return True
+
+
+def _get_twin_metadata(data: Any) -> dict:
+    """Extract the twin's current metadata dict (returns a shallow copy)."""
+    if hasattr(data, "metadata"):
+        meta = data.metadata
+    elif isinstance(data, dict):
+        meta = data.get("metadata")
+    else:
+        meta = None
+    return dict(meta) if isinstance(meta, dict) else {}
+
+
+def _build_controller_assignment_metadata(twin_data: Any, policy: Any) -> dict:
+    """Build the metadata dict the backend expects when assigning a controller policy.
+
+    Mirrors the frontend's ``buildTwinControllerUpdatePayload`` logic so the UI
+    can immediately reflect the assignment without a full page refresh.
+    """
+    base = _get_twin_metadata(twin_data)
+    base["controller_policy_uuid"] = str(policy.uuid)
+    base["controller_policy_name"] = str(getattr(policy, "name", "") or "")
+    base["controller_type"] = str(getattr(policy, "controller_type", "") or "")
+    base["control_mode"] = "joint_control"
+    return base
+
+
 def _load_capabilities_cache() -> Dict[str, Any]:
     """Load the capabilities cache from JSON file."""
     global _CAPABILITIES_CACHE
@@ -163,21 +238,12 @@ class JointController:
 
     def refresh(self):
         """Refresh joint states from the server"""
-        try:
-            states = self.twin.client.twins.get_joint_states(self.twin.uuid)
-            if hasattr(states, "joint_states"):
-                self._joint_states = {
-                    js.joint_name: js.position for js in states.joint_states
-                }
-            else:
-                self._joint_states = {}
-        except Exception as e:
-            raise CyberwaveError(f"Failed to refresh joint states: {e}")
+        logger.warning("Deprecated: JointController.refresh() is a no-op")
 
     def get(self, joint_name: str) -> float:
         """Get current position of a joint"""
         if self._joint_states is None:
-            self.refresh()
+            self._joint_states = {name: 0.0 for name in self.twin.get_controllable_joint_names()}
 
         # After refresh, _joint_states should be a dict
         if self._joint_states is None or joint_name not in self._joint_states:
@@ -210,6 +276,8 @@ class JointController:
             source_type = _default_control_source_type(self.twin.client)
 
         try:
+            self.twin._ensure_controller_ready()
+
             # Connect to MQTT if not already connected
             self.twin._connect_to_mqtt_if_not_connected()
 
@@ -238,8 +306,21 @@ class JointController:
             )
         return self.get(name)
 
-    def __setattr__(self, name: str, value: float):
-        """Allow setting joints as attributes (e.g., joints.arm_joint = 45)"""
+    def __setattr__(self, name: str, value: Any):
+        """Allow setting joints as attributes (e.g., joints.arm_joint = 45).
+
+        ``value`` is ``Any`` (not ``float``) because the same dunder
+        also stores the bookkeeping attributes ``twin`` (a ``Twin``
+        instance) and ``_joint_states`` (a ``dict``). Annotating it as
+        ``float`` is wrong for those two assignments and — when this
+        module is Cython-compiled with ``language_level=3`` (which the
+        worker images do) — Cython enforces the annotation as a C-level
+        type at function entry, so even ``self.twin = twin`` inside
+        ``__init__`` raises ``TypeError: must be real number, not
+        <Twin>`` before the ``name in [...]`` guard ever runs. Don't
+        re-tighten this annotation without also keeping
+        ``annotation_typing=False`` set in the worker obfuscate build.
+        """
         if name in ["twin", "_joint_states"]:
             super().__setattr__(name, value)
         else:
@@ -247,17 +328,14 @@ class JointController:
 
     def list(self) -> List[str]:
         """Get list of all joint names"""
-        if self._joint_states is None:
-            self.refresh()
-        if self._joint_states is None:
-            return []
-        return list(self._joint_states.keys())
+        return self.twin.get_controllable_joint_names()
 
     def get_all(self) -> Dict[str, float]:
         """Get all joint states as a dictionary"""
         if self._joint_states is None:
             self.refresh()
         if self._joint_states is None:
+            logger.warning("WIP: If you want to get joint states, subscribe to the proper mqtt topic via twin.subscribe_joints() and read from the topic directly.")
             return {}
         return self._joint_states.copy()
 
@@ -561,6 +639,7 @@ class Twin:
         self.client = client
         self._data = twin_data
         self.joints = JointController(self)
+        self._controller_ensured: bool = False
 
         # Cache for current state
         self._position: Optional[Dict[str, float]] = None
@@ -572,6 +651,123 @@ class Twin:
         self._alerts: Optional["TwinAlertManager"] = None
         self._camera_handle: Optional["TwinCameraHandle"] = None
         self._scale: Optional[Dict[str, float]] = None
+
+    def _get_workspace_uuid(self) -> Optional[str]:
+        """Return the workspace UUID for this twin's environment (non-fatal)."""
+        try:
+            env = self.client.environments.get(self.environment_id)
+            if hasattr(env, "workspace_uuid"):
+                return str(env.workspace_uuid) if env.workspace_uuid else None
+        except Exception:
+            pass
+        return None
+
+    def _list_controller_policies(self) -> List[Any]:
+        """Fetch controller policies scoped to this twin's asset and workspace."""
+        api = getattr(getattr(self.client, "twins", None), "api", None)
+        if api is None:
+            raise CyberwaveError("Client does not expose a controller-policies API")
+        try:
+            return api.src_app_api_controller_policies_list_controller_policies(
+                asset_uuid=self.asset_id or None,
+                workspace_uuid=self._get_workspace_uuid(),
+            )
+        except Exception as e:
+            raise CyberwaveError(f"Failed to list controller policies: {e}") from e
+
+    def _pick_controller_policy(self, policies: List[Any]) -> Any:
+        """Return the best policy object to use for SDK joint commands.
+
+        Keeps the twin's current teleop assignment if it is visible in *policies*
+        (i.e. passes the workspace filter).  Otherwise picks the best
+        sdk/keyboard candidate.
+        """
+        current: Optional[str] = None
+        if hasattr(self._data, "controller_policy_uuid"):
+            raw = self._data.controller_policy_uuid
+            current = str(raw) if raw else None
+        elif isinstance(self._data, dict):
+            raw = self._data.get("controller_policy_uuid")
+            current = str(raw) if raw else None
+
+        if current:
+            cur_policy = next((p for p in policies if str(p.uuid) == current), None)
+            if cur_policy is None:
+                logger.warning(
+                    "Twin %s: assigned controller %r not visible in workspace policy list; "
+                    "will replace with a suitable candidate",
+                    self.uuid, current,
+                )
+            elif str(getattr(cur_policy, "controller_type", "") or "").lower() == "teleop":
+                return cur_policy
+
+        candidates = [p for p in policies if _policy_is_sdk_joint_teleop_candidate(p)]
+        if not candidates:
+            raise CyberwaveError(
+                "No controller policy suitable for SDK joint commands was found "
+                f"(need a teleop policy with input_device in "
+                f"{sorted(_SDK_JOINT_INPUT_DEVICES)!r}). "
+                "Attach a teleop controller to this twin in the UI, or re-run "
+                "backend seed_controllers so sdk/keyboard policies exist."
+            )
+        chosen_uuid = _pick_default_sdk_joint_policy_uuid(candidates)
+        return next(p for p in candidates if str(p.uuid) == chosen_uuid)
+
+    def _apply_controller_policy(self, policy: Any) -> None:
+        """PUT the chosen policy onto the twin (FK + metadata), or sync metadata if FK already matches."""
+        current: Optional[str] = None
+        if hasattr(self._data, "controller_policy_uuid"):
+            raw = self._data.controller_policy_uuid
+            current = str(raw) if raw else None
+        elif isinstance(self._data, dict):
+            raw = self._data.get("controller_policy_uuid")
+            current = str(raw) if raw else None
+
+        chosen_uuid = str(policy.uuid)
+        chosen_name = getattr(policy, "name", chosen_uuid)
+        metadata_update = _build_controller_assignment_metadata(self._data, policy)
+
+        if current != chosen_uuid:
+            try:
+                self._data = self.client.twins.update(
+                    self.uuid,
+                    controller_policy_uuid=chosen_uuid,
+                    metadata=metadata_update,
+                )
+            except Exception as e:
+                raise CyberwaveError(f"Failed to attach controller policy to twin: {e}") from e
+            logger.info("Twin %s: assigned controller %r", self.uuid, chosen_name)
+        elif _get_twin_metadata(self._data).get("controller_policy_uuid") != chosen_uuid:
+            try:
+                self._data = self.client.twins.update(self.uuid, metadata=metadata_update)
+                logger.info("Twin %s: synced controller metadata for %r", self.uuid, chosen_name)
+            except Exception as exc:
+                logger.warning("Twin %s: metadata sync failed (non-fatal): %s", self.uuid, exc)
+        else:
+            logger.debug("Twin %s: controller %r already assigned", self.uuid, chosen_name)
+
+    def _ensure_controller_ready(self) -> None:
+        """Auto-attach a teleop controller and stub live readiness check.
+
+        Set ``CYBERWAVE_SDK_AUTO_ATTACH_CONTROLLER=0`` to skip assignment.
+        """
+        if self._controller_ensured:
+            return
+
+        if not _sdk_auto_attach_controller_enabled():
+            logger.debug("Twin %s: auto-attach disabled; skipping controller assignment", self.uuid)
+        elif getattr(getattr(self.client, "twins", None), "api", None) is None:
+            logger.debug("Twin %s: client has no controller-policies API; skipping auto-attach", self.uuid)
+        else:
+            policies = self._list_controller_policies()
+            policy = self._pick_controller_policy(policies)
+            self._apply_controller_policy(policy)
+
+        runtime_mode = getattr(getattr(self.client, "config", None), "runtime_mode", "live")
+        if runtime_mode == "live" and not _check_controller_ready_live():
+            raise CyberwaveError("Robot controller is not ready for live joint commands.")
+
+        self._controller_ensured = True
 
     @property
     def uuid(self) -> str:
@@ -678,6 +874,71 @@ class Twin:
 
             self._motion = TwinMotionHandle(self)
         return self._motion
+
+    def list_movements(
+        self, scope: str = "auto", environment_uuid: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List saved movements for this twin using existing animation data."""
+        return self.motion.list_movements(
+            scope=scope,
+            environment_uuid=environment_uuid,
+        )
+
+    def run_movement(
+        self,
+        name: str,
+        *,
+        scope: str = "auto",
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Run a saved movement.
+
+        Defaults to ``scope="auto"`` so the backend resolves the movement by
+        name across twin/asset/environment scopes.
+        """
+        return self.motion.run_movement(
+            name,
+            scope=scope,
+            environment_uuid=environment_uuid,
+            preview=preview,
+            sync=sync,
+            source_type=source_type,
+            transition_ms=transition_ms,
+            hold_ms=hold_ms,
+        )
+
+    def move_to_pose(
+        self,
+        name: str,
+        *,
+        scope: str = "auto",
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Move joints to a saved pose by posting the existing pose action payload.
+
+        Defaults to ``scope="auto"`` so the backend resolves the pose by
+        name across twin/asset/environment scopes.
+        """
+        return self.motion.move_to_pose(
+            name,
+            scope=scope,
+            environment_uuid=environment_uuid,
+            preview=preview,
+            sync=sync,
+            source_type=source_type,
+            transition_ms=transition_ms,
+            hold_ms=hold_ms,
+        )
 
     @property
     def navigation(self) -> "TwinNavigationHandle":

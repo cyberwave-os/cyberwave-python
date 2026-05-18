@@ -998,6 +998,15 @@ class BaseVideoStreamer(abc.ABC):
                 edge_id=self.twin_uuid,
                 stale_timeout=SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
                 interval=SDK_EDGE_HEALTH_INTERVAL_SECONDS,
+                # Wire the per-stream static config through the dynamic
+                # provider rather than ``register_stream_config`` so the
+                # block is re-read on every heartbeat.  This is what lets
+                # ``CV2CameraStreamer`` publish ``actual_fps`` once the
+                # V4L2 stack has negotiated — registered-once snapshots
+                # would have shipped the requested fps for the lifetime
+                # of the streamer, which is exactly what the ticket's
+                # static-vs-runtime split table says we must not do.
+                stream_config_provider=self._collect_stream_configs,
             )
             self._health_check.start()
             self._last_frame_count = 0
@@ -1006,6 +1015,57 @@ class BaseVideoStreamer(abc.ABC):
             logger.debug("Health check started")
         except Exception as e:
             logger.warning(f"Failed to start health check: {e}")
+
+    def _collect_stream_configs(self) -> Dict[str, Dict[str, Any]]:
+        """Adapter from the per-streamer hook to the multi-stream provider shape.
+
+        ``EdgeHealthCheck.stream_config_provider`` returns
+        ``{stream_id: config}`` so it can advertise multi-stream
+        publishers.  ``BaseVideoStreamer`` is single-stream by design
+        (one peer connection, one track), so the dict has at most one
+        key — the canonical ``"stream"`` id, matching the single
+        ``streams[…]`` entry the publisher emits when no driver has
+        registered something more meaningful.
+
+        Returns an empty dict when the subclass hasn't overridden
+        :meth:`_build_stream_config` (legacy publishers stay on the
+        no-stream_config wire shape) or when the override raises (the
+        heartbeat keeps flowing — a broken hook must not silently mark
+        the edge offline).
+        """
+        try:
+            cfg = self._build_stream_config()
+        except Exception as exc:
+            logger.debug("_build_stream_config raised: %s", exc)
+            return {}
+        if cfg is None:
+            return {}
+        return {"stream": cfg}
+
+    def _build_stream_config(self) -> Optional[Dict[str, Any]]:
+        """Return a typed ``stream_config`` block for this streamer, or ``None``.
+
+        Invoked on every heartbeat via the ``stream_config_provider``
+        wiring in :meth:`_start_health_check`, so subclasses can return
+        runtime-negotiated values (post-V4L2 ``actual_fps``, the codec
+        the SDP handshake settled on, etc.).  The publisher re-reads on
+        every cycle; there is no need for subclasses to track when
+        these values become available.
+
+        Default implementation returns ``None`` (no config block on the
+        wire), which keeps the legacy heartbeat shape for streamers
+        without static config to advertise — virtual / test tracks, or
+        early bootstrap publishers that don't know their parameters
+        yet.
+
+        Concrete subclasses (``CV2CameraStreamer``, ``RealsenseCameraStreamer``,
+        ...) override this to return a dict carrying ``kind`` plus
+        kind-specific fields.  See :meth:`EdgeHealthCheck.register_stream_config`
+        for the schema contract.  Credentials in ``source`` must
+        already be masked by the override; the publisher does not
+        redact.
+        """
+        return None
 
     def _stop_health_check(self):
         """Stop health check monitoring."""

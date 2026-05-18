@@ -302,6 +302,57 @@ class HookRegistry:
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         return self._make_decorator("alert", "alert", twin_uuid)
 
+    def on_mqtt(
+        self,
+        twin_uuid: str,
+        *,
+        subtopic: str,
+        qos: int = 0,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Hook a callback to a twin-scoped MQTT subtopic.
+
+        The runtime subscribes to ``cyberwave/twin/<twin_uuid>/<subtopic>``
+        directly via :class:`CyberwaveMQTTClient` (no Zenoh data-bus
+        involvement) and dispatches the decoded payload to *fn* with
+        the signature ``fn(payload, topic, ctx)``.
+
+        Mirrors :meth:`on_alert` so that MQTT triggers compose with the
+        rest of the worker runtime (lifecycle, monitor stats,
+        graceful shutdown) instead of running their own ``while True``
+        loops.
+
+        ``subtopic`` is required (callers must opt into a specific topic
+        rather than reusing reserved channels like ``alert`` or
+        ``telemetry`` that are already covered by dedicated hooks).
+        Wildcards (``+`` / ``#``) are rejected at validation time so
+        the hook stays exact-match.
+        """
+        if not isinstance(subtopic, str):
+            raise TypeError("on_mqtt subtopic must be a string")
+        normalized = subtopic.strip()
+        if (
+            not normalized
+            or normalized.startswith("/")
+            or normalized.startswith("cyberwave/")
+            or "+" in normalized
+            or "#" in normalized
+            or "//" in normalized
+        ):
+            raise ValueError(
+                "on_mqtt subtopic must be a non-empty relative twin "
+                "topic segment without wildcards"
+            )
+        if isinstance(qos, bool) or not isinstance(qos, int) or qos not in {0, 1, 2}:
+            raise ValueError("on_mqtt qos must be one of 0, 1, or 2")
+        channel = f"mqtt/{normalized}"
+        return self._make_decorator(
+            channel,
+            "mqtt",
+            twin_uuid,
+            subtopic=normalized,
+            qos=qos,
+        )
+
     def on_temperature(
         self, twin_uuid: str
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:

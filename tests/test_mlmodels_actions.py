@@ -1,9 +1,8 @@
-"""Tests for :mod:`cyberwave.mlmodels.actions`.
+"""Tests for the playground structured-action catalog.
 
-The SDK now ships only a slim view of the backend catalog (ids + short
+The SDK ships a slim local mirror of the backend catalog (ids + short
 metadata for autocomplete). Prompt templates and JSON schemas live on the
-backend and are fetched lazily through
-:meth:`cyberwave.mlmodels.MLModelsClient.fetch_structured_actions_catalog`.
+backend.
 
 This module guards:
 
@@ -21,10 +20,10 @@ from __future__ import annotations
 
 import pytest
 
-from cyberwave.mlmodels.actions import (
+from cyberwave.models.playground import (
     STRUCTURED_ACTIONS,
-    get_action,
-    list_actions,
+    _get_action as get_action,
+    _list_actions as list_actions,
 )
 
 
@@ -57,7 +56,7 @@ class TestCatalogShape:
 
     def test_er_1_6_actions_are_mirrored(self) -> None:
         """Gemini Robotics-ER 1.6 adds two structured tasks; the SDK must
-        surface them so consumers using ``cyberwave.mlmodels.actions`` get
+        surface them so consumers using ``cw.models.playground`` get
         auto-complete without a network round-trip."""
         ids = {a.id for a in STRUCTURED_ACTIONS}
         assert "point_trajectory" in ids
@@ -69,7 +68,7 @@ class TestCatalogShape:
         """The CaP-X-inspired expansion (3D detections + grasps +
         scene graph relations) must be discoverable from the SDK.
         Without the mirror, SDK-first workflows would fail validation
-        in ``MLModelsClient.run`` even though the backend accepts the
+        in ``PlaygroundHandle.run`` even though the backend accepts the
         task id."""
         ids = {a.id for a in STRUCTURED_ACTIONS}
         assert "detect_objects_3d" in ids

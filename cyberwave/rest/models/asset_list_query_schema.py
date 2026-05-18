@@ -33,11 +33,12 @@ class AssetListQuerySchema(BaseModel):
     registry_vendor: Optional[StrictStr] = None
     owned: Optional[StrictStr] = None
     search: Optional[StrictStr] = None
+    tag: Optional[StrictStr] = None
     metadata_key: Optional[StrictStr] = None
     metadata_value: Optional[StrictStr] = None
     min_price: Optional[Union[StrictFloat, StrictInt]] = None
     max_price: Optional[Union[StrictFloat, StrictInt]] = None
-    __properties: ClassVar[List[str]] = ["limit", "offset", "registry_id", "registry_vendor", "owned", "search", "metadata_key", "metadata_value", "min_price", "max_price"]
+    __properties: ClassVar[List[str]] = ["limit", "offset", "registry_id", "registry_vendor", "owned", "search", "tag", "metadata_key", "metadata_value", "min_price", "max_price"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -108,6 +109,11 @@ class AssetListQuerySchema(BaseModel):
         if self.search is None and "search" in self.model_fields_set:
             _dict['search'] = None
 
+        # set to None if tag (nullable) is None
+        # and model_fields_set contains the field
+        if self.tag is None and "tag" in self.model_fields_set:
+            _dict['tag'] = None
+
         # set to None if metadata_key (nullable) is None
         # and model_fields_set contains the field
         if self.metadata_key is None and "metadata_key" in self.model_fields_set:
@@ -146,6 +152,7 @@ class AssetListQuerySchema(BaseModel):
             "registry_vendor": obj.get("registry_vendor"),
             "owned": obj.get("owned"),
             "search": obj.get("search"),
+            "tag": obj.get("tag"),
             "metadata_key": obj.get("metadata_key"),
             "metadata_value": obj.get("metadata_value"),
             "min_price": obj.get("min_price"),

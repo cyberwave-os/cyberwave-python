@@ -7,6 +7,7 @@ import pytest
 
 from cyberwave.models.runtimes.onnxruntime_rt import (
     OnnxRuntime,
+    _is_e2e_layout,
     _nms_per_class,
     _parse_kpt_shape,
     _postprocess,
@@ -408,7 +409,10 @@ class TestPostprocessNMS:
         # tensor non-square so ``_postprocess``'s auto-transpose does
         # the right thing.
         raw = self._cluster_around(
-            cx=320, cy=320, w=100, h=200,
+            cx=320,
+            cy=320,
+            w=100,
+            h=200,
             scores=[0.92, 0.88, 0.85, 0.81, 0.77, 0.72],
         )
         result = _postprocess(
@@ -459,7 +463,10 @@ class TestPostprocessNMS:
         # survives — the documented escape hatch for callers that want
         # raw output (custom tracker, ensemble, debugging).
         raw = self._cluster_around(
-            cx=320, cy=320, w=100, h=200,
+            cx=320,
+            cy=320,
+            w=100,
+            h=200,
             scores=[0.92, 0.88, 0.85, 0.81, 0.77, 0.72],
         )
         result = _postprocess(
@@ -546,15 +553,22 @@ class TestNMSPerClass:
     def test_empty_input_returns_empty_array(self):
         empty = np.empty(0, dtype=np.float32)
         keep = _nms_per_class(
-            empty, empty, empty, empty, empty, empty.astype(np.int64),
+            empty,
+            empty,
+            empty,
+            empty,
+            empty,
+            empty.astype(np.int64),
             iou_threshold=0.7,
         )
         assert keep.shape == (0,)
 
     def test_single_box_kept(self):
         keep = _nms_per_class(
-            np.array([10.0]), np.array([10.0]),
-            np.array([20.0]), np.array([20.0]),
+            np.array([10.0]),
+            np.array([10.0]),
+            np.array([20.0]),
+            np.array([20.0]),
             np.array([0.9]),
             np.array([0]),
             iou_threshold=0.7,
@@ -596,3 +610,398 @@ class TestNMSPerClass:
             x1, y1, x2, y2, scores, class_ids, iou_threshold=0.7
         )
         assert sorted(keep_loose.tolist()) == [0, 1]
+
+
+# COCO class id 74 is "book" — the value that surfaced as the original
+# bug report ("confidence must be in [0, 1], got 74.0").  Using it in
+# the fixture data keeps the connection between symptom and root cause
+# obvious to anyone reading the test in the future.
+_COCO_LIKE_NAMES = {i: f"cls{i}" for i in range(80)}
+
+
+def _yolo26_e2e_output(
+    rows: list[tuple[float, float, float, float, float, int]],
+    *,
+    max_det: int = 300,
+) -> np.ndarray:
+    """Build a YOLO26-style ``(1, max_det, 6)`` end-to-end output tensor.
+
+    ``rows`` is a list of ``(x1, y1, x2, y2, conf, class_id)`` tuples.
+    Any slots beyond ``len(rows)`` are zero-padded — matching Ultralytics'
+    behaviour when the one-to-one head emits fewer than ``max_det``
+    real detections.
+    """
+    out = np.zeros((1, max_det, 6), dtype=np.float32)
+    for i, (x1, y1, x2, y2, conf, cls) in enumerate(rows):
+        out[0, i] = [x1, y1, x2, y2, conf, cls]
+    return out
+
+
+class TestIsE2ELayout:
+    """Discriminator between YOLO26/YOLOv10 end-to-end and YOLOv8 anchor."""
+
+    def test_wrong_shape_returns_false(self):
+        # Anchor layout (transposed): (N, 84) for COCO. Not a candidate.
+        preds = np.zeros((8400, 84), dtype=np.float32)
+        assert _is_e2e_layout(preds, _COCO_LIKE_NAMES) is False
+
+    def test_3d_returns_false(self):
+        # _is_e2e_layout runs after _postprocess drops the batch dim and
+        # normalises the transpose, so anything still 3-D is malformed.
+        preds = np.zeros((1, 300, 6), dtype=np.float32)
+        assert _is_e2e_layout(preds, _COCO_LIKE_NAMES) is False
+
+    def test_coco_class_count_short_circuits_to_true(self):
+        # 80 names + (N, 6) shape ⇒ unambiguous e2e.  Don't even need
+        # to inspect data.
+        preds = np.zeros((300, 6), dtype=np.float32)
+        assert _is_e2e_layout(preds, _COCO_LIKE_NAMES) is True
+
+    def test_two_class_anchor_output_rejected_by_data_check(self):
+        # Synthetic YOLOv8 anchor output with exactly 2 classes — col 5
+        # is a continuous class-1 probability.  Heuristic must not
+        # misroute this through the e2e parser.
+        preds = np.array(
+            [[320.0, 320.0, 100.0, 100.0, 0.85, 0.15]],
+            dtype=np.float32,
+        )
+        assert _is_e2e_layout(preds, {0: "cat", 1: "dog"}) is False
+
+    def test_one_class_e2e_accepted_via_feat_dim_mismatch(self):
+        # 1-class YOLOv8 anchor has feat_dim = 4 + 1 = 5, so a (N, 6)
+        # array with exactly one embedded name can only be an e2e
+        # export.  Signal 1 short-circuits without inspecting data.
+        preds = np.array(
+            [[10.0, 10.0, 50.0, 50.0, 0.9, 0.0]],
+            dtype=np.float32,
+        )
+        assert _is_e2e_layout(preds, {0: "person"}) is True
+
+    def test_unnamed_e2e_with_high_class_ids_accepted_via_data_check(self):
+        # YOLO26 export missing ``names`` metadata.  Class ids 5 and 17
+        # are integer-valued and > 1.5, which the data-check branch
+        # uses to distinguish from a 2-class anchor probability column.
+        preds = np.array(
+            [
+                [10.0, 10.0, 100.0, 100.0, 0.9, 5.0],
+                [200.0, 200.0, 300.0, 300.0, 0.8, 17.0],
+            ],
+            dtype=np.float32,
+        )
+        assert _is_e2e_layout(preds, {}) is True
+
+    def test_unnamed_e2e_with_only_binary_ids_is_ambiguous(self):
+        # Documented limitation: an e2e output that only ever reports
+        # class 0 or 1 (and has empty names metadata) is indistinguishable
+        # from a 2-class anchor output by shape+data alone, so we fall
+        # back to the safer anchor path.  Caller should re-export with
+        # ``names`` embedded — signal 1 (feat-dim mismatch) then
+        # decides correctly.
+        preds = np.array(
+            [[10.0, 10.0, 100.0, 100.0, 0.9, 1.0]],
+            dtype=np.float32,
+        )
+        assert _is_e2e_layout(preds, {}) is False
+
+    def test_negative_col5_rejected_by_data_check(self):
+        # Defensive: a noisy column-5 with negative integers would
+        # technically pass an ``is_integer`` check (np.mod handles
+        # negatives Python-style), but real class ids are non-negative.
+        # Stay on the safer anchor path.
+        preds = np.array(
+            [[10.0, 10.0, 100.0, 100.0, 0.9, -3.0]],
+            dtype=np.float32,
+        )
+        assert _is_e2e_layout(preds, {}) is False
+
+    def test_empty_rows_returns_false(self):
+        preds = np.zeros((0, 6), dtype=np.float32)
+        assert _is_e2e_layout(preds, {}) is False
+
+
+class TestPostprocessE2E:
+    """End-to-end parsing of the YOLO26 / YOLOv10 ``(N, 6)`` layout.
+
+    The original bug report — ``ValueError: confidence must be in
+    [0, 1], got 74.0`` — was a column shift: the anchor parser read
+    the class-id column as a confidence.  These tests pin the new
+    branch so that regression can't recur.
+    """
+
+    def test_yolo26_output_parsed_without_value_error(self):
+        # Three real detections + zero-padded slots up to max_det.
+        # Class id 74 is the exact value that fired the original
+        # ``confidence must be in [0, 1], got 74.0``.
+        raw = _yolo26_e2e_output(
+            [
+                (10.0, 10.0, 50.0, 50.0, 0.92, 0),  # cls0
+                (100.0, 100.0, 200.0, 200.0, 0.85, 74),  # cls74
+                (300.0, 300.0, 400.0, 400.0, 0.71, 17),  # cls17
+            ]
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert len(result) == 3
+        labels = {d.label for d in result}
+        assert labels == {"cls0", "cls74", "cls17"}
+        # Confidences are read from column 4, not column 5.  This is the
+        # specific invariant the original bug violated.
+        assert all(0.0 <= d.confidence <= 1.0 for d in result)
+        cls74 = next(d for d in result if d.label == "cls74")
+        assert cls74.confidence == pytest.approx(0.85)
+
+    def test_e2e_boxes_are_corner_coords_not_centre_size(self):
+        # YOLO26 emits (x1, y1, x2, y2).  The anchor parser would have
+        # treated those columns as (cx, cy, w, h) and computed
+        # x1=cx-w/2, y1=cy-h/2 etc.  Pin the corner-coord interpretation.
+        raw = _yolo26_e2e_output(
+            [(100.0, 200.0, 300.0, 400.0, 0.9, 0)],
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        det = result[0]
+        assert det.bbox.x1 == pytest.approx(100.0)
+        assert det.bbox.y1 == pytest.approx(200.0)
+        assert det.bbox.x2 == pytest.approx(300.0)
+        assert det.bbox.y2 == pytest.approx(400.0)
+
+    def test_zero_padded_slots_filtered_out(self):
+        # Two real detections, 298 zero-padded rows.  Confidence filter
+        # must drop everything below 0.5 — including the zero-padded
+        # tail — otherwise we'd emit 300 spurious ``cls0`` detections
+        # at (0, 0, 0, 0).
+        raw = _yolo26_e2e_output(
+            [
+                (10.0, 10.0, 50.0, 50.0, 0.9, 0),
+                (100.0, 100.0, 200.0, 200.0, 0.8, 7),
+            ]
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert len(result) == 2
+
+    def test_e2e_scales_to_image_dimensions(self):
+        # 320×320 image fed into a 640×640 model → sx = sy = 0.5.
+        # Box at (100, 200, 300, 400) in model space should land at
+        # (50, 100, 150, 200) in image space.
+        raw = _yolo26_e2e_output(
+            [(100.0, 200.0, 300.0, 400.0, 0.9, 0)],
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=320,
+            img_h=320,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        det = result[0]
+        assert det.bbox.x1 == pytest.approx(50.0)
+        assert det.bbox.y1 == pytest.approx(100.0)
+        assert det.bbox.x2 == pytest.approx(150.0)
+        assert det.bbox.y2 == pytest.approx(200.0)
+
+    def test_e2e_dynamic_axes_keep_native_coordinates(self):
+        # Dynamic-axis exports declare input_shape=[None, 3, None, None];
+        # we mustn't divide by 1 (which would explode coords by img_w/h).
+        raw = _yolo26_e2e_output(
+            [(100.0, 200.0, 300.0, 400.0, 0.9, 0)],
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=480,
+            input_shape=[None, 3, None, None],
+        )
+
+        det = result[0]
+        # Coordinates stay in input space — same invariant the anchor
+        # path holds for dynamic-axis YOLOv8 exports.
+        assert det.bbox.x1 == pytest.approx(100.0)
+        assert det.bbox.x2 == pytest.approx(300.0)
+
+    def test_e2e_classes_filter(self):
+        raw = _yolo26_e2e_output(
+            [
+                (10.0, 10.0, 50.0, 50.0, 0.9, 0),  # cls0
+                (100.0, 100.0, 200.0, 200.0, 0.85, 74),  # cls74
+            ]
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=["cls74"],
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert len(result) == 1
+        assert result[0].label == "cls74"
+
+    def test_e2e_confidence_filter(self):
+        # Below-threshold detection (0.4) and zero-padded rows alike.
+        raw = _yolo26_e2e_output(
+            [(10.0, 10.0, 50.0, 50.0, 0.4, 0)],
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert result == []
+
+    def test_e2e_all_zero_tensor_yields_no_detections(self):
+        # Frame with nothing in it — Ultralytics emits the full
+        # ``max_det`` rows but every row is zero-padded.  The
+        # confidence filter alone must drop every row; we must not
+        # leak 300 spurious ``cls0`` detections at (0, 0, 0, 0).
+        raw = np.zeros((1, 300, 6), dtype=np.float32)
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert result == []
+
+    def test_e2e_transposed_layout_normalised(self):
+        # If a hypothetical export emits ``(1, 6, 300)`` instead of
+        # ``(1, 300, 6)``, the transpose at the top of _postprocess
+        # rotates it back to ``(300, 6)`` and we still take the e2e
+        # branch.  Guards us against a future Ultralytics export
+        # quirk without needing a separate code path.
+        canonical = _yolo26_e2e_output(
+            [(10.0, 10.0, 50.0, 50.0, 0.9, 74)],
+            max_det=300,
+        )
+        transposed = canonical.transpose(0, 2, 1)  # → (1, 6, 300)
+
+        result = _postprocess(
+            transposed,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert len(result) == 1
+        assert result[0].label == "cls74"
+        assert result[0].confidence == pytest.approx(0.9)
+
+    def test_e2e_unknown_class_id_falls_back_to_stringified_int(self):
+        # If the model emits a class id beyond the embedded ``names``
+        # map (corrupt export, sparse class set, etc.), the runtime
+        # must not crash — fall back to the integer label, mirroring
+        # the anchor path's behaviour.
+        raw = _yolo26_e2e_output(
+            [(10.0, 10.0, 50.0, 50.0, 0.9, 999)],
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names=_COCO_LIKE_NAMES,  # only covers 0..79
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert len(result) == 1
+        assert result[0].label == "999"
+
+
+class TestPostprocessAnchorVsE2EDiscrimination:
+    """Regression: small-N 2-class anchor outputs must still go through
+    the anchor path even though they share ``feat_dim == 6`` with the
+    YOLO26 e2e layout.  The synthetic outputs in
+    :class:`TestOnnxRuntimePredict` rely on this — break the heuristic
+    and they all flip to e2e parsing (cx/cy/w/h misread as x1/y1/x2/y2,
+    column 4 probability read as confidence, column 5 probability
+    silently treated as class id).
+    """
+
+    def test_two_class_synthetic_uses_anchor_path(self):
+        # Same shape as ``test_predict_returns_prediction_result`` after
+        # transpose: 3 detections, feat_dim=6, 2 classes.  The anchor
+        # parser handles per-class argmax; the e2e parser would emit
+        # nonsense.  ``len(result) == 3`` with labels in {cat, dog}
+        # is only achievable through the anchor branch.
+        raw = np.array(
+            [
+                [
+                    [320, 320, 320],
+                    [320, 320, 320],
+                    [100, 50, 200],
+                    [100, 50, 200],
+                    [0.9, 0.3, 0.8],
+                    [0.1, 0.7, 0.2],
+                ]
+            ],
+            dtype=np.float32,
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.2,  # keep all 3 anchors
+            classes=None,
+            class_names={0: "cat", 1: "dog"},
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+            iou=1.0,  # disable NMS so the assertion is about routing
+        )
+
+        labels = {d.label for d in result}
+        assert labels == {"cat", "dog"}
+        assert all(0.0 <= d.confidence <= 1.0 for d in result)

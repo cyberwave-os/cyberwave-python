@@ -30,7 +30,9 @@ class _FakeRuntime(ModelRuntime):
     def load(self, model_path, *, device=None, **kwargs):
         return {"path": model_path, "device": device}
 
-    def predict(self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs):
+    def predict(
+        self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs
+    ):
         return PredictionResult()
 
 
@@ -211,9 +213,9 @@ class TestDetectDevice:
             with caplog.at_level("WARNING", logger="cyberwave.models.manager"):
                 assert ModelManager._detect_device() == "cpu"
 
-        assert any(
-            "falling back to CPU" in rec.message for rec in caplog.records
-        ), "expected a warning explaining the CPU fallback"
+        assert any("falling back to CPU" in rec.message for rec in caplog.records), (
+            "expected a warning explaining the CPU fallback"
+        )
 
     def test_probe_result_is_cached(self):
         """_detect_device must only run the conv2d probe once per process."""
@@ -256,6 +258,53 @@ class TestResolveModelPath:
         mgr = ModelManager(model_dir=str(tmp_path))
         with pytest.raises(FileNotFoundError, match="not found"):
             mgr._resolve_model_path("missing", "onnxruntime")
+
+
+# ---------------------------------------------------------------------------
+# local public weight auto-download
+# ---------------------------------------------------------------------------
+
+
+class TestLocalPublicWeightDownload:
+    def test_download_url_populates_missing_local_model_path(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from cyberwave.models.runtimes import _RUNTIME_REGISTRY, register_runtime
+
+        class _FakeWhisperCpp(_FakeRuntime):
+            name = "whisper_cpp"
+
+        old = _RUNTIME_REGISTRY.get("whisper_cpp")
+        register_runtime(_FakeWhisperCpp)
+        calls: list[tuple[str, Path]] = []
+
+        def fake_stream(url: str, dest: Path) -> None:
+            calls.append((url, dest))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"whisper-weights")
+
+        monkeypatch.setattr(
+            ModelManager, "_stream_download_to", staticmethod(fake_stream)
+        )
+
+        try:
+            mgr = ModelManager(model_dir=str(tmp_path))
+            loaded = mgr.load(
+                "models/whisper/ggml-tiny.en-q5_1.bin",
+                runtime="whisper_cpp",
+                download_url="https://example.com/ggml-tiny.en-q5_1.bin",
+            )
+        finally:
+            if old is None:
+                _RUNTIME_REGISTRY.pop("whisper_cpp", None)
+            else:
+                _RUNTIME_REGISTRY["whisper_cpp"] = old
+
+        expected_path = tmp_path / "models" / "whisper" / "ggml-tiny.en-q5_1.bin"
+        assert calls == [("https://example.com/ggml-tiny.en-q5_1.bin", expected_path)]
+        assert expected_path.read_bytes() == b"whisper-weights"
+        assert loaded.runtime == "whisper_cpp"
+        assert loaded._model_handle["path"] == str(expected_path)
 
 
 # ---------------------------------------------------------------------------

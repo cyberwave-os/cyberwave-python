@@ -7611,6 +7611,7 @@ class DefaultApi:
         registry_vendor: Optional[StrictStr] = None,
         owned: Optional[StrictStr] = None,
         search: Optional[StrictStr] = None,
+        tag: Optional[StrictStr] = None,
         metadata_key: Optional[StrictStr] = None,
         metadata_value: Optional[StrictStr] = None,
         min_price: Optional[Union[StrictFloat, StrictInt]] = None,
@@ -7643,6 +7644,8 @@ class DefaultApi:
         :type owned: str
         :param search:
         :type search: str
+        :param tag:
+        :type tag: str
         :param metadata_key:
         :type metadata_key: str
         :param metadata_value:
@@ -7680,6 +7683,7 @@ class DefaultApi:
             registry_vendor=registry_vendor,
             owned=owned,
             search=search,
+            tag=tag,
             metadata_key=metadata_key,
             metadata_value=metadata_value,
             min_price=min_price,
@@ -7713,6 +7717,7 @@ class DefaultApi:
         registry_vendor: Optional[StrictStr] = None,
         owned: Optional[StrictStr] = None,
         search: Optional[StrictStr] = None,
+        tag: Optional[StrictStr] = None,
         metadata_key: Optional[StrictStr] = None,
         metadata_value: Optional[StrictStr] = None,
         min_price: Optional[Union[StrictFloat, StrictInt]] = None,
@@ -7745,6 +7750,8 @@ class DefaultApi:
         :type owned: str
         :param search:
         :type search: str
+        :param tag:
+        :type tag: str
         :param metadata_key:
         :type metadata_key: str
         :param metadata_value:
@@ -7782,6 +7789,7 @@ class DefaultApi:
             registry_vendor=registry_vendor,
             owned=owned,
             search=search,
+            tag=tag,
             metadata_key=metadata_key,
             metadata_value=metadata_value,
             min_price=min_price,
@@ -7815,6 +7823,7 @@ class DefaultApi:
         registry_vendor: Optional[StrictStr] = None,
         owned: Optional[StrictStr] = None,
         search: Optional[StrictStr] = None,
+        tag: Optional[StrictStr] = None,
         metadata_key: Optional[StrictStr] = None,
         metadata_value: Optional[StrictStr] = None,
         min_price: Optional[Union[StrictFloat, StrictInt]] = None,
@@ -7847,6 +7856,8 @@ class DefaultApi:
         :type owned: str
         :param search:
         :type search: str
+        :param tag:
+        :type tag: str
         :param metadata_key:
         :type metadata_key: str
         :param metadata_value:
@@ -7884,6 +7895,7 @@ class DefaultApi:
             registry_vendor=registry_vendor,
             owned=owned,
             search=search,
+            tag=tag,
             metadata_key=metadata_key,
             metadata_value=metadata_value,
             min_price=min_price,
@@ -7912,6 +7924,7 @@ class DefaultApi:
         registry_vendor,
         owned,
         search,
+        tag,
         metadata_key,
         metadata_value,
         min_price,
@@ -7961,6 +7974,10 @@ class DefaultApi:
         if search is not None:
             
             _query_params.append(('search', search))
+            
+        if tag is not None:
+            
+            _query_params.append(('tag', tag))
             
         if metadata_key is not None:
             
