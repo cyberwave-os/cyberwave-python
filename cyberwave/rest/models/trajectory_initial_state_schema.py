@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class TrajectoryInitialStateSchema(BaseModel):
     """
-    Joint positions the solver should start from.  When omitted, the backend uses a neutral stance (joint midpoints from the URDF limits) — deterministic and safe, avoids leaking twin state into unauthenticated playground calls. An authenticated caller with a ``twin_uuid`` in scope can fill this from live twin state on the client side; server-side auto-pull is a P5 concern.
+    Joint positions the solver should start from.
     """ # noqa: E501
     joint_positions: Optional[List[Union[StrictFloat, StrictInt]]] = None
     joint_names: Optional[List[StrictStr]] = None

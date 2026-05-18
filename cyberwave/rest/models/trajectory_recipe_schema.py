@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class TrajectoryRecipeSchema(BaseModel):
     """
-    Optional kinematic scaffolding applied around the raw action.  Keeping the recipe separate from ``action`` means the same target pose can be replayed with different pre-grasp offsets / lift heights without restating the pose. MVP fields mirror what the frontend ``graspToEpisode`` adapter (P3) needs; grow the schema additively as adapters land.
+    Optional kinematic scaffolding applied around the raw action.
     """ # noqa: E501
     pre_grasp_offset_m: Optional[Union[StrictFloat, StrictInt]] = 0.1
     lift_m: Optional[Union[StrictFloat, StrictInt]] = 0.1

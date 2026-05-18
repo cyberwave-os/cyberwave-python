@@ -45,7 +45,8 @@ class MLModelUpdateSchema(BaseModel):
     can_take_text_as_input: Optional[StrictBool] = None
     can_take_action_as_input: Optional[StrictBool] = None
     edge_runtime: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "edge_runtime"]
+    workspace_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "edge_runtime", "workspace_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -176,6 +177,11 @@ class MLModelUpdateSchema(BaseModel):
         if self.edge_runtime is None and "edge_runtime" in self.model_fields_set:
             _dict['edge_runtime'] = None
 
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -205,7 +211,8 @@ class MLModelUpdateSchema(BaseModel):
             "can_take_image_as_input": obj.get("can_take_image_as_input"),
             "can_take_text_as_input": obj.get("can_take_text_as_input"),
             "can_take_action_as_input": obj.get("can_take_action_as_input"),
-            "edge_runtime": obj.get("edge_runtime")
+            "edge_runtime": obj.get("edge_runtime"),
+            "workspace_uuid": obj.get("workspace_uuid")
         })
         return _obj
 

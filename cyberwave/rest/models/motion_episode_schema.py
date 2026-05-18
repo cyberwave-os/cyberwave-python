@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class MotionEpisodeSchema(BaseModel):
     """
-    Canonical dense, time-indexed rollout of joint positions.  @sync cyberwave-frontend/lib/types.ts:MotionEpisode  ADR 0001 (\"Harmonized playground\") pins this shape as the single domain-level motion artefact flowing through every player, adapter, and dispatch path. LeRobot is *an encoding*, not our domain type — so nothing in this schema mentions it. The matching wire tag on model-run responses is ``output_format: \"motion_episode\"``; the legacy ``\"lerobot_episode\"`` tag is accepted on read for one release (see :class:`MLModelRunResultSchema`).  Invariants:   * ``len(observation_state) == len(action)`` when both arrays     are non-empty — one row per frame.   * ``observation_state[i]`` is length ``len(joint_names)`` for     every ``i`` (URDF-joint order, radians for revolute joints).   * ``ee_positions[i] = (x, y, z)`` in metres, in the asset's     URDF root frame. Optional; populated for EE-only replays     where ``observation_state`` is empty.   * ``fps`` > 0.
+    Canonical dense, time-indexed rollout of joint positions.
     """ # noqa: E501
     fps: Union[StrictFloat, StrictInt]
     joint_names: List[StrictStr]

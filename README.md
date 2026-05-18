@@ -441,31 +441,50 @@ For custom or robot-provided sources, pass your own `get_audio()` callback. For 
 ### Drones and Flying Twins
 
 Twins whose asset has `can_fly: true` are returned as `FlyingTwin` instances.
-They expose `takeoff()`, `land()`, and `hover()` MQTT commands, plus helpers to
-read and persist the hovering state in the twin's metadata.
+`FlyingTwin` inherits from `LocomoteTwin`, so flying twins also expose the
+locomotion verbs (`move_forward`, `move_backward`, `turn_left`, `turn_right`)
+on top of their aerial-specific surface:
+
+| Surface | Methods |
+| --- | --- |
+| Flight phase | `takeoff()`, `land()`, `hover()`, `cancel_takeoff()`, `cancel_landing()` |
+| Return to home | `return_to_home()`, `cancel_return_to_home()`, `set_home_here()` |
+| Service / safety | `start_compass_calibration()`, `stop_compass_calibration()`, `reboot()`, `emergency_stop()` |
+| Gimbal | `gimbal_rotate(pitch=..., roll=..., yaw=..., mode=..., duration=...)`, `gimbal_recenter()`, `gimbal_rotate_speed(pitch=..., roll=..., yaw=...)` |
+| Locomotion (inherited) | `move_forward()`, `move_backward()`, `turn_left()`, `turn_right()` |
+
+All commands publish on the canonical `{topic_prefix}cyberwave/twin/{uuid}/command`
+topic with the standard `{source_type, command, data, timestamp}` envelope —
+the same contract every Cyberwave drone driver listens on.
 
 ```python
 from cyberwave import Cyberwave
 from cyberwave.twin import FlyingTwin
 
 cw = Cyberwave()
-drone: FlyingTwin = cw.twin("cyberwave/px4vision")  # type: ignore[assignment]
+cw.affect("real-world")  # or "simulation" for a dry run
 
-# Send the takeoff command
-ALTITUDE = 2.0  # metres
-drone.takeoff(altitude=ALTITUDE)
+drone: FlyingTwin = cw.twin("SZ-DJI-Technology/DJI-Mini-4-Pro")  # type: ignore[assignment]
 
-# Read the hovering status back
+drone.takeoff(altitude=2.0)
+drone.move_forward(1.5)                          # locomotion (sim + future off-RC teleop)
+drone.gimbal_rotate(pitch=-45.0, duration=1.5)   # tilt camera 45° down
+drone.gimbal_rotate_speed(pitch=50.0)            # cinematic pan @ 5°/s
+drone.gimbal_recenter()                          # back to 0° / absolute
+drone.return_to_home()                           # KeyStartGoHome (with confirm flow)
+drone.land()                                     # auto-arms landing-confirmation flow
+```
+
+Hovering helpers persist the controller's *intent* in `twin.metadata.status`
+(useful in the Cyberwave playground simulator, where setting
+`controller_requested_hovering=True` disables gravity for that twin so it stays
+at its current altitude visually):
+
+```python
 if drone.is_hovering():
     status = drone.get_hovering_status()
     print(f"Hovering at {status['controller_requested_hovering_altitude']} m")
-
-# Land and clear the hovering state
-drone.land()
-drone.set_hovering_status(hovering=False)
 ```
-
-The hovering state is stored under `twin.metadata.status`:
 
 ```json
 {
@@ -479,10 +498,9 @@ The hovering state is stored under `twin.metadata.status`:
 The `controller_requested_` prefix makes it clear these are controller
 intentions, not ground-truth sensor readings from the drone.
 
-In the Cyberwave **playground simulate** mode, setting `controller_requested_hovering=True`
-disables gravity for that twin so it stays at its current altitude visually.
-
-See the full example in [examples/drone_hovering.py](examples/drone_hovering.py).
+See the full DJI Mini 4 Pro walkthrough in
+[examples/drone_dji_mini.py](examples/drone_dji_mini.py), and the simpler
+hovering-only flow in [examples/drone_hovering.py](examples/drone_hovering.py).
 
 ## Examples
 
@@ -494,6 +512,7 @@ Check the [examples](examples) directory for complete examples:
 - Joint manipulation for robot arms
 - Audio streaming (e.g. Go2 microphone) — [audio_stream.py](examples/audio_stream.py), [multimedia_stream.py](examples/multimedia_stream.py)
 - Drone takeoff, hovering status, and landing — [drone_hovering.py](examples/drone_hovering.py)
+- DJI Mini 4 Pro full flight + gimbal control — [drone_dji_mini.py](examples/drone_dji_mini.py)
 
 ## Advanced Usage
 

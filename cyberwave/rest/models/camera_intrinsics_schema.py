@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class CameraIntrinsicsSchema(BaseModel):
     """
-    Pinhole intrinsics used to deproject 2D detections into 3D.  Follows the OpenCV / LeRobot convention: ``fx``, ``fy`` are focal lengths in pixels and ``cx``, ``cy`` is the principal point in pixels. Distortion is intentionally out of scope for v1; callers that need it can pass it through :attr:`MLModelRunSchema.params` until the field stabilises.
+    Pinhole intrinsics used to deproject 2D detections into 3D.  Follows the OpenCV / LeRobot convention: ``fx``, ``fy`` are focal lengths in pixels and ``cx``, ``cy`` is the principal point in pixels. Distortion is intentionally out of scope for v1; callers that need it can pass it through :attr:`MLModelRunSchema.params` until the field stabilises.  ``width`` and ``height`` accept whole-number floats (e.g. ``640.0``) and coerce them to ``int`` so callers that forward raw JSON from camera drivers don't need to cast on their side.
     """ # noqa: E501
     fx: Union[StrictFloat, StrictInt]
     fy: Union[StrictFloat, StrictInt]

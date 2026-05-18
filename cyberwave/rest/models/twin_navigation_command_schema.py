@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema
+from cyberwave.rest.models.relative_translation import RelativeTranslation
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -33,19 +34,21 @@ class TwinNavigationCommandSchema(BaseModel):
     rotation: Optional[List[Union[StrictFloat, StrictInt]]] = None
     yaw: Optional[Union[StrictFloat, StrictInt]] = None
     waypoints: Optional[List[NavigationWaypointSchema]] = None
+    relative_translation: Optional[RelativeTranslation] = None
+    frame: Optional[StrictStr] = None
     controller_policy_uuid: Optional[StrictStr] = None
     reference_frame: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     source_type: Optional[StrictStr] = None
     constraints: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "yaw", "waypoints", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata"]
+    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "yaw", "waypoints", "relative_translation", "frame", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata"]
 
     @field_validator('command')
     def command_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['goto', 'path', 'stop', 'pause', 'resume']):
-            raise ValueError("must be one of enum values ('goto', 'path', 'stop', 'pause', 'resume')")
+        if value not in set(['goto', 'path', 'stop', 'pause', 'resume', 'relative_move']):
+            raise ValueError("must be one of enum values ('goto', 'path', 'stop', 'pause', 'resume', 'relative_move')")
         return value
 
     model_config = ConfigDict(
@@ -94,6 +97,9 @@ class TwinNavigationCommandSchema(BaseModel):
                 if _item_waypoints:
                     _items.append(_item_waypoints.to_dict())
             _dict['waypoints'] = _items
+        # override the default output from pydantic by calling `to_dict()` of relative_translation
+        if self.relative_translation:
+            _dict['relative_translation'] = self.relative_translation.to_dict()
         # set to None if position (nullable) is None
         # and model_fields_set contains the field
         if self.position is None and "position" in self.model_fields_set:
@@ -113,6 +119,16 @@ class TwinNavigationCommandSchema(BaseModel):
         # and model_fields_set contains the field
         if self.waypoints is None and "waypoints" in self.model_fields_set:
             _dict['waypoints'] = None
+
+        # set to None if relative_translation (nullable) is None
+        # and model_fields_set contains the field
+        if self.relative_translation is None and "relative_translation" in self.model_fields_set:
+            _dict['relative_translation'] = None
+
+        # set to None if frame (nullable) is None
+        # and model_fields_set contains the field
+        if self.frame is None and "frame" in self.model_fields_set:
+            _dict['frame'] = None
 
         # set to None if controller_policy_uuid (nullable) is None
         # and model_fields_set contains the field
@@ -161,6 +177,8 @@ class TwinNavigationCommandSchema(BaseModel):
             "rotation": obj.get("rotation"),
             "yaw": obj.get("yaw"),
             "waypoints": [NavigationWaypointSchema.from_dict(_item) for _item in obj["waypoints"]] if obj.get("waypoints") is not None else None,
+            "relative_translation": RelativeTranslation.from_dict(obj["relative_translation"]) if obj.get("relative_translation") is not None else None,
+            "frame": obj.get("frame"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "reference_frame": obj.get("reference_frame"),
             "environment_uuid": obj.get("environment_uuid"),

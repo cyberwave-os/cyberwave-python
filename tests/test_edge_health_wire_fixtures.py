@@ -26,12 +26,10 @@ import pytest
 from cyberwave.edge.health import EdgeHealthCheck
 
 
-# The shared edge_health wire-format fixtures are vendored into this
-# repo under ``tests/fixtures/edge_health/`` so the Python SDK's CI is
-# self-contained.  The C++ SDK consumes the same files from this
-# directory (via submodule/sync) to keep the cross-language contract
-# anchored on a single source of truth.
-_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "edge_health"
+# The shared fixtures live one level above the Python SDK so the C++
+# SDK can reference the same files without either tree owning them.
+_SDKS_ROOT = Path(__file__).resolve().parents[2]
+_FIXTURES_DIR = _SDKS_ROOT / "test-fixtures" / "edge_health"
 
 
 # Fields that vary with publisher runtime state and therefore cannot be

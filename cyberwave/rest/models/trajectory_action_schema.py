@@ -26,7 +26,7 @@ from pydantic_core import to_jsonable_python
 
 class TrajectoryActionSchema(BaseModel):
     """
-    ``action.kind = \"target_pose\" | \"trajectory_points\" | \"ee_delta\"``.  Only the fields matching the chosen ``kind`` must be populated. Validation happens server-side in :func:`src.lib.motion_utils.trajectory_from_action`; leaving it as-a-union here keeps the OpenAPI schema compact and the C++ codegen on the edge side happy (``dict[str, Any]`` renders as generic JSON, preserving the pattern from migration ``0065``).
+    ``action.kind = \"target_pose\" | \"trajectory_points\" | \"ee_delta\"``.
     """ # noqa: E501
     kind: StrictStr
     target_pose: Optional[TargetPoseSchema] = None

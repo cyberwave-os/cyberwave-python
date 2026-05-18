@@ -36,13 +36,15 @@ class EdgeSchema(BaseModel):
     platform: StrictStr
     status: StrictStr
     is_online: StrictBool
+    liveness_state: StrictStr
     last_heartbeat: Optional[StrictStr]
+    last_seen_at: Optional[StrictStr]
     last_ip_address: Optional[StrictStr]
     created_at: datetime
     updated_at: datetime
     organization_uuid: Optional[StrictStr]
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "fingerprint", "name", "workspace_uuid", "hostname", "platform", "status", "is_online", "last_heartbeat", "last_ip_address", "created_at", "updated_at", "organization_uuid", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "fingerprint", "name", "workspace_uuid", "hostname", "platform", "status", "is_online", "liveness_state", "last_heartbeat", "last_seen_at", "last_ip_address", "created_at", "updated_at", "organization_uuid", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -98,6 +100,11 @@ class EdgeSchema(BaseModel):
         if self.last_heartbeat is None and "last_heartbeat" in self.model_fields_set:
             _dict['last_heartbeat'] = None
 
+        # set to None if last_seen_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.last_seen_at is None and "last_seen_at" in self.model_fields_set:
+            _dict['last_seen_at'] = None
+
         # set to None if last_ip_address (nullable) is None
         # and model_fields_set contains the field
         if self.last_ip_address is None and "last_ip_address" in self.model_fields_set:
@@ -128,7 +135,9 @@ class EdgeSchema(BaseModel):
             "platform": obj.get("platform"),
             "status": obj.get("status"),
             "is_online": obj.get("is_online"),
+            "liveness_state": obj.get("liveness_state"),
             "last_heartbeat": obj.get("last_heartbeat"),
+            "last_seen_at": obj.get("last_seen_at"),
             "last_ip_address": obj.get("last_ip_address"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),

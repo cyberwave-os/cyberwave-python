@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class TargetPoseSchema(BaseModel):
     """
-    6-DoF target pose for the end-effector.  Quaternion is ``(x, y, z, w)`` following the IK-solver convention used in the rest of ``cyberwave-rl`` (pinocchio). Position is in metres in the asset's URDF root frame.
+    6-DoF target pose for the end-effector.
     """ # noqa: E501
     position: List[Union[StrictFloat, StrictInt]]
     quaternion: List[Union[StrictFloat, StrictInt]]

@@ -30,7 +30,8 @@ class RobotContextSchema(BaseModel):
     twin_uuid: Optional[StrictStr] = None
     asset_uuid: Optional[StrictStr] = None
     frame_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "asset_uuid", "frame_id"]
+    checkpoint: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["twin_uuid", "asset_uuid", "frame_id", "checkpoint"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -86,6 +87,11 @@ class RobotContextSchema(BaseModel):
         if self.frame_id is None and "frame_id" in self.model_fields_set:
             _dict['frame_id'] = None
 
+        # set to None if checkpoint (nullable) is None
+        # and model_fields_set contains the field
+        if self.checkpoint is None and "checkpoint" in self.model_fields_set:
+            _dict['checkpoint'] = None
+
         return _dict
 
     @classmethod
@@ -100,7 +106,8 @@ class RobotContextSchema(BaseModel):
         _obj = cls.model_validate({
             "twin_uuid": obj.get("twin_uuid"),
             "asset_uuid": obj.get("asset_uuid"),
-            "frame_id": obj.get("frame_id")
+            "frame_id": obj.get("frame_id"),
+            "checkpoint": obj.get("checkpoint")
         })
         return _obj
 

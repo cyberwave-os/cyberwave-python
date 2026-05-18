@@ -31,9 +31,10 @@ class TwinActionResponseSchema(BaseModel):
     status: StrictStr
     message: Optional[StrictStr] = None
     plan: Optional[Dict[str, Any]] = None
+    trajectory_preview: Optional[Dict[str, Any]] = None
     resolved_scope: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["action_id", "status", "message", "plan", "resolved_scope", "metadata"]
+    __properties: ClassVar[List[str]] = ["action_id", "status", "message", "plan", "trajectory_preview", "resolved_scope", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -89,6 +90,11 @@ class TwinActionResponseSchema(BaseModel):
         if self.plan is None and "plan" in self.model_fields_set:
             _dict['plan'] = None
 
+        # set to None if trajectory_preview (nullable) is None
+        # and model_fields_set contains the field
+        if self.trajectory_preview is None and "trajectory_preview" in self.model_fields_set:
+            _dict['trajectory_preview'] = None
+
         # set to None if resolved_scope (nullable) is None
         # and model_fields_set contains the field
         if self.resolved_scope is None and "resolved_scope" in self.model_fields_set:
@@ -115,6 +121,7 @@ class TwinActionResponseSchema(BaseModel):
             "status": obj.get("status"),
             "message": obj.get("message"),
             "plan": obj.get("plan"),
+            "trajectory_preview": obj.get("trajectory_preview"),
             "resolved_scope": obj.get("resolved_scope"),
             "metadata": obj.get("metadata")
         })

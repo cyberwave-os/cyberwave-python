@@ -47,11 +47,12 @@ class CloudNodeWorkloadSchema(BaseModel):
     created_by_email: Optional[StrictStr]
     command_type: Optional[StrictStr]
     command_params: Optional[Dict[str, Any]]
+    results: Optional[Dict[str, Any]]
     callback_task: Optional[StrictStr]
     callback_kwargs: Optional[Dict[str, Any]]
     asset_uuid: Optional[StrictStr] = None
     asset_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "profile_uuid", "profile_slug", "instance_uuid", "instance_slug", "status", "twin_uuid", "controller_policy_uuid", "controller_type", "mlmodel_uuid", "mlmodel_name", "mlmodel_external_id", "workspace_uuid", "visibility", "created_at", "updated_at", "created_by_email", "command_type", "command_params", "callback_task", "callback_kwargs", "asset_uuid", "asset_name"]
+    __properties: ClassVar[List[str]] = ["uuid", "profile_uuid", "profile_slug", "instance_uuid", "instance_slug", "status", "twin_uuid", "controller_policy_uuid", "controller_type", "mlmodel_uuid", "mlmodel_name", "mlmodel_external_id", "workspace_uuid", "visibility", "created_at", "updated_at", "created_by_email", "command_type", "command_params", "results", "callback_task", "callback_kwargs", "asset_uuid", "asset_name"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -152,6 +153,11 @@ class CloudNodeWorkloadSchema(BaseModel):
         if self.command_params is None and "command_params" in self.model_fields_set:
             _dict['command_params'] = None
 
+        # set to None if results (nullable) is None
+        # and model_fields_set contains the field
+        if self.results is None and "results" in self.model_fields_set:
+            _dict['results'] = None
+
         # set to None if callback_task (nullable) is None
         # and model_fields_set contains the field
         if self.callback_task is None and "callback_task" in self.model_fields_set:
@@ -203,6 +209,7 @@ class CloudNodeWorkloadSchema(BaseModel):
             "created_by_email": obj.get("created_by_email"),
             "command_type": obj.get("command_type"),
             "command_params": obj.get("command_params"),
+            "results": obj.get("results"),
             "callback_task": obj.get("callback_task"),
             "callback_kwargs": obj.get("callback_kwargs"),
             "asset_uuid": obj.get("asset_uuid"),

@@ -846,12 +846,7 @@ class CyberwavesubstationTwin(Twin):
     Digital twin for Electric Substation
     Registry ID: cyberwave/substation
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
+    pass
 
 class DjidjiMini3ProTwin(Twin):
     """
@@ -1134,12 +1129,6 @@ class PollenRoboticsreachyMiniTwin(Twin):
     Digital twin for Reachy Mini
     Registry ID: pollen-robotics/reachy-mini
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""

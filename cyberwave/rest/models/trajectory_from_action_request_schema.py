@@ -28,7 +28,7 @@ from pydantic_core import to_jsonable_python
 
 class TrajectoryFromActionRequestSchema(BaseModel):
     """
-    Request body for ``POST /api/v1/assets/{uuid}/trajectories/from-action``.
+    Request body for trajectory expansion from a control action.
     """ # noqa: E501
     action: TrajectoryActionSchema
     recipe: Optional[TrajectoryRecipeSchema] = None

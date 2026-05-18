@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class DatasetImportInitSchema(BaseModel):
     """
-    Request schema for ``POST /datasets/import`` (HF Hub or zip upload).  For ``source=\"zip\"``: returns a signed URL for direct GCS upload (HTTP 200). For ``source=\"hf\"``: queues metadata import on the worker (HTTP 202).  No ``format`` field — detection happens server-side after bytes land.  ``name`` is required for ``zip`` imports. For ``hf`` imports it is optional: if omitted, the dataset's name is set to the upstream ``\"<owner>/<repo>\"`` from ``hf_repo_id``.
+    Request schema for ``POST /datasets/import`` (HF Hub or zip upload).  For ``source=\"zip\"``: returns a signed URL for direct GCS upload (HTTP 200). For ``source=\"hf\"``: queues metadata import on the worker (HTTP 202).  No ``format`` field — detection happens server-side after bytes land.  ``name`` is required for ``zip`` imports. For ``hf`` imports it is optional: if omitted, the dataset's name is set to the upstream ``\"<owner>/<repo>\"`` from ``hf_repo_id``.  ``visibility`` controls who can see the dataset after import. When ``None`` (the default), the dataset is created with ``Visibility.WORKSPACE`` so workspace members can see it immediately, which is the expected default for a deliberate import action.
     """ # noqa: E501
     source: StrictStr
     name: Optional[StrictStr] = None
@@ -34,13 +34,24 @@ class DatasetImportInitSchema(BaseModel):
     hf_repo_id: Optional[StrictStr] = None
     hf_revision: Optional[StrictStr] = None
     hf_subset: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["source", "name", "file_size_bytes", "content_type", "hf_repo_id", "hf_revision", "hf_subset"]
+    visibility: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["source", "name", "file_size_bytes", "content_type", "hf_repo_id", "hf_revision", "hf_subset", "visibility"]
 
     @field_validator('source')
     def source_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['hf', 'zip']):
             raise ValueError("must be one of enum values ('hf', 'zip')")
+        return value
+
+    @field_validator('visibility')
+    def visibility_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['private', 'workspace', 'org', 'public']):
+            raise ValueError("must be one of enum values ('private', 'workspace', 'org', 'public')")
         return value
 
     model_config = ConfigDict(
@@ -107,6 +118,11 @@ class DatasetImportInitSchema(BaseModel):
         if self.hf_subset is None and "hf_subset" in self.model_fields_set:
             _dict['hf_subset'] = None
 
+        # set to None if visibility (nullable) is None
+        # and model_fields_set contains the field
+        if self.visibility is None and "visibility" in self.model_fields_set:
+            _dict['visibility'] = None
+
         return _dict
 
     @classmethod
@@ -125,7 +141,8 @@ class DatasetImportInitSchema(BaseModel):
             "content_type": obj.get("content_type") if obj.get("content_type") is not None else 'application/zip',
             "hf_repo_id": obj.get("hf_repo_id"),
             "hf_revision": obj.get("hf_revision"),
-            "hf_subset": obj.get("hf_subset")
+            "hf_subset": obj.get("hf_subset"),
+            "visibility": obj.get("visibility")
         })
         return _obj
 

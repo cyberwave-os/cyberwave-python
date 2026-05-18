@@ -25,13 +25,14 @@ from pydantic_core import to_jsonable_python
 
 class EdgeRegisterSchema(BaseModel):
     """
-    Schema for registering an edge.
+    Schema for registering an edge.  ``host_facts`` is an optional free-form dict carrying static host information (total RAM, CPU model, ``/dev/watchdog`` presence, kernel, …). When provided, it is merged into ``Edge.metadata['host_facts']`` so the dashboard can render a \"what hardware is this\" row without having to ride MQTT for data that effectively never changes.  See :class:`cyberwave.edge.host_metrics.HostFacts` in the SDK for the canonical producer.
     """ # noqa: E501
     fingerprint: StrictStr
     hostname: Optional[StrictStr] = ''
     platform: Optional[StrictStr] = ''
     name: Optional[StrictStr] = ''
-    __properties: ClassVar[List[str]] = ["fingerprint", "hostname", "platform", "name"]
+    host_facts: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["fingerprint", "hostname", "platform", "name", "host_facts"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -72,6 +73,11 @@ class EdgeRegisterSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if host_facts (nullable) is None
+        # and model_fields_set contains the field
+        if self.host_facts is None and "host_facts" in self.model_fields_set:
+            _dict['host_facts'] = None
+
         return _dict
 
     @classmethod
@@ -87,7 +93,8 @@ class EdgeRegisterSchema(BaseModel):
             "fingerprint": obj.get("fingerprint"),
             "hostname": obj.get("hostname") if obj.get("hostname") is not None else '',
             "platform": obj.get("platform") if obj.get("platform") is not None else '',
-            "name": obj.get("name") if obj.get("name") is not None else ''
+            "name": obj.get("name") if obj.get("name") is not None else '',
+            "host_facts": obj.get("host_facts")
         })
         return _obj
 
