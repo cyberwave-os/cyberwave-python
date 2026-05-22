@@ -30,7 +30,9 @@ class _FakeRuntime(ModelRuntime):
     def load(self, model_path, *, device=None, **kwargs):
         return {"path": model_path, "device": device}
 
-    def predict(self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs):
+    def predict(
+        self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs
+    ):
         return PredictionResult()
 
 
@@ -103,6 +105,9 @@ class TestDetectRuntime:
             ("yolov11s", "ultralytics"),
             ("YOLO-custom", "ultralytics"),
             ("yolov5m", "ultralytics"),
+            ("yolov8n-pose-onnx", "onnxruntime"),
+            ("yolov8n-onnx", "onnxruntime"),
+            ("custom-detector-onnx", "onnxruntime"),
             ("haar-face", "opencv"),
             ("background-subtraction-mog2", "opencv"),
             ("cascade-classifier", "opencv"),
@@ -151,6 +156,14 @@ class TestDetectRuntimeFromExtension:
 
 
 class TestDetectDevice:
+    @pytest.fixture(autouse=True)
+    def _reset_probe_cache(self):
+        from cyberwave.models import manager as mgr_mod
+
+        mgr_mod._CUDA_PROBE_CACHE = None
+        yield
+        mgr_mod._CUDA_PROBE_CACHE = None
+
     def test_cpu_when_torch_unavailable(self):
         with patch.dict("sys.modules", {"torch": None}):
             assert ModelManager._detect_device() == "cpu"
@@ -161,11 +174,59 @@ class TestDetectDevice:
         with patch.dict("sys.modules", {"torch": mock_torch}):
             assert ModelManager._detect_device() == "cpu"
 
-    def test_cuda_when_available(self):
+    def test_cuda_when_available_and_probe_ok(self):
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
         with patch.dict("sys.modules", {"torch": mock_torch}):
             assert ModelManager._detect_device() == "cuda:0"
+
+        mock_torch.nn.functional.conv2d.assert_called_once()
+        zeros_calls = mock_torch.zeros.call_args_list
+        assert len(zeros_calls) == 2, (
+            "probe must allocate exactly two tensors (input + weights)"
+        )
+        assert zeros_calls[0].args == (1, 3, 8, 8)
+        assert zeros_calls[1].args == (1, 3, 3, 3)
+        mock_torch.cuda.synchronize.assert_called_once()
+        mock_torch.nn.functional.conv2d.return_value.cpu.assert_called_once()
+
+    def test_cuda_is_available_itself_raising(self):
+        """If torch.cuda.is_available() raises, we must still return cpu."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.side_effect = RuntimeError("driver broken")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cpu"
+        mock_torch.nn.functional.conv2d.assert_not_called()
+
+    def test_cpu_when_conv2d_probe_fails(self, caplog):
+        """cuDNN with no engine for the host GPU → fall back to CPU + warn."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (6, 1)
+        mock_torch.cuda.get_device_name.return_value = "Quadro P3200"
+        mock_torch.cuda.get_arch_list.return_value = ["sm_75", "sm_90"]
+        mock_torch.backends.cudnn.version.return_value = 90100
+        mock_torch.nn.functional.conv2d.side_effect = RuntimeError(
+            "GET was unable to find an engine to execute this computation"
+        )
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            with caplog.at_level("WARNING", logger="cyberwave.models.manager"):
+                assert ModelManager._detect_device() == "cpu"
+
+        assert any("falling back to CPU" in rec.message for rec in caplog.records), (
+            "expected a warning explaining the CPU fallback"
+        )
+
+    def test_probe_result_is_cached(self):
+        """_detect_device must only run the conv2d probe once per process."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.nn.functional.conv2d.side_effect = RuntimeError("no engine")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            ModelManager._detect_device()
+            ModelManager._detect_device()
+            ModelManager._detect_device()
+        assert mock_torch.nn.functional.conv2d.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +258,53 @@ class TestResolveModelPath:
         mgr = ModelManager(model_dir=str(tmp_path))
         with pytest.raises(FileNotFoundError, match="not found"):
             mgr._resolve_model_path("missing", "onnxruntime")
+
+
+# ---------------------------------------------------------------------------
+# local public weight auto-download
+# ---------------------------------------------------------------------------
+
+
+class TestLocalPublicWeightDownload:
+    def test_download_url_populates_missing_local_model_path(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from cyberwave.models.runtimes import _RUNTIME_REGISTRY, register_runtime
+
+        class _FakeWhisperCpp(_FakeRuntime):
+            name = "whisper_cpp"
+
+        old = _RUNTIME_REGISTRY.get("whisper_cpp")
+        register_runtime(_FakeWhisperCpp)
+        calls: list[tuple[str, Path]] = []
+
+        def fake_stream(url: str, dest: Path) -> None:
+            calls.append((url, dest))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"whisper-weights")
+
+        monkeypatch.setattr(
+            ModelManager, "_stream_download_to", staticmethod(fake_stream)
+        )
+
+        try:
+            mgr = ModelManager(model_dir=str(tmp_path))
+            loaded = mgr.load(
+                "models/whisper/ggml-tiny.en-q5_1.bin",
+                runtime="whisper_cpp",
+                download_url="https://example.com/ggml-tiny.en-q5_1.bin",
+            )
+        finally:
+            if old is None:
+                _RUNTIME_REGISTRY.pop("whisper_cpp", None)
+            else:
+                _RUNTIME_REGISTRY["whisper_cpp"] = old
+
+        expected_path = tmp_path / "models" / "whisper" / "ggml-tiny.en-q5_1.bin"
+        assert calls == [("https://example.com/ggml-tiny.en-q5_1.bin", expected_path)]
+        assert expected_path.read_bytes() == b"whisper-weights"
+        assert loaded.runtime == "whisper_cpp"
+        assert loaded._model_handle["path"] == str(expected_path)
 
 
 # ---------------------------------------------------------------------------

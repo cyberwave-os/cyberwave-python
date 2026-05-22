@@ -12,6 +12,7 @@ Inbound path (cloud → edge):
 
 from __future__ import annotations
 
+import collections
 import logging
 import threading
 import time
@@ -115,6 +116,13 @@ class ZenohMqttBridge:
             max_bytes=self._config.queue_max_bytes,
         )
 
+        # In-memory outbound buffer so the Zenoh subscriber callback never
+        # blocks on MQTT I/O.  A dedicated thread drains this deque.
+        # No maxlen — the publish thread drains continuously, and when MQTT
+        # is down the drain method moves items to the persistent OfflineQueue.
+        self._outbound_buffer: collections.deque[tuple[str, bytes]] = collections.deque()
+        self._outbound_ready = threading.Event()
+
         # Stats
         self._outbound_count = 0
         self._inbound_count = 0
@@ -146,6 +154,7 @@ class ZenohMqttBridge:
         self._init_mqtt()
         self._subscribe_outbound()
         self._subscribe_inbound()
+        self._start_outbound_publish_thread()
         self._start_drain_thread()
 
         logger.info(
@@ -352,32 +361,70 @@ class ZenohMqttBridge:
         return _callback
 
     def _publish_or_queue(self, mqtt_topic: str, payload: bytes) -> None:
-        """Publish to MQTT, or enqueue if disconnected."""
-        if self._mqtt_connected.is_set() and self._queue.is_empty:
-            try:
-                result = self._mqtt_client.publish(
-                    mqtt_topic, payload, qos=self._config.mqtt_qos
-                )
-                result.wait_for_publish(timeout=2.0)
-                with self._stats_lock:
-                    self._outbound_count += 1
-                logger.debug("Outbound: → MQTT %s (%d bytes)", mqtt_topic, len(payload))
-                return
-            except Exception:
-                logger.debug(
-                    "MQTT publish failed, queueing: %s", mqtt_topic, exc_info=True
-                )
+        """Enqueue an outbound message for the publish thread.
 
-        self._queue.enqueue(
-            QueuedMessage(
-                mqtt_topic=mqtt_topic,
-                payload=payload,
-                qos=self._config.mqtt_qos,
-                enqueued_at=time.time(),
-            )
+        This method is called from Zenoh subscriber callbacks and must
+        never block on MQTT I/O.  The actual MQTT publish (including
+        ACK waiting) happens in ``_outbound_publish_loop``.
+        """
+        self._outbound_buffer.append((mqtt_topic, payload))
+        self._outbound_ready.set()
+
+    def _start_outbound_publish_thread(self) -> None:
+        t = threading.Thread(
+            target=self._outbound_publish_loop, daemon=True,
+            name="bridge-outbound-publish",
         )
-        with self._stats_lock:
-            self._queued_count += 1
+        t.start()
+
+    def _outbound_publish_loop(self) -> None:
+        """Drain the in-memory outbound buffer and publish to MQTT."""
+        while not self._stop_event.is_set():
+            self._outbound_ready.wait(timeout=0.1)
+            self._outbound_ready.clear()
+            self._drain_outbound_buffer()
+
+    def _drain_outbound_buffer(self) -> None:
+        """Process all pending items in the outbound buffer.
+
+        Called by the publish thread in normal operation.  Can also be
+        invoked directly in tests to flush the buffer synchronously.
+        """
+        while self._outbound_buffer:
+            try:
+                mqtt_topic, payload = self._outbound_buffer.popleft()
+            except IndexError:
+                break
+
+            if self._mqtt_connected.is_set() and self._queue.is_empty:
+                try:
+                    result = self._mqtt_client.publish(
+                        mqtt_topic, payload, qos=self._config.mqtt_qos
+                    )
+                    result.wait_for_publish(timeout=2.0)
+                    with self._stats_lock:
+                        self._outbound_count += 1
+                    logger.debug(
+                        "Outbound: → MQTT %s (%d bytes)", mqtt_topic, len(payload),
+                    )
+                    continue
+                except Exception:
+                    logger.debug(
+                        "MQTT publish failed, queueing: %s",
+                        mqtt_topic,
+                        exc_info=True,
+                    )
+
+            self._queue.enqueue(
+                QueuedMessage(
+                    mqtt_topic=mqtt_topic,
+                    payload=payload,
+                    qos=self._config.mqtt_qos,
+                    enqueued_at=time.time(),
+                )
+            )
+            with self._stats_lock:
+                self._queued_count += 1
 
     # ── Inbound subscriptions (MQTT → Zenoh) ─────────────────────────
 

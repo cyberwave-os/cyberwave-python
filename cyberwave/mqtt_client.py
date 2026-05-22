@@ -297,6 +297,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Update multiple joints at once via MQTT.
@@ -319,6 +320,8 @@ class CyberwaveMQTTClient:
             source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
             workload_uuid: Optional UUID of the workload generating this update
             session_id: Optional session ID for grouping related updates
+            camera_frame_counters: Optional dict mapping track_id to frame info used
+                for robot-camera synchronization.
         """
         return self._client.update_joints_state(
             twin_uuid,
@@ -330,6 +333,7 @@ class CyberwaveMQTTClient:
             source_subtype,
             workload_uuid,
             session_id,
+            camera_frame_counters,
         )
 
     def update_aggregated_joints_state(
@@ -343,6 +347,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Alias for update_joints_state with aggregated format.
@@ -359,6 +364,7 @@ class CyberwaveMQTTClient:
             source_subtype,
             workload_uuid,
             session_id,
+            camera_frame_counters,
         )
 
     def subscribe_environment(

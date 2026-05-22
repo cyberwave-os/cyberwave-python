@@ -33,6 +33,7 @@ from cyberwave.resources import (
     ProjectManager,
     EnvironmentManager,
     AssetManager,
+    DatasetManager,
     EdgeManager,
     TwinManager,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "ProjectManager",
     "EnvironmentManager",
     "AssetManager",
+    "DatasetManager",
     "EdgeManager",
     "TwinManager",
 ]

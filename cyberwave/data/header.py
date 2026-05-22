@@ -24,9 +24,9 @@ for drivers publishing at 60 fps+ with sub-microsecond header overhead.
 
 from __future__ import annotations
 
+import itertools
 import json
 import struct
-import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -168,9 +168,8 @@ class HeaderTemplate:
 
     __slots__ = (
         "_cached_json_bytes",
-        "_cached_header_len",
-        "_lock",
-        "_seq",
+        "_cached_header_len_packed",
+        "_seq_counter",
         "content_type",
         "shape",
         "dtype",
@@ -187,8 +186,7 @@ class HeaderTemplate:
         self.content_type = content_type
         self.shape = shape
         self.dtype = dtype
-        self._seq: int = 0
-        self._lock = threading.Lock()
+        self._seq_counter = itertools.count()
 
         json_dict: dict[str, Any] = {"content_type": content_type}
         if shape is not None:
@@ -200,32 +198,39 @@ class HeaderTemplate:
         self._cached_json_bytes: bytes = json.dumps(
             json_dict, separators=(",", ":")
         ).encode()
-        self._cached_header_len: int = _TS_SEQ_SIZE + len(self._cached_json_bytes)
-        if self._cached_header_len > _MAX_HEADER_BYTES:
+        cached_header_len = _TS_SEQ_SIZE + len(self._cached_json_bytes)
+        if cached_header_len > _MAX_HEADER_BYTES:
             raise WireFormatError(
                 f"Header exceeds {_MAX_HEADER_BYTES} bytes "
-                f"({self._cached_header_len})."
+                f"({cached_header_len})."
             )
+        self._cached_header_len_packed: bytes = struct.pack(
+            _HEADER_LEN_FMT, cached_header_len
+        )
 
     def pack(self, payload: bytes, *, ts: float | None = None) -> bytes:
         """Combine the cached header with *payload*.
 
-        Per-sample cost: one ``struct.pack`` (16 bytes) + one bytes join.
+        Per-sample cost: one ``struct.pack`` (16 bytes) + one ``b"".join``.
         """
         if ts is None:
             ts = time.time()
-        with self._lock:
-            seq = self._seq
-            self._seq += 1
-        return (
-            struct.pack(_HEADER_LEN_FMT, self._cached_header_len)
-            + struct.pack(_TS_SEQ_FMT, ts, seq)
-            + self._cached_json_bytes
-            + payload
-        )
+        seq = next(self._seq_counter)
+        return b"".join((
+            self._cached_header_len_packed,
+            struct.pack(_TS_SEQ_FMT, ts, seq),
+            self._cached_json_bytes,
+            payload,
+        ))
 
     @property
     def seq(self) -> int:
-        """Current sequence number (next ``pack`` will use this value)."""
-        with self._lock:
-            return self._seq
+        """Approximate next sequence number (for monitoring; not exact under concurrency).
+
+        Parses the internal ``itertools.count`` repr.  Not on the hot path.
+        """
+        r = repr(self._seq_counter)
+        try:
+            return int(r.split("(")[1].rstrip(")"))
+        except (IndexError, ValueError):
+            return 0

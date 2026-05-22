@@ -15,149 +15,18 @@ Quick Start:
     >>> twin.start_streaming()  # blocking; use stream_video_background() in async code
 """
 
-# Core client
-from .client import Cyberwave
+from __future__ import annotations
 
-# Configuration
+import importlib
+from typing import Any
+
+# ---- Eagerly loaded (lightweight, no transitive heavy deps) -----------------
+
+import yaml as _yaml  # noqa: F401  — imported to anchor sys.modules["yaml"]
+# before test stubs (e.g. test_camera_virtual_streamer.py) can replace it
+# with a SimpleNamespace via sys.modules.setdefault().  Only costs ~15ms.
+
 from .config import CyberwaveConfig, get_config, set_config
-
-# High-level abstractions
-from .twin import (
-    Twin,
-    JointController,
-    TwinControllerHandle,
-    TwinCameraHandle,
-    CameraTwin,
-    DepthCameraTwin,
-    FlyingTwin,
-    GripperTwin,
-    FlyingCameraTwin,
-    GripperCameraTwin,
-    create_twin,
-)
-
-# Alerts
-from .alerts import Alert, TwinAlertManager
-
-# Motion and navigation
-from .motion import (
-    TwinMotionHandle,
-    ScopedMotionHandle,
-    TwinNavigationHandle,
-)
-from .navigation import NavigationPlan
-
-# Keyboard teleop
-from .keyboard import KeyboardBindings, KeyboardTeleop
-
-# Exceptions
-from .exceptions import (
-    CyberwaveError,
-    CyberwaveAPIError,
-    CyberwaveConnectionError,
-    CyberwaveTimeoutError,
-    CyberwaveValidationError,
-)
-
-# Compact API - convenience functions
-from .compact import (
-    configure,
-    twin,
-    get_client,
-)
-
-# Resource managers depend on the auto-generated REST client (cyberwave.rest)
-# which may not be present in edge-only installs.
-try:
-    from .resources import (
-        WorkspaceManager,
-        ProjectManager,
-        EnvironmentManager,
-        AssetManager,
-        EdgeManager,
-        TwinManager,
-    )
-except ImportError:
-    WorkspaceManager = None  # type: ignore[assignment,misc]
-    ProjectManager = None  # type: ignore[assignment,misc]
-    EnvironmentManager = None  # type: ignore[assignment,misc]
-    AssetManager = None  # type: ignore[assignment,misc]
-    EdgeManager = None  # type: ignore[assignment,misc]
-    TwinManager = None  # type: ignore[assignment,misc]
-
-# Workflow management
-try:
-    from .workflows import (
-        Workflow,
-        WorkflowRun,
-        WorkflowManager,
-        WorkflowRunManager,
-    )
-except ImportError:
-    Workflow = None  # type: ignore[assignment,misc]
-    WorkflowRun = None  # type: ignore[assignment,misc]
-    WorkflowManager = None  # type: ignore[assignment,misc]
-    WorkflowRunManager = None  # type: ignore[assignment,misc]
-
-# Worker API
-from .workers import HookContext
-
-# Manifest schema
-from .manifest import ManifestSchema, detect_dispatch_mode, validate_manifest
-
-# Model API
-from .models import ModelManager, LoadedModel, Detection, BoundingBox, PredictionResult
-
-# MQTT client (optional, for direct MQTT access)
-from .mqtt import CyberwaveMQTTClient
-
-# Camera streaming (optional, requires additional dependencies)
-try:
-    from .sensor import (
-        CV2VideoTrack,
-        CV2CameraStreamer,
-        VirtualVideoTrack,
-        VirtualCameraStreamer,
-        RealSenseVideoTrack,
-        RealSenseStreamer,
-        BaseVideoTrack,
-        BaseVideoStreamer,
-        CameraStreamManager,
-    )
-
-    # Legacy alias for backwards compatibility
-    CameraStreamer = CV2CameraStreamer
-
-    _has_camera = True
-except ImportError:
-    _has_camera = False
-    CameraStreamer = None  # type: ignore
-    CV2VideoTrack = None  # type: ignore
-    CV2CameraStreamer = None  # type: ignore
-    VirtualVideoTrack = None  # type: ignore
-    VirtualCameraStreamer = None  # type: ignore
-    CallbackVideoTrack = None  # type: ignore
-    CallbackCameraStreamer = None  # type: ignore
-    RealSenseVideoTrack = None  # type: ignore
-    RealSenseStreamer = None  # type: ignore
-    BaseVideoTrack = None  # type: ignore
-    BaseVideoStreamer = None  # type: ignore
-    CameraStreamManager = None  # type: ignore
-
-# Edge controller
-from .controller import EdgeController
-
-# Utils
-from .utils import TimeReference
-
-# Device fingerprinting (for edge devices)
-from .fingerprint import (
-    generate_fingerprint,
-    get_device_info,
-    format_device_info_table,
-)
-
-# Constants
 from .constants import (
     SOURCE_TYPE_EDGE,
     SOURCE_TYPE_EDGE_FOLLOWER,
@@ -168,20 +37,174 @@ from .constants import (
     SOURCE_TYPE_SIM_TELE,
     SOURCE_TYPES,
 )
-
-# Worker API
-from .workers import HookContext, HookRegistration, HookRegistry, SynchronizedGroup
-
-# Model output types
-from .models import BoundingBox, Detection, PredictionResult
-
-# Scene Composition
-from .scene import Scene
-
-# Version information
+from .exceptions import (
+    CyberwaveError,
+    CyberwaveAPIError,
+    CyberwaveConnectionError,
+    CyberwaveTimeoutError,
+    CyberwaveValidationError,
+)
 from ._version import get_version
 
 __version__ = get_version()
+
+# ---- Eagerly loaded compact API & image module ------------------------------
+# ``twin`` and ``image`` collide with submodule filenames (twin.py, image.py).
+# Python's import machinery sets package attributes when submodules are loaded,
+# overwriting any lazy wrapper we might install.  Eagerly importing these
+# ensures the compact-API *function* (not the module) is the canonical binding.
+# The import chain (compact -> client -> data) is lightweight (~130ms) and
+# does NOT trigger the heavy REST layer.
+from .compact import configure, twin, get_client  # noqa: E402
+from . import image  # noqa: E402
+
+# ---- Lazily loaded (deferred until first access) ----------------------------
+#
+# The auto-generated REST client (cyberwave.rest) contains a ~98k-line
+# default_api.py that takes >1 second to parse on fast hardware and 5-10
+# seconds on edge devices.  Deferring it (and everything that depends on
+# it) behind __getattr__ turns ``import cyberwave`` from a multi-second
+# penalty into a ~50ms baseline.  The full cost is only paid when a
+# caller first accesses a symbol that needs the REST layer (e.g.
+# ``Cyberwave``, ``WorkspaceManager``, etc.).
+
+# Maps public symbol names to (module_path, attribute_name).
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    # Core client
+    "Cyberwave": (".client", "Cyberwave"),
+    # High-level abstractions
+    "Twin": (".twin", "Twin"),
+    "JointController": (".twin", "JointController"),
+    "TwinControllerHandle": (".twin", "TwinControllerHandle"),
+    "TwinCameraHandle": (".twin", "TwinCameraHandle"),
+    "CameraTwin": (".twin", "CameraTwin"),
+    "DepthCameraTwin": (".twin", "DepthCameraTwin"),
+    "FlyingTwin": (".twin", "FlyingTwin"),
+    "GripperTwin": (".twin", "GripperTwin"),
+    "FlyingCameraTwin": (".twin", "FlyingCameraTwin"),
+    "GripperCameraTwin": (".twin", "GripperCameraTwin"),
+    "create_twin": (".twin", "create_twin"),
+    # Alerts
+    "Alert": (".alerts", "Alert"),
+    "TwinAlertManager": (".alerts", "TwinAlertManager"),
+    # Agent/action API helpers
+    "ActionsClient": (".actions", "ActionsClient"),
+    "AgentManager": (".agents", "AgentManager"),
+    "ControlAgentClient": (".agents", "ControlAgentClient"),
+    "EmbodimentAgentClient": (".agents", "EmbodimentAgentClient"),
+    "EnvironmentAgentClient": (".agents", "EnvironmentAgentClient"),
+    "WorkflowAgentClient": (".agents", "WorkflowAgentClient"),
+    # Motion and navigation
+    "TwinMotionHandle": (".motion", "TwinMotionHandle"),
+    "ScopedMotionHandle": (".motion", "ScopedMotionHandle"),
+    "TwinNavigationHandle": (".motion", "TwinNavigationHandle"),
+    "NavigationPlan": (".navigation", "NavigationPlan"),
+    # Keyboard teleop
+    "KeyboardBindings": (".keyboard", "KeyboardBindings"),
+    "KeyboardTeleop": (".keyboard", "KeyboardTeleop"),
+    # Compact API (twin, configure, get_client are eagerly imported above
+    # to avoid submodule name collision with cyberwave/twin.py)
+    # Resource managers (these pull in the heavy REST layer)
+    "WorkspaceManager": (".resources", "WorkspaceManager"),
+    "ProjectManager": (".resources", "ProjectManager"),
+    "EnvironmentManager": (".resources", "EnvironmentManager"),
+    "AssetManager": (".resources", "AssetManager"),
+    "EdgeManager": (".resources", "EdgeManager"),
+    "TwinManager": (".resources", "TwinManager"),
+    # Workflow management (also pulls in REST layer)
+    "Workflow": (".workflows", "Workflow"),
+    "WorkflowRun": (".workflows", "WorkflowRun"),
+    "WorkflowManager": (".workflows", "WorkflowManager"),
+    "WorkflowRunManager": (".workflows", "WorkflowRunManager"),
+    # Worker API
+    "HookContext": (".workers", "HookContext"),
+    "HookRegistration": (".workers", "HookRegistration"),
+    "HookRegistry": (".workers", "HookRegistry"),
+    "ScheduleRegistration": (".workers", "ScheduleRegistration"),
+    "SynchronizedGroup": (".workers", "SynchronizedGroup"),
+    # Manifest
+    "ManifestSchema": (".manifest", "ManifestSchema"),
+    "detect_dispatch_mode": (".manifest", "detect_dispatch_mode"),
+    "validate_manifest": (".manifest", "validate_manifest"),
+    # Model API (edge runtime)
+    "ModelManager": (".models", "ModelManager"),
+    "LoadedModel": (".models", "LoadedModel"),
+    "Detection": (".models", "Detection"),
+    "BoundingBox": (".models", "BoundingBox"),
+    "PredictionResult": (".models", "PredictionResult"),
+    # Playground API (cloud inference)
+    "StructuredAction": (".models.playground", "StructuredAction"),
+    "STRUCTURED_ACTIONS": (".models.playground", "STRUCTURED_ACTIONS"),
+    # Image helpers (image module is eagerly imported above to avoid
+    # submodule collision with cyberwave/image.py)
+    "decode_image_base64": (".image", "decode_image_base64"),
+    "encode_image_base64": (".image", "encode_image_base64"),
+    "read_annotated_metadata": (".image", "read_annotated_metadata"),
+    "save_annotated_image": (".image", "save_annotated_image"),
+    # MQTT client
+    "CyberwaveMQTTClient": (".mqtt", "CyberwaveMQTTClient"),
+    # Edge controller
+    "EdgeController": (".controller", "EdgeController"),
+    # Utils
+    "TimeReference": (".utils", "TimeReference"),
+    # Device fingerprinting
+    "generate_fingerprint": (".fingerprint", "generate_fingerprint"),
+    "get_device_info": (".fingerprint", "get_device_info"),
+    "format_device_info_table": (".fingerprint", "format_device_info_table"),
+    # Scene
+    "Scene": (".scene", "Scene"),
+}
+
+# Optional camera streaming symbols — only available with extra deps.
+_OPTIONAL_CAMERA_IMPORTS: dict[str, tuple[str, str]] = {
+    "CV2VideoTrack": (".sensor", "CV2VideoTrack"),
+    "CV2CameraStreamer": (".sensor", "CV2CameraStreamer"),
+    "VirtualVideoTrack": (".sensor", "VirtualVideoTrack"),
+    "VirtualCameraStreamer": (".sensor", "VirtualCameraStreamer"),
+    "RealSenseVideoTrack": (".sensor", "RealSenseVideoTrack"),
+    "RealSenseStreamer": (".sensor", "RealSenseStreamer"),
+    "BaseVideoTrack": (".sensor", "BaseVideoTrack"),
+    "BaseVideoStreamer": (".sensor", "BaseVideoStreamer"),
+    "CameraStreamManager": (".sensor", "CameraStreamManager"),
+    "CameraStreamer": (".sensor", "CV2CameraStreamer"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    # Standard lazy imports
+    if name in _LAZY_IMPORTS:
+        module_path, attr_name = _LAZY_IMPORTS[name]
+        mod = importlib.import_module(module_path, package=__name__)
+        if attr_name is None:
+            value = mod
+        else:
+            value = getattr(mod, attr_name)
+        globals()[name] = value
+        return value
+
+    # Optional camera imports
+    if name in _OPTIONAL_CAMERA_IMPORTS:
+        module_path, attr_name = _OPTIONAL_CAMERA_IMPORTS[name]
+        try:
+            mod = importlib.import_module(module_path, package=__name__)
+            value = getattr(mod, attr_name)
+        except ImportError:
+            value = None
+        globals()[name] = value
+        return value
+
+    # Backward compat: _has_camera flag
+    if name == "_has_camera":
+        try:
+            importlib.import_module(".sensor", package=__name__)
+            globals()["_has_camera"] = True
+            return True
+        except ImportError:
+            globals()["_has_camera"] = False
+            return False
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Define public API
 __all__ = [
@@ -208,6 +231,13 @@ __all__ = [
     # Alerts
     "Alert",
     "TwinAlertManager",
+    # Agent/action API helpers
+    "ActionsClient",
+    "AgentManager",
+    "ControlAgentClient",
+    "EmbodimentAgentClient",
+    "EnvironmentAgentClient",
+    "WorkflowAgentClient",
     # Motion and navigation
     "TwinMotionHandle",
     "ScopedMotionHandle",
@@ -241,7 +271,7 @@ __all__ = [
     # MQTT client
     "CyberwaveMQTTClient",
     # Camera streaming (optional)
-    "CameraStreamer",  # Legacy alias for CV2CameraStreamer
+    "CameraStreamer",
     "CV2VideoTrack",
     "CV2CameraStreamer",
     "VirtualVideoTrack",
@@ -255,12 +285,21 @@ __all__ = [
     "EdgeController",
     # Worker API
     "HookContext",
-    # Model API
+    # Model API (edge runtime)
     "ModelManager",
     "LoadedModel",
     "Detection",
     "BoundingBox",
     "PredictionResult",
+    # Playground API (cloud inference)
+    "StructuredAction",
+    "STRUCTURED_ACTIONS",
+    # Image helpers
+    "image",
+    "encode_image_base64",
+    "decode_image_base64",
+    "save_annotated_image",
+    "read_annotated_metadata",
     # Constants
     "SOURCE_TYPE_EDGE",
     "SOURCE_TYPE_EDGE_FOLLOWER",
@@ -280,6 +319,7 @@ __all__ = [
     "HookContext",
     "HookRegistration",
     "HookRegistry",
+    "ScheduleRegistration",
     "SynchronizedGroup",
     # Model output types
     "BoundingBox",

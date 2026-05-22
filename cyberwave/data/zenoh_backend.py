@@ -13,6 +13,7 @@ installed, importing this module still works but instantiating
 
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import threading
@@ -72,6 +73,36 @@ _RECONNECT_BACKOFF_MAX_S = 30.0
 _RECONNECT_MAX_ATTEMPTS = 20
 
 
+def extract_sample_key_expr(zenoh_sample: Any) -> str | None:
+    """Return the publishing key of a Zenoh sample as a string, or ``None``.
+
+    The Python zenoh bindings have exposed ``key_expr`` on samples at
+    different attribute names across releases (``key_expr``, ``keyexpr``,
+    ``key``); this helper keeps callers working whether the attribute is
+    a plain string or a ``KeyExpr`` object.
+
+    Wildcard subscribers rely on this to recover the actual sensor name
+    that published a frame — the CLI ``worker doctor`` probe uses it
+    too, which is why this is a public helper rather than private to
+    the backend.
+    """
+    for attr in ("key_expr", "keyexpr", "key"):
+        key = getattr(zenoh_sample, attr, None)
+        if key is None:
+            continue
+        try:
+            return str(key)
+        except Exception:
+            continue
+    return None
+
+
+# Backwards-compatible alias — kept because it was the original private
+# name used internally within this module before the helper was made
+# public.  Prefer :func:`extract_sample_key_expr` in new code.
+_zenoh_sample_key = extract_sample_key_expr
+
+
 class ZenohBackend(DataBackend):
     """Zenoh-backed data bus.
 
@@ -114,12 +145,16 @@ class ZenohBackend(DataBackend):
         self._store_lock = threading.Lock()
         self._queryables: dict[str, Any] = {}
 
-        # Per-channel message counters and byte accumulators for monitoring.
+        # Per-channel message counters for monitoring.  We use defaultdict
+        # and skip locking on the hot path — the GIL makes individual dict
+        # operations atomic and occasional lost increments are acceptable
+        # for monitoring data.  The _stats_lock is only held during
+        # stats()/stats_and_reset() snapshot reads.
         self._stats_lock = threading.Lock()
-        self._publish_counts: dict[str, int] = {}
-        self._publish_bytes: dict[str, int] = {}
-        self._recv_counts: dict[str, int] = {}
-        self._recv_bytes: dict[str, int] = {}
+        self._publish_counts: dict[str, int] = collections.defaultdict(int)
+        self._publish_bytes: dict[str, int] = collections.defaultdict(int)
+        self._recv_counts: dict[str, int] = collections.defaultdict(int)
+        self._recv_bytes: dict[str, int] = collections.defaultdict(int)
         self._stats_start_time: float = time.time()
 
         # Reconnection machinery
@@ -257,10 +292,8 @@ class ZenohBackend(DataBackend):
         except Exception as exc:
             raise PublishError(f"Zenoh publish to '{channel}' failed: {exc}") from exc
 
-        nbytes = len(payload)
-        with self._stats_lock:
-            self._publish_counts[channel] = self._publish_counts.get(channel, 0) + 1
-            self._publish_bytes[channel] = self._publish_bytes.get(channel, 0) + nbytes
+        self._publish_counts[channel] += 1
+        self._publish_bytes[channel] += len(payload)
 
         with self._store_lock:
             self._latest_store[channel] = Sample(
@@ -343,15 +376,15 @@ class ZenohBackend(DataBackend):
                         raw = bytes(zenoh_sample.payload)
                     except Exception:
                         raw = zenoh_sample.payload.to_bytes()
-                    nbytes = len(raw)
-                    with backend_ref._stats_lock:
-                        backend_ref._recv_counts[ch] = (
-                            backend_ref._recv_counts.get(ch, 0) + 1
-                        )
-                        backend_ref._recv_bytes[ch] = (
-                            backend_ref._recv_bytes.get(ch, 0) + nbytes
-                        )
-                    cb(Sample(channel=ch, payload=raw, timestamp=time.time()))
+                    backend_ref._recv_counts[ch] += 1
+                    backend_ref._recv_bytes[ch] += len(raw)
+                    # Use the sample's actual publishing key so wildcard
+                    # subscribers can recover the real sensor name
+                    # (``color_camera`` vs ``depth_camera``).  Fall back
+                    # to the subscribed key for backends that don't carry
+                    # a key_expr on the sample.
+                    wire_key = _zenoh_sample_key(zenoh_sample) or ch
+                    cb(Sample(channel=wire_key, payload=raw, timestamp=time.time()))
 
             t = threading.Thread(
                 target=_recv_loop,
@@ -367,17 +400,12 @@ class ZenohBackend(DataBackend):
                     raw = bytes(zenoh_sample.payload)
                 except Exception:
                     raw = zenoh_sample.payload.to_bytes()
-                nbytes = len(raw)
-                with backend_ref._stats_lock:
-                    backend_ref._recv_counts[channel] = (
-                        backend_ref._recv_counts.get(channel, 0) + 1
-                    )
-                    backend_ref._recv_bytes[channel] = (
-                        backend_ref._recv_bytes.get(channel, 0) + nbytes
-                    )
+                backend_ref._recv_counts[channel] += 1
+                backend_ref._recv_bytes[channel] += len(raw)
+                wire_key = _zenoh_sample_key(zenoh_sample) or channel
                 callback(
                     Sample(
-                        channel=channel,
+                        channel=wire_key,
                         payload=raw,
                         timestamp=time.time(),
                     )
@@ -436,10 +464,10 @@ class ZenohBackend(DataBackend):
                 "recv_bytes": dict(self._recv_bytes),
                 "elapsed_s": now - self._stats_start_time,
             }
-            self._publish_counts.clear()
-            self._publish_bytes.clear()
-            self._recv_counts.clear()
-            self._recv_bytes.clear()
+            self._publish_counts = collections.defaultdict(int)
+            self._publish_bytes = collections.defaultdict(int)
+            self._recv_counts = collections.defaultdict(int)
+            self._recv_bytes = collections.defaultdict(int)
             self._stats_start_time = now
         return snapshot
 

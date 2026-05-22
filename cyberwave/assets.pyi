@@ -465,10 +465,10 @@ class ComauedoTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class SzDjiTechnologydjiTelloTwin(Twin):
+class DjidjiTelloTwin(Twin):
     """
     Digital twin for DJI Tello
-    Registry ID: SZ-DJI-Technology/DJI-Tello
+    Registry ID: dji/DJI-Tello
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -846,29 +846,12 @@ class CyberwavesubstationTwin(Twin):
     Digital twin for Electric Substation
     Registry ID: cyberwave/substation
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
+    pass
 
-class SzDjiTechnologydjiMini3ProTwin(Twin):
+class DjidjiMini3ProTwin(Twin):
     """
     Digital twin for DJI Mini 3 Pro
-    Registry ID: SZ-DJI-Technology/DJI-Mini-3-Pro
-    """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
-
-class SzDjiTechnologydjiMini4ProTwin(Twin):
-    """
-    Digital twin for DJI Mini 4 Pro
-    Registry ID: SZ-DJI-Technology/DJI-Mini-4-Pro
+    Registry ID: dji/DJI-Mini-3-Pro
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1146,21 +1129,15 @@ class PollenRoboticsreachyMiniTwin(Twin):
     Digital twin for Reachy Mini
     Registry ID: pollen-robotics/reachy-mini
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
     @property
     def joints(self) -> JointController:
         """Controller for robot joints"""
         ...
 
-class SzDjiTechnologydjiMavic3EnterpriseTwin(Twin):
+class Djimavic3EnterpriseTwin(Twin):
     """
     Digital twin for DJI Mavic 3 Enterprise
-    Registry ID: sz-dji-technology/DJI-Mavic-3-Enterprise
+    Registry ID: dji/mavic-3-enterprise
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1179,6 +1156,54 @@ class SamWilcocksWorkspaced500Lidar2Twin(Twin):
     Registry ID: sam-wilcocks-workspace/d500-lidar-2
     """
     pass
+
+class NeuraRoboticsmaira7sTwin(Twin):
+    """
+    Digital twin for Maira7s
+    Registry ID: neura-robotics/maira7s
+    """
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class NeuraRoboticsmaira6mTwin(Twin):
+    """
+    Digital twin for Maira6M
+    Registry ID: neura-robotics/maira6m
+    """
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class DjidjiMini4ProTwin(Twin):
+    """
+    Digital twin for DJI Mini 4 Pro
+    Registry ID: dji/dji-mini-4-pro
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointController:
+        """Controller for robot joints"""
+        ...
+
+class CyberwaveepalTwin(Twin):
+    """
+    Digital twin for  EPAL Euro Pallet
+    Registry ID: cyberwave/epal
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
 
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
@@ -1217,7 +1242,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "kinova-robotics/kortex-gen3": KinovaRoboticskortexGen3Twin,
     "anybotics/anymal-c": AnyboticsanymalCTwin,
     "comau/edo": ComauedoTwin,
-    "SZ-DJI-Technology/DJI-Tello": SzDjiTechnologydjiTelloTwin,
+    "dji/DJI-Tello": DjidjiTelloTwin,
     "bitcraze/crazyflie-2": Bitcrazecrazyflie2Twin,
     "fourier/fftai-gr1t1": FourierfftaiGr1t1Twin,
     "fourier/fftai-gr1t2": FourierfftaiGr1t2Twin,
@@ -1253,8 +1278,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "prox-dynamics/black-hornet-nano": ProxDynamicsblackHornetNanoTwin,
     "cyberwave/generic-auv": CyberwavegenericAuvTwin,
     "cyberwave/substation": CyberwavesubstationTwin,
-    "SZ-DJI-Technology/DJI-Mini-3-Pro": SzDjiTechnologydjiMini3ProTwin,
-    "SZ-DJI-Technology/DJI-Mini-4-Pro": SzDjiTechnologydjiMini4ProTwin,
+    "dji/DJI-Mini-3-Pro": DjidjiMini3ProTwin,
     "Holybro/PX4Vision": Holybropx4visionTwin,
     "hoverspect/Avientory-Platform": HoverspectavientoryPlatformTwin,
     "apeiroon/bx100": Apeiroonbx100Twin,
@@ -1285,6 +1309,10 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "generic-drone-payloads/rf-scanner-pod": GenericDronePayloadsrfScannerPodTwin,
     "FWR/Robotic-Arm": FwrroboticArmTwin,
     "pollen-robotics/reachy-mini": PollenRoboticsreachyMiniTwin,
-    "sz-dji-technology/DJI-Mavic-3-Enterprise": SzDjiTechnologydjiMavic3EnterpriseTwin,
+    "dji/mavic-3-enterprise": Djimavic3EnterpriseTwin,
     "sam-wilcocks-workspace/d500-lidar-2": SamWilcocksWorkspaced500Lidar2Twin,
+    "neura-robotics/maira7s": NeuraRoboticsmaira7sTwin,
+    "neura-robotics/maira6m": NeuraRoboticsmaira6mTwin,
+    "dji/dji-mini-4-pro": DjidjiMini4ProTwin,
+    "cyberwave/epal": CyberwaveepalTwin,
 }

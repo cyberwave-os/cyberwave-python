@@ -40,6 +40,7 @@ class TestBridgeOutbound:
         bridge._mqtt_client.publish.return_value = result_mock
 
         bridge._publish_or_queue("cyberwave/twin/test/event", b"hello")
+        bridge._drain_outbound_buffer()
 
         bridge._mqtt_client.publish.assert_called_once_with(
             "cyberwave/twin/test/event", b"hello", qos=1
@@ -52,6 +53,7 @@ class TestBridgeOutbound:
         bridge._mqtt_connected.clear()
 
         bridge._publish_or_queue("cyberwave/twin/test/event", b"hello")
+        bridge._drain_outbound_buffer()
 
         assert bridge.stats["outbound"] == 0
         assert bridge.stats["queued"] == 1
@@ -66,6 +68,7 @@ class TestBridgeOutbound:
         bridge._mqtt_client.publish.side_effect = Exception("network error")
 
         bridge._publish_or_queue("cyberwave/twin/test/event", b"hello")
+        bridge._drain_outbound_buffer()
 
         assert bridge.stats["queued"] == 1
 
@@ -112,6 +115,7 @@ class TestBridgeQueueDrain:
 
         bridge._publish_or_queue(f"cyberwave/twin/{TWIN}/event", b"msg1")
         bridge._publish_or_queue(f"cyberwave/twin/{TWIN}/event", b"msg2")
+        bridge._drain_outbound_buffer()
         assert bridge.stats["queued"] == 2
 
         # Simulate reconnect
@@ -147,6 +151,7 @@ class TestBridgeStats:
         for t in threads:
             t.join()
 
+        bridge._drain_outbound_buffer()
         assert bridge.stats["outbound"] == 10
 
 

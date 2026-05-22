@@ -407,6 +407,8 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
         "from .camera import CameraStreamer",
         "from .controller import EdgeController",
         "from .mqtt_client import CyberwaveMQTTClient",
+        "from .models.manager import ModelManager",
+        "from .models.playground import PlaygroundClient, PlaygroundHandle, StructuredAction",
         "from .resources import (",
         "    WorkspaceManager,",
         "    ProjectManager,",
@@ -429,6 +431,7 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
         "    assets: AssetManager",
         "    edges: EdgeManager",
         "    twins: TwinManager",
+        "    models: ModelManager",
         "    ",
         "    def __init__(",
         "        self,",
@@ -468,7 +471,7 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
                 ]
             )
 
-    # Add fallback overload for unknown assets
+    # Add fallback overload for unknown assets``
     lines.extend(
         [
             "    @overload",

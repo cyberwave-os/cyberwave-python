@@ -25,12 +25,11 @@ from pydantic_core import to_jsonable_python
 
 class MLTrainingUpdateSchema(BaseModel):
     """
-    MLTrainingUpdateSchema
+    Schema for updating an MLTraining object properties.
     """ # noqa: E501
     status: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    update_type: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["status", "metadata", "update_type"]
+    __properties: ClassVar[List[str]] = ["status", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,11 +80,6 @@ class MLTrainingUpdateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
-        # set to None if update_type (nullable) is None
-        # and model_fields_set contains the field
-        if self.update_type is None and "update_type" in self.model_fields_set:
-            _dict['update_type'] = None
-
         return _dict
 
     @classmethod
@@ -99,8 +93,7 @@ class MLTrainingUpdateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "status": obj.get("status"),
-            "metadata": obj.get("metadata"),
-            "update_type": obj.get("update_type")
+            "metadata": obj.get("metadata")
         })
         return _obj
 

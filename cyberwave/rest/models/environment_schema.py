@@ -18,8 +18,8 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,6 +31,7 @@ class EnvironmentSchema(BaseModel):
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
+    slug: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr]
     workspace_uuid: Optional[StrictStr] = None
     created_at: datetime
@@ -39,7 +40,11 @@ class EnvironmentSchema(BaseModel):
     universal_schema: Optional[Dict[str, Any]] = None
     visibility: Optional[StrictStr] = None
     thumbnail: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "universal_schema", "visibility", "thumbnail"]
+    tags: Optional[List[StrictStr]] = None
+    is_template: Optional[StrictBool] = False
+    total_monthly_cost: Optional[Union[StrictFloat, StrictInt]] = None
+    total_purchase_cost: Optional[Union[StrictFloat, StrictInt]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "universal_schema", "visibility", "thumbnail", "tags", "is_template", "total_monthly_cost", "total_purchase_cost"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -80,6 +85,11 @@ class EnvironmentSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if project_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.project_uuid is None and "project_uuid" in self.model_fields_set:
@@ -110,6 +120,16 @@ class EnvironmentSchema(BaseModel):
         if self.thumbnail is None and "thumbnail" in self.model_fields_set:
             _dict['thumbnail'] = None
 
+        # set to None if total_monthly_cost (nullable) is None
+        # and model_fields_set contains the field
+        if self.total_monthly_cost is None and "total_monthly_cost" in self.model_fields_set:
+            _dict['total_monthly_cost'] = None
+
+        # set to None if total_purchase_cost (nullable) is None
+        # and model_fields_set contains the field
+        if self.total_purchase_cost is None and "total_purchase_cost" in self.model_fields_set:
+            _dict['total_purchase_cost'] = None
+
         return _dict
 
     @classmethod
@@ -125,6 +145,7 @@ class EnvironmentSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),
+            "slug": obj.get("slug"),
             "project_uuid": obj.get("project_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "created_at": obj.get("created_at"),
@@ -132,7 +153,11 @@ class EnvironmentSchema(BaseModel):
             "settings": obj.get("settings"),
             "universal_schema": obj.get("universal_schema"),
             "visibility": obj.get("visibility"),
-            "thumbnail": obj.get("thumbnail")
+            "thumbnail": obj.get("thumbnail"),
+            "tags": obj.get("tags"),
+            "is_template": obj.get("is_template") if obj.get("is_template") is not None else False,
+            "total_monthly_cost": obj.get("total_monthly_cost"),
+            "total_purchase_cost": obj.get("total_purchase_cost")
         })
         return _obj
 

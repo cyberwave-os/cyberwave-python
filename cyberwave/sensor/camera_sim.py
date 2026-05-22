@@ -48,18 +48,9 @@ import uuid as _uuid_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-import numpy as np
-
-from av import VideoFrame as _AvVideoFrame
 import mujoco
-
-# Path to the preview subprocess entry point.
-# Spawning a separate process keeps cv2's Qt5 GUI isolated from the simulation's
-# GLFW/OpenGL context (same-process Qt5 + GLFW causes fatal X11 errors on some
-# Linux drivers).  The script is a proper module, not an embedded string, so it
-# can be linted, type-checked, and tested independently.
-_PREVIEW_SCRIPT_PATH: Path = Path(__file__).parent / "_camera_preview.py"
-
+import numpy as np
+from av import VideoFrame as _AvVideoFrame
 
 from . import BaseVideoStreamer, BaseVideoTrack
 
@@ -68,6 +59,14 @@ if TYPE_CHECKING:
     from cyberwave.utils import TimeReference
 
 logger = logging.getLogger(__name__)
+
+
+# Path to the preview subprocess entry point.
+# Spawning a separate process keeps cv2's Qt5 GUI isolated from the simulation's
+# GLFW/OpenGL context (same-process Qt5 + GLFW causes fatal X11 errors on some
+# Linux drivers).  The script is a proper module, not an embedded string, so it
+# can be linted, type-checked, and tested independently.
+_PREVIEW_SCRIPT_PATH: Path = Path(__file__).parent / "_camera_preview.py"
 
 
 # =============================================================================
@@ -183,13 +182,8 @@ class SimVideoTrack(BaseVideoTrack):
         if frame is None:
             frame = self._placeholder
 
-        # Read time reference to capture current timestamp at frame capture moment.
-        # This ensures video frame timestamps reflect actual capture time.
-        if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.read()
-        else:
-            timestamp = time.time()
-            timestamp_monotonic = time.monotonic()
+        # Capture current timestamp at frame capture moment for accuracy.
+        timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 
         if self.frame_count == 0:
             self.frame_0_timestamp = timestamp
@@ -199,10 +193,32 @@ class SimVideoTrack(BaseVideoTrack):
         arr = np.ascontiguousarray(frame)
         video_frame = _AvVideoFrame.from_ndarray(arr, format="rgb24")
         video_frame = video_frame.reformat(format="yuv420p")
+        
+        # Set media timestamps
+        # Current policy: pts = frame_index, time_base = 1/fps
         video_frame.pts = self.frame_count
-        video_frame.time_base = fractions.Fraction(1, self.fps)
+        time_base = fractions.Fraction(1, self.fps)
+        video_frame.time_base = time_base
 
-        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        # Store per-frame metadata for sync extension (if installed)
+        self._store_frame_metadata_for_sync(
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+            capture_wall_time=timestamp,
+            capture_monotonic=timestamp_monotonic,
+        )
+
+        # Capture sync frame metadata with explicit frame_index, pts, and time_base
+        self._capture_sync_frame(
+            timestamp,
+            timestamp_monotonic,
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+        )
         self.frame_count += 1
 
         return video_frame

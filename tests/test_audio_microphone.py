@@ -10,22 +10,25 @@ Coverage:
 
 from __future__ import annotations
 
-import asyncio
 import fractions
 import json
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 aiortc = pytest.importorskip("aiortc", reason="aiortc not installed (install with extras: camera)")
-from aiortc.mediastreams import MediaStreamError
+from aiortc.mediastreams import MediaStreamError  # noqa: E402
 
-from cyberwave.sensor.microphone import (
+from cyberwave.sensor.microphone import (  # noqa: E402
     AUDIO_PTIME,
     DEFAULT_LAYOUT,
     DEFAULT_SAMPLE_RATE,
+    HostMicrophoneCapture,
     MicrophoneAudioStreamer,
     MicrophoneAudioTrack,
+    check_host_microphone_settings,
+    list_host_microphone_devices,
 )
 
 # ---------------------------------------------------------------------------
@@ -50,6 +53,97 @@ def _silent_get_audio() -> bytes | None:
 
 def _chunk_get_audio() -> bytes:
     return bytes(range(256)) * (BYTES_PER_FRAME // 256) + bytes(BYTES_PER_FRAME % 256)
+
+
+# ===========================================================================
+# Host microphone capture helpers
+# ===========================================================================
+
+
+class TestHostMicrophoneCapture:
+    def test_list_host_microphone_devices_filters_input_devices(self, monkeypatch):
+        fake_sd = MagicMock()
+        fake_sd.default.device = (2, None)
+        fake_sd.query_devices.return_value = [
+            {"name": "Speaker", "max_input_channels": 0, "default_samplerate": 48000, "hostapi": 0},
+            {
+                "name": "Built-in Microphone",
+                "max_input_channels": 2,
+                "default_samplerate": 48000,
+                "hostapi": 1,
+            },
+        ]
+        monkeypatch.setattr("cyberwave.sensor.microphone._get_sounddevice_module", lambda: fake_sd)
+
+        devices, default_index = list_host_microphone_devices()
+
+        assert default_index == 2
+        assert devices == [
+            {
+                "index": 1,
+                "name": "Built-in Microphone",
+                "max_input_channels": 2,
+                "default_samplerate": 48000.0,
+                "hostapi": 1,
+            }
+        ]
+
+    def test_check_host_microphone_settings_delegates_to_sounddevice(self, monkeypatch):
+        fake_sd = MagicMock()
+        monkeypatch.setattr("cyberwave.sensor.microphone._get_sounddevice_module", lambda: fake_sd)
+
+        check_host_microphone_settings(device=3, sample_rate=44100, channels=1)
+
+        fake_sd.check_input_settings.assert_called_once_with(
+            device=3,
+            channels=1,
+            samplerate=44100,
+            dtype="int16",
+        )
+
+    def test_capture_start_stop_and_get_audio(self, monkeypatch):
+        streams = []
+
+        class _FakeInputStream:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+                self.started = False
+                self.closed = False
+                streams.append(self)
+
+            def start(self):
+                self.started = True
+
+            def stop(self):
+                self.started = False
+
+            def close(self):
+                self.closed = True
+
+        fake_sd = MagicMock()
+        fake_sd.InputStream = _FakeInputStream
+        monkeypatch.setattr("cyberwave.sensor.microphone._get_sounddevice_module", lambda: fake_sd)
+
+        capture = HostMicrophoneCapture(sample_rate=48000, channels=1, device_index=4)
+        capture.start()
+
+        assert capture.is_running is True
+        assert streams[0].kwargs["samplerate"] == 48000
+        assert streams[0].kwargs["channels"] == 1
+        assert streams[0].kwargs["device"] == 4
+
+        payload = bytes(BYTES_PER_FRAME)
+        capture._on_audio_callback(
+            np.zeros((SAMPLES_PER_FRAME, 1), dtype=np.int16),
+            SAMPLES_PER_FRAME,
+            None,
+            None,
+        )
+        assert capture.get_audio(timeout=0) == payload
+
+        capture.stop()
+        assert capture.is_running is False
+        assert streams[0].closed is True
 
 
 # ===========================================================================
@@ -149,6 +243,28 @@ class TestOfferPayload:
         assert payload["sensor"] == "mic"
         assert payload["recording"] is False
 
+    def test_offer_payload_can_request_recording(self):
+        client = _make_mqtt_client(topic_prefix="")
+        s = MicrophoneAudioStreamer(
+            client,
+            get_audio=_silent_get_audio,
+            twin_uuid="twin-123",
+            mic_name="mic",
+            recording=True,
+            stream_source="live",
+            stream_instance_id="default",
+        )
+        fake_pc = MagicMock()
+        fake_pc.localDescription.type = "offer"
+        s.pc = fake_pc
+        s.streamer = MicrophoneAudioTrack(_silent_get_audio)
+        s._send_offer("v=0\r\n")
+        _, payload = s.client.publish.call_args[0]
+        assert payload["recording"] is True
+        assert payload["frontend_type"] == "audio"
+        assert payload["stream_source"] == "live"
+        assert payload["stream_instance_id"] == "default"
+
     def test_offer_published_to_correct_topic(self):
         s = self._make_streamer()
         s._send_offer("v=0\r\n")
@@ -175,6 +291,68 @@ class TestOfferPayload:
         s._send_offer("v=0\r\n")
         topic = s.client.publish.call_args[0][0]
         assert topic == "env/cyberwave/twin/twin-123/webrtc-offer"
+
+
+class TestCommandRecordingControl:
+    @pytest.mark.asyncio
+    async def test_start_command_publishes_recording_command_when_connected(self, monkeypatch):
+        s = MicrophoneAudioStreamer(
+            _make_mqtt_client(),
+            get_audio=_silent_get_audio,
+            twin_uuid="twin-123",
+            mic_name="mic",
+            auto_reconnect=True,
+            recording=False,
+        )
+        s.pc = MagicMock()
+        calls: list[str] = []
+
+        async def _fake_start_webrtc():
+            calls.append("start")
+            s.pc = MagicMock()
+
+        monkeypatch.setattr(s, "_start_webrtc", _fake_start_webrtc)
+
+        await s._handle_start_command()
+
+        assert calls == []
+        topic, payload = s.client.publish.call_args[0]
+        assert topic == "cyberwave/twin/twin-123/webrtc-command"
+        assert payload == {
+            "command": "start_recording",
+            "source_type": "edge",
+            "sensor": "mic",
+        }
+
+    @pytest.mark.asyncio
+    async def test_stop_command_publishes_recording_command_without_reconnect(self, monkeypatch):
+        s = MicrophoneAudioStreamer(
+            _make_mqtt_client(),
+            get_audio=_silent_get_audio,
+            twin_uuid="twin-123",
+            mic_name="mic",
+            auto_reconnect=True,
+            recording=True,
+        )
+        s.pc = MagicMock()
+        calls: list[str] = []
+
+        async def _fake_start_webrtc():
+            calls.append("start")
+            s.pc = MagicMock()
+
+        monkeypatch.setattr(s, "_start_webrtc", _fake_start_webrtc)
+
+        await s._handle_stop_command()
+
+        assert calls == []
+        topic, payload = s.client.publish.call_args[0]
+        assert topic == "cyberwave/twin/twin-123/webrtc-command"
+        assert payload == {
+            "command": "stop_recording",
+            "source_type": "edge",
+            "sensor": "mic",
+        }
 
 
 # ===========================================================================
@@ -218,6 +396,21 @@ class TestAnswerRouting:
         s = self._make_streamer(mic_name="mic")
         on_answer = _extract_on_answer(s)
         wrong = {**VALID_ANSWER, "sensor": "front_camera"}
+        on_answer(wrong)
+        assert s._answer_received is False
+
+    def test_answer_with_wrong_stream_identity_rejected(self):
+        client = _make_mqtt_client()
+        s = MicrophoneAudioStreamer(
+            client,
+            get_audio=_silent_get_audio,
+            twin_uuid="twin-123",
+            mic_name="mic",
+            stream_source="live",
+            stream_instance_id="default",
+        )
+        on_answer = _extract_on_answer(s)
+        wrong = {**VALID_ANSWER, "stream_source": "simulation"}
         on_answer(wrong)
         assert s._answer_received is False
 

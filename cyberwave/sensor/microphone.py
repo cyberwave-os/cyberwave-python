@@ -21,9 +21,13 @@ import asyncio
 import fractions
 import json
 import logging
+import platform
+import queue
+import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+import numpy as np
 from aiortc import (
     RTCConfiguration,
     RTCIceServer,
@@ -89,6 +93,11 @@ def _strip_non_opus_audio(sdp: str) -> str:
 AUDIO_PTIME = 0.020
 DEFAULT_SAMPLE_RATE = 48000
 DEFAULT_LAYOUT = "mono"
+DEFAULT_AUDIO_RECORDING = False
+DEFAULT_AUTO_RECONNECT = True
+DEFAULT_FRONTEND_TYPE = "audio"
+DEFAULT_STREAM_SOURCE = "live"
+DEFAULT_STREAM_INSTANCE_ID = "default"
 
 # Reused from sensor package to avoid circular import
 _AUDIO_TURN_SERVERS = [
@@ -100,6 +109,205 @@ _AUDIO_TURN_SERVERS = [
     },
 ]
 _CONNECTION_LOSS_CONFIRMATION_CHECKS = 3
+
+
+def _get_sounddevice_module() -> Any | None:
+    try:
+        import sounddevice as sd  # type: ignore[import]
+
+        return sd
+    except Exception:
+        return None
+
+
+def list_host_microphone_devices() -> tuple[list[dict[str, Any]], int | None]:
+    """List host audio input devices using ``sounddevice``.
+
+    Install ``cyberwave[microphone]`` to include the host capture dependencies.
+    """
+    sd = _get_sounddevice_module()
+    if sd is None:
+        raise RuntimeError(
+            "sounddevice is not installed; install with: pip install 'cyberwave[microphone]'"
+        )
+
+    raw_devices = sd.query_devices()
+    default_device = sd.default.device
+    candidate = default_device[0] if isinstance(default_device, tuple) else default_device
+    default_input_index = candidate if isinstance(candidate, int) and candidate >= 0 else None
+
+    devices: list[dict[str, Any]] = []
+    for index, device in enumerate(raw_devices):
+        max_input = int(device.get("max_input_channels", 0) or 0)
+        if max_input <= 0:
+            continue
+        devices.append(
+            {
+                "index": index,
+                "name": str(device.get("name", f"input-{index}")),
+                "max_input_channels": max_input,
+                "default_samplerate": float(device.get("default_samplerate", 0.0) or 0.0),
+                "hostapi": int(device.get("hostapi", -1) or -1),
+            }
+        )
+    return devices, default_input_index
+
+
+def check_host_microphone_settings(
+    *,
+    device: int | None = None,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    channels: int = 1,
+) -> None:
+    """Validate host microphone settings with ``sounddevice``."""
+    sd = _get_sounddevice_module()
+    if sd is None:
+        raise RuntimeError(
+            "sounddevice is not installed; install with: pip install 'cyberwave[microphone]'"
+        )
+    sd.check_input_settings(
+        device=device,
+        channels=channels,
+        samplerate=sample_rate,
+        dtype="int16",
+    )
+
+
+def create_linux_microphone_monitor() -> Any | None:
+    """Create a Linux ``pyudev`` monitor for sound-device hotplug events."""
+    if platform.system().lower() != "linux":
+        return None
+    try:
+        import pyudev  # type: ignore[import]
+    except Exception:
+        return None
+
+    context = pyudev.Context()
+    monitor = pyudev.Monitor.from_netlink(context)
+    monitor.filter_by(subsystem="sound")
+    return monitor
+
+
+class HostMicrophoneCapture:
+    """Capture fixed-size int16 chunks from a host microphone.
+
+    Use :meth:`get_audio` as the callback for :class:`MicrophoneAudioStreamer`.
+    The default format is 20 ms of s16 mono 48 kHz audio.
+    """
+
+    def __init__(
+        self,
+        *,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
+        channels: int = 1,
+        frames_per_chunk: int | None = None,
+        device_index: int | None = None,
+        queue_chunks: int = 32,
+        on_chunk: Callable[[np.ndarray], None] | None = None,
+    ) -> None:
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self.frames_per_chunk = frames_per_chunk or int(AUDIO_PTIME * sample_rate)
+        self.device_index = device_index
+        self.bytes_per_chunk = self.frames_per_chunk * channels * 2
+        self._queue: queue.Queue[bytes] = queue.Queue(maxsize=max(1, queue_chunks))
+        self._on_chunk = on_chunk
+        self._stream: Any | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def is_running(self) -> bool:
+        return self._stream is not None
+
+    def start(self) -> None:
+        """Start host microphone capture. This method is idempotent."""
+        with self._lock:
+            if self._stream is not None:
+                return
+            sd = _get_sounddevice_module()
+            if sd is None:
+                raise RuntimeError(
+                    "sounddevice is not installed; install with: pip install 'cyberwave[microphone]'"
+                )
+
+            stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype="int16",
+                blocksize=self.frames_per_chunk,
+                device=self.device_index,
+                callback=self._on_audio_callback,
+                latency="low",
+            )
+            try:
+                stream.start()
+            except Exception:
+                try:
+                    stream.close()
+                except Exception:
+                    logger.exception("Error while closing audio stream after start failure")
+                self.clear()
+                raise
+            self._stream = stream
+
+    def stop(self) -> None:
+        """Stop host microphone capture and clear buffered chunks."""
+        with self._lock:
+            stream = self._stream
+            self._stream = None
+
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:
+                logger.exception("Error while stopping sounddevice input stream")
+
+        self.clear()
+
+    def clear(self) -> None:
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+
+    def get_audio(self, timeout: float = AUDIO_PTIME) -> bytes | None:
+        """Return one captured chunk or ``None`` when no chunk is available."""
+        try:
+            return self._queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def _queue_chunk(self, chunk: bytes) -> None:
+        try:
+            self._queue.put_nowait(chunk)
+        except queue.Full:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                pass
+            self._queue.put_nowait(chunk)
+
+    def _on_audio_callback(
+        self,
+        indata: np.ndarray,
+        _frames: int,
+        _time_info: Any,
+        status: Any,
+    ) -> None:
+        if status:
+            logger.debug("sounddevice callback status: %s", status)
+
+        chunk = np.asarray(indata, dtype=np.int16).copy()
+        if chunk.size == 0:
+            return
+        self._queue_chunk(chunk.tobytes())
+        if self._on_chunk is not None:
+            try:
+                self._on_chunk(chunk)
+            except Exception:
+                logger.exception("Host microphone chunk callback failed")
 
 
 def _notify(callback: Callable[..., None] | None, *args: Any) -> None:
@@ -227,14 +435,22 @@ class BaseAudioStreamer:
         client: "CyberwaveMQTTClient",
         turn_servers: list | None = None,
         twin_uuid: str | None = None,
-        auto_reconnect: bool = True,
+        auto_reconnect: bool = DEFAULT_AUTO_RECONNECT,
         mic_name: Optional[str] = None,
+        recording: bool = DEFAULT_AUDIO_RECORDING,
+        frontend_type: str = DEFAULT_FRONTEND_TYPE,
+        stream_source: Optional[str] = None,
+        stream_instance_id: Optional[str] = None,
     ) -> None:
         self.client = client
         self.twin_uuid: str | None = twin_uuid
         self.mic_name: Optional[str] = mic_name  # e.g. "mic", "audio" (for multi-stream routing)
         self.auto_reconnect = auto_reconnect
         self.turn_servers = turn_servers if turn_servers is not None else _AUDIO_TURN_SERVERS
+        self.recording = bool(recording)
+        self.frontend_type = frontend_type
+        self.stream_source = stream_source
+        self.stream_instance_id = stream_instance_id
 
         self.pc: RTCPeerConnection | None = None
         self.streamer: BaseAudioTrack | None = None
@@ -465,13 +681,17 @@ class BaseAudioStreamer:
             "type": self.pc.localDescription.type,
             "sdp": sdp,
             "timestamp": time.time(),
-            "recording": False,
+            "recording": self.recording,
             "stream_attributes": stream_attributes,
             "sensor": self.mic_name,
             "track_id": self.streamer.id if self.streamer else None,
-            "frontend_type": "audio",
+            "frontend_type": self.frontend_type,
             "session_id": f"{self.client.client_id}_{self.mic_name}",
         }
+        if self.stream_source:
+            offer_payload["stream_source"] = self.stream_source
+        if self.stream_instance_id:
+            offer_payload["stream_instance_id"] = self.stream_instance_id
         self._publish_message(offer_topic, offer_payload)
 
     async def _wait_for_answer(self, timeout: float = 60.0) -> None:
@@ -508,10 +728,12 @@ class BaseAudioStreamer:
                     return
                 payload = data if isinstance(data, dict) else json.loads(data)
                 logger.debug(
-                    "Audio on_answer: type=%s target=%s sensor=%s has_m_audio=%s",
+                    "Audio on_answer: type=%s target=%s sensor=%s stream_source=%s stream_instance_id=%s has_m_audio=%s",
                     payload.get("type"),
                     payload.get("target"),
                     payload.get("sensor") or payload.get("camera"),
+                    payload.get("stream_source"),
+                    payload.get("stream_instance_id"),
                     "m=audio" in payload.get("sdp", ""),
                 )
                 if payload.get("type") == "offer":
@@ -525,13 +747,33 @@ class BaseAudioStreamer:
                         return
                     answer_sensor = payload.get("sensor") or payload.get("camera")
                     expected = self.mic_name if self.mic_name is not None else "default"
-                    if answer_sensor is None or answer_sensor == expected:
+                    answer_stream_source = payload.get("stream_source") or DEFAULT_STREAM_SOURCE
+                    expected_stream_source = self.stream_source or DEFAULT_STREAM_SOURCE
+                    answer_stream_instance_id = (
+                        payload.get("stream_instance_id") or DEFAULT_STREAM_INSTANCE_ID
+                    )
+                    expected_stream_instance_id = (
+                        self.stream_instance_id or DEFAULT_STREAM_INSTANCE_ID
+                    )
+                    if (
+                        (answer_sensor is None or answer_sensor == expected)
+                        and answer_stream_source == expected_stream_source
+                        and answer_stream_instance_id == expected_stream_instance_id
+                    ):
                         self._answer_data = payload
                         self._answer_received = True
                     else:
                         logger.warning(
-                            "Audio answer rejected: sensor mismatch (expected=%r, got=%r)",
-                            expected, answer_sensor,
+                            "Audio answer rejected: stream identity mismatch "
+                            "(expected_sensor=%r, got_sensor=%r, "
+                            "expected_stream_source=%r, got_stream_source=%r, "
+                            "expected_stream_instance_id=%r, got_stream_instance_id=%r)",
+                            expected,
+                            answer_sensor,
+                            expected_stream_source,
+                            answer_stream_source,
+                            expected_stream_instance_id,
+                            answer_stream_instance_id,
                         )
                 elif payload.get("type") == "candidate" and payload.get("target") == "edge":
                     self._handle_candidate(payload)
@@ -588,10 +830,12 @@ class BaseAudioStreamer:
     async def _handle_start_command(self, callback: Callable[..., None] | None = None) -> None:
         try:
             if self.pc is not None:
-                _notify(callback, "ok", "Audio stream already running")
+                self._publish_webrtc_recording_command("start_recording")
+                _notify(callback, "ok", "Audio recording started")
                 return
             await self._start_webrtc()
             self._should_reconnect = self.auto_reconnect
+            self._publish_webrtc_recording_command("start_recording")
             _notify(callback, "ok", "Audio streaming started")
         except Exception as e:
             logger.error("Error starting audio stream: %s", e, exc_info=True)
@@ -602,12 +846,25 @@ class BaseAudioStreamer:
             if self.pc is None:
                 _notify(callback, "ok", "Audio stream not running")
                 return
-            self._should_reconnect = False
-            await self.stop()
-            _notify(callback, "ok", "Audio stream stopped")
+            self._publish_webrtc_recording_command("stop_recording")
+            _notify(callback, "ok", "Audio recording stopped")
         except Exception as e:
             logger.error("Error stopping audio stream: %s", e, exc_info=True)
             _notify(callback, "error", str(e))
+
+    def _publish_webrtc_recording_command(self, command: str) -> None:
+        if not self.twin_uuid:
+            raise ValueError("twin_uuid must be set before publishing recording commands")
+        prefix = self.client.topic_prefix
+        command_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-command"
+        self._publish_message(
+            command_topic,
+            {
+                "command": command,
+                "source_type": "edge",
+                "sensor": self.mic_name,
+            },
+        )
 
     def _publish_message(self, topic: str, payload: dict[str, Any]) -> None:
         self.client.publish(topic, payload, qos=2)
@@ -756,10 +1013,14 @@ class MicrophoneAudioStreamer(BaseAudioStreamer):
         *,
         twin_uuid: str | None = None,
         turn_servers: list | None = None,
-        auto_reconnect: bool = True,
+        auto_reconnect: bool = DEFAULT_AUTO_RECONNECT,
         mic_name: Optional[str] = None,
         sample_rate: int = DEFAULT_SAMPLE_RATE,
         layout: str = DEFAULT_LAYOUT,
+        recording: bool = DEFAULT_AUDIO_RECORDING,
+        frontend_type: str = DEFAULT_FRONTEND_TYPE,
+        stream_source: Optional[str] = None,
+        stream_instance_id: Optional[str] = None,
     ) -> None:
         super().__init__(
             client,
@@ -767,6 +1028,10 @@ class MicrophoneAudioStreamer(BaseAudioStreamer):
             twin_uuid=twin_uuid,
             auto_reconnect=auto_reconnect,
             mic_name=mic_name,
+            recording=recording,
+            frontend_type=frontend_type,
+            stream_source=stream_source,
+            stream_instance_id=stream_instance_id,
         )
         self._get_audio = get_audio
         self._sample_rate = sample_rate

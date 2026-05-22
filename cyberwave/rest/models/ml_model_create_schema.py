@@ -28,6 +28,7 @@ class MLModelCreateSchema(BaseModel):
     MLModelCreateSchema
     """ # noqa: E501
     name: StrictStr
+    slug: Optional[StrictStr] = None
     description: StrictStr
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -38,12 +39,15 @@ class MLModelCreateSchema(BaseModel):
     mapped_model_id: Optional[StrictStr] = None
     output_format: Optional[StrictStr] = None
     deployment: Optional[StrictStr] = 'cloud'
+    is_trainable: Optional[StrictBool] = False
+    supported_level: Optional[StrictStr] = None
     can_take_video_as_input: Optional[StrictBool] = False
     can_take_audio_as_input: Optional[StrictBool] = False
     can_take_image_as_input: Optional[StrictBool] = False
     can_take_text_as_input: Optional[StrictBool] = True
     can_take_action_as_input: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["name", "description", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input"]
+    edge_runtime: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "edge_runtime"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -84,6 +88,11 @@ class MLModelCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -109,6 +118,16 @@ class MLModelCreateSchema(BaseModel):
         if self.output_format is None and "output_format" in self.model_fields_set:
             _dict['output_format'] = None
 
+        # set to None if supported_level (nullable) is None
+        # and model_fields_set contains the field
+        if self.supported_level is None and "supported_level" in self.model_fields_set:
+            _dict['supported_level'] = None
+
+        # set to None if edge_runtime (nullable) is None
+        # and model_fields_set contains the field
+        if self.edge_runtime is None and "edge_runtime" in self.model_fields_set:
+            _dict['edge_runtime'] = None
+
         return _dict
 
     @classmethod
@@ -122,6 +141,7 @@ class MLModelCreateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "name": obj.get("name"),
+            "slug": obj.get("slug"),
             "description": obj.get("description"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
@@ -132,11 +152,14 @@ class MLModelCreateSchema(BaseModel):
             "mapped_model_id": obj.get("mapped_model_id"),
             "output_format": obj.get("output_format"),
             "deployment": obj.get("deployment") if obj.get("deployment") is not None else 'cloud',
+            "is_trainable": obj.get("is_trainable") if obj.get("is_trainable") is not None else False,
+            "supported_level": obj.get("supported_level"),
             "can_take_video_as_input": obj.get("can_take_video_as_input") if obj.get("can_take_video_as_input") is not None else False,
             "can_take_audio_as_input": obj.get("can_take_audio_as_input") if obj.get("can_take_audio_as_input") is not None else False,
             "can_take_image_as_input": obj.get("can_take_image_as_input") if obj.get("can_take_image_as_input") is not None else False,
             "can_take_text_as_input": obj.get("can_take_text_as_input") if obj.get("can_take_text_as_input") is not None else True,
-            "can_take_action_as_input": obj.get("can_take_action_as_input") if obj.get("can_take_action_as_input") is not None else False
+            "can_take_action_as_input": obj.get("can_take_action_as_input") if obj.get("can_take_action_as_input") is not None else False,
+            "edge_runtime": obj.get("edge_runtime")
         })
         return _obj
 

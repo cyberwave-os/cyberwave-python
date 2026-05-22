@@ -408,3 +408,39 @@ class TestKeyBuilding:
             f"cw/{TWIN_UUID}/data/depth/default",
         }
         assert set(bus.backend._callbacks.keys()) == expected_keys
+
+    def test_bare_sensor_channel_expands_to_wildcard(
+        self, cw: FakeCyberwave, registry: HookRegistry, bus: FakeDataBus
+    ) -> None:
+        """A bare ``"frames"`` (no sensor) should subscribe with the
+        ``frames/**`` wildcard so drivers publishing under any sensor
+        name (e.g. ``color_camera``) are picked up.  Sensor-less
+        channels like ``joint_states`` must stay exact-match.
+        """
+
+        @registry.on_synchronized(TWIN_UUID, ["frames", "joint_states"])
+        def handler(samples: dict[str, Sample], ctx: HookContext) -> None:
+            pass
+
+        _start_runtime(cw)
+
+        expected_keys = {
+            f"cw/{TWIN_UUID}/data/frames/**",
+            f"cw/{TWIN_UUID}/data/joint_states",
+        }
+        assert set(bus.backend._callbacks.keys()) == expected_keys
+
+    def test_explicit_star_suffix_also_expands_to_wildcard(
+        self, cw: FakeCyberwave, registry: HookRegistry, bus: FakeDataBus
+    ) -> None:
+        """Passing ``"frames/*"`` should be equivalent to ``"frames"``."""
+
+        @registry.on_synchronized(TWIN_UUID, ["frames/*"])
+        def handler(samples: dict[str, Sample], ctx: HookContext) -> None:
+            pass
+
+        _start_runtime(cw)
+
+        assert set(bus.backend._callbacks.keys()) == {
+            f"cw/{TWIN_UUID}/data/frames/**"
+        }

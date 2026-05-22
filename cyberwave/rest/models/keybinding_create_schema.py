@@ -29,7 +29,7 @@ class KeybindingCreateSchema(BaseModel):
     """ # noqa: E501
     name: StrictStr
     metadata: Optional[Dict[str, Any]] = None
-    keyboard_bindings: Optional[List[Optional[Dict[str, Any]]]] = None
+    keyboard_bindings: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["name", "metadata", "keyboard_bindings"]
 
     model_config = ConfigDict(

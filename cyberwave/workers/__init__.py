@@ -7,7 +7,7 @@ and ``Cyberwave._hook_registry``) ships with CYB-1557.
 
 from .constants import MONITOR_STATS_KEY
 from .context import HookContext
-from .hooks import HookRegistration, HookRegistry, SynchronizedGroup
+from .hooks import HookRegistration, HookRegistry, ScheduleRegistration, SynchronizedGroup
 from .loader import load_workers
 from .runtime import WorkerRuntime
 
@@ -16,6 +16,7 @@ __all__ = [
     "HookRegistration",
     "HookRegistry",
     "MONITOR_STATS_KEY",
+    "ScheduleRegistration",
     "SynchronizedGroup",
     "WorkerRuntime",
     "load_workers",

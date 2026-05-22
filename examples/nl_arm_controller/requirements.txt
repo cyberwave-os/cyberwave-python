@@ -1,0 +1,18 @@
+# NL Arm Controller — runtime deps
+#
+# `cyberwave` is installed from this SDK source — re-install if you've pulled
+# new changes:  pip install -e cyberwave-sdks/cyberwave-python
+
+anthropic>=0.40.0
+# Mistral STT is called via direct HTTP (httpx) — the official `mistralai`
+# v2.x SDK on PyPI is currently unstable for our use case.
+httpx>=0.28.1
+numpy>=1.26
+sounddevice>=0.4.7
+soundfile>=0.12.1
+pynput>=1.7.7
+python-dotenv>=1.0.1
+# OpenCV — used by vision.py to read the Mac webcam directly and
+# JPEG-encode frames for Claude Vision (--vision mode). `-headless`
+# avoids pulling GUI / X11 deps we don't need.
+opencv-python-headless>=4.10

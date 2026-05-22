@@ -58,6 +58,7 @@ class NavigationPlan:
         rotation: Optional[Sequence[float] | Dict[str, Any]] = None,
         yaw: Optional[float] = None,
         waypoint_id: Optional[str] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "NavigationPlan":
         """Add a waypoint to the plan."""
@@ -70,6 +71,7 @@ class NavigationPlan:
             "position": position,
             "rotation": rotation,
             "yaw": yaw,
+            "actions": actions,
             "metadata": metadata or {},
         })
         self._append_waypoint(waypoint)
@@ -149,6 +151,11 @@ def _normalize_waypoint(item: Any) -> Dict[str, Any]:
         }
         if rotation is not None:
             waypoint["rotation"] = rotation
+        actions = item.get("actions")
+        if actions is not None:
+            if not isinstance(actions, list):
+                raise ValueError("waypoint actions must be a list")
+            waypoint["actions"] = list(actions)
         return waypoint
 
     if isinstance(item, (list, tuple)):
@@ -179,7 +186,7 @@ def _normalize_position(position: Sequence[float] | Dict[str, Any]) -> Dict[str,
 def _normalize_rotation(
     rotation: Optional[Sequence[float] | Dict[str, Any]],
     yaw: Optional[float],
-) -> Optional[List[float]]:
+) -> Optional[Dict[str, float]]:
     if rotation is not None and yaw is not None:
         raise ValueError("waypoint rotation and yaw are mutually exclusive")
     if rotation is None and yaw is None:
@@ -196,9 +203,9 @@ def _normalize_rotation(
             w, x, y, z = rotation
         if w is None or x is None or y is None or z is None:
             raise ValueError("rotation requires w, x, y, z values")
-        return [float(w), float(x), float(y), float(z)]
+        return {"w": float(w), "x": float(x), "y": float(y), "z": float(z)}
     half = float(yaw) * 0.5
-    return [math.cos(half), 0.0, 0.0, math.sin(half)]
+    return {"w": math.cos(half), "x": 0.0, "y": 0.0, "z": math.sin(half)}
 
 
 def _make_id(prefix: str, suffix: Optional[int] = None) -> str:

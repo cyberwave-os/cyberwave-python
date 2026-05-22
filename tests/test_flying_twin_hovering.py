@@ -5,10 +5,15 @@ Covers:
 - set_hovering_status() — API call + local cache update
 - takeoff() / land() / hover() automatic status updates in sim_tele mode
 - takeoff() / land() / hover() do NOT touch status in live (tele) mode
+
+The MQTT-side contract (canonical command topic / payload envelope /
+source-type validation) is exercised in
+``test_flying_twin_drone_commands.py`` to keep this file focused on the
+hovering-metadata bookkeeping that lives next to the SDK methods.
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -48,6 +53,27 @@ def _make_flying_twin(
     )
     twin = FlyingTwin(client, data)
     return twin, client
+
+
+def _published_command(client: SimpleNamespace, command: str) -> dict:
+    """
+    Return the canonical-command payload published for ``command``.
+
+    Fails the test (via assert) if no such call was made.
+    """
+    expected_topic = "cyberwave/twin/drone-uuid/command"
+    matching = [
+        call.args[1]
+        for call in client.mqtt.publish.call_args_list
+        if call.args[0] == expected_topic
+        and isinstance(call.args[1], dict)
+        and call.args[1].get("command") == command
+    ]
+    assert matching, (
+        f"No publish() call to {expected_topic!r} with command={command!r}; "
+        f"actual calls: {client.mqtt.publish.call_args_list}"
+    )
+    return matching[-1]
 
 
 # ---------------------------------------------------------------------------
@@ -193,13 +219,14 @@ class TestSetHoveringStatus:
 # ---------------------------------------------------------------------------
 
 class TestTakeoffSimMode:
-    def test_publishes_mqtt_takeoff_command(self):
+    def test_publishes_canonical_takeoff_command(self):
         twin, client = _make_flying_twin(runtime_mode="simulation")
         twin.takeoff(altitude=3.0)
 
-        client.mqtt.publish.assert_any_call(
-            "twins/drone-uuid/commands/takeoff", {"altitude": 3.0}
-        )
+        payload = _published_command(client, "takeoff")
+        assert payload["source_type"] == "sim_tele"
+        assert payload["data"] == {"altitude": 3.0}
+        assert "timestamp" in payload
 
     def test_sets_hovering_true_with_altitude_in_sim_mode(self):
         twin, client = _make_flying_twin(runtime_mode="simulation")
@@ -230,13 +257,13 @@ class TestTakeoffSimMode:
 # ---------------------------------------------------------------------------
 
 class TestTakeoffLiveMode:
-    def test_publishes_mqtt_takeoff_command(self):
+    def test_publishes_canonical_takeoff_command_with_tele_source(self):
         twin, client = _make_flying_twin(runtime_mode="live")
         twin.takeoff(altitude=2.0)
 
-        client.mqtt.publish.assert_called_once_with(
-            "twins/drone-uuid/commands/takeoff", {"altitude": 2.0}
-        )
+        payload = _published_command(client, "takeoff")
+        assert payload["source_type"] == "tele"
+        assert payload["data"] == {"altitude": 2.0}
 
     def test_does_not_call_twins_update(self):
         twin, client = _make_flying_twin(runtime_mode="live")
@@ -256,14 +283,16 @@ class TestTakeoffLiveMode:
 # ---------------------------------------------------------------------------
 
 class TestLandSimMode:
-    def test_publishes_mqtt_land_command(self):
+    def test_publishes_canonical_land_command(self):
         twin, client = _make_flying_twin(
             runtime_mode="simulation",
             metadata={"status": {"controller_requested_hovering": True, "controller_requested_hovering_altitude": 2.0}},
         )
         twin.land()
 
-        client.mqtt.publish.assert_any_call("twins/drone-uuid/commands/land", {})
+        payload = _published_command(client, "land")
+        assert payload["source_type"] == "sim_tele"
+        assert payload["data"] == {}
 
     def test_sets_hovering_false_in_sim_mode(self):
         twin, client = _make_flying_twin(
@@ -291,13 +320,13 @@ class TestLandSimMode:
 # ---------------------------------------------------------------------------
 
 class TestLandLiveMode:
-    def test_publishes_mqtt_land_command(self):
+    def test_publishes_canonical_land_command_with_tele_source(self):
         twin, client = _make_flying_twin(runtime_mode="live")
         twin.land()
 
-        client.mqtt.publish.assert_called_once_with(
-            "twins/drone-uuid/commands/land", {}
-        )
+        payload = _published_command(client, "land")
+        assert payload["source_type"] == "tele"
+        assert payload["data"] == {}
 
     def test_does_not_call_twins_update(self):
         twin, client = _make_flying_twin(runtime_mode="live")
@@ -311,11 +340,13 @@ class TestLandLiveMode:
 # ---------------------------------------------------------------------------
 
 class TestHoverSimMode:
-    def test_publishes_mqtt_hover_command(self):
+    def test_publishes_canonical_hover_command(self):
         twin, client = _make_flying_twin(runtime_mode="simulation")
         twin.hover()
 
-        client.mqtt.publish.assert_any_call("twins/drone-uuid/commands/hover", {})
+        payload = _published_command(client, "hover")
+        assert payload["source_type"] == "sim_tele"
+        assert payload["data"] == {}
 
     def test_sets_hovering_true_in_sim_mode(self):
         twin, client = _make_flying_twin(runtime_mode="simulation")
@@ -349,7 +380,7 @@ class TestHoverLiveMode:
 
 class TestFullFlightWorkflow:
     def test_takeoff_hover_land_sequence_updates_status_correctly(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
+        twin, _ = _make_flying_twin(runtime_mode="simulation")
 
         twin.takeoff(altitude=2.0)
         assert twin.is_hovering() is True
@@ -362,16 +393,20 @@ class TestFullFlightWorkflow:
         assert twin.is_hovering() is False
         assert twin.get_hovering_status()["controller_requested_hovering_altitude"] is None
 
-    def test_mqtt_commands_published_in_order(self):
+    def test_canonical_commands_published_in_order(self):
         twin, client = _make_flying_twin(runtime_mode="simulation")
 
         twin.takeoff(altitude=1.5)
         twin.land()
 
-        mqtt_calls = client.mqtt.publish.call_args_list
-        topics = [c.args[0] for c in mqtt_calls]
-        assert "twins/drone-uuid/commands/takeoff" in topics
-        assert "twins/drone-uuid/commands/land" in topics
-        assert topics.index("twins/drone-uuid/commands/takeoff") < topics.index(
-            "twins/drone-uuid/commands/land"
-        )
+        # Filter out the metadata-update calls and pluck out just the
+        # `command` field of every canonical-command publish.
+        topic = "cyberwave/twin/drone-uuid/command"
+        canonical_commands = [
+            call.args[1]["command"]
+            for call in client.mqtt.publish.call_args_list
+            if call.args[0] == topic
+        ]
+        assert "takeoff" in canonical_commands
+        assert "land" in canonical_commands
+        assert canonical_commands.index("takeoff") < canonical_commands.index("land")

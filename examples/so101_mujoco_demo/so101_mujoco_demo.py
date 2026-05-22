@@ -25,7 +25,14 @@ Environment variables (copy .env.example → .env)
   CONTROL_MODE        sine | manual (default: sine)
 """
 
-import argparse, fractions, json, os, shutil, sys, time, threading, zipfile
+import argparse
+import fractions
+import json
+import os
+import shutil
+import sys
+import time
+import zipfile
 import ctypes
 from datetime import datetime, timezone as _tz
 from pathlib import Path
@@ -56,15 +63,16 @@ if Path("/dev/nvidia0").exists():
         except OSError:
             pass  # non-fatal: fall back to env-var-only fix
 
-import mujoco
-import mujoco.viewer
-import numpy as np
-from cyberwave import Cyberwave
-from cyberwave.constants import SOURCE_TYPE_EDGE
-from cyberwave.sensor.camera_sim import CyberwaveSimStreaming
-from cyberwave.sensor.config import cameras_from_schema
+import mujoco  # noqa: E402
+import mujoco.viewer  # noqa: E402
+import numpy as np  # noqa: E402
+from cyberwave import Cyberwave  # noqa: E402
+from cyberwave.constants import SOURCE_TYPE_EDGE  # noqa: E402
+from cyberwave.sensor.camera_sim import CyberwaveSimStreaming  # noqa: E402
+from cyberwave.sensor.config import cameras_from_schema  # noqa: E402
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _strip_joint_prefix(name: str, uuid_hex: str) -> str:
     """Strip the Cyberwave UUID hex prefix from a MuJoCo joint name.
@@ -75,18 +83,18 @@ def _strip_joint_prefix(name: str, uuid_hex: str) -> str:
     """
     prefix = uuid_hex + "__"
     if name.startswith(prefix):
-        return name[len(prefix):]
+        return name[len(prefix) :]
     return name
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-SCRIPT_DIR  = Path(__file__).parent
-OUT_DIR     = SCRIPT_DIR / "out"
+SCRIPT_DIR = Path(__file__).parent
+OUT_DIR = SCRIPT_DIR / "out"
 
-ENV_NAME        = "so101_mujoco_demo"
-ARM_ASSET_KEY   = "the-robot-studio/so101"
-CAM_ASSET_KEY   = "cyberwave/standard-cam"
+ENV_NAME = "so101_mujoco_demo"
+ARM_ASSET_KEY = "the-robot-studio/so101"
+CAM_ASSET_KEY = "cyberwave/standard-cam"
 
 # Path to Django backend media directory (where telemetry files are stored locally).
 # The FileSystemStorage backend uses {media_root}/{relative_path} for telemetry.
@@ -104,51 +112,51 @@ CAMERA_LOOKAT = [0.2, 0.0, 0.3]
 # ── Alert schedule ────────────────────────────────────────────────────────────
 #
 # Each entry fires once when sim-time crosses the threshold (seconds).
-# is_burst=True triggers 10 rapid-fire alerts in ~2 s.
 _ALERT_SCHEDULE = [
-    # (threshold_s, name, severity, description, is_burst)
-    (5.0,  "Joint velocity approaching limit", "warning",
-     "Left shoulder joint nearing velocity cap during sine sweep", False),
-    (15.0, "Torque spike detected",             "critical",
-     "Shoulder pitch joint: 18.7 Nm transient torque peak",         False),
-    (25.0, "burst",                             None,   None,        True),
-    (35.0, "Motion resumed after protection",   "warning",
-     "Arm returned to safe operating range after torque protection", False),
+    # (threshold_s, name, severity, description)
+    (
+        5.0,
+        "Joint velocity approaching limit",
+        "warning",
+        "Left shoulder joint nearing velocity cap during sine sweep",
+    ),
+    (
+        15.0,
+        "Torque spike detected",
+        "critical",
+        "Shoulder pitch joint: 18.7 Nm transient torque peak",
+    ),
+    (
+        35.0,
+        "Motion resumed after protection",
+        "warning",
+        "Arm returned to safe operating range after torque protection",
+    ),
 ]
-
-
-def _fire_burst(arm_twin) -> None:
-    """Emit 10 alerts within ~2 s (one every 200 ms) in a background thread
-    so the MuJoCo loop is not stalled for 2 seconds."""
-    def _worker():
-        for i in range(10):
-            try:
-                arm_twin.alerts.create(
-                    name=f"Stress-test burst #{i + 1}/10",
-                    severity="warning",
-                    source_type="edge",
-                    description="Rapid-fire burst alert for UI stress-test",
-                    metadata={"burst_index": i, "burst_total": 10},
-                )
-            except Exception as exc:
-                print(f"[ALERT] burst #{i + 1} failed: {exc}")
-            time.sleep(0.2)
-        print("[ALERT] Burst of 10 alerts complete.")
-
-    threading.Thread(target=_worker, daemon=True).start()
-    print("[ALERT] Burst started in background (10 alerts × 200 ms).")
 
 # ── Camera alert schedule ─────────────────────────────────────────────────────
 #
 # Same structure as _ALERT_SCHEDULE but fires on the *camera* twin.
 _CAM_ALERT_SCHEDULE = [
-    # (threshold_s, name, severity, description, is_burst)
-    (8.0,  "Low lighting detected",    "warning",
-     "Scene illumination below recommended threshold for observation camera", False),
-    (20.0, "Camera frame drop event",  "warning",
-     "Transient GPU load caused brief frame-rate reduction in camera pipeline", False),
-    (38.0, "Vision pipeline nominal",  "info",
-     "Camera auto-exposure settled; image quality stable", False),
+    # (threshold_s, name, severity, description)
+    (
+        8.0,
+        "Low lighting detected",
+        "warning",
+        "Scene illumination below recommended threshold for observation camera",
+    ),
+    (
+        20.0,
+        "Camera frame drop event",
+        "warning",
+        "Transient GPU load caused brief frame-rate reduction in camera pipeline",
+    ),
+    (
+        38.0,
+        "Vision pipeline nominal",
+        "info",
+        "Camera auto-exposure settled; image quality stable",
+    ),
 ]
 
 
@@ -192,6 +200,7 @@ class SimFrameRecorder:
     def start(self) -> None:
         """Open the MKV container and add an H.264 video stream."""
         import av as _av
+
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._container = _av.open(str(self._path), "w", format="matroska")
         self._video_stream = self._container.add_stream("libx264", rate=self._fps)
@@ -203,6 +212,7 @@ class SimFrameRecorder:
     def capture(self, data) -> None:
         """Render and write one frame (throttled to *fps*)."""
         import av as _av
+
         now = time.monotonic()
         if now - self._last_write_time < self._interval:
             return
@@ -254,15 +264,16 @@ def _publish_camera_stored(
 # Keys are joint-name fragments; MuJoCo joints whose name contains the key are
 # set to the mapped value (radians).
 HOME_POSE = {
-    "_1": 0.0,   # shoulder yaw
-    "_2": 0.5,   # shoulder pitch — tilt forward
-    "_3": 0.8,   # elbow — bent
-    "_4": 0.0,   # wrist pitch
-    "_5": 0.0,   # wrist roll
-    "_6": 0.0,   # jaw — open
+    "_1": 0.0,  # shoulder yaw
+    "_2": 0.5,  # shoulder pitch — tilt forward
+    "_3": 0.8,  # elbow — bent
+    "_4": 0.0,  # wrist pitch
+    "_5": 0.0,  # wrist roll
+    "_6": 0.0,  # jaw — open
 }
 
 # ── create ────────────────────────────────────────────────────────────────────
+
 
 def cmd_create(_args):
     """Create workspace/project/env, add arm + observer camera, write out/env.json."""
@@ -270,16 +281,18 @@ def cmd_create(_args):
 
     # Workspace — find or create "SDK Demo Workspace"
     workspaces = client.workspaces.list()
-    workspace  = next((w for w in workspaces if w.name == "SDK Demo Workspace"), None)
+    workspace = next((w for w in workspaces if w.name == "SDK Demo Workspace"), None)
     if not workspace:
         workspace = client.workspaces.create(name="SDK Demo Workspace")
     print(f"Workspace : {workspace.name} ({workspace.uuid})")
 
     # Project — find or create "SDK Demo Project" inside that workspace
     projects = client.projects.list(workspace_id=workspace.uuid)
-    project  = next((p for p in projects if p.name == "SDK Demo Project"), None)
+    project = next((p for p in projects if p.name == "SDK Demo Project"), None)
     if not project:
-        project = client.projects.create(name="SDK Demo Project", workspace_id=workspace.uuid)
+        project = client.projects.create(
+            name="SDK Demo Project", workspace_id=workspace.uuid
+        )
     print(f"Project   : {project.name} ({project.uuid})")
 
     # Remove stale env with the same name
@@ -324,16 +337,18 @@ def cmd_create(_args):
     env_data = {
         "environment_uuid": str(env.uuid),
         "environment_name": ENV_NAME,
-        "arm_twin_uuid":    str(arm.uuid),
+        "arm_twin_uuid": str(arm.uuid),
         "camera_twin_uuid": str(cam.uuid),
-        "base_url":         client.config.base_url,
+        "base_url": client.config.base_url,
     }
     out_path = OUT_DIR / "env.json"
     out_path.write_text(json.dumps(env_data, indent=2))
     print(f"\nWritten: {out_path}")
-    print(f"\n{'='*60}\nSUCCESS — next step: just export\n{'='*60}")
+    print(f"\n{'=' * 60}\nSUCCESS — next step: just export\n{'=' * 60}")
+
 
 # ── export ────────────────────────────────────────────────────────────────────
+
 
 def cmd_export(_args):
     """Export universal schema + MuJoCo scene ZIP from Cyberwave into out/."""
@@ -342,11 +357,11 @@ def cmd_export(_args):
         sys.exit(f"ERROR: {env_json} not found.\nRun `just create` first.")
 
     env_uuid = json.loads(env_json.read_text())["environment_uuid"]
-    client   = Cyberwave()
+    client = Cyberwave()
 
     # Universal schema
     print("1. Exporting universal schema...")
-    schema      = client.environments.get_universal_schema_json(env_uuid)
+    schema = client.environments.get_universal_schema_json(env_uuid)
     schema_path = OUT_DIR / "universal_schema.json"
     schema_path.write_text(json.dumps(schema, indent=2))
     print(f"   Saved: {schema_path}")
@@ -366,38 +381,45 @@ def cmd_export(_args):
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(extract_dir)
     xml_path = extract_dir / "mujoco_scene.xml"
-    print(f"   Scene XML: {xml_path}" if xml_path.exists() else
-          f"   [WARN] mujoco_scene.xml not found in {extract_dir}")
+    print(
+        f"   Scene XML: {xml_path}"
+        if xml_path.exists()
+        else f"   [WARN] mujoco_scene.xml not found in {extract_dir}"
+    )
 
-    print(f"\n{'='*60}\nSUCCESS — next step: just run\n{'='*60}")
+    print(f"\n{'=' * 60}\nSUCCESS — next step: just run\n{'=' * 60}")
+
 
 # ── run ───────────────────────────────────────────────────────────────────────
 
+
 def _setup_viewer_camera(viewer, lookat: list):
-    viewer.cam.type      = mujoco.mjtCamera.mjCAMERA_FREE
-    viewer.cam.distance  = 1.2
-    viewer.cam.azimuth   = -135.0
+    viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+    viewer.cam.distance = 1.2
+    viewer.cam.azimuth = -135.0
     viewer.cam.elevation = -20.0
     viewer.cam.lookat[:] = lookat
 
 
 def _make_centering_fn(home_pose: dict):
     """Return a center_fn(model, data) that sets joints to the home pose."""
+
     def center_fn(model, data):
         for i in range(model.njnt):
             if model.jnt_type[i] == mujoco.mjtJoint.mjJNT_FREE:
                 continue
-            qadr     = model.jnt_qposadr[i]
+            qadr = model.jnt_qposadr[i]
             jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i) or ""
             home_val = next((v for k, v in home_pose.items() if k in jnt_name), None)
             if home_val is not None:
-                lo, hi = (model.jnt_range[i] if model.jnt_limited[i] else (-3.14, 3.14))
+                lo, hi = model.jnt_range[i] if model.jnt_limited[i] else (-3.14, 3.14)
                 data.qpos[qadr] = float(np.clip(home_val, lo, hi))
             elif model.jnt_limited[i]:
                 lo, hi = model.jnt_range[i]
                 data.qpos[qadr] = 0.5 * (lo + hi)
         data.qvel[:] = 0.0
         mujoco.mj_forward(model, data)
+
     return center_fn
 
 
@@ -412,25 +434,28 @@ def cmd_run(args):
         sys.exit(f"ERROR: {env_json} not found.\nRun `just create` first.")
     env_data = json.loads(env_json.read_text())
     arm_twin_uuid = env_data["arm_twin_uuid"]
-    arm_uuid_hex  = arm_twin_uuid.replace("-", "")
+    arm_uuid_hex = arm_twin_uuid.replace("-", "")
     cam_twin_uuid = env_data["camera_twin_uuid"]
-    env_uuid      = env_data["environment_uuid"]
+    env_uuid = env_data["environment_uuid"]
 
     control_mode = os.getenv("CONTROL_MODE", "sine").lower()
-    headless     = args.headless
+    headless = args.headless
 
     # Resolve controller
     control_fn = None
     if control_mode == "sine":
         try:
             from so101_mujoco_control import sine_control
+
             control_fn = sine_control
         except ImportError:
-            print("[WARN] so101_mujoco_control.py not found — defaulting to manual mode.")
+            print(
+                "[WARN] so101_mujoco_control.py not found — defaulting to manual mode."
+            )
             control_mode = "manual"
 
     model = mujoco.MjModel.from_xml_path(str(xml_path))
-    data  = mujoco.MjData(model)
+    data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
 
     center_fn = _make_centering_fn(HOME_POSE)
@@ -448,16 +473,16 @@ def cmd_run(args):
     cam_twin = cw.twin(twin_id=cam_twin_uuid)
     print(f"Arm alert target  : {arm_twin.name} ({arm_twin_uuid})")
     print(f"Cam alert target  : {cam_twin.name} ({cam_twin_uuid})")
-    _alert_fired:     set[float] = set()
+    _alert_fired: set[float] = set()
     _cam_alert_fired: set[float] = set()
 
     # Camera streaming.  MUJOCO_GL=egl must be set before the process starts
     # (see justfile) — mujoco reads it at import time, not at renderer creation.
     schema_cameras = cameras_from_schema(OUT_DIR / "universal_schema.json")
-    max_w = max((c.get("width",  640) for c in schema_cameras), default=640)
+    max_w = max((c.get("width", 640) for c in schema_cameras), default=640)
     max_h = max((c.get("height", 480) for c in schema_cameras), default=480)
-    if model.vis.global_.offwidth  < max_w:
-        model.vis.global_.offwidth  = max_w
+    if model.vis.global_.offwidth < max_w:
+        model.vis.global_.offwidth = max_w
     if model.vis.global_.offheight < max_h:
         model.vis.global_.offheight = max_h
     streaming = CyberwaveSimStreaming(
@@ -479,10 +504,10 @@ def cmd_run(args):
 
     # MKV path is built here but the timestamp will be snapped to loop-start below.
     _run_ts_us = 0  # placeholder — set just before the headless/viewer loop starts
-    _run_date  = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    _run_date = datetime.now(_tz.utc).strftime("%Y-%m-%d")
     # MKV path and recorder are finalised just before the headless/viewer loop starts.
     _mkv_storage_path: str = ""
-    _mkv_host_path: Path   = Path()
+    _mkv_host_path: Path = Path()
     recorder: "SimFrameRecorder | None" = None
     if _rec_cam_id < 0:
         print("[WARN] Could not find observer camera in model — skipping recording.")
@@ -491,7 +516,7 @@ def cmd_run(args):
         # Snap MKV timestamp to actual loop-start wall time so the camera session
         # window aligns with the alerts that will be created during the run.
         _run_ts_us = int(time.time() * 1_000_000)
-        _run_date  = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+        _run_date = datetime.now(_tz.utc).strftime("%Y-%m-%d")
         if _rec_cam_id >= 0:
             _mkv_storage_path = (
                 f"video_telemetry/{cam_twin_uuid}/color_camera"
@@ -524,33 +549,33 @@ def cmd_run(args):
             cw.mqtt.update_joints_state(
                 twin_uuid=arm_twin_uuid,
                 joint_positions={
-                    _strip_joint_prefix(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i), arm_uuid_hex): float(data.qpos[model.jnt_qposadr[i]])
+                    _strip_joint_prefix(
+                        mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i),
+                        arm_uuid_hex,
+                    ): float(data.qpos[model.jnt_qposadr[i]])
                     for i in range(model.njnt)
                     if model.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE
                 },
                 source_type=SOURCE_TYPE_EDGE,
-                timestamp=data.time,
+                timestamp=time.time(),
             )
             # Arm alert schedule.
-            for thresh, name, severity, desc, is_burst in _ALERT_SCHEDULE:
+            for thresh, name, severity, desc in _ALERT_SCHEDULE:
                 if data.time >= thresh and thresh not in _alert_fired:
                     _alert_fired.add(thresh)
-                    if is_burst:
-                        _fire_burst(arm_twin)
-                    else:
-                        try:
-                            arm_twin.alerts.create(
-                                name=name,
-                                severity=severity,
-                                source_type="edge",
-                                description=desc,
-                                metadata={"sim_time_s": round(data.time, 2)},
-                            )
-                            print(f"[ALERT][arm] [{severity}] {name} @ t={data.time:.1f}s")
-                        except Exception as exc:
-                            print(f"[ALERT][arm] create failed: {exc}")
+                    try:
+                        arm_twin.alerts.create(
+                            name=name,
+                            severity=severity,
+                            source_type="edge",
+                            description=desc,
+                            metadata={"sim_time_s": round(data.time, 2)},
+                        )
+                        print(f"[ALERT][arm] [{severity}] {name} @ t={data.time:.1f}s")
+                    except Exception as exc:
+                        print(f"[ALERT][arm] create failed: {exc}")
             # Camera alert schedule.
-            for thresh, name, severity, desc, is_burst in _CAM_ALERT_SCHEDULE:
+            for thresh, name, severity, desc in _CAM_ALERT_SCHEDULE:
                 if data.time >= thresh and thresh not in _cam_alert_fired:
                     _cam_alert_fired.add(thresh)
                     try:
@@ -565,9 +590,9 @@ def cmd_run(args):
                     except Exception as exc:
                         print(f"[ALERT][cam] create failed: {exc}")
             if step_i % 2000 == 0:
-                print(f"  step={step_i} t={data.time:.1f}s alerts_fired={len(_alert_fired)}")
-        # Wait for burst background thread to finish.
-        time.sleep(3)
+                print(
+                    f"  step={step_i} t={data.time:.1f}s alerts_fired={len(_alert_fired)}"
+                )
         print(
             f"Done. t={data.time:.3f}s  arm_alerts={len(_alert_fired)}"
             f"  cam_alerts={len(_cam_alert_fired)}"
@@ -605,7 +630,7 @@ def cmd_run(args):
 
     # Snap MKV timestamp to viewer launch time.
     _run_ts_us = int(time.time() * 1_000_000)
-    _run_date  = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    _run_date = datetime.now(_tz.utc).strftime("%Y-%m-%d")
     if _rec_cam_id >= 0:
         _mkv_storage_path = (
             f"video_telemetry/{cam_twin_uuid}/color_camera"
@@ -656,36 +681,38 @@ def cmd_run(args):
                 cw.mqtt.update_joints_state(
                     twin_uuid=arm_twin_uuid,
                     joint_positions={
-                        _strip_joint_prefix(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i), arm_uuid_hex): float(data.qpos[model.jnt_qposadr[i]])
+                        _strip_joint_prefix(
+                            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i),
+                            arm_uuid_hex,
+                        ): float(data.qpos[model.jnt_qposadr[i]])
                         for i in range(model.njnt)
                         if model.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE
                     },
                     source_type=SOURCE_TYPE_EDGE,
-                    timestamp=data.time,
+                    timestamp=time.time(),
                 )
 
                 viewer.sync()
 
                 # ── Arm alert schedule ────────────────────────────────────
-                for thresh, name, severity, desc, is_burst in _ALERT_SCHEDULE:
+                for thresh, name, severity, desc in _ALERT_SCHEDULE:
                     if data.time >= thresh and thresh not in _alert_fired:
                         _alert_fired.add(thresh)
-                        if is_burst:
-                            _fire_burst(arm_twin)
-                        else:
-                            try:
-                                arm_twin.alerts.create(
-                                    name=name,
-                                    severity=severity,
-                                    source_type="edge",
-                                    description=desc,
-                                    metadata={"sim_time_s": round(data.time, 2)},
-                                )
-                                print(f"[ALERT][arm] [{severity}] {name} @ t={data.time:.1f}s")
-                            except Exception as exc:
-                                print(f"[ALERT][arm] create failed: {exc}")
+                        try:
+                            arm_twin.alerts.create(
+                                name=name,
+                                severity=severity,
+                                source_type="edge",
+                                description=desc,
+                                metadata={"sim_time_s": round(data.time, 2)},
+                            )
+                            print(
+                                f"[ALERT][arm] [{severity}] {name} @ t={data.time:.1f}s"
+                            )
+                        except Exception as exc:
+                            print(f"[ALERT][arm] create failed: {exc}")
                 # ── Camera alert schedule ─────────────────────────────────
-                for thresh, name, severity, desc, _is_burst in _CAM_ALERT_SCHEDULE:
+                for thresh, name, severity, desc in _CAM_ALERT_SCHEDULE:
                     if data.time >= thresh and thresh not in _cam_alert_fired:
                         _cam_alert_fired.add(thresh)
                         try:
@@ -696,7 +723,9 @@ def cmd_run(args):
                                 description=desc,
                                 metadata={"sim_time_s": round(data.time, 2)},
                             )
-                            print(f"[ALERT][cam] [{severity}] {name} @ t={data.time:.1f}s")
+                            print(
+                                f"[ALERT][cam] [{severity}] {name} @ t={data.time:.1f}s"
+                            )
                         except Exception as exc:
                             print(f"[ALERT][cam] create failed: {exc}")
 
@@ -711,7 +740,9 @@ def cmd_run(args):
         if recorder is not None:
             try:
                 n_frames = recorder.stop()
-                print(f"[CAMERA] Recorder stopped: {n_frames} frames → {_mkv_host_path}")
+                print(
+                    f"[CAMERA] Recorder stopped: {n_frames} frames → {_mkv_host_path}"
+                )
                 if n_frames > 0 and _mkv_host_path.exists():
                     _publish_camera_stored(
                         cw=cw,
@@ -733,7 +764,9 @@ def cmd_run(args):
 
     print(f"\nViewer closed. t={data.time:.3f}s")
 
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -743,9 +776,10 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("create", help="Create the Cyberwave environment")
     sub.add_parser("export", help="Export MuJoCo scene from Cyberwave into out/")
-    run_p = sub.add_parser("run",    help="Launch the MuJoCo simulation")
-    run_p.add_argument("--headless", action="store_true",
-                       help="Run without viewer (CI / smoke-test)")
+    run_p = sub.add_parser("run", help="Launch the MuJoCo simulation")
+    run_p.add_argument(
+        "--headless", action="store_true", help="Run without viewer (CI / smoke-test)"
+    )
 
     args = parser.parse_args()
     {"create": cmd_create, "export": cmd_export, "run": cmd_run}[args.cmd](args)

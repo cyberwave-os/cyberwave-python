@@ -29,8 +29,10 @@ class AttachmentCreateSchema(BaseModel):
     """ # noqa: E501
     asset_uuid: Optional[StrictStr] = None
     twin_uuid: Optional[StrictStr] = None
+    environment_uuid: Optional[StrictStr] = None
+    workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["asset_uuid", "twin_uuid", "metadata"]
+    __properties: ClassVar[List[str]] = ["asset_uuid", "twin_uuid", "environment_uuid", "workspace_uuid", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +83,16 @@ class AttachmentCreateSchema(BaseModel):
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
             _dict['twin_uuid'] = None
 
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -100,6 +112,8 @@ class AttachmentCreateSchema(BaseModel):
         _obj = cls.model_validate({
             "asset_uuid": obj.get("asset_uuid"),
             "twin_uuid": obj.get("twin_uuid"),
+            "environment_uuid": obj.get("environment_uuid"),
+            "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata")
         })
         return _obj

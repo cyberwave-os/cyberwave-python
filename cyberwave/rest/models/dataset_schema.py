@@ -30,21 +30,31 @@ class DatasetSchema(BaseModel):
     DatasetSchema
     """ # noqa: E501
     uuid: StrictStr
+    name: Optional[StrictStr] = None
     episodes: List[StrictStr]
-    description: StrictStr
     metadata: Dict[str, Any]
     processed_datasets: List[ProcessedDatasetSchema]
     processing_status: StrictStr
     is_ready: StrictBool
+    is_imported: Optional[StrictBool] = False
+    source: Optional[StrictStr] = None
+    source_format: Optional[StrictStr] = None
+    slug: Optional[StrictStr] = None
+    visibility: Optional[StrictStr] = 'private'
     total_episodes: StrictInt
     processed_episodes: StrictInt
     failed_episodes: StrictInt
     failed_episode_uuids: List[StrictStr]
+    cameras: Optional[List[StrictStr]] = None
+    fps: Optional[StrictInt] = None
+    robot_type: Optional[StrictStr] = None
+    action_dim: Optional[StrictInt] = None
+    state_dim: Optional[StrictInt] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "episodes", "description", "metadata", "processed_datasets", "processing_status", "is_ready", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "created_at", "updated_at", "created_by", "updated_by"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "episodes", "metadata", "processed_datasets", "processing_status", "is_ready", "is_imported", "source", "source_format", "slug", "visibility", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "cameras", "fps", "robot_type", "action_dim", "state_dim", "created_at", "updated_at", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -92,6 +102,51 @@ class DatasetSchema(BaseModel):
                 if _item_processed_datasets:
                     _items.append(_item_processed_datasets.to_dict())
             _dict['processed_datasets'] = _items
+        # set to None if name (nullable) is None
+        # and model_fields_set contains the field
+        if self.name is None and "name" in self.model_fields_set:
+            _dict['name'] = None
+
+        # set to None if source (nullable) is None
+        # and model_fields_set contains the field
+        if self.source is None and "source" in self.model_fields_set:
+            _dict['source'] = None
+
+        # set to None if source_format (nullable) is None
+        # and model_fields_set contains the field
+        if self.source_format is None and "source_format" in self.model_fields_set:
+            _dict['source_format'] = None
+
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
+        # set to None if cameras (nullable) is None
+        # and model_fields_set contains the field
+        if self.cameras is None and "cameras" in self.model_fields_set:
+            _dict['cameras'] = None
+
+        # set to None if fps (nullable) is None
+        # and model_fields_set contains the field
+        if self.fps is None and "fps" in self.model_fields_set:
+            _dict['fps'] = None
+
+        # set to None if robot_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.robot_type is None and "robot_type" in self.model_fields_set:
+            _dict['robot_type'] = None
+
+        # set to None if action_dim (nullable) is None
+        # and model_fields_set contains the field
+        if self.action_dim is None and "action_dim" in self.model_fields_set:
+            _dict['action_dim'] = None
+
+        # set to None if state_dim (nullable) is None
+        # and model_fields_set contains the field
+        if self.state_dim is None and "state_dim" in self.model_fields_set:
+            _dict['state_dim'] = None
+
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -115,16 +170,26 @@ class DatasetSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
+            "name": obj.get("name"),
             "episodes": obj.get("episodes"),
-            "description": obj.get("description"),
             "metadata": obj.get("metadata"),
             "processed_datasets": [ProcessedDatasetSchema.from_dict(_item) for _item in obj["processed_datasets"]] if obj.get("processed_datasets") is not None else None,
             "processing_status": obj.get("processing_status"),
             "is_ready": obj.get("is_ready"),
+            "is_imported": obj.get("is_imported") if obj.get("is_imported") is not None else False,
+            "source": obj.get("source"),
+            "source_format": obj.get("source_format"),
+            "slug": obj.get("slug"),
+            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
             "total_episodes": obj.get("total_episodes"),
             "processed_episodes": obj.get("processed_episodes"),
             "failed_episodes": obj.get("failed_episodes"),
             "failed_episode_uuids": obj.get("failed_episode_uuids"),
+            "cameras": obj.get("cameras"),
+            "fps": obj.get("fps"),
+            "robot_type": obj.get("robot_type"),
+            "action_dim": obj.get("action_dim"),
+            "state_dim": obj.get("state_dim"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),

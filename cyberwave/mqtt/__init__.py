@@ -169,11 +169,34 @@ class CyberwaveMQTTClient:
         self._last_update_times[key] = current_time
         return False
 
-    def _add_handler(self, topic: str, handler: Callable):
-        """Add event handler for a specific topic."""
-        if topic not in self._handlers:
-            self._handlers[topic] = []
-        self._handlers[topic].append(handler)
+    def _add_handler(self, topic: str, handler: Callable) -> bool:
+        """Register a handler for ``topic``.
+
+        Single-handler-per-topic semantics: if a handler is already
+        registered for ``topic``, it is **replaced** (not appended). This
+        prevents handler accumulation when callers re-subscribe the same
+        topic — most notably the WebRTC streaming flow, which calls
+        ``BaseVideoStreamer._subscribe_to_answer()`` on every
+        auto-reconnect cycle. Under the old append semantics a single
+        SFU answer would fan out into N stale closures (one per
+        reconnect), and the matching ``webrtc-candidate`` subscription
+        would inject the same ICE candidate into the peer connection N
+        times — which destabilises aioice's checklist and produces a
+        "connected but no media" zombie state.
+
+        Returns ``True`` when this is the first handler for the topic
+        (caller should issue a broker-level SUBSCRIBE), ``False`` when
+        an existing handler was replaced (broker subscription is still
+        live, no SUBSCRIBE round-trip is needed).
+        """
+        is_new = topic not in self._handlers
+        if not is_new:
+            logger.debug(
+                "Replacing existing handler for topic %s (idempotent re-subscribe)",
+                topic,
+            )
+        self._handlers[topic] = [handler]
+        return is_new
 
     def unsubscribe(self, topic: str) -> None:
         """Unsubscribe from an MQTT topic and remove all its handlers.
@@ -467,9 +490,24 @@ class CyberwaveMQTTClient:
             logger.error(f"Error publishing to {topic}: {e}")
 
     def subscribe(self, topic: str, handler: Optional[Callable] = None, qos: int = 0):
-        """Subscribe to MQTT topic."""
+        """Subscribe to MQTT topic.
+
+        Idempotent w.r.t. ``handler``: re-registering a handler for a
+        topic the client is already subscribed to replaces the prior
+        handler in-place and skips the broker-level SUBSCRIBE round-trip
+        (no extra ``mid`` / SUBACK pair). See :meth:`_add_handler` for
+        the rationale — without this, every camera auto-reconnect cycle
+        added another stale closure to the ``webrtc-answer`` /
+        ``webrtc-candidate`` topics, and a single SFU answer fanned out
+        into N "Processing answer" log lines plus N duplicate
+        ``addIceCandidate`` calls.
+        """
+        is_new_topic = True
         if handler:
-            self._add_handler(topic, handler)
+            is_new_topic = self._add_handler(topic, handler)
+
+        if not is_new_topic:
+            return
 
         if self.connected:
             result = self.client.subscribe(topic, qos=qos)
@@ -501,6 +539,8 @@ class CyberwaveMQTTClient:
                 message["fps"] = metadata["fps"]
             if "observations" in metadata:
                 message["observations"] = metadata["observations"]
+            if "camera_participants" in metadata:
+                message["camera_participants"] = metadata["camera_participants"]
         logger.info(
             f"Publishing telemetry start message for twin {twin_uuid}: {message}"
         )
@@ -518,7 +558,7 @@ class CyberwaveMQTTClient:
 
         Args:
             twin_uuid: UUID of the twin
-            metadata: Optional dict (e.g. {"fps": 100, "observations": {...}})
+            metadata: Optional dict (e.g. fps, observations, camera_participants)
         """
         with self._telemetry_lock:
             if twin_uuid not in self.twin_uuids:
@@ -555,7 +595,33 @@ class CyberwaveMQTTClient:
         Also clears the telemetry tracking state for this twin, allowing
         subsequent publish_telemetry_start calls to work properly when
         a new operation (teleoperate/remoteoperate) is started.
+
+        This method is idempotent: if telemetry_end was already published for
+        this twin (i.e., twin is no longer in tracking list), this call is a
+        no-op to avoid sending duplicate telemetry_end messages.
         """
+        # Check and clear tracking state atomically to ensure idempotency.
+        # Only publish if the twin was still being tracked (telemetry_start was sent).
+        with self._telemetry_lock:
+            was_in_list = twin_uuid in self.twin_uuids_with_telemetry_start
+            if was_in_list:
+                self.twin_uuids_with_telemetry_start.remove(twin_uuid)
+            logger.info(
+                "publish_telemetry_end: twin %s was_in_tracking_list=%s, "
+                "remaining_tracked_twins=%s",
+                twin_uuid,
+                was_in_list,
+                self.twin_uuids_with_telemetry_start,
+            )
+
+        # Skip publishing if already ended (idempotent behavior)
+        if not was_in_list:
+            logger.debug(
+                "publish_telemetry_end: skipping duplicate for twin %s (already ended)",
+                twin_uuid,
+            )
+            return
+
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
         message = {
             "type": "telemetry_end",
@@ -568,20 +634,6 @@ class CyberwaveMQTTClient:
         if stream_instance_id:
             message["stream_instance_id"] = stream_instance_id
         self.publish(topic, message)
-
-        # Clear tracking state so next publish_telemetry_start will fire
-        # Use lock for thread safety (consistent with _handle_twin_update_with_telemetry)
-        with self._telemetry_lock:
-            was_in_list = twin_uuid in self.twin_uuids_with_telemetry_start
-            if was_in_list:
-                self.twin_uuids_with_telemetry_start.remove(twin_uuid)
-            logger.info(
-                "publish_telemetry_end: twin %s was_in_tracking_list=%s, "
-                "remaining_tracked_twins=%s",
-                twin_uuid,
-                was_in_list,
-                self.twin_uuids_with_telemetry_start,
-            )
 
     def publish_connected(self, twin_uuid: str):
         """Publish connected message via MQTT.
@@ -773,6 +825,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Update multiple joints at once via MQTT.
@@ -797,7 +850,10 @@ class CyberwaveMQTTClient:
                "timestamp": 1709123456.789,
                "source_subtype": "openvla",
                "workload_uuid": "uuid-here",
-               "session_id": "session-id"
+               "session_id": "session-id",
+               "camera_frame_counters": {
+                   "<track_id>": {"frame_count": 1234, "sensor_id": "wrist"}
+               }
            }
            ```
 
@@ -813,6 +869,9 @@ class CyberwaveMQTTClient:
             source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
             workload_uuid: Optional UUID of the workload generating this update
             session_id: Optional session ID for grouping related updates
+            camera_frame_counters: Optional dict mapping camera track_id to frame info.
+                Each value is a dict with "frame_count" (int) and "sensor_id" (str).
+                Used for robot-camera synchronization. Only included in aggregated format.
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
@@ -831,6 +890,7 @@ class CyberwaveMQTTClient:
             or source_subtype is not None
             or workload_uuid is not None
             or session_id is not None
+            or camera_frame_counters is not None
         )
 
         if use_aggregated:
@@ -849,6 +909,8 @@ class CyberwaveMQTTClient:
                 message["workload_uuid"] = workload_uuid
             if session_id:
                 message["session_id"] = session_id
+            if camera_frame_counters:
+                message["camera_frame_counters"] = camera_frame_counters
 
             logger.debug(
                 f"Publishing aggregated joint state for {twin_uuid}: "
@@ -878,6 +940,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Alias for update_joints_state with aggregated format.
@@ -899,6 +962,7 @@ class CyberwaveMQTTClient:
             source_subtype=source_subtype,
             workload_uuid=workload_uuid,
             session_id=session_id,
+            camera_frame_counters=camera_frame_counters,
         )
 
     def publish_initial_observation(

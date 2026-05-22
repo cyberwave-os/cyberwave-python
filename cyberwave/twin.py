@@ -82,6 +82,81 @@ def _default_control_source_type(client: Any) -> str:
     return SOURCE_TYPE_SIM_TELE if runtime_mode == "simulation" else SOURCE_TYPE_TELE
 
 
+# Teleop policies with these ``metadata["input_device"]`` values are used when
+# auto-attaching a controller for ``joints.set`` (see ``_ensure_controller_ready``).
+_SDK_JOINT_INPUT_DEVICES: frozenset[str] = frozenset({"sdk", "keyboard"})
+
+
+def _sdk_auto_attach_controller_enabled() -> bool:
+    """When false (``CYBERWAVE_SDK_AUTO_ATTACH_CONTROLLER=0``), skip REST controller assignment."""
+    raw = os.environ.get("CYBERWAVE_SDK_AUTO_ATTACH_CONTROLLER", "1")
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _policy_is_sdk_joint_teleop_candidate(policy: Any) -> bool:
+    """Teleop policies suitable for SDK joint MQTT (sdk or keyboard input_device)."""
+    ctype = getattr(policy, "controller_type", None) or ""
+    if str(ctype).lower() != "teleop":
+        return False
+    meta = policy.metadata if isinstance(policy.metadata, dict) else {}
+    device = meta.get("input_device")
+    return isinstance(device, str) and device in _SDK_JOINT_INPUT_DEVICES
+
+
+def _pick_default_sdk_joint_policy_uuid(candidates: List[Any]) -> str:
+    """Prefer ``input_device`` sdk, then keyboard; else stable tie-break by policy uuid."""
+    if not candidates:
+        raise CyberwaveError("Internal error: empty SDK joint controller candidates")
+
+    def _rank(pol: Any) -> tuple[int, str]:
+        meta = pol.metadata if isinstance(pol.metadata, dict) else {}
+        dev = meta.get("input_device")
+        if dev == "sdk":
+            return (0, str(pol.uuid))
+        if dev == "keyboard":
+            return (1, str(pol.uuid))
+        return (2, str(pol.uuid))
+
+    return str(sorted(candidates, key=_rank)[0].uuid)
+
+
+def _check_controller_ready_live() -> bool:
+    """Whether the robot edge path is ready to accept live teleop joint commands.
+
+    TODO: Infer readiness from edge telemetry (e.g. joint_states / heartbeat flowing).
+    """
+    logger.debug(
+        "Live controller readiness check is stubbed True; "
+        "TODO: verify robot/edge connectivity before joint commands."
+    )
+    return True
+
+
+def _get_twin_metadata(data: Any) -> dict:
+    """Extract the twin's current metadata dict (returns a shallow copy)."""
+    if hasattr(data, "metadata"):
+        meta = data.metadata
+    elif isinstance(data, dict):
+        meta = data.get("metadata")
+    else:
+        meta = None
+    return dict(meta) if isinstance(meta, dict) else {}
+
+
+def _build_controller_assignment_metadata(twin_data: Any, policy: Any) -> dict:
+    """Build the metadata dict the backend expects when assigning a controller policy.
+
+    Mirrors the frontend's ``buildTwinControllerUpdatePayload`` logic so the UI
+    can immediately reflect the assignment without a full page refresh.
+    """
+    base = _get_twin_metadata(twin_data)
+    base["controller_policy_uuid"] = str(policy.uuid)
+    base["controller_policy_name"] = str(getattr(policy, "name", "") or "")
+    base["controller_type"] = str(getattr(policy, "controller_type", "") or "")
+    base["control_mode"] = "joint_control"
+    return base
+
+
 def _load_capabilities_cache() -> Dict[str, Any]:
     """Load the capabilities cache from JSON file."""
     global _CAPABILITIES_CACHE
@@ -163,31 +238,12 @@ class JointController:
 
     def refresh(self):
         """Refresh joint states from the server"""
-        try:
-            states = self.twin.client.twins.get_joint_states(self.twin.uuid)
-            parsed: Dict[str, float] = {}
-
-            legacy = getattr(states, "joint_states", None)
-            if legacy:
-                for js in legacy:
-                    parsed[str(getattr(js, "joint_name", ""))] = float(
-                        getattr(js, "position", 0.0)
-                    )
-            else:
-                names = getattr(states, "name", None)
-                positions = getattr(states, "position", None)
-                if isinstance(names, list) and isinstance(positions, list):
-                    for joint_name, pos in zip(names, positions):
-                        parsed[str(joint_name)] = float(pos)
-
-            self._joint_states = parsed
-        except Exception as e:
-            raise CyberwaveError(f"Failed to refresh joint states: {e}")
+        logger.warning("Deprecated: JointController.refresh() is a no-op")
 
     def get(self, joint_name: str) -> float:
         """Get current position of a joint"""
         if self._joint_states is None:
-            self.refresh()
+            self._joint_states = {name: 0.0 for name in self.twin.get_controllable_joint_names()}
 
         # After refresh, _joint_states should be a dict
         if self._joint_states is None or joint_name not in self._joint_states:
@@ -220,6 +276,8 @@ class JointController:
             source_type = _default_control_source_type(self.twin.client)
 
         try:
+            self.twin._ensure_controller_ready()
+
             # Connect to MQTT if not already connected
             self.twin._connect_to_mqtt_if_not_connected()
 
@@ -248,8 +306,21 @@ class JointController:
             )
         return self.get(name)
 
-    def __setattr__(self, name: str, value: float):
-        """Allow setting joints as attributes (e.g., joints.arm_joint = 45)"""
+    def __setattr__(self, name: str, value: Any):
+        """Allow setting joints as attributes (e.g., joints.arm_joint = 45).
+
+        ``value`` is ``Any`` (not ``float``) because the same dunder
+        also stores the bookkeeping attributes ``twin`` (a ``Twin``
+        instance) and ``_joint_states`` (a ``dict``). Annotating it as
+        ``float`` is wrong for those two assignments and — when this
+        module is Cython-compiled with ``language_level=3`` (which the
+        worker images do) — Cython enforces the annotation as a C-level
+        type at function entry, so even ``self.twin = twin`` inside
+        ``__init__`` raises ``TypeError: must be real number, not
+        <Twin>`` before the ``name in [...]`` guard ever runs. Don't
+        re-tighten this annotation without also keeping
+        ``annotation_typing=False`` set in the worker obfuscate build.
+        """
         if name in ["twin", "_joint_states"]:
             super().__setattr__(name, value)
         else:
@@ -257,17 +328,14 @@ class JointController:
 
     def list(self) -> List[str]:
         """Get list of all joint names"""
-        if self._joint_states is None:
-            self.refresh()
-        if self._joint_states is None:
-            return []
-        return list(self._joint_states.keys())
+        return self.twin.get_controllable_joint_names()
 
     def get_all(self) -> Dict[str, float]:
         """Get all joint states as a dictionary"""
         if self._joint_states is None:
             self.refresh()
         if self._joint_states is None:
+            logger.warning("WIP: If you want to get joint states, subscribe to the proper mqtt topic via twin.subscribe_joints() and read from the topic directly.")
             return {}
         return self._joint_states.copy()
 
@@ -571,6 +639,7 @@ class Twin:
         self.client = client
         self._data = twin_data
         self.joints = JointController(self)
+        self._controller_ensured: bool = False
 
         # Cache for current state
         self._position: Optional[Dict[str, float]] = None
@@ -582,6 +651,123 @@ class Twin:
         self._alerts: Optional["TwinAlertManager"] = None
         self._camera_handle: Optional["TwinCameraHandle"] = None
         self._scale: Optional[Dict[str, float]] = None
+
+    def _get_workspace_uuid(self) -> Optional[str]:
+        """Return the workspace UUID for this twin's environment (non-fatal)."""
+        try:
+            env = self.client.environments.get(self.environment_id)
+            if hasattr(env, "workspace_uuid"):
+                return str(env.workspace_uuid) if env.workspace_uuid else None
+        except Exception:
+            pass
+        return None
+
+    def _list_controller_policies(self) -> List[Any]:
+        """Fetch controller policies scoped to this twin's asset and workspace."""
+        api = getattr(getattr(self.client, "twins", None), "api", None)
+        if api is None:
+            raise CyberwaveError("Client does not expose a controller-policies API")
+        try:
+            return api.src_app_api_controller_policies_list_controller_policies(
+                asset_uuid=self.asset_id or None,
+                workspace_uuid=self._get_workspace_uuid(),
+            )
+        except Exception as e:
+            raise CyberwaveError(f"Failed to list controller policies: {e}") from e
+
+    def _pick_controller_policy(self, policies: List[Any]) -> Any:
+        """Return the best policy object to use for SDK joint commands.
+
+        Keeps the twin's current teleop assignment if it is visible in *policies*
+        (i.e. passes the workspace filter).  Otherwise picks the best
+        sdk/keyboard candidate.
+        """
+        current: Optional[str] = None
+        if hasattr(self._data, "controller_policy_uuid"):
+            raw = self._data.controller_policy_uuid
+            current = str(raw) if raw else None
+        elif isinstance(self._data, dict):
+            raw = self._data.get("controller_policy_uuid")
+            current = str(raw) if raw else None
+
+        if current:
+            cur_policy = next((p for p in policies if str(p.uuid) == current), None)
+            if cur_policy is None:
+                logger.warning(
+                    "Twin %s: assigned controller %r not visible in workspace policy list; "
+                    "will replace with a suitable candidate",
+                    self.uuid, current,
+                )
+            elif str(getattr(cur_policy, "controller_type", "") or "").lower() == "teleop":
+                return cur_policy
+
+        candidates = [p for p in policies if _policy_is_sdk_joint_teleop_candidate(p)]
+        if not candidates:
+            raise CyberwaveError(
+                "No controller policy suitable for SDK joint commands was found "
+                f"(need a teleop policy with input_device in "
+                f"{sorted(_SDK_JOINT_INPUT_DEVICES)!r}). "
+                "Attach a teleop controller to this twin in the UI, or re-run "
+                "backend seed_controllers so sdk/keyboard policies exist."
+            )
+        chosen_uuid = _pick_default_sdk_joint_policy_uuid(candidates)
+        return next(p for p in candidates if str(p.uuid) == chosen_uuid)
+
+    def _apply_controller_policy(self, policy: Any) -> None:
+        """PUT the chosen policy onto the twin (FK + metadata), or sync metadata if FK already matches."""
+        current: Optional[str] = None
+        if hasattr(self._data, "controller_policy_uuid"):
+            raw = self._data.controller_policy_uuid
+            current = str(raw) if raw else None
+        elif isinstance(self._data, dict):
+            raw = self._data.get("controller_policy_uuid")
+            current = str(raw) if raw else None
+
+        chosen_uuid = str(policy.uuid)
+        chosen_name = getattr(policy, "name", chosen_uuid)
+        metadata_update = _build_controller_assignment_metadata(self._data, policy)
+
+        if current != chosen_uuid:
+            try:
+                self._data = self.client.twins.update(
+                    self.uuid,
+                    controller_policy_uuid=chosen_uuid,
+                    metadata=metadata_update,
+                )
+            except Exception as e:
+                raise CyberwaveError(f"Failed to attach controller policy to twin: {e}") from e
+            logger.info("Twin %s: assigned controller %r", self.uuid, chosen_name)
+        elif _get_twin_metadata(self._data).get("controller_policy_uuid") != chosen_uuid:
+            try:
+                self._data = self.client.twins.update(self.uuid, metadata=metadata_update)
+                logger.info("Twin %s: synced controller metadata for %r", self.uuid, chosen_name)
+            except Exception as exc:
+                logger.warning("Twin %s: metadata sync failed (non-fatal): %s", self.uuid, exc)
+        else:
+            logger.debug("Twin %s: controller %r already assigned", self.uuid, chosen_name)
+
+    def _ensure_controller_ready(self) -> None:
+        """Auto-attach a teleop controller and stub live readiness check.
+
+        Set ``CYBERWAVE_SDK_AUTO_ATTACH_CONTROLLER=0`` to skip assignment.
+        """
+        if self._controller_ensured:
+            return
+
+        if not _sdk_auto_attach_controller_enabled():
+            logger.debug("Twin %s: auto-attach disabled; skipping controller assignment", self.uuid)
+        elif getattr(getattr(self.client, "twins", None), "api", None) is None:
+            logger.debug("Twin %s: client has no controller-policies API; skipping auto-attach", self.uuid)
+        else:
+            policies = self._list_controller_policies()
+            policy = self._pick_controller_policy(policies)
+            self._apply_controller_policy(policy)
+
+        runtime_mode = getattr(getattr(self.client, "config", None), "runtime_mode", "live")
+        if runtime_mode == "live" and not _check_controller_ready_live():
+            raise CyberwaveError("Robot controller is not ready for live joint commands.")
+
+        self._controller_ensured = True
 
     @property
     def uuid(self) -> str:
@@ -600,6 +786,15 @@ class Twin:
             if hasattr(self._data, "name")
             else str(self._data.get("name", ""))
         )
+
+    @property
+    def slug(self) -> str:
+        """Get the twin's unified slug (e.g. ``acme/twins/arm-station-1``)."""
+        if hasattr(self._data, "slug"):
+            return str(self._data.slug or "")
+        if isinstance(self._data, dict):
+            return str(self._data.get("slug", ""))
+        return ""
 
     @property
     def asset_id(self) -> str:
@@ -679,6 +874,71 @@ class Twin:
 
             self._motion = TwinMotionHandle(self)
         return self._motion
+
+    def list_movements(
+        self, scope: str = "auto", environment_uuid: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List saved movements for this twin using existing animation data."""
+        return self.motion.list_movements(
+            scope=scope,
+            environment_uuid=environment_uuid,
+        )
+
+    def run_movement(
+        self,
+        name: str,
+        *,
+        scope: str = "auto",
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Run a saved movement.
+
+        Defaults to ``scope="auto"`` so the backend resolves the movement by
+        name across twin/asset/environment scopes.
+        """
+        return self.motion.run_movement(
+            name,
+            scope=scope,
+            environment_uuid=environment_uuid,
+            preview=preview,
+            sync=sync,
+            source_type=source_type,
+            transition_ms=transition_ms,
+            hold_ms=hold_ms,
+        )
+
+    def move_to_pose(
+        self,
+        name: str,
+        *,
+        scope: str = "auto",
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Move joints to a saved pose by posting the existing pose action payload.
+
+        Defaults to ``scope="auto"`` so the backend resolves the pose by
+        name across twin/asset/environment scopes.
+        """
+        return self.motion.move_to_pose(
+            name,
+            scope=scope,
+            environment_uuid=environment_uuid,
+            preview=preview,
+            sync=sync,
+            source_type=source_type,
+            transition_ms=transition_ms,
+            hold_ms=hold_ms,
+        )
 
     @property
     def navigation(self) -> "TwinNavigationHandle":
@@ -1944,45 +2204,321 @@ class LocomoteTwin(Twin):
         self.edit_rotation(yaw=yaw, pitch=pitch, roll=roll)
 
 
-class FlyingTwin(Twin):
+class FlyingTwin(LocomoteTwin):
     """
     Twin with flight capabilities (drones, UAVs).
 
-    Provides methods for aerial control including takeoff, landing,
-    and hovering.
+    Inherits from :class:`LocomoteTwin`, so flying twins also expose
+    ``move_forward`` / ``move_backward`` / ``turn_left`` / ``turn_right``
+    — useful for simulator runs and for off-RC teleoperation on edge
+    drivers that wire continuous-stick commands through to the
+    aircraft (the DJI Mini driver currently drops them while the
+    physical RC2 owns the sticks; the Go2 driver and the Cyberwave
+    playground simulator both consume them).
+
+    Aerial-specific methods include takeoff, landing, return-to-home,
+    hovering, gimbal control, and the DJI service / safety surface
+    (set home, compass calibration, reboot, emergency stop).
+
+    All commands publish on the canonical
+    ``{topic_prefix}cyberwave/twin/{uuid}/command`` topic with the
+    standard ``{source_type, command, data, timestamp}`` envelope —
+    the contract every Cyberwave edge driver
+    (``cyberwave-edge-nodes/cyberwave-edge-dji-mini-android``,
+    ``cyberwave-edge-nodes/cyberwave-edge-ros-ugv``, the Go2 driver,
+    the playground simulator, …) listens on.
     """
 
-    def takeoff(self, altitude: float = 1.0) -> None:
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _send_drone_command(
+        self,
+        command: str,
+        data: Optional[Dict[str, Any]] = None,
+        source_type: Optional[str] = None,
+    ) -> str:
+        """
+        Publish a single command on the canonical drone-command topic.
+
+        Returns the resolved ``source_type`` so callers can decide
+        whether to also persist sim-mode metadata
+        (e.g. ``set_hovering_status``) — that's only meaningful when
+        the command was sent in ``sim_tele``, since on a live aircraft
+        the edge driver owns the metadata.
+
+        Raises:
+            ValueError: If the resolved source type is not one of
+                ``"tele"`` / ``"sim_tele"``. Mirrors the validation
+                applied to ``LocomoteTwin.move_forward`` etc.
+        """
+        if source_type is None:
+            source_type = _default_control_source_type(self.client)
+        source_type = _normalize_locomotion_source_type(source_type)
+        if source_type not in [SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE]:
+            raise ValueError(
+                f"Invalid source type '{source_type}' for drone command "
+                f"'{command}'. Use cw.affect('simulation') or "
+                "cw.affect('real-world'), or pass source_type='sim' / "
+                "'sim_tele' / 'tele' directly."
+            )
+
+        self._connect_to_mqtt_if_not_connected()
+        topic_prefix = self.client.config.topic_prefix or ""
+        self.client.mqtt.publish(
+            f"{topic_prefix}cyberwave/twin/{self.uuid}/command",
+            {
+                "source_type": source_type,
+                "command": command,
+                "data": dict(data) if data else {},
+                "timestamp": time.time(),
+            },
+        )
+        return source_type  # type: ignore[return-value]
+
+    # ------------------------------------------------------------------
+    # Flight-phase commands
+    # ------------------------------------------------------------------
+
+    def takeoff(
+        self,
+        altitude: float = 1.0,
+        *,
+        source_type: Optional[str] = None,
+    ) -> None:
         """
         Take off to the specified altitude.
 
         Args:
-            altitude: Target altitude in meters (default: 1.0)
+            altitude: Target altitude in meters (default: 1.0). Only
+                meaningful in ``sim_tele`` — the DJI MSDK ``takeoff``
+                action is parameter-less and goes to the firmware
+                default (~1.2 m).
+            source_type: ``"sim_tele"``/``"sim"`` for simulation,
+                ``"tele"`` for the real aircraft. Falls back to the
+                client-level setting from ``cw.affect()``.
         """
-        self._connect_to_mqtt_if_not_connected()
-        # Send takeoff command via MQTT
-        self.client.mqtt.publish(
-            f"twins/{self.uuid}/commands/takeoff", {"altitude": altitude}
+        resolved = self._send_drone_command(
+            "takeoff",
+            data={"altitude": altitude},
+            source_type=source_type,
         )
-        # if the default source is telesim, also update the hovering status. In other scenarios (e.g. actual drone driver running) the hovering status is updated by the driver.
-        if _default_control_source_type(self.client) == SOURCE_TYPE_SIM_TELE:
+        # In live (tele) mode the edge driver owns the hovering
+        # status flag (it flips it once the FC reports motors-on /
+        # in-flight); only mirror it in sim mode where there is no
+        # driver to do that for us.
+        if resolved == SOURCE_TYPE_SIM_TELE:
             self.set_hovering_status(hovering=True, hovering_altitude=altitude)
 
-    def land(self) -> None:
-        """Land the drone."""
-        self._connect_to_mqtt_if_not_connected()
-        self.client.mqtt.publish(f"twins/{self.uuid}/commands/land", {})
-        # if the default source is telesim, also update the hovering status. In other scenarios (e.g. actual drone driver running) the hovering status is updated by the driver.
-        if _default_control_source_type(self.client) == SOURCE_TYPE_SIM_TELE:
+    def land(self, *, source_type: Optional[str] = None) -> None:
+        """
+        Land the drone.
+
+        On the DJI Mini driver this triggers ``KeyStartAutoLanding``
+        and arms the landing-confirmation listener — if the firmware
+        asks the operator to confirm (over water / glass / glossy
+        surfaces), a Cyberwave alert is raised and a second
+        ``land()`` call from the operator confirms the touchdown.
+        See ``DroneCommandManager`` for the full state machine.
+        """
+        resolved = self._send_drone_command("land", source_type=source_type)
+        if resolved == SOURCE_TYPE_SIM_TELE:
             self.set_hovering_status(hovering=False)
 
-    def hover(self) -> None:
-        """Hover in place."""
-        self._connect_to_mqtt_if_not_connected()
-        self.client.mqtt.publish(f"twins/{self.uuid}/commands/hover", {})
-        # if the default source is telesim, also update the hovering status. In other scenarios (e.g. actual drone driver running) the hovering status is updated by the driver.
-        if _default_control_source_type(self.client) == SOURCE_TYPE_SIM_TELE:
+    def cancel_takeoff(self, *, source_type: Optional[str] = None) -> None:
+        """Abort an in-progress automatic takeoff (DJI MSDK ``KeyStopTakeoff``)."""
+        self._send_drone_command("cancel_takeoff", source_type=source_type)
+
+    def cancel_landing(self, *, source_type: Optional[str] = None) -> None:
+        """Abort an in-progress automatic landing (DJI MSDK ``KeyStopAutoLanding``)."""
+        self._send_drone_command("cancel_landing", source_type=source_type)
+
+    def hover(self, *, source_type: Optional[str] = None) -> None:
+        """
+        Hover in place.
+
+        On a real DJI aircraft this is effectively a no-op at the
+        SDK level — the drone hovers automatically when the RC2
+        sticks are centred — but it's still useful in ``sim_tele``
+        to flip the metadata flag that prevents the simulator from
+        applying gravity to the twin.
+        """
+        resolved = self._send_drone_command("hover", source_type=source_type)
+        if resolved == SOURCE_TYPE_SIM_TELE:
             self.set_hovering_status(hovering=True)
+
+    # ------------------------------------------------------------------
+    # Return-to-home
+    # ------------------------------------------------------------------
+
+    def return_to_home(self, *, source_type: Optional[str] = None) -> None:
+        """
+        Return to the home location (DJI MSDK ``KeyStartGoHome``).
+
+        Some firmwares prompt the operator to confirm before
+        beginning the return flight. The driver surfaces that prompt
+        as a Cyberwave alert and a second ``return_to_home()`` call
+        confirms it (mirrors the landing-confirmation flow).
+        """
+        self._send_drone_command("return_to_home", source_type=source_type)
+
+    def cancel_return_to_home(self, *, source_type: Optional[str] = None) -> None:
+        """
+        Cancel a return-to-home in progress.
+
+        While the firmware is parked on a confirmation prompt this
+        routes through ``KeyGoHomeConfirm(false)`` — once the return
+        flight is actually under way it flows through
+        ``KeyStopGoHome``. The edge driver picks the right SDK call
+        based on the current state.
+        """
+        self._send_drone_command("cancel_return_to_home", source_type=source_type)
+
+    # ------------------------------------------------------------------
+    # Service / safety
+    # ------------------------------------------------------------------
+
+    def set_home_here(self, *, source_type: Optional[str] = None) -> None:
+        """Reset the home location to the aircraft's current GPS position."""
+        self._send_drone_command("set_home_here", source_type=source_type)
+
+    def start_compass_calibration(self, *, source_type: Optional[str] = None) -> None:
+        """Begin compass calibration."""
+        self._send_drone_command("start_compass_calibration", source_type=source_type)
+
+    def stop_compass_calibration(self, *, source_type: Optional[str] = None) -> None:
+        """Stop an in-progress compass calibration."""
+        self._send_drone_command("stop_compass_calibration", source_type=source_type)
+
+    def reboot(self, *, source_type: Optional[str] = None) -> None:
+        """Reboot the aircraft (DJI MSDK ``KeyRebootDevice``)."""
+        self._send_drone_command("reboot", source_type=source_type)
+
+    def emergency_stop(self, *, source_type: Optional[str] = None) -> None:
+        """
+        Best-effort emergency stop.
+
+        MSDK v5 deliberately doesn't expose a mid-air motor cut, so
+        on a DJI Mini this maps to "cancel every automated motion"
+        (auto-landing, RTH, takeoff). The aircraft then hovers and
+        stick control returns to the operator on the physical RC.
+        For a real kill switch use the RC's hardware combo (CSC).
+        """
+        self._send_drone_command("emergency_stop", source_type=source_type)
+
+    # ------------------------------------------------------------------
+    # Gimbal control
+    # ------------------------------------------------------------------
+
+    def gimbal_rotate(
+        self,
+        *,
+        pitch: Optional[float] = None,
+        roll: Optional[float] = None,
+        yaw: Optional[float] = None,
+        mode: str = "absolute",
+        duration: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> None:
+        """
+        Rotate the gimbal to a target pitch/roll/yaw.
+
+        Maps to DJI MSDK v5's ``GimbalKey.KeyRotateByAngle``. On the
+        Mini 4 Pro only the pitch axis is mechanically controllable
+        (range approximately ``[-90°, +30°]``); roll and yaw are
+        accepted but the hardware ignores them.
+
+        Args:
+            pitch: Target pitch in degrees. Positive = up,
+                negative = down. ``None`` leaves it unset (axis is
+                not commanded).
+            roll: Target roll in degrees, ``None`` for unset.
+            yaw: Target yaw in degrees (relative to aircraft heading
+                when ``mode="absolute"``), ``None`` for unset.
+            mode: ``"absolute"`` (default — angle is interpreted
+                relative to the aircraft heading) or ``"relative"``
+                (angle is a delta from the current gimbal attitude).
+                Anything unrecognised falls back to ``"absolute"``
+                on the driver side.
+            duration: Rotation duration in seconds, ``None`` to use
+                the SDK default. Useful for cinematic moves.
+            source_type: ``"tele"`` / ``"sim_tele"`` (auto-resolved
+                from ``cw.affect()`` if omitted).
+
+        Example::
+
+            drone.gimbal_rotate(pitch=-45.0, duration=2.0)   # tilt down 45°
+            drone.gimbal_rotate(pitch=10.0, mode="relative")  # +10° from current
+        """
+        # Build only the fields the user actually set so the driver
+        # can distinguish "leave this axis alone" (key absent) from
+        # "command axis to 0" (key=0).
+        data: Dict[str, Any] = {}
+        if pitch is not None:
+            data["pitch"] = float(pitch)
+        if roll is not None:
+            data["roll"] = float(roll)
+        if yaw is not None:
+            data["yaw"] = float(yaw)
+        if duration is not None:
+            # `duration` is the documented wire field; the driver
+            # also accepts `time` and `duration_sec` as aliases.
+            data["duration"] = float(duration)
+        # Always include `mode` so the driver doesn't have to fall
+        # back to its own default and the wire payload stays
+        # self-describing for log diffs.
+        data["mode"] = mode
+
+        self._send_drone_command("gimbal_rotate", data=data, source_type=source_type)
+
+    def gimbal_recenter(self, *, source_type: Optional[str] = None) -> None:
+        """
+        Recenter the gimbal to pitch=0 / mode=absolute.
+
+        Convenience wrapper around :meth:`gimbal_rotate` matching
+        the keyboard "Recenter Gimbal" binding (``N`` key on
+        ``controller:dji-keyboard:v1``).
+        """
+        self.gimbal_rotate(pitch=0.0, mode="absolute", source_type=source_type)
+
+    def gimbal_rotate_speed(
+        self,
+        *,
+        pitch: Optional[float] = None,
+        roll: Optional[float] = None,
+        yaw: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> None:
+        """
+        Rotate the gimbal at a constant speed (DJI MSDK ``KeyRotateBySpeed``).
+
+        Units are 0.1°/s per the MSDK contract — i.e. ``pitch=100``
+        means 10°/s. Valid range is ``[-3599, 3599]`` (i.e.
+        ``±359.9°/s``). Each call drives the gimbal for a short
+        window influenced by call frequency and airlink quality, so
+        sustained motion needs the command re-issued.
+
+        Args:
+            pitch: Pitch speed in 0.1°/s, ``None`` for unset.
+            roll: Roll speed in 0.1°/s, ``None`` for unset.
+            yaw: Yaw speed in 0.1°/s, ``None`` for unset.
+            source_type: ``"tele"`` / ``"sim_tele"`` (auto-resolved
+                from ``cw.affect()`` if omitted).
+        """
+        data: Dict[str, Any] = {}
+        if pitch is not None:
+            data["pitch"] = float(pitch)
+        if roll is not None:
+            data["roll"] = float(roll)
+        if yaw is not None:
+            data["yaw"] = float(yaw)
+
+        self._send_drone_command(
+            "gimbal_rotate_speed",
+            data=data,
+            source_type=source_type,
+        )
 
     # ------------------------------------------------------------------
     # Hovering status helpers

@@ -16,6 +16,7 @@ from cyberwave.data.exceptions import ChannelError
 from cyberwave.data.keys import (
     COMMAND_CHANNELS,
     LATEST_VALUE_CHANNELS,
+    FILTERED_FRAME_CHANNEL,
     STREAM_CHANNELS,
     WELL_KNOWN_CHANNELS,
     KeyExpression,
@@ -38,6 +39,14 @@ class TestChannelSets:
     def test_stream_channels_are_subset(self) -> None:
         assert STREAM_CHANNELS <= WELL_KNOWN_CHANNELS
 
+    def test_filtered_frame_channel_is_a_valid_channel_segment(self) -> None:
+        # The constant is the wire contract between the generic-camera
+        # driver and any worker that publishes anonymised frames. It must
+        # round-trip through build_key without raising.
+        assert FILTERED_FRAME_CHANNEL == "frames/filtered"
+        key = build_key(SAMPLE_UUID, FILTERED_FRAME_CHANNEL)
+        assert key.endswith(f"/data/{FILTERED_FRAME_CHANNEL}")
+
     def test_latest_value_channels_are_subset(self) -> None:
         assert LATEST_VALUE_CHANNELS <= WELL_KNOWN_CHANNELS
 
@@ -48,7 +57,10 @@ class TestChannelSets:
         assert COMMAND_CHANNELS <= WELL_KNOWN_CHANNELS
 
     def test_union_equals_all(self) -> None:
-        assert STREAM_CHANNELS | LATEST_VALUE_CHANNELS | COMMAND_CHANNELS == WELL_KNOWN_CHANNELS
+        assert (
+            STREAM_CHANNELS | LATEST_VALUE_CHANNELS | COMMAND_CHANNELS
+            == WELL_KNOWN_CHANNELS
+        )
 
     def test_expected_stream_channels(self) -> None:
         expected = {"frames", "depth", "audio", "pointcloud", "imu", "force_torque"}

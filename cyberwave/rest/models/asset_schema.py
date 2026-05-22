@@ -18,8 +18,8 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -37,6 +37,7 @@ class AssetSchema(BaseModel):
     owner_uuid: Optional[StrictStr] = None
     registry_id: Optional[StrictStr] = None
     registry_id_alias: Optional[StrictStr] = None
+    slug: Optional[StrictStr] = None
     glb_file: Optional[StrictStr] = None
     urdf_file: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
@@ -47,7 +48,12 @@ class AssetSchema(BaseModel):
     has_universal_schema: Optional[StrictBool] = False
     universal_schema: Optional[Dict[str, Any]] = None
     fixed_base: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base"]
+    supported_simulation_backends: Optional[List[StrictStr]] = None
+    purchase_price: Optional[Union[StrictFloat, StrictInt]] = None
+    monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
+    is_purchasable: Optional[StrictBool] = True
+    is_rentable: Optional[StrictBool] = True
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -108,6 +114,11 @@ class AssetSchema(BaseModel):
         if self.registry_id_alias is None and "registry_id_alias" in self.model_fields_set:
             _dict['registry_id_alias'] = None
 
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if glb_file (nullable) is None
         # and model_fields_set contains the field
         if self.glb_file is None and "glb_file" in self.model_fields_set:
@@ -148,6 +159,16 @@ class AssetSchema(BaseModel):
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
             _dict['universal_schema'] = None
 
+        # set to None if purchase_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.purchase_price is None and "purchase_price" in self.model_fields_set:
+            _dict['purchase_price'] = None
+
+        # set to None if monthly_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.monthly_price is None and "monthly_price" in self.model_fields_set:
+            _dict['monthly_price'] = None
+
         return _dict
 
     @classmethod
@@ -169,6 +190,7 @@ class AssetSchema(BaseModel):
             "owner_uuid": obj.get("owner_uuid"),
             "registry_id": obj.get("registry_id"),
             "registry_id_alias": obj.get("registry_id_alias"),
+            "slug": obj.get("slug"),
             "glb_file": obj.get("glb_file"),
             "urdf_file": obj.get("urdf_file"),
             "workspace_uuid": obj.get("workspace_uuid"),
@@ -178,7 +200,12 @@ class AssetSchema(BaseModel):
             "thumbnail": obj.get("thumbnail"),
             "has_universal_schema": obj.get("has_universal_schema") if obj.get("has_universal_schema") is not None else False,
             "universal_schema": obj.get("universal_schema"),
-            "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False
+            "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False,
+            "supported_simulation_backends": obj.get("supported_simulation_backends"),
+            "purchase_price": obj.get("purchase_price"),
+            "monthly_price": obj.get("monthly_price"),
+            "is_purchasable": obj.get("is_purchasable") if obj.get("is_purchasable") is not None else True,
+            "is_rentable": obj.get("is_rentable") if obj.get("is_rentable") is not None else True
         })
         return _obj
 

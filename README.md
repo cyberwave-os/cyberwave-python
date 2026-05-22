@@ -28,6 +28,17 @@ The official Python SDK for Cyberwave. Create, control, and simulate robotics wi
 pip install cyberwave
 ```
 
+## Try on Google Colab
+
+These notebooks use **`pip install "cyberwave[ml]"`** and walk through **`cw.models` / `cyberwave.models`**: local YOLO weights, **`PredictionResult`**, overlays, and (in the minimal notebook) a **live twin** JPEG → predict flow.
+
+| Notebook | Open in Colab | In this repo |
+| --- | --- | --- |
+| **YOLO26 tasks** — detection, segmentation, pose, classification, cascade demos | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cyberwave-os/cyberwave-python/blob/main/examples/ai/yolo.ipynb) | [`examples/ai/yolo.ipynb`](examples/ai/yolo.ipynb) |
+| **Minimal twin** — `Twin.get_latest_frame()` → predict → table + overlay | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cyberwave-os/cyberwave-python/blob/main/examples/ai/yolo_minimal_on_twin.ipynb) | [`examples/ai/yolo_minimal_on_twin.ipynb`](examples/ai/yolo_minimal_on_twin.ipynb) |
+
+On Colab, run the install cell first, then set **`CYBERWAVE_API_KEY`** (or use **`cyberwave login --token`** as in the twin notebook). The twin notebook needs a camera twin with Edge Core and a publishing driver; the YOLO task notebook is self-contained offline once weights are downloaded.
+
 ## Quick Start
 
 ### 1. Get Your API Key
@@ -110,6 +121,22 @@ environment = cw.environments.create(
 )
 ```
 
+### Managing Environment Waypoints
+
+```python
+waypoints = cw.environments.create_waypoint(
+    environment.uuid,
+    waypoint_id="dock-a",
+    name="Dock A",
+    position={"x": 1.0, "y": 2.0, "z": 0.0},
+    rotation={"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
+    metadata={"priority": "high"},
+)
+
+waypoints = cw.environments.get_waypoints(environment.uuid)
+waypoints = cw.environments.delete_waypoint(environment.uuid, "dock-a")
+```
+
 ### Managing Assets and Twins
 
 ```python
@@ -157,6 +184,49 @@ robot.add_to_environment("TARGET_ENVIRONMENT_UUID")
 `add_to_environment()` creates a deep copy of the twin in the target environment, marks the original twin as deleted, and also deletes the source environment if it has no twins left.
 
 `move()` and `rotate()` are deprecated. Use `move_forward()`, `move_backward()`, `turn_left()`, and `turn_right()` for locomotion commands, or `edit_rotation()` to directly set orientation.
+
+### Using Unified Slugs
+
+Every major entity (asset, twin, environment, workflow) has a **unified slug** — a human-readable identifier in the format `{workspace-slug}/{type-prefix}/{entity-slug}`. Slugs can be used interchangeably with UUIDs across the SDK.
+
+```python
+from cyberwave import Cyberwave
+
+cw = Cyberwave()
+
+# Fetch a twin by its slug instead of UUID
+robot = cw.twin(twin_id="acme/twins/my-arm")
+
+# Create a twin using an asset slug
+robot = cw.twin("acme/catalog/so101")
+
+# Pass an environment slug
+robot = cw.twin("acme/catalog/so101", environment_id="acme/envs/production")
+
+# Fetch an environment by slug
+env = cw.environments.get_by_slug("acme/envs/production")
+
+# Fetch a workflow by slug and trigger it
+wf = cw.workflows.get_by_slug("acme/workflows/pick-and-place")
+run = cw.workflows.trigger("acme/workflows/pick-and-place", inputs={"speed": 1.0})
+
+# Check slug availability
+result = cw.assets.check_slug("acme/catalog/my-new-robot")
+if result["available"]:
+    print("Slug is available!")
+
+# Access an entity's slug
+print(robot.slug)  # e.g. "acme/twins/my-arm"
+```
+
+| Entity       | Type Prefix   | Slug Example                          |
+|------------- |-------------- |---------------------------------------|
+| Asset        | `catalog`     | `acme/catalog/my-robot-arm`           |
+| Twin         | `twins`       | `acme/twins/arm-station-1`            |
+| Environment  | `envs`        | `acme/envs/production-floor`          |
+| Workflow     | `workflows`   | `acme/workflows/pick-and-place`       |
+| ML Model     | `models`      | `acme/models/yolov8-custom`           |
+| Controller   | `controllers` | `acme/controllers/keyboard-teleop`    |
 
 ### Listing Primitive Assets (catalog assets with shortcuts)
 
@@ -338,59 +408,83 @@ finally:
 
 Stream microphone audio to a digital twin over WebRTC (Opus, 48 kHz mono). Use a `get_audio()` callback that returns 20 ms of s16 mono audio (1920 bytes) or `None` for silence.
 
+Install host microphone dependencies:
+
+```bash
+pip install cyberwave[microphone]
+```
+
 ```python
 import asyncio
 from cyberwave import Cyberwave
-from cyberwave.sensor.microphone import MicrophoneAudioStreamer
+from cyberwave.sensor.microphone import HostMicrophoneCapture, MicrophoneAudioStreamer
 
-def get_audio() -> bytes | None:
-    # Return 20 ms s16 mono 48 kHz (1920 bytes), or None for silence
-    # e.g. read from PyAudio, sounddevice, or robot WebRTC (Go2)
-    return bytes(1920)  # or your capture
+capture = HostMicrophoneCapture()
+capture.start()
 
 cw = Cyberwave()
 streamer = MicrophoneAudioStreamer(
     cw.mqtt,
-    get_audio,
+    capture.get_audio,
     twin_uuid="your-twin-uuid",
-    sensor_name="mic",
+    mic_name="mic",
 )
 await streamer.start()
 # ... run until done ...
 await streamer.stop()
+capture.stop()
 cw.disconnect()
 ```
 
-For Unitree Go2 robot microphone streaming, see [examples/audio_stream.py](examples/audio_stream.py) (requires `unitree_webrtc_connect`). For combined video + audio, see [examples/multimedia_stream.py](examples/multimedia_stream.py).
+For custom or robot-provided sources, pass your own `get_audio()` callback. For Unitree Go2 robot microphone streaming, see [examples/audio_stream.py](examples/audio_stream.py) (requires `unitree_webrtc_connect`). For combined video + audio, see [examples/multimedia_stream.py](examples/multimedia_stream.py).
 
 ### Drones and Flying Twins
 
 Twins whose asset has `can_fly: true` are returned as `FlyingTwin` instances.
-They expose `takeoff()`, `land()`, and `hover()` MQTT commands, plus helpers to
-read and persist the hovering state in the twin's metadata.
+`FlyingTwin` inherits from `LocomoteTwin`, so flying twins also expose the
+locomotion verbs (`move_forward`, `move_backward`, `turn_left`, `turn_right`)
+on top of their aerial-specific surface:
+
+| Surface | Methods |
+| --- | --- |
+| Flight phase | `takeoff()`, `land()`, `hover()`, `cancel_takeoff()`, `cancel_landing()` |
+| Return to home | `return_to_home()`, `cancel_return_to_home()`, `set_home_here()` |
+| Service / safety | `start_compass_calibration()`, `stop_compass_calibration()`, `reboot()`, `emergency_stop()` |
+| Gimbal | `gimbal_rotate(pitch=..., roll=..., yaw=..., mode=..., duration=...)`, `gimbal_recenter()`, `gimbal_rotate_speed(pitch=..., roll=..., yaw=...)` |
+| Locomotion (inherited) | `move_forward()`, `move_backward()`, `turn_left()`, `turn_right()` |
+
+All commands publish on the canonical `{topic_prefix}cyberwave/twin/{uuid}/command`
+topic with the standard `{source_type, command, data, timestamp}` envelope —
+the same contract every Cyberwave drone driver listens on.
 
 ```python
 from cyberwave import Cyberwave
 from cyberwave.twin import FlyingTwin
 
 cw = Cyberwave()
-drone: FlyingTwin = cw.twin("cyberwave/px4vision")  # type: ignore[assignment]
+cw.affect("real-world")  # or "simulation" for a dry run
 
-# Send the takeoff command
-ALTITUDE = 2.0  # metres
-drone.takeoff(altitude=ALTITUDE)
+drone: FlyingTwin = cw.twin("SZ-DJI-Technology/DJI-Mini-4-Pro")  # type: ignore[assignment]
 
-# Read the hovering status back
+drone.takeoff(altitude=2.0)
+drone.move_forward(1.5)                          # locomotion (sim + future off-RC teleop)
+drone.gimbal_rotate(pitch=-45.0, duration=1.5)   # tilt camera 45° down
+drone.gimbal_rotate_speed(pitch=50.0)            # cinematic pan @ 5°/s
+drone.gimbal_recenter()                          # back to 0° / absolute
+drone.return_to_home()                           # KeyStartGoHome (with confirm flow)
+drone.land()                                     # auto-arms landing-confirmation flow
+```
+
+Hovering helpers persist the controller's *intent* in `twin.metadata.status`
+(useful in the Cyberwave playground simulator, where setting
+`controller_requested_hovering=True` disables gravity for that twin so it stays
+at its current altitude visually):
+
+```python
 if drone.is_hovering():
     status = drone.get_hovering_status()
     print(f"Hovering at {status['controller_requested_hovering_altitude']} m")
-
-# Land and clear the hovering state
-drone.land()
-drone.set_hovering_status(hovering=False)
 ```
-
-The hovering state is stored under `twin.metadata.status`:
 
 ```json
 {
@@ -404,10 +498,9 @@ The hovering state is stored under `twin.metadata.status`:
 The `controller_requested_` prefix makes it clear these are controller
 intentions, not ground-truth sensor readings from the drone.
 
-In the Cyberwave **playground simulate** mode, setting `controller_requested_hovering=True`
-disables gravity for that twin so it stays at its current altitude visually.
-
-See the full example in [examples/drone_hovering.py](examples/drone_hovering.py).
+See the full DJI Mini 4 Pro walkthrough in
+[examples/drone_dji_mini.py](examples/drone_dji_mini.py), and the simpler
+hovering-only flow in [examples/drone_hovering.py](examples/drone_hovering.py).
 
 ## Examples
 
@@ -419,6 +512,7 @@ Check the [examples](examples) directory for complete examples:
 - Joint manipulation for robot arms
 - Audio streaming (e.g. Go2 microphone) — [audio_stream.py](examples/audio_stream.py), [multimedia_stream.py](examples/multimedia_stream.py)
 - Drone takeoff, hovering status, and landing — [drone_hovering.py](examples/drone_hovering.py)
+- DJI Mini 4 Pro full flight + gimbal control — [drone_dji_mini.py](examples/drone_dji_mini.py)
 
 ## Advanced Usage
 
@@ -463,6 +557,20 @@ shoulder_joint            0.7854 rad      45.00 °
 
 To check out the available endpoints and their parameters, you can refer to the full API reference [here](https://docs.cyberwave.com/api-reference/overview).
 
+### Saved Movements and Poses
+
+Replay saved poses and movements on a twin without thinking about which scope owns them. `run_movement` sends the movement action contract, `move_to_pose` snaps the twin to a saved pose, and `list_movements` enumerates everything available.
+
+```python
+robot = cw.twin("the-robot-studio/so101")
+
+robot.list_movements()              # twin, asset, and environment scopes
+robot.run_movement("Wave")          # plays whichever scope owns "Wave"
+robot.move_to_pose("Stand")         # snaps to the saved pose by name
+```
+
+> Note: `run_movement`, `move_to_pose`, and `list_movements` default to `scope="auto"`, so the backend resolves the name across the twin/asset/environment scopes. Pass `scope="twin"`, `scope="asset"`, or `scope="environment"` to pin the lookup to a specific scope.
+
 ### Simulation vs. Live
 
 Use `mode="simulation"` when you want a simulator-first client with simulation defaults for state publishing, or use `cw.affect()` to switch locomotion/control commands between the simulation and the live robot on an existing client.
@@ -498,6 +606,62 @@ Runtime mode defaults:
 For lower-level integrations you can still pass `source_type` explicitly or use the `CYBERWAVE_SOURCE_TYPE` environment variable. Accepted raw values are `"sim"`, `"sim_tele"`, `"tele"`, `"edge"`, and `"edit"`. Legacy locomotion calls that pass `"sim"` are still accepted and normalized to `"sim_tele"` for simulator control commands.
 
 This same mode selection is also used by camera frame grabs (`get_latest_frame()` and `capture_frame()`), so frame retrieval stays consistent with the mode your script is affecting.
+
+### Agent SDK
+
+The SDK exposes typed agent namespaces under `cw.agents`. Use direct resource APIs for deterministic commands, and agent APIs when you want backend planning, previews, setup guidance, or explicit dispatch.
+
+- `cw.agents.environment`: environment editor agent messages and agent-created environments.
+- `cw.agents.workflow`: workflow planning, preview, setup-and-draft, and constrained workflow edits.
+- `cw.agents.control`: control surfaces, route/action planning, route resolution, and explicit dispatch.
+- `cw.agents.embodiment`: server-built embodiment context for an environment or twin.
+
+`cw.control` is a convenience alias for `cw.agents.control`.
+
+```python
+cw = Cyberwave(mode="simulation")
+
+surfaces = cw.agents.control.surfaces("environment-uuid")
+print(surfaces[0]["capabilities"])
+
+plan = cw.agents.control.plan(
+    "environment-uuid",
+    "Move the Go2 to Waypoint A",
+    twin_uuid="twin-uuid",
+    mode="simulation",
+)
+
+response = cw.control.dispatch(
+    "environment-uuid",
+    plan["dispatchable_actions"][0],
+    confirmed=True,
+)
+
+status = cw.actions.wait(
+    response["action_id"],
+    twin_uuid="twin-uuid",
+    timeout=60,
+)
+```
+
+Workflow and environment agents follow the same plan/preview/apply shape:
+
+```python
+draft = cw.agents.workflow.plan(
+    "environment-uuid",
+    "inspect every pallet and alert if damage is detected",
+)
+
+preview = cw.agents.workflow.preview(
+    "environment-uuid",
+    "inspect every pallet and alert if damage is detected",
+)
+
+context = cw.agents.embodiment.context(
+    "environment-uuid",
+    twin_uuid="twin-uuid",
+)
+```
 
 ### Camera & Sensor discovery
 
@@ -634,6 +798,20 @@ The fingerprint is a stable identifier derived from the host hardware (hostname,
 
 List, trigger, and monitor workflows programmatically. Useful for building custom automations on top of Cyberwave's visual workflow engine.
 
+Generated `run_on_edge` workers with schedule triggers use
+`@cw.on_schedule(...)`. The edge worker runtime evaluates the cron locally and
+calls the generated `run(...)` entrypoint when the schedule is due.
+Install `cyberwave[schedule]` when running scheduled workers outside the
+standard Edge worker image.
+
+Custom edge workers can use the same scheduler directly:
+
+```python
+@cw.on_schedule("*/5 * * * *", timezone="UTC")
+def every_five_minutes(ctx):
+    print("schedule fired", ctx.timestamp)
+```
+
 ```python
 cw = Cyberwave()
 
@@ -711,6 +889,94 @@ alert.update(severity="critical")
 alert.delete()
 ```
 
+### Datasets
+
+Import, manage, and export robotics datasets from HuggingFace or local files.
+
+```python
+# Import a dataset from HuggingFace.
+# Idempotent by default: if the same repo was already imported it is reused.
+# Pass reuse_existing=False to force a fresh import.
+ds = cw.datasets.add("lerobot/pusht", name="pusht")
+print(f"Dataset {ds.uuid} is {ds.processing_status}")
+
+# Import with specific revision/subset
+ds = cw.datasets.add(
+    "lerobot/aloha_sim_insertion_human",
+    name="aloha-insertion",
+    hf_revision="main",
+    hf_subset="default",
+)
+
+# Upload a local dataset (directory or zip)
+ds = cw.datasets.add("./my_lerobot_dataset", name="my-dataset")
+ds = cw.datasets.add("./recordings.zip", name="recordings")
+
+# List datasets with pagination and filters
+datasets = cw.datasets.list(limit=20, offset=0)
+datasets = cw.datasets.list(processing_status="completed")
+datasets = cw.datasets.list(environment="env-uuid")
+
+# Get, visualize URL, delete
+ds = cw.datasets.get("dataset-uuid")
+url = cw.datasets.visualize(ds)   # returns frontend URL (does not print)
+print(url)                         # https://cyberwave.com/acme/datasets/pusht
+cw.datasets.delete("dataset-uuid")
+
+# Wait for async HuggingFace import to complete.
+# Prints one status line per poll by default; pass on_poll=None to silence.
+ds = cw.datasets.wait_until_ready(ds)
+# With custom callback:
+ds = cw.datasets.wait_until_ready(
+    ds,
+    poll_interval=5.0,
+    timeout=1800,
+    on_poll=lambda d: print(f"{d.processing_status} {d.processed_episodes}/{d.total_episodes}"),
+)
+# Fully silent (for libraries/production):
+ds = cw.datasets.wait_until_ready(ds, on_poll=None)
+```
+
+Available properties on `DatasetSchema`: `uuid`, `name`, `slug`, `processing_status`,
+`is_ready`, `total_episodes`, `processed_episodes`, `failed_episodes`,
+`failed_episode_uuids`, `source`, `source_format`, `visibility`, `metadata`.
+
+**Supported import source formats:**
+- **LeRobot v3** (`lerobot3`) — Latest LeRobot format with parquet episodes
+- **LeRobot v2.1** (`lerobot21`) — Normalised to LeRobot v3 automatically
+- **RLDS** — TensorFlow Datasets / Open-X-Embodiment (zip upload)
+- **Cyberwave Parquet** — Native format for natively generated datasets
+
+### Export / download a converted format
+
+Both calls are idempotent — if a conversion artifact already exists it is returned immediately; otherwise conversion is kicked off automatically.
+
+```python
+# Block until backend conversion is done, return the signed URL.
+# Default on_poll prints one status line per poll; pass on_poll=None to silence.
+url = cw.datasets.convert(ds, "rlds")
+print(url)   # signed URL valid for 24 h
+
+# Convert AND stream the zip to disk in one call.
+path = cw.datasets.download(ds, "rlds", dest="./data")
+print(path)  # absolute path to saved file
+
+# Silence both:
+url = cw.datasets.convert(ds, "rlds", on_poll=None)
+path = cw.datasets.download(ds, "rlds", dest="./data", on_poll=None)
+```
+
+**Supported output formats:**
+
+| `format` | Description |
+|---|---|
+| `parquet` | Cyberwave joined-parquet zip (native) |
+| `lerobot3` | LeRobot v3 — recommended for LeRobot training pipelines |
+| `lerobot21` | LeRobot v2.1 |
+| `rlds` | RLDS / TF-Record (Open-X-Embodiment) |
+| `openvla` | Cyberwave OpenVLA TFDS bundle |
+| `robodm` | Berkeley `.vla` format |
+
 ## Data Layer (`cw.data`) — *stub*
 
 Transport-agnostic pub/sub for edge sensor data. Supports Zenoh (primary) and filesystem (fallback) backends.
@@ -780,25 +1046,141 @@ def detect_collision(samples, ctx):
     # All three are within 50ms of each other
 ```
 
+**Cross-twin mode** — synchronize channels from different twins (e.g. stereo cameras):
+
+```python
+@cw.on_synchronized(
+    twin_channels={
+        "left": (CAMERA_LEFT, "frames/default"),
+        "right": (CAMERA_RIGHT, "frames/default"),
+    },
+    tolerance_ms=50.0,
+)
+def on_stereo_pair(samples, ctx):
+    left = samples["left"]   # Sample from CAMERA_LEFT
+    right = samples["right"] # Sample from CAMERA_RIGHT
+```
+
 See the [synchronized hooks docs](https://docs.cyberwave.com/sdks/data-synchronized-hooks) for details.
 
-## ML Models (`cw.models`) — *stub*
+## ML Models (`cw.models`)
 
-Load and run ML models on edge devices. Models are loaded via `cw.models.load()` and expose a `predict()` method.
+Unified catalog, edge/cloud runtime, optional cascade inference, and a typed playground client bound to **`POST /api/v1/mlmodels/{uuid}/run`**. Vision / Ultralytics backends need the **`[ml]`** extra: `pip install cyberwave[ml]`.
+
+**Catalog** (authenticated client): `cw.models.list()` with optional **`deployment`** (server-side) and **`filters`** (client-side shorthands — `edge`, `cloud`, `image`, unknown strings match tags), **`get` / `get_by_uuid` / `get_by_slug`**, **`delete`**. **`cw.models.create()` / `cw.models.update()`** are still stubs — use REST or generated `cw.api.*` helpers.
+
+**Runtime**: `cw.models.load(id_or_entry)` resolves **`sdk_load_id` → slug → UUID** when you pass an **`MLModelSchema`**. **`load([a, b, ...])`** returns a **`CascadeModel`** (same kwargs to every sub-model; **`CascadePredictionResult.draw_on_top()`** overlays all heads). **`predict()`** returns **`PredictionResult`**: prefer **`pred.describe()`** for a human summary across detection, classification, pose, segmentation, OBB; iterate detections with **`for d in pred:`** when the output is detection-shaped; use **`pred.output`** / helpers like **`pred.pose`** for typed fields. Legacy **`pred.describe_detections_text()`** is bbox-only shorthand.
+
+**Playground**: `cw.models.playground(slug).run(prompt=..., structured_task=...)` → **`MLModelRunResultSchema`** or **`MLModelRunQueuedSchema`**, not **`PredictionResult`**.
 
 ```python
 cw = Cyberwave()
 model = cw.models.load("yolov8n")
 result = model.predict(frame)
-for det in result.detections:
+print(result.describe())
+for det in result:  # when output is DetectionResult-backed
     print(f"{det.label}: {det.confidence:.2f}")
+```
+
+YOLO ONNX postprocessing applies per-class non-max suppression with the same default IoU threshold (`0.7`) as Ultralytics' `YOLO.predict`, so swapping `yolov8s.pt` for `yolov8s.onnx` produces the same number of boxes per object instead of a cluster of overlapping anchors. Tune via `model.predict(frame, iou=0.5)` (stricter) or pass `iou=1.0` to disable NMS entirely (raw output for custom trackers).
+
+NMS-free / end-to-end exports (YOLO26's default one-to-one head, YOLOv10) are detected automatically and routed through a separate decoder that parses the `[max_det, 6] = [x1, y1, x2, y2, conf, class_id]` layout directly. The `iou` knob is ignored on that path — suppression is already applied inside the model graph by consistent dual-assignment training. End-to-end pose and segmentation exports aren't decoded yet; re-export those tasks with `end2end=False` until the e2e pose branch lands.
+
+### Edge speech-to-text — *stub*
+
+The SDK includes a `whisper_cpp` runtime for local STT on devices like Raspberry Pi 4. Install the STT extra on the edge device, then load a Whisper.cpp GGML/GGUF checkpoint:
+
+```bash
+pip install "cyberwave[ml-stt]"
+```
+
+```python
+model = cw.models.load(
+    "models/whisper/ggml-tiny.en-q5_1.bin",
+    runtime="whisper_cpp",
+    download_url="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin",
+)
+result = model.predict(audio, sample_rate_hz=16000, channels=1, language="en")
+print(result.raw["text"])
+```
+
+Workflow-generated `Audio Track -> Call Model` edge workers pass the seeded `download_url` automatically, so the first run downloads the Whisper weights into the local Cyberwave model cache and later runs reuse the cached file.
+
+### Model warm-up — *stub*
+
+Eliminate cold-start latency by calling `warm_up()` after loading:
+
+```python
+model = cw.models.load("yolov8n")
+cold_ms, warm_ms = model.warm_up()  # two dummy inferences
+# cold_ms ≈ 150 ms (JIT/allocation), warm_ms ≈ 8 ms (steady-state)
+```
+
+The worker runtime calls `warm_up()` automatically on startup for all loaded models.
+
+### Frame resolution scaling — *stub*
+
+Set `CYBERWAVE_WORKER_INPUT_RESOLUTION` to downscale frames before inference without changing the camera driver's publish resolution:
+
+```bash
+export CYBERWAVE_WORKER_INPUT_RESOLUTION=640x480  # 4K camera → 640x480 for YOLO nano
 ```
 
 ### Automatic detection publishing
 
-When a loaded model produces detections, the SDK automatically publishes them to a `detections/<runtime>` Zenoh channel (e.g. `detections/ultralytics`, `detections/onnxruntime`) as structured JSON. Drivers that subscribe to `detections/*` (e.g. the OBSBOT camera driver) can draw bounding box overlays directly on the video stream — no extra worker code needed.
+Every call to `model.predict()` automatically publishes its result to a `detections/<runtime>` Zenoh channel (e.g. `detections/ultralytics`, `detections/onnxruntime`) as structured JSON. Empty results are published as `{"detections": []}` heartbeats at the worker's inference cadence so overlay consumers (e.g. the OBSBOT camera driver) see a steady signal and don't fall into their staleness cutoff when the scene transiently has nothing to detect. Drivers that subscribe to `detections/*` can draw bounding box overlays directly on the video stream — no extra worker code needed.
+
+**Multi-camera routing:** Pass `twin_uuid=ctx.twin_uuid` to `model.predict()` to route detections to the correct twin when handling multiple cameras:
+
+```python
+@cw.on_frame(CAMERA_A)
+def on_cam_a(frame, ctx):
+    model.predict(frame, confidence=0.5, twin_uuid=ctx.twin_uuid)
+```
+
+Omitting `sensor=` subscribes to `frames/**` on the twin, so the hook picks
+up whatever sensor name the driver publishes (e.g. `color_camera`,
+`depth_camera`). `ctx.sensor_name` is populated from the observed key, so
+a single handler can disambiguate multi-sensor twins. Pass
+`sensor="<name>"` explicitly when you need to target one specific sensor.
 
 This requires a Zenoh data bus (`pip install cyberwave[zenoh]` and `CYBERWAVE_TWIN_UUID` set). If unavailable, auto-publish is silently skipped.
+
+### Privacy-preserving workers — *stub*
+
+Use `cyberwave.vision.anonymize_frame()` together with a pose model (e.g. `yolov8n-pose-onnx`) to **obscure every person** in the stream and overlay a colour-coded pose skeleton **before** the frame leaves the edge:
+
+```python
+from cyberwave.vision import anonymize_frame
+
+model = cw.models.load("yolov8n-pose-onnx")
+
+from cyberwave.data import FILTERED_FRAME_CHANNEL
+
+@cw.on_frame(cw.config.twin_uuid, sensor="default")
+def anonymise(frame, ctx):
+    result = model.predict(frame, classes=["person"], confidence=0.4)
+    # Defaults: pixelate mosaic + per-bodypart skeleton palette.
+    # mode={"pixelate"|"redact"|"blur"|"bbox"}, pixel_size=int|None,
+    # blur_kernel=int, color=BGR (used by bbox + redact, and as the
+    # small-ROI fallback fill for any mode).
+    out = anonymize_frame(frame, result.detections)
+    cw.data.publish(FILTERED_FRAME_CHANNEL, out, twin_uuid=ctx.twin_uuid)
+```
+
+For a runnable end-to-end demo against your local webcam — useful for tuning the mode / threshold knobs interactively — see [`examples/webcam_pose_anonymize.py`](./examples/webcam_pose_anonymize.py).
+
+Pair the worker with a generic-camera driver configured to consult `frames/processed` (`CYBERWAVE_DRIVER_FRAME_FILTER=frames/processed`); the driver substitutes the obscured frame into the WebRTC stream before encoding. Raw `frames/*` channels stay local — they are not forwarded over MQTT by default.
+
+> **Privacy note:** the default `pixelate` mode is intended for casual visual obscuring, not as a cryptographic anonymisation primitive — modern depixelation networks can recover recognisable faces from low-density mosaics. For stronger guarantees use `mode="blur"` (heavier irreversible degradation), `mode="redact"` (grid of solid `color` blocks with visible separators — the "censored document" look), or `mode="bbox"` (single solid fill, destroys the underlying pixels entirely). See the `cyberwave.vision.anonymize` module docstring for the full caveat.
+
+> **Note:** the driver-side `frames/processed` consumer and the
+> `CYBERWAVE_DRIVER_FRAME_FILTER` knob ship in the follow-up PRs (driver
+> wiring + end-to-end example). This snippet shows the eventual shape of
+> the API; today, only the SDK building blocks (`anonymize_frame`,
+> `draw_skeleton`, the return-aware `frame_callback`) are wired up.
+
+A complete two-camera example lives at [`examples/security_pipeline/`](./examples/security_pipeline). See the [Security Pipeline](https://docs.cyberwave.com/edge/drivers/security-pipeline) and [Frame Filters](https://docs.cyberwave.com/edge/drivers/frame-filters) docs for the full picture.
 
 ## Zenoh-MQTT Bridge (`cyberwave.zenoh_mqtt`) — *stub*
 

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,6 +28,7 @@ class EnvironmentCreateSchema(BaseModel):
     EnvironmentCreateSchema
     """ # noqa: E501
     name: StrictStr
+    slug: Optional[StrictStr] = None
     description: StrictStr
     settings: Optional[Dict[str, Any]] = None
     universal_schema: Optional[Dict[str, Any]] = None
@@ -35,7 +36,9 @@ class EnvironmentCreateSchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "settings", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility"]
+    tags: Optional[List[StrictStr]] = None
+    is_template: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,6 +79,11 @@ class EnvironmentCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if settings (nullable) is None
         # and model_fields_set contains the field
         if self.settings is None and "settings" in self.model_fields_set:
@@ -106,6 +114,16 @@ class EnvironmentCreateSchema(BaseModel):
         if self.visibility is None and "visibility" in self.model_fields_set:
             _dict['visibility'] = None
 
+        # set to None if tags (nullable) is None
+        # and model_fields_set contains the field
+        if self.tags is None and "tags" in self.model_fields_set:
+            _dict['tags'] = None
+
+        # set to None if is_template (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_template is None and "is_template" in self.model_fields_set:
+            _dict['is_template'] = None
+
         return _dict
 
     @classmethod
@@ -119,13 +137,16 @@ class EnvironmentCreateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "name": obj.get("name"),
+            "slug": obj.get("slug"),
             "description": obj.get("description"),
             "settings": obj.get("settings"),
             "universal_schema": obj.get("universal_schema"),
             "asset_uuid": obj.get("asset_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "project_uuid": obj.get("project_uuid"),
-            "visibility": obj.get("visibility")
+            "visibility": obj.get("visibility"),
+            "tags": obj.get("tags"),
+            "is_template": obj.get("is_template")
         })
         return _obj
 

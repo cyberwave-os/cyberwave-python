@@ -20,6 +20,7 @@ from typing import List, Optional
 from cyberwave.rest.models.cloud_node_workload_assign_schema import CloudNodeWorkloadAssignSchema
 from cyberwave.rest.models.cloud_node_workload_attachment_response_schema import CloudNodeWorkloadAttachmentResponseSchema
 from cyberwave.rest.models.cloud_node_workload_attachment_schema import CloudNodeWorkloadAttachmentSchema
+from cyberwave.rest.models.cloud_node_workload_complete_schema import CloudNodeWorkloadCompleteSchema
 from cyberwave.rest.models.cloud_node_workload_create_schema import CloudNodeWorkloadCreateSchema
 from cyberwave.rest.models.cloud_node_workload_result_schema import CloudNodeWorkloadResultSchema
 from cyberwave.rest.models.cloud_node_workload_schema import CloudNodeWorkloadSchema
@@ -2453,6 +2454,7 @@ class CloudNodeWorkloadsApi:
         twin_uuid: Optional[StrictStr] = None,
         controller_policy_uuid: Optional[StrictStr] = None,
         environment_uuid: Optional[StrictStr] = None,
+        mlmodel_uuid: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2468,7 +2470,7 @@ class CloudNodeWorkloadsApi:
     ) -> List[CloudNodeWorkloadSchema]:
         """List Workloads
 
-        List all Cloud Node workloads visible to the authenticated user.  Optionally filter by status, profile_slug, workspace_uuid, command_type, twin_uuid, controller_policy_uuid, or environment_uuid.
+        List all Cloud Node workloads visible to the authenticated user.  Optionally filter by status, profile_slug, workspace_uuid, command_type, twin_uuid, controller_policy_uuid, environment_uuid, or mlmodel_uuid.
 
         :param status:
         :type status: str
@@ -2486,6 +2488,8 @@ class CloudNodeWorkloadsApi:
         :type controller_policy_uuid: str
         :param environment_uuid:
         :type environment_uuid: str
+        :param mlmodel_uuid:
+        :type mlmodel_uuid: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2517,6 +2521,7 @@ class CloudNodeWorkloadsApi:
             twin_uuid=twin_uuid,
             controller_policy_uuid=controller_policy_uuid,
             environment_uuid=environment_uuid,
+            mlmodel_uuid=mlmodel_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2548,6 +2553,7 @@ class CloudNodeWorkloadsApi:
         twin_uuid: Optional[StrictStr] = None,
         controller_policy_uuid: Optional[StrictStr] = None,
         environment_uuid: Optional[StrictStr] = None,
+        mlmodel_uuid: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2563,7 +2569,7 @@ class CloudNodeWorkloadsApi:
     ) -> ApiResponse[List[CloudNodeWorkloadSchema]]:
         """List Workloads
 
-        List all Cloud Node workloads visible to the authenticated user.  Optionally filter by status, profile_slug, workspace_uuid, command_type, twin_uuid, controller_policy_uuid, or environment_uuid.
+        List all Cloud Node workloads visible to the authenticated user.  Optionally filter by status, profile_slug, workspace_uuid, command_type, twin_uuid, controller_policy_uuid, environment_uuid, or mlmodel_uuid.
 
         :param status:
         :type status: str
@@ -2581,6 +2587,8 @@ class CloudNodeWorkloadsApi:
         :type controller_policy_uuid: str
         :param environment_uuid:
         :type environment_uuid: str
+        :param mlmodel_uuid:
+        :type mlmodel_uuid: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2612,6 +2620,7 @@ class CloudNodeWorkloadsApi:
             twin_uuid=twin_uuid,
             controller_policy_uuid=controller_policy_uuid,
             environment_uuid=environment_uuid,
+            mlmodel_uuid=mlmodel_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2643,6 +2652,7 @@ class CloudNodeWorkloadsApi:
         twin_uuid: Optional[StrictStr] = None,
         controller_policy_uuid: Optional[StrictStr] = None,
         environment_uuid: Optional[StrictStr] = None,
+        mlmodel_uuid: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2658,7 +2668,7 @@ class CloudNodeWorkloadsApi:
     ) -> RESTResponseType:
         """List Workloads
 
-        List all Cloud Node workloads visible to the authenticated user.  Optionally filter by status, profile_slug, workspace_uuid, command_type, twin_uuid, controller_policy_uuid, or environment_uuid.
+        List all Cloud Node workloads visible to the authenticated user.  Optionally filter by status, profile_slug, workspace_uuid, command_type, twin_uuid, controller_policy_uuid, environment_uuid, or mlmodel_uuid.
 
         :param status:
         :type status: str
@@ -2676,6 +2686,8 @@ class CloudNodeWorkloadsApi:
         :type controller_policy_uuid: str
         :param environment_uuid:
         :type environment_uuid: str
+        :param mlmodel_uuid:
+        :type mlmodel_uuid: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2707,6 +2719,7 @@ class CloudNodeWorkloadsApi:
             twin_uuid=twin_uuid,
             controller_policy_uuid=controller_policy_uuid,
             environment_uuid=environment_uuid,
+            mlmodel_uuid=mlmodel_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2733,6 +2746,7 @@ class CloudNodeWorkloadsApi:
         twin_uuid,
         controller_policy_uuid,
         environment_uuid,
+        mlmodel_uuid,
         _request_auth,
         _content_type,
         _headers,
@@ -2787,6 +2801,10 @@ class CloudNodeWorkloadsApi:
             
             _query_params.append(('environment_uuid', environment_uuid))
             
+        if mlmodel_uuid is not None:
+            
+            _query_params.append(('mlmodel_uuid', mlmodel_uuid))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -2828,6 +2846,7 @@ class CloudNodeWorkloadsApi:
     def src_app_api_cloud_node_workloads_mark_workload_completed(
         self,
         uuid: StrictStr,
+        cloud_node_workload_complete_schema: Optional[CloudNodeWorkloadCompleteSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2843,10 +2862,12 @@ class CloudNodeWorkloadsApi:
     ) -> CloudNodeWorkloadSchema:
         """Mark Workload Completed
 
-        Mark a workload as completed.
+        Mark a workload as completed.  Accepts an optional JSON body with ``result`` (dict) and ``success`` (bool) so that cloud-node processes can upload inline result data at completion time without a separate API call.
 
         :param uuid: (required)
         :type uuid: str
+        :param cloud_node_workload_complete_schema:
+        :type cloud_node_workload_complete_schema: CloudNodeWorkloadCompleteSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2871,6 +2892,7 @@ class CloudNodeWorkloadsApi:
 
         _param = self._src_app_api_cloud_node_workloads_mark_workload_completed_serialize(
             uuid=uuid,
+            cloud_node_workload_complete_schema=cloud_node_workload_complete_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2895,6 +2917,7 @@ class CloudNodeWorkloadsApi:
     def src_app_api_cloud_node_workloads_mark_workload_completed_with_http_info(
         self,
         uuid: StrictStr,
+        cloud_node_workload_complete_schema: Optional[CloudNodeWorkloadCompleteSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2910,10 +2933,12 @@ class CloudNodeWorkloadsApi:
     ) -> ApiResponse[CloudNodeWorkloadSchema]:
         """Mark Workload Completed
 
-        Mark a workload as completed.
+        Mark a workload as completed.  Accepts an optional JSON body with ``result`` (dict) and ``success`` (bool) so that cloud-node processes can upload inline result data at completion time without a separate API call.
 
         :param uuid: (required)
         :type uuid: str
+        :param cloud_node_workload_complete_schema:
+        :type cloud_node_workload_complete_schema: CloudNodeWorkloadCompleteSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2938,6 +2963,7 @@ class CloudNodeWorkloadsApi:
 
         _param = self._src_app_api_cloud_node_workloads_mark_workload_completed_serialize(
             uuid=uuid,
+            cloud_node_workload_complete_schema=cloud_node_workload_complete_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2962,6 +2988,7 @@ class CloudNodeWorkloadsApi:
     def src_app_api_cloud_node_workloads_mark_workload_completed_without_preload_content(
         self,
         uuid: StrictStr,
+        cloud_node_workload_complete_schema: Optional[CloudNodeWorkloadCompleteSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2977,10 +3004,12 @@ class CloudNodeWorkloadsApi:
     ) -> RESTResponseType:
         """Mark Workload Completed
 
-        Mark a workload as completed.
+        Mark a workload as completed.  Accepts an optional JSON body with ``result`` (dict) and ``success`` (bool) so that cloud-node processes can upload inline result data at completion time without a separate API call.
 
         :param uuid: (required)
         :type uuid: str
+        :param cloud_node_workload_complete_schema:
+        :type cloud_node_workload_complete_schema: CloudNodeWorkloadCompleteSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -3005,6 +3034,7 @@ class CloudNodeWorkloadsApi:
 
         _param = self._src_app_api_cloud_node_workloads_mark_workload_completed_serialize(
             uuid=uuid,
+            cloud_node_workload_complete_schema=cloud_node_workload_complete_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -3024,6 +3054,7 @@ class CloudNodeWorkloadsApi:
     def _src_app_api_cloud_node_workloads_mark_workload_completed_serialize(
         self,
         uuid,
+        cloud_node_workload_complete_schema,
         _request_auth,
         _content_type,
         _headers,
@@ -3051,6 +3082,8 @@ class CloudNodeWorkloadsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
+        if cloud_node_workload_complete_schema is not None:
+            _body_params = cloud_node_workload_complete_schema
 
 
         # set the HTTP header `Accept`
@@ -3061,6 +3094,19 @@ class CloudNodeWorkloadsApi:
                 ]
             )
 
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
