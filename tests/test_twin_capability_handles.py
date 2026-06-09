@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from tests.twin_patch import patch_twin
+
 from cyberwave.twin import CameraTwin, LocomoteTwin, create_twin
 from cyberwave.twin.classes import FlyingTwin, GripperJointTwin, JointTwin, LocomoteCameraTwin
 
@@ -103,7 +105,7 @@ def test_joint_twin_get_pose_set_pose() -> None:
         client,
         SimpleNamespace(uuid="arm", name="SO101", asset_uuid="asset-1"),
     )
-    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["_1", "_2"]):
+    with patch_twin("capabilities.joints.controllable_joint_names", return_value=["_1", "_2"]):
         with patch.object(twin, "_prepare_outbound_command"):
             twin.set_pose({"_1": -1.5, "_2": 1.5})
         assert twin.get_joints()["_1"] != 0.0

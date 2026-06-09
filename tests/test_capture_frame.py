@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.twin_patch import patch_twin
+
 from cyberwave.exceptions import CyberwaveError
 from cyberwave.twin import CameraTwin, Twin, TwinCameraHandle, _decode_frame
 
@@ -281,8 +283,8 @@ class TestTwinCameraHandle:
     def test_get_frame_path_without_path_writes_temp_jpeg(self):
         twin, mgr = _make_twin()
         real_get_frame = TwinCameraHandle.get_frame
-        with patch(
-            "cyberwave.twin.sensors.camera._decode_frame",
+        with patch_twin(
+            "sensors.camera._decode_frame",
             return_value="/tmp/cyberwave_test.jpg",
         ):
             mgr.get_latest_frame.return_value = FAKE_JPEG
@@ -296,8 +298,8 @@ class TestTwinCameraHandle:
         with open(temp, "wb") as f:
             f.write(FAKE_JPEG)
         real_get_frame = TwinCameraHandle.get_frame
-        with patch(
-            "cyberwave.twin.sensors.camera._decode_frame",
+        with patch_twin(
+            "sensors.camera._decode_frame",
             return_value=temp,
         ):
             mgr.get_latest_frame.return_value = FAKE_JPEG

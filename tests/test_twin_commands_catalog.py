@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.twin_patch import patch_twin
+
 from cyberwave.twin import FlyingTwin, LocomoteTwin
 from cyberwave.twin.command_factory import resolve_command_delegate
 
@@ -146,7 +148,7 @@ def test_catalog_locomotion_command_burst_delegates() -> None:
     assert twin.commands._command_routing["stop"]["via"] == "locomotion.stop"
 
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch("cyberwave.twin.transport.time.sleep"):
+        with patch_twin("transport.time.sleep"):
             twin.commands.turn_left(angular_z=0.4, duration=0.2, rate_hz=10)
 
     commands = [entry.command for entry in twin._outbound_log]
@@ -167,7 +169,7 @@ def test_catalog_go2_move_forward_delegates_burst() -> None:
         capabilities={"can_locomote": True},
     )
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch("cyberwave.twin.transport.time.sleep"):
+        with patch_twin("transport.time.sleep"):
             twin.commands.move_forward(linear_x=0.5, duration=0.2, rate_hz=10)
 
     forward = [
@@ -280,7 +282,7 @@ def test_catalog_dji_continuous_ascend_bursts() -> None:
     assert twin.commands._command_routing["ascend"]["via"] == "burst"
 
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch("cyberwave.twin.transport.time.sleep"):
+        with patch_twin("transport.time.sleep"):
             twin.commands.ascend(linear_z=1.5, duration=0.2, rate_hz=10)
 
     commands = [entry.command for entry in twin._outbound_log]
