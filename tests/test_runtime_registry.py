@@ -81,5 +81,6 @@ class TestRuntimeRegistry:
             "tensorrt",
             "torch",
             "whisper_cpp",
+            "hailo",
         ):
             assert name in _RUNTIME_REGISTRY, f"runtime '{name}' not registered"

@@ -139,7 +139,7 @@ class KeyboardTeleop:
     def _get_initial_positions(self) -> Dict[str, float]:
         positions: Dict[str, float] = {}
         try:
-            positions = self._twin.joints.get_all()
+            positions = self._twin.joints.get()
         except Exception:
             pass
         return positions

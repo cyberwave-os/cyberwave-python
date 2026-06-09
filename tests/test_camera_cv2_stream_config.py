@@ -62,24 +62,74 @@ def _make_streamer(
     )
 
 
-def test_build_stream_config_for_local_camera_index() -> None:
-    """Local cameras serialise the integer id as a string ``source``.
+@pytest.mark.parametrize(
+    ("system", "expected_source"),
+    [
+        ("Linux", "/dev/video0"),
+        ("Darwin", "avfoundation:0"),
+        ("Windows", "dshow:0"),
+        ("FreeBSD", "index:0"),
+    ],
+)
+def test_build_stream_config_renders_integer_id_per_platform(
+    monkeypatch: pytest.MonkeyPatch,
+    system: str,
+    expected_source: str,
+) -> None:
+    """Bare integer ids render as the platform-native device identifier.
 
-    The frontend renders ``source`` verbatim in the Edge Details pane;
-    coercing to ``str`` here keeps the JSON wire-side typed as a
-    string regardless of whether the driver used an int or a path.
+    ``cv2.VideoCapture(0)`` opens completely different devices depending
+    on the host OS — the V4L2 node ``/dev/video0`` on Linux, an
+    AVFoundation camera on macOS, a DirectShow device on Windows.
+    Shipping a bare ``"0"`` on the wire forces the operator reading the
+    Edge Details pane to remember which OS the edge runs on; rendering
+    the platform-native identifier instead removes that mental hop
+    (CYB-2004 follow-up).
+
+    The "FreeBSD" branch pins the generic ``index:<N>`` fallback so an
+    unrecognised ``platform.system()`` still produces a meaningful
+    label rather than a bare integer.
     """
+    monkeypatch.setattr(
+        "cyberwave.sensor.camera_cv2.platform.system", lambda: system
+    )
+
     streamer = _make_streamer(camera_id=0, fps=15, resolution=Resolution.HD)
 
     config = streamer._build_stream_config()
 
     assert config == {
         "kind": "camera",
-        "source": "0",
+        "source": expected_source,
         "resolution": "1280x720",
         "fps": 15,
         "camera_type": "cv2",
     }
+
+
+def test_build_stream_config_passes_through_explicit_dev_video_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit ``/dev/video*`` paths are never rewritten by the formatter.
+
+    edge-core's ``_load_selected_camera_device`` already injects the
+    full ``/dev/video<N>`` path when the operator has selected one in
+    ``cameras.json``; the formatter must respect that choice on every
+    platform — including macOS, where the bridge may legitimately
+    pass a Linux-style path through to the container.
+    """
+    monkeypatch.setattr(
+        "cyberwave.sensor.camera_cv2.platform.system", lambda: "Darwin"
+    )
+
+    streamer = _make_streamer(
+        camera_id="/dev/video2", fps=15, resolution=Resolution.HD
+    )
+
+    config = streamer._build_stream_config()
+
+    assert config is not None
+    assert config["source"] == "/dev/video2"
 
 
 def test_build_stream_config_for_rtsp_url_preserves_source_string() -> None:
@@ -180,13 +230,24 @@ def test_build_stream_config_for_tuple_resolution() -> None:
     assert config["resolution"] == "800x600"
 
 
-def test_stream_config_round_trips_into_edge_health_payload() -> None:
+def test_stream_config_round_trips_into_edge_health_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Full integration: streamer config → EdgeHealthCheck → wire payload.
 
     Catches a class of bug where the hook is correct but the registration
     path silently drops it — the dashboard would then look fine in unit
     tests but render the asset-spec fallback on real edges.
+
+    Pinned to ``Linux`` so the legacy ``camera_config.source`` mirror
+    asserts against a stable value across CI runners; the per-platform
+    rendering rule itself is exercised by
+    :func:`test_build_stream_config_renders_integer_id_per_platform`.
     """
+    monkeypatch.setattr(
+        "cyberwave.sensor.camera_cv2.platform.system", lambda: "Linux"
+    )
+
     streamer = _make_streamer(camera_id=0, fps=15, resolution=Resolution.HD)
     mqtt = _FakeMQTT()
     health = EdgeHealthCheck(
@@ -214,7 +275,7 @@ def test_stream_config_round_trips_into_edge_health_payload() -> None:
     assert payload["camera_config"] == {
         "camera_id": "stream",
         "camera_type": "cv2",
-        "source": "0",
+        "source": "/dev/video0",
         "fps": 15,
         "resolution": "1280x720",
         "enabled": True,

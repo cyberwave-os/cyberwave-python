@@ -1,6 +1,7 @@
 """Tests for Twin.capture_frame, Twin.capture_frames, and TwinCameraHandle."""
 
 import os
+import warnings
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +13,7 @@ from cyberwave.twin import CameraTwin, Twin, TwinCameraHandle, _decode_frame
 FAKE_JPEG = b"\xff\xd8fake-jpeg-payload\xff\xd9"
 
 
-def _make_twin(cls=Twin, source_type=None):
+def _make_twin(cls=CameraTwin, source_type=None):
     twins_manager = MagicMock()
     twins_manager.get_latest_frame.return_value = FAKE_JPEG
     if source_type is not None:
@@ -21,8 +22,35 @@ def _make_twin(cls=Twin, source_type=None):
             config=SimpleNamespace(source_type=source_type),
         )
     else:
-        client = SimpleNamespace(twins=twins_manager)
-    twin = cls(client, SimpleNamespace(uuid="twin-uuid", name="TestTwin"))
+        client = SimpleNamespace(
+            twins=twins_manager,
+            config=SimpleNamespace(runtime_mode="live", source_type="tele"),
+        )
+    caps = {"sensors": [{"id": "cam", "type": "rgb", "name": "cam"}]}
+    twin = cls(
+        client,
+        SimpleNamespace(uuid="twin-uuid", name="TestTwin", capabilities=caps),
+    )
+    def _capture_side_effect(format: str = "numpy", **kwargs: object):
+        if format == "path":
+            import tempfile
+
+            dest = kwargs.get("path")
+            if dest is None:
+                fd, dest = tempfile.mkstemp(suffix=".jpg")
+                os.close(fd)
+            else:
+                parent = os.path.dirname(os.path.abspath(dest))
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
+            with open(dest, "wb") as f:
+                f.write(FAKE_JPEG)
+            return os.path.abspath(dest)
+        return FAKE_JPEG
+
+    if hasattr(twin, "get_frame"):
+        twin.get_frame = MagicMock(side_effect=_capture_side_effect)  # type: ignore[method-assign]
+        twin.camera.get_frame = twin.get_frame  # type: ignore[method-assign, union-attr]
     return twin, twins_manager
 
 
@@ -130,7 +158,7 @@ class TestTwinCaptureFrame:
         assert twin.capture_frame("bytes") == FAKE_JPEG
 
     def test_path_format_is_default(self):
-        twin, mgr = _make_twin()
+        twin, _mgr = _make_twin()
         path = twin.capture_frame()
         try:
             assert os.path.isfile(path)
@@ -140,58 +168,37 @@ class TestTwinCaptureFrame:
             os.unlink(path)
 
     def test_passes_sensor_id_and_mock(self):
-        twin, mgr = _make_twin()
+        twin, _mgr = _make_twin()
         twin.capture_frame("bytes", sensor_id="wrist", mock=True)
-        mgr.get_latest_frame.assert_called_once_with(
-            "twin-uuid", sensor_id="wrist", mock=True
+        twin.get_frame.assert_called_once_with(
+            "bytes",
+            source="local",
+            sensor_id="wrist",
+            mock=True,
         )
 
-    def test_wraps_api_errors(self):
-        twin, mgr = _make_twin()
-        mgr.get_latest_frame.side_effect = RuntimeError("network")
-        with pytest.raises(CyberwaveError, match="Failed to get latest frame"):
+    def test_wraps_unavailable_capture(self):
+        twin, _mgr = _make_twin()
+        twin.get_frame = MagicMock(return_value=None)  # type: ignore[method-assign]
+        with pytest.raises(CyberwaveError, match="No frame available"):
             twin.capture_frame("bytes")
 
-    def test_uses_sim_source_type_when_affect_simulation(self):
-        """capture_frame respects cw.affect('simulation') → source_type='sim'."""
-        twin, mgr = _make_twin(source_type="sim")
-        twin.capture_frame("bytes")
-        mgr.get_latest_frame.assert_called_once_with(
-            "twin-uuid", sensor_id=None, mock=False, source_type="sim"
-        )
-
-    def test_uses_tele_source_type_when_affect_real_world(self):
-        """capture_frame respects cw.affect('real-world') → source_type='edge' → maps to 'tele'."""
-        twin, mgr = _make_twin(source_type="edge")
-        twin.capture_frame("bytes")
-        mgr.get_latest_frame.assert_called_once_with(
-            "twin-uuid", sensor_id=None, mock=False, source_type="tele"
-        )
-
-    def test_explicit_source_type_overrides_affect(self):
-        """An explicit source_type= argument takes precedence over the affect() setting."""
-        twin, mgr = _make_twin(source_type="sim")
-        twin.capture_frame("bytes", source_type="tele")
-        mgr.get_latest_frame.assert_called_once_with(
-            "twin-uuid", sensor_id=None, mock=False, source_type="tele"
-        )
-
 
 # ---------------------------------------------------------------------------
-# Twin.capture_frames
+# Twin.get_frames
 # ---------------------------------------------------------------------------
 
 
-class TestTwinCaptureFrames:
+class TestTwinGetFrames:
     def test_bytes_returns_list(self):
-        twin, mgr = _make_twin()
-        result = twin.capture_frames(3, interval_ms=0, format="bytes")
+        twin, _mgr = _make_twin()
+        result = twin.get_frames(3, interval_ms=0, format="bytes")
         assert result == [FAKE_JPEG] * 3
-        assert mgr.get_latest_frame.call_count == 3
+        assert twin.get_frame.call_count == 3
 
     def test_path_returns_folder_with_numbered_jpegs(self):
-        twin, mgr = _make_twin()
-        folder = twin.capture_frames(2, interval_ms=0)
+        twin, _mgr = _make_twin()
+        folder = twin.get_frames(2, interval_ms=0)
         try:
             assert os.path.isdir(folder)
             files = sorted(os.listdir(folder))
@@ -206,15 +213,29 @@ class TestTwinCaptureFrames:
 
     def test_rejects_count_less_than_one(self):
         twin, _ = _make_twin()
-        with pytest.raises(CyberwaveError, match="count must be >= 1"):
-            twin.capture_frames(0)
+        with pytest.raises(ValueError, match="count must be >= 1"):
+            twin.get_frames(0)
 
     def test_passes_sensor_id(self):
-        twin, mgr = _make_twin()
-        twin.capture_frames(1, interval_ms=0, format="bytes", sensor_id="front")
-        mgr.get_latest_frame.assert_called_once_with(
-            "twin-uuid", sensor_id="front", mock=False
+        twin, _mgr = _make_twin()
+        twin.get_frames(1, interval_ms=0, format="bytes", sensor_id="front")
+        twin.get_frame.assert_called_with(
+            "bytes",
+            source="cloud",
+            sensor_id="front",
+            mock=False,
+            idx=0,
+            max_age_ms=None,
+            zenoh_timeout_s=3.0,
+            edge_timeout_s=5.0,
         )
+
+    def test_capture_frames_deprecated_delegates(self):
+        twin, _mgr = _make_twin()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            result = twin.capture_frames(2, interval_ms=0, format="bytes")
+        assert result == [FAKE_JPEG] * 2
 
 
 # ---------------------------------------------------------------------------
@@ -244,36 +265,75 @@ class TestCameraTwinUnified:
 class TestTwinCameraHandle:
     def test_read_defaults_to_numpy(self):
         twin, _ = _make_twin()
-        with patch.object(twin, "capture_frame", return_value="frame") as mock_cf:
+        with patch.object(twin.camera, "get_frame", return_value="frame") as mock_gf:
             result = twin.camera.read()
-        mock_cf.assert_called_once_with(format="numpy", sensor_id=None, mock=False)
+        mock_gf.assert_called_once_with("numpy", source="local")
         assert result == "frame"
 
     def test_read_passes_format(self):
         twin, _ = _make_twin()
-        with patch.object(twin, "capture_frame", return_value="img") as mock_cf:
+        with patch.object(twin.camera, "get_frame", return_value="img") as mock_gf:
             twin.camera.read("pil", sensor_id="top")
-        mock_cf.assert_called_once_with(format="pil", sensor_id="top", mock=False)
+        mock_gf.assert_called_once_with(
+            "pil", source="local", sensor_id="top"
+        )
 
-    def test_snapshot_without_path_uses_capture_frame_path(self):
+    def test_get_frame_path_without_path_writes_temp_jpeg(self):
+        twin, mgr = _make_twin()
+        real_get_frame = TwinCameraHandle.get_frame
+        with patch(
+            "cyberwave.twin.sensors.camera._decode_frame",
+            return_value="/tmp/cyberwave_test.jpg",
+        ):
+            mgr.get_latest_frame.return_value = FAKE_JPEG
+            result = real_get_frame(twin.camera, "path", source="cloud")
+        assert result == os.path.abspath("/tmp/cyberwave_test.jpg")
+
+    def test_get_frame_path_with_dest_writes_file(self, tmp_path):
+        twin, mgr = _make_twin()
+        dest = str(tmp_path / "out.jpg")
+        temp = str(tmp_path / "temp.jpg")
+        with open(temp, "wb") as f:
+            f.write(FAKE_JPEG)
+        real_get_frame = TwinCameraHandle.get_frame
+        with patch(
+            "cyberwave.twin.sensors.camera._decode_frame",
+            return_value=temp,
+        ):
+            mgr.get_latest_frame.return_value = FAKE_JPEG
+            result = real_get_frame(
+                twin.camera, "path", path=dest, source="cloud"
+            )
+        assert result == os.path.abspath(dest)
+        with open(dest, "rb") as f:
+            assert f.read() == FAKE_JPEG
+
+    def test_snapshot_without_path_uses_get_frame_path(self):
         twin, _ = _make_twin()
-        with patch.object(twin, "capture_frame", return_value="/tmp/snap.jpg") as mock_cf:
-            result = twin.camera.snapshot()
-        mock_cf.assert_called_once_with(format="path", sensor_id=None, mock=False)
+        with patch.object(
+            twin.camera, "get_frame", return_value="/tmp/snap.jpg"
+        ) as mock_gf:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                result = twin.camera.snapshot()
+        mock_gf.assert_called_once_with("path", path=None, source="local")
         assert result == "/tmp/snap.jpg"
 
     def test_snapshot_with_path_writes_file(self, tmp_path):
-        twin, mgr = _make_twin()
+        twin, _ = _make_twin()
         dest = str(tmp_path / "out.jpg")
-        result = twin.camera.snapshot(dest)
-        assert os.path.isfile(result)
-        with open(result, "rb") as f:
-            assert f.read() == FAKE_JPEG
+        mock_gf = MagicMock(return_value=dest)
+        twin.camera.get_frame = mock_gf
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            result = twin.camera.snapshot(dest)
+        assert result == dest
+        mock_gf.assert_called_once_with("path", path=dest, source="local")
 
-    def test_stream_raises_for_base_twin(self):
-        twin, _ = _make_twin(Twin)
-        with pytest.raises(CyberwaveError, match="streaming capabilities"):
-            twin.camera.stream()
+    def test_base_twin_has_no_stream(self):
+        client = SimpleNamespace(twins=MagicMock())
+        twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="TestTwin"))
+        assert not hasattr(twin, "stream")
 
     def test_stream_delegates_to_start_streaming(self):
         twin, _ = _make_twin(CameraTwin)

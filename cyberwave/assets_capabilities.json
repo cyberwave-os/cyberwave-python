@@ -550,11 +550,6 @@
       "has_legs": true,
       "has_wheels": false,
       "locomotion_mode": "legged",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 7,
@@ -573,23 +568,23 @@
           "parent_link": "radar",
           "offset": {
             "position": {
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "x": 0,
+              "y": 0,
+              "z": 0
             },
             "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
             }
           },
           "parameters": {
-            "update_rate": 10.0,
-            "fov_horizontal": 360.0,
-            "fov_vertical": 90.0,
+            "update_rate": 10,
+            "fov_horizontal": 360,
+            "fov_vertical": 90,
             "min_range": 0.05,
-            "max_range": 30.0,
+            "max_range": 30,
             "points_per_second": 21600,
             "velocity_sensing": true
           }
@@ -602,9 +597,9 @@
           "parent_link": "front_camera",
           "offset": {
             "position": {
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "x": 0,
+              "y": 0,
+              "z": 0
             },
             "rotation": {
               "w": 0.5,
@@ -616,8 +611,11 @@
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30.0,
-            "fovy": 88.5072
+            "update_rate": 30,
+            "fov_degrees": 88.5072,
+            "fovy": 88.5072,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
           }
         }
       ]
@@ -1664,9 +1662,9 @@
     "registry_id": "rethink-robotics/sawyer",
     "registry_id_alias": null
   },
-  "kinova-robotics/kortex-gen3": {
+  "kinova/kortex-gen3-lite": {
     "uuid": "6cb1a4a7-ed24-4e2b-b126-5ac665ddf80a",
-    "name": "Kortex Gen3",
+    "name": "Kortex Gen3 Lite",
     "capabilities": {
       "has_joints": true,
       "can_actuate": true,
@@ -1675,11 +1673,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": true,
       "manipulator_count": 1,
       "payload_capacity_kg": 0,
@@ -1691,7 +1684,7 @@
       "minimum_frequency_hz": 0,
       "sensors": []
     },
-    "registry_id": "kinova-robotics/kortex-gen3",
+    "registry_id": "kinova/kortex-gen3-lite",
     "registry_id_alias": null
   },
   "anybotics/anymal-c": {
@@ -2466,7 +2459,7 @@
     "registry_id": "robotis/turtlebot3-burger",
     "registry_id_alias": null
   },
-  "unitree/unitree_go1": {
+  "unitree/go1": {
     "uuid": "6fe74a78-f244-4b4a-8046-501e5c35a5b9",
     "name": "Unitree Go1",
     "capabilities": {
@@ -2477,11 +2470,6 @@
       "has_legs": true,
       "has_wheels": false,
       "locomotion_mode": "legged",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -2512,7 +2500,9 @@
             }
           },
           "parameters": {
-            "update_rate": null
+            "update_rate": 10,
+            "min_range": 0.1,
+            "max_range": 100
           }
         },
         {
@@ -2535,14 +2525,16 @@
             }
           },
           "parameters": {
-            "width": null,
-            "height": null,
-            "update_rate": null
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
           }
         }
       ]
     },
-    "registry_id": "unitree/unitree_go1",
+    "registry_id": "unitree/go1",
     "registry_id_alias": null
   },
   "unitree/unitree-b1": {
@@ -3018,11 +3010,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -3687,66 +3674,6 @@
     "registry_id": "cyberwave/substation",
     "registry_id_alias": null
   },
-  "dji/DJI-Mini-3-Pro": {
-    "uuid": "e07a26e1-1419-4523-81cf-8ae97fb1fb73",
-    "name": "DJI Mini 3 Pro",
-    "capabilities": {
-      "has_joints": false,
-      "can_actuate": false,
-      "can_locomote": true,
-      "can_fly": true,
-      "has_legs": false,
-      "has_wheels": false,
-      "locomotion_mode": "aerial",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
-      "can_grip": false,
-      "manipulator_count": 0,
-      "payload_capacity_kg": 0,
-      "power_source": "battery",
-      "power_capacity_wh": -1,
-      "navigation_autonomy_level": "manual",
-      "navigation_obstacle_avoidance": false,
-      "maximum_frequency_hz": 30,
-      "minimum_frequency_hz": 0,
-      "sensors": [
-        {
-          "id": "main_camera",
-          "name": "main_camera",
-          "type": "rgb",
-          "model": null,
-          "parent_link": "base_link",
-          "offset": {
-            "position": {
-              "x": 0.003,
-              "y": -0.05,
-              "z": 0.023
-            },
-            "rotation": {
-              "w": 0,
-              "x": 0,
-              "y": -0.7071,
-              "z": -0.7071
-            }
-          },
-          "parameters": {
-            "width": 4096,
-            "height": 2160,
-            "update_rate": 30,
-            "fov_degrees": 48.1,
-            "fovy": 48.1,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
-          }
-        }
-      ]
-    },
-    "registry_id": "dji/DJI-Mini-3-Pro",
-    "registry_id_alias": null
-  },
   "Holybro/PX4Vision": {
     "uuid": "36e7e7c0-696c-410f-83f0-0d6a3f239bde",
     "name": "PX4 Vision",
@@ -4073,11 +4000,6 @@
       "has_legs": false,
       "has_wheels": true,
       "locomotion_mode": "wheeled",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -4409,11 +4331,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": true,
       "manipulator_count": 2,
       "payload_capacity_kg": 4,
@@ -5358,11 +5275,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "aerial",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -5433,6 +5345,135 @@
       "sensors": []
     },
     "registry_id": "cyberwave/epal",
+    "registry_id_alias": null
+  },
+  "dji/dji-mini-3": {
+    "uuid": "100eda41-c59c-405e-bec1-797d1edce4ea",
+    "name": "DJI Mini 3",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": true,
+      "can_fly": true,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "aerial",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": "battery",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "manual",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "main_camera",
+          "name": "main_camera",
+          "type": "rgb",
+          "model": null,
+          "parent_link": "camera_gimbal",
+          "offset": {
+            "position": {
+              "x": 3.0258299199559247e-09,
+              "y": -0.019600005181208136,
+              "z": 0.00995460188114642
+            },
+            "rotation": {
+              "w": -0.0212,
+              "x": -0.0206,
+              "y": -0.6966,
+              "z": -0.7169
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_degrees": 85,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
+          }
+        }
+      ]
+    },
+    "registry_id": "dji/dji-mini-3",
+    "registry_id_alias": null
+  },
+  "mls-team/math-scavator-9000": {
+    "uuid": "5190de27-7b4a-4b1b-a12f-f777cd29ac19",
+    "name": "Math Scavator 9000",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "mls-team/math-scavator-9000",
+    "registry_id_alias": null
+  },
+  "cyberwave/generic-microphone": {
+    "uuid": "86debf8a-a0fd-4c9c-aaa8-b86a7264b458",
+    "name": "Generic Microphone",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/generic-microphone",
+    "registry_id_alias": null
+  },
+  "cyberwave/generic-speaker": {
+    "uuid": "bb1a29be-0e88-4b12-a6af-2864b2448ca0",
+    "name": "Generic Speaker",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/generic-speaker",
     "registry_id_alias": null
   }
 }

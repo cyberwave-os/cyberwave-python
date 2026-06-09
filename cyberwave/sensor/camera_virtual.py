@@ -138,6 +138,11 @@ class VirtualVideoTrack(BaseVideoTrack):
                 frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
                 frame[...] = (0, 0, 255)
 
+        try:
+            self._current_frame = np.ascontiguousarray(frame).copy()
+        except Exception:
+            self._current_frame = frame
+
         # Log timestamps periodically
         if self.frame_count % 60 == 0 and self.frame_count > 0:
             logger.debug(

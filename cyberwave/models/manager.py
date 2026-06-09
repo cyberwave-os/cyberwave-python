@@ -32,6 +32,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -180,6 +181,20 @@ class ModelManager:
                 "ModelManager directly without an api_client."
             )
         return self._catalog
+
+    def run(self, model_id: str, **kwargs: Any) -> Any:
+        """Run cloud playground inference for a model UUID or slug.
+
+        Alias used by generated workflow workers (``client.mlmodels.run``).
+        Forwards to :meth:`PlaygroundClient.run`.
+        """
+        if self.playground is None:
+            raise CyberwaveAPIError(
+                "cw.models.run requires an API connection. "
+                "Use 'cw = Cyberwave(api_key=...)' instead of constructing "
+                "ModelManager directly without an api_client."
+            )
+        return self.playground.run(model_id, **kwargs)
 
     def list(
         self,
@@ -583,7 +598,21 @@ class ModelManager:
         *,
         download_url: str | None = None,
     ) -> Path:
-        """Resolve a catalog model ID to a local file path."""
+        """Resolve a catalog model ID to a local file path.
+
+        Self-heal contract: when a staging directory at
+        ``self._model_dir / model_id`` exists but contains no recognized
+        weight file, it is treated as a poison-pill orphan left by a
+        previously-failed Edge Core download (see
+        ``cyberwave-edge-core/cyberwave_edge_core/model_manager.py``,
+        ``_download_runtime_managed`` / ``_download_model`` create the
+        directory before the network call). Returning that directory
+        path here would forward a directory into ``torch.load`` and
+        crash with ``IsADirectoryError`` on every worker start, so we
+        prune it (best-effort) and let the Ultralytics auto-download
+        convenience branch — or a clear ``FileNotFoundError`` for
+        non-Ultralytics runtimes — take over.
+        """
         exact = self._model_dir / model_id
         if exact.is_file():
             return exact
@@ -594,11 +623,50 @@ class ModelManager:
                 return candidate
 
         model_subdir = self._model_dir / model_id
+        staged_dir_was_empty = False
         if model_subdir.is_dir():
+            # faster-whisper stores a HuggingFace-style tree, not a single weight file.
+            if runtime == "faster_whisper":
+                return model_subdir
             for ext in self._runtime_extensions(runtime):
                 for f in sorted(model_subdir.iterdir()):
                     if f.suffix == ext:
                         return f
+
+            # No recognized weight file inside the staging directory.
+            # Two distinct sub-cases, both of which previously fell
+            # through to "return the directory path" and crashed
+            # ``torch.load`` with ``IsADirectoryError`` on every worker
+            # start.
+            if self._is_empty_staging_dir(model_subdir):
+                # Cruft-only orphan from a previously failed download
+                # (mkdir runs before the network fetch on the Edge Core
+                # side; an aborted fetch leaves the directory in place).
+                # Prune so the fallback paths below can run on a clean
+                # slate.
+                logger.warning(
+                    "Pruning orphan model staging directory at %s "
+                    "(no recognized weight file inside — likely left "
+                    "behind by a previous failed download).",
+                    model_subdir,
+                )
+                shutil.rmtree(model_subdir, ignore_errors=True)
+                staged_dir_was_empty = True
+            else:
+                # Operator-staged content (a README, a half-staged weight
+                # with an unexpected extension, a sub-directory). The
+                # "human always wins" invariant says we do **not** touch
+                # the directory; raise an actionable error so the
+                # operator can finish staging.
+                stray = sorted(p.name for p in model_subdir.iterdir())
+                raise FileNotFoundError(
+                    f"Model '{model_id}' staging directory at "
+                    f"{model_subdir} contains files but no recognized "
+                    f"weight file for runtime '{runtime}' (expected one "
+                    f"of: {self._runtime_extensions(runtime)}). Found: "
+                    f"{stray}. Add the missing weight file or remove "
+                    f"the directory to let Edge Core re-download."
+                )
 
         # Ultralytics convenience: let the library auto-download from hub.
         # Place the file inside _model_dir so it lands on a writable mount
@@ -606,6 +674,13 @@ class ModelManager:
         if runtime == "ultralytics":
             self._model_dir.mkdir(parents=True, exist_ok=True)
             return self._model_dir / model_id
+
+        # faster-whisper downloads CTranslate2 weights into download_root.
+        if runtime == "faster_whisper":
+            self._model_dir.mkdir(parents=True, exist_ok=True)
+            cache_root = self._model_dir / model_id
+            cache_root.mkdir(parents=True, exist_ok=True)
+            return cache_root
 
         if download_url is not None and download_url.strip():
             logger.info(
@@ -616,11 +691,51 @@ class ModelManager:
             self._stream_download_to(download_url.strip(), exact)
             return exact
 
+        if staged_dir_was_empty:
+            raise FileNotFoundError(
+                f"Model '{model_id}' staging directory at {model_subdir} "
+                f"was empty and has been pruned. The previous Edge Core "
+                f"download likely failed mid-way; restart the edge agent "
+                f"to retry, or pre-stage weights manually."
+            )
+
         raise FileNotFoundError(
             f"Model '{model_id}' not found in {self._model_dir}. "
             f"Ensure edge core has downloaded the model weights, "
             f"or use load_from_file()."
         )
+
+    @staticmethod
+    def _is_empty_staging_dir(model_subdir: Path) -> bool:
+        """Return ``True`` iff *model_subdir* contains only orphan-cruft.
+
+        Conservative definition of "orphan": the directory contains no
+        recognizable weight file (handled by the caller before this
+        helper runs) **and** every remaining entry is either the
+        metadata sidecar (``MODEL_METADATA_FILENAME``) or a partial
+        streaming download (``.dl_*.part`` — matches the temp-file
+        prefix used by both the SDK's :meth:`_stream_download_to` and
+        Edge Core's ``_stream_download``).
+
+        We deliberately keep this strict: any other file in the
+        directory (a half-written weight file with an unexpected
+        extension, an operator's README, a sidecar config) blocks the
+        prune, so a human always wins over the self-heal.
+        """
+        try:
+            entries = list(model_subdir.iterdir())
+        except OSError:
+            return False
+        for entry in entries:
+            if not entry.is_file():
+                return False
+            name = entry.name
+            if name == MODEL_METADATA_FILENAME:
+                continue
+            if name.startswith(".dl_") and name.endswith(".part"):
+                continue
+            return False
+        return True
 
     # ------------------------------------------------------------------
     # Cloud routing
@@ -977,12 +1092,22 @@ class ModelManager:
         # so e.g. ``yolov8n-pose-onnx`` resolves to onnxruntime, not ultralytics.
         if lower.endswith("-onnx") or lower.endswith(".onnx"):
             return "onnxruntime"
+        # Hailo HEFs: explicit ``.hef`` extension, or catalog slug hints
+        # (``_h8`` / ``_h8l`` / ``_hailo``) that the seed file uses to
+        # distinguish hardware variants when the slug otherwise looks
+        # like a generic ``yolov8s``.
+        if lower.endswith(".hef") or any(
+            tag in lower for tag in ("_h8l", "_h8", "_hailo", "-hailo")
+        ):
+            return "hailo"
         if any(k in lower for k in ("yolo", "yolov5", "yolov8", "yolov11")):
             return "ultralytics"
         if any(k in lower for k in ("background-subtraction", "haar", "cascade")):
             return "opencv"
         if lower.endswith((".gguf", ".bin")) and "whisper" in lower:
             return "whisper_cpp"
+        if "faster-whisper" in lower or lower.startswith("systran/faster-whisper"):
+            return "faster_whisper"
         if lower.endswith(".tflite"):
             return "tflite"
         if lower.endswith((".engine", ".trt")):
@@ -1007,6 +1132,7 @@ class ModelManager:
             ".engine": "tensorrt",
             ".trt": "tensorrt",
             ".pth": "torch",
+            ".hef": "hailo",
         }
         return mapping.get(ext.lower(), "ultralytics")
 
@@ -1020,6 +1146,8 @@ class ModelManager:
             "torch": [".pt", ".pth"],
             "tensorrt": [".engine", ".trt"],
             "whisper_cpp": [".gguf", ".bin"],
+            "faster_whisper": [],
+            "hailo": [".hef"],
         }
         return mapping.get(runtime, [".pt"])
 

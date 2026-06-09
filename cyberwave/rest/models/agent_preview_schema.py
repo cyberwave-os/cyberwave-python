@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.workflow_node_hint_schema import WorkflowNodeHintSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -32,7 +33,8 @@ class AgentPreviewSchema(BaseModel):
     controller_policy_uuid: Optional[StrictStr] = None
     mode: Optional[StrictStr] = 'preview'
     simulation_backend: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["prompt", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend"]
+    node_hints: Optional[List[WorkflowNodeHintSchema]] = None
+    __properties: ClassVar[List[str]] = ["prompt", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "node_hints"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -83,6 +85,13 @@ class AgentPreviewSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in node_hints (list)
+        _items = []
+        if self.node_hints:
+            for _item_node_hints in self.node_hints:
+                if _item_node_hints:
+                    _items.append(_item_node_hints.to_dict())
+            _dict['node_hints'] = _items
         # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
@@ -114,7 +123,8 @@ class AgentPreviewSchema(BaseModel):
             "twin_uuid": obj.get("twin_uuid"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "mode": obj.get("mode") if obj.get("mode") is not None else 'preview',
-            "simulation_backend": obj.get("simulation_backend")
+            "simulation_backend": obj.get("simulation_backend"),
+            "node_hints": [WorkflowNodeHintSchema.from_dict(_item) for _item in obj["node_hints"]] if obj.get("node_hints") is not None else None
         })
         return _obj
 

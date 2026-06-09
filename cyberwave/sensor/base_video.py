@@ -83,6 +83,7 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
         self._current_time_base_den: int = 30
         self._current_capture_wall_time: float = 0.0
         self._current_capture_monotonic: float = 0.0
+        self._current_frame: Any = None
 
     def _store_frame_metadata_for_sync(
         self,
@@ -765,6 +766,8 @@ class BaseVideoStreamer(abc.ABC):
                     logger.warning("Command message missing command field")
                     return
 
+                _EDGE_CORE_COMMANDS = {"sync_workflows", "remove_workflow_worker"}
+
                 if command_type == "start_video":
                     data_dict = payload.get("data", {})
                     if isinstance(data_dict, dict):
@@ -780,6 +783,8 @@ class BaseVideoStreamer(abc.ABC):
                     asyncio.run_coroutine_threadsafe(
                         self._handle_stop_command(command_callback), self._event_loop
                     )
+                elif command_type in _EDGE_CORE_COMMANDS:
+                    pass
                 else:
                     logger.warning(f"Unknown command type: {command_type}")
 

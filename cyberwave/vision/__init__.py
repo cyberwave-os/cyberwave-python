@@ -21,8 +21,10 @@ enough to run on a per-frame basis on edge workers:
 
 from cyberwave.vision.annotate import (
     OVERLAY_PAYLOAD_VERSION,
+    MaskFormat,
     annotate_detections,
     build_overlay_payload,
+    mask_to_polygon,
 )
 from cyberwave.vision.anonymize import (
     COCO17_EDGE_GROUPS,
@@ -38,9 +40,11 @@ __all__ = [
     "COCO17_SEGMENT_COLORS",
     "COCO17_SKELETON",
     "OVERLAY_PAYLOAD_VERSION",
+    "MaskFormat",
     "annotate_detections",
     "anonymize_frame",
     "blank_persons",
     "build_overlay_payload",
     "draw_skeleton",
+    "mask_to_polygon",
 ]

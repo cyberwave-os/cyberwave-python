@@ -182,6 +182,11 @@ class SimVideoTrack(BaseVideoTrack):
         if frame is None:
             frame = self._placeholder
 
+        try:
+            self._current_frame = np.ascontiguousarray(frame).copy()
+        except Exception:
+            self._current_frame = frame
+
         # Capture current timestamp at frame capture moment for accuracy.
         timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 

@@ -21,6 +21,7 @@ def _stub_manager_modules(monkeypatch: pytest.MonkeyPatch) -> None:
             self.client = client
 
     fake_resources = SimpleNamespace(
+        BaseResourceManager=_FakeResourceManager,
         WorkspaceManager=_FakeResourceManager,
         ProjectManager=_FakeResourceManager,
         EnvironmentManager=_FakeResourceManager,
@@ -124,16 +125,22 @@ def test_affect_same_runtime_keeps_existing_mqtt_client() -> None:
 def test_affect_changes_emitted_command_and_state_source_types() -> None:
     with patch("cyberwave.mqtt.mqtt.Client"):
         client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
-        twin = LocomoteTwin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+        twin = LocomoteTwin(
+            client,
+            SimpleNamespace(uuid="twin-uuid", name="Twin", asset_uuid="asset-uuid"),
+        )
 
         client.affect("simulation")
         simulation_mqtt = client.mqtt
         simulation_mqtt._client.connected = True
         simulation_mqtt._client.publish = MagicMock()
 
-        twin.move_forward(1.0)
-        simulation_command_payload = simulation_mqtt._client.publish.call_args.args[1]
-        assert simulation_command_payload["source_type"] == "sim_tele"
+        with patch.object(twin, "_prepare_outbound_command"):
+            twin.move_forward(1.0, duration=0)
+        forward = next(
+            entry for entry in twin._outbound_log if entry.command == "move_forward"
+        )
+        assert forward.payload["source_type"] == "sim_tele"
 
         simulation_mqtt._client.publish.reset_mock()
         simulation_mqtt.update_twin_position(
@@ -146,10 +153,14 @@ def test_affect_changes_emitted_command_and_state_source_types() -> None:
         live_mqtt = client.mqtt
         live_mqtt._client.connected = True
         live_mqtt._client.publish = MagicMock()
+        twin._outbound_log.clear()
 
-        twin.move_forward(1.0)
-        live_command_payload = live_mqtt._client.publish.call_args.args[1]
-        assert live_command_payload["source_type"] == "tele"
+        with patch.object(twin, "_prepare_outbound_command"):
+            twin.move_forward(1.0, duration=0)
+        forward = next(
+            entry for entry in twin._outbound_log if entry.command == "move_forward"
+        )
+        assert forward.payload["source_type"] == "tele"
 
         live_mqtt._client.publish.reset_mock()
         live_mqtt.update_twin_position("twin-uuid", {"x": 4.0, "y": 5.0, "z": 6.0})

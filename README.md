@@ -28,6 +28,22 @@ The official Python SDK for Cyberwave. Create, control, and simulate robotics wi
 pip install cyberwave
 ```
 
+## Contents
+
+- [Installation](#installation)
+- [Try on Google Colab](#try-on-google-colab)
+- [Quick Start](#quick-start)
+- [Core Features](#core-features)
+- [Twin control guide](#twin-control-guide)
+- [Examples](#examples)
+- [Advanced Usage](#advanced-usage)
+- [Data Layer (`cw.data`)](#data-layer-cwdata--stub)
+- [ML Models (`cw.models`)](#ml-models-cwmodels)
+- [Zenoh-MQTT Bridge](#zenoh-mqtt-bridge-cyberwavezenoh_mqtt--stub)
+- [Testing](#testing)
+- [Version 0.5.0 twin API changelog](#version-050-twin-api-changelog-in-progress)
+- [Contributing](#contributing)
+
 ## Try on Google Colab
 
 These notebooks use **`pip install "cyberwave[ml]"`** and walk through **`cw.models` / `cyberwave.models`**: local YOLO weights, **`PredictionResult`**, overlays, and (in the minimal notebook) a **live twin** JPEG → predict flow.
@@ -82,11 +98,14 @@ cw.affect("simulation")   # or cw.affect("live") for the physical robot
 rover.move_forward(distance=1.0)
 rover.turn_left(angle=1.57)
 
-# Move the robot arm to 30 degrees
-robot.joints.set("1", 30)
+# Move a joint by name (from joints.list())
+joint_names = robot.joints.list()
+if joint_names:
+    robot.set_joints({joint_names[0]: -0.2})
+    print(joint_names[0], ":", robot.joints[joint_names[0]])
 
-# Get current joint positions
-print(robot.joints.get_all())
+# Or use the joints handle directly
+print(robot.get_joints())
 ```
 
 ## Core Features
@@ -268,7 +287,87 @@ print(updated_asset.glb_file)
 
 ### Grab a Frame
 
-Capture the latest camera frame in 3 lines — no streaming setup required:
+``twin.get_frame()`` is the single entry point for still images. It has two independent parameters:
+
+- ``source=`` — **where** the pixels are produced (default ``"cloud"``).
+- ``format=`` — **how** you want them back: ``"bytes"``, ``"numpy"``, ``"pil"``, or ``"path"`` (write a JPEG and return the file path; replaces the old ``snapshot`` helpers). Default: ``"bytes"``.
+
+#### 1. Runtime mode — ``cw.affect()`` (cloud only)
+
+Sim vs live is **not** a ``source=`` option. Set it once on the client with ``cw.affect()`` and it will affect twin.get_frame() as well as other twin related methods for getters and setters. ``cw.affect("sim")`` will make your code work on simulation, while ``cw.affect("live")`` will make the same code work on real hardware. Same code, just one setting to update. By default, the runtime mode is ``live``.
+
+| ``cw.affect(...)`` | What ``robot.get_frame()`` sees (``source="cloud"``) |
+| --- | --- |
+| ``"simulation"`` | Latest frame from the **simulator** bucket (virtual camera in the scene). |
+| ``"live"`` | Latest frame from the **live / teleoperation** bucket (edge or active stream mirrored to the platform). |
+
+```python
+cw.affect("simulation")
+sim_jpeg = robot.get_frame()          # sim latest-frame — no edge hardware required
+
+cw.affect("live")
+live_jpeg = robot.get_frame()         # live latest-frame — what the UI / teleop path sees
+```
+
+When the client is in **simulation runtime mode**, only ``source="cloud"`` is allowed. ``local``, ``zenoh``, and ``remote_edge`` raise — those transports are for on-machine / edge workflows, not the sim-first client default.
+
+#### 2. Frame sources — ``source=``
+
+Pick the transport that matches **where your script runs** relative to the camera.
+
+##### ``"cloud"`` (default) — works from anywhere
+
+``robot.get_frame()`` with no ``source`` calls the platform ``/latest-frame`` API. Use this in notebooks, Colab, CI, or any machine with API access. No local driver, Zenoh, or stream required.
+
+Fail-soft: returns ``None`` if the endpoint has no frame yet. Which sim vs live bucket is used is determined by ``cw.affect()`` as above.
+
+```python
+jpeg = robot.get_frame()                    # bytes from latest-frame
+arr = robot.get_frame("numpy")              # decoded array
+wrist = robot.get_frame("numpy", sensor_id="wrist_cam")  # multi-camera twins
+```
+
+##### ``"remote_edge"`` — still from hardware over MQTT
+
+Sends the twin’s MQTT ``take_photo`` command and waits for a JPEG on the driver photo topic. Useful when there is **no active video stream** to the platform but the edge driver can capture a single image (e.g. snapshot on demand).
+
+Raises on timeout or driver error (unlike cloud, which is fail-soft).
+
+```python
+edge_jpeg = robot.get_frame("bytes", source="remote_edge")
+```
+
+##### ``"local"`` — same process as your stream (**advanced**, driver authoring)
+
+For scripts that **start the camera stream inside the same Python process** — typical when writing or testing drivers. After you call ``twin.start_streaming()`` (or ``twin.stream()``, which delegates to it), ``source="local"`` reads the current frame from the in-process ``CameraStreamer`` (``_camera_streamer``) **without** a round trip to Cyberwave servers.
+
+```python
+robot.start_streaming()   # publishes via MQTT; streamer lives on this process
+frame = robot.get_frame("numpy", source="local")   # from CameraStreamer, not REST
+```
+
+**Scope:** only meaningful in the process that owns the stream. It will not fetch another machine’s stream.
+
+If no streamer is running, ``local`` falls back to a **single** OpenCV grab from device ``idx`` (default ``0``) — handy for a one-off USB frame, not a substitute for cloud or edge streaming.
+
+##### ``"zenoh"`` — same machine as the driver (**advanced**)
+
+Reads the latest sample on the twin’s ``cw.data`` ``frames`` channel. Use when your script runs on the **same device (or Zenoh-reachable LAN)** as the edge camera driver that publishes frames over Zenoh — e.g. your driver process and your test script on the robot’s onboard computer.
+
+**Scope:** does not work from arbitrary remote hosts (Colab, your laptop) unless Zenoh is explicitly reachable there. Treat as an on-robot / co-located integration path.
+
+```python
+frame = robot.get_frame("numpy", source="zenoh")
+```
+
+#### Quick reference
+
+| ``source`` | Runs from | Needs |
+| --- | --- | --- |
+| ``cloud`` | Anywhere with API key | Twin has a latest-frame on the platform; ``cw.affect()`` for sim vs live |
+| ``remote_edge`` | Anywhere with MQTT to twin | Driver supports ``take_photo`` |
+| ``local`` | Same process as ``start_streaming()`` | Active ``CameraStreamer``, or local OpenCV device |
+| ``zenoh`` | Same host / Zenoh LAN as driver | Driver publishing ``cw.data`` frames |
 
 ```python
 from cyberwave import Cyberwave
@@ -276,40 +375,29 @@ from cyberwave import Cyberwave
 cw = Cyberwave()
 robot = cw.twin("the-robot-studio/so101")
 
-# Grab the latest frame (default: saved to a temp JPEG file)
-path = robot.capture_frame()                   # returns temp file path
-frame = robot.capture_frame("numpy")           # numpy BGR array (requires numpy + opencv-python)
-image = robot.capture_frame("pil")             # PIL.Image (requires Pillow)
-raw = robot.capture_frame("bytes")             # raw JPEG bytes
+# General-purpose (default)
+cloud = robot.get_frame()
 
-# Batch capture: grab 5 frames 200ms apart
-folder = robot.capture_frames(5, interval_ms=200)           # folder of JPEGs
-frames = robot.capture_frames(5, format="numpy")             # list of arrays
+# On-robot / driver development (advanced)
+robot.start_streaming()
+in_process = robot.get_frame("numpy", source="local")
+on_device = robot.get_frame("numpy", source="zenoh")
 
-# For multi-camera twins, specify a sensor
-wrist = robot.capture_frame("numpy", sensor_id="wrist_cam")
+# Edge still without live video
+edge = robot.get_frame("bytes", source="remote_edge")
 ```
 
-`capture_frame()` and `get_latest_frame()` follow your active `cw.affect(...)` mode by default:
-
-- `cw.affect("real-world")` → returns the latest real sensor frame
-- `cw.affect("simulation")` → returns the rendered virtual camera frame
-
-You can still override per call with `source_type`:
+#### Output format and bursts
 
 ```python
-cw.affect("simulation")
-sim_raw = robot.get_latest_frame()                    # virtual camera frame
-real_raw = robot.get_latest_frame(source_type="tele")  # force real-world frame
+path = robot.get_frame("path")                              # temp JPEG on disk
+path = robot.get_frame("path", path="/tmp/frame.jpg", source="local")
+
+folder = robot.get_frames(5, interval_ms=200)               # numbered JPEGs in a temp dir
+frames = robot.get_frames(5, format="bytes")                # list of raw JPEG bytes
 ```
 
-There's also a `twin.camera` namespace with convenience methods:
-
-```python
-frame = robot.camera.read()              # numpy array (default)
-path  = robot.camera.snapshot()           # save JPEG to temp file
-path  = robot.camera.snapshot("out.jpg")  # save to a specific path
-```
+``twin.get_latest_frame()`` remains for backward compatibility (raises on error). Deprecated aliases on ``twin.camera`` (``latest_frame``, ``capture``, ``read``, ``snapshot``, ``edge_photo``, …) delegate to ``get_frame`` with a ``DeprecationWarning``.
 
 ### Environment Variables
 
@@ -438,6 +526,44 @@ cw.disconnect()
 
 For custom or robot-provided sources, pass your own `get_audio()` callback. For Unitree Go2 robot microphone streaming, see [examples/audio_stream.py](examples/audio_stream.py) (requires `unitree_webrtc_connect`). For combined video + audio, see [examples/multimedia_stream.py](examples/multimedia_stream.py).
 
+### Audio playback (speaker)
+
+The speaker counterpart consumes a WebRTC downstream leg from the media-service (or any user-supplied source) and plays it through a host `sounddevice.OutputStream`. The SDK ships the same lifecycle abstractions as the microphone — `SpeakerAudioStreamer` subclasses the shared `BaseAudioStreamer`, and `HostSpeakerCapture` wraps the device with idempotent `start()` / `stop()`. See the [native speaker driver](https://docs.cyberwave.com/feature-reference/edge/drivers/native-speaker-driver) page for the containerised edge build.
+
+Install host speaker dependencies:
+
+```bash
+pip install cyberwave[speaker]
+```
+
+Play a local file through the default output device:
+
+```python
+from cyberwave.sensor.speaker import play_file
+
+play_file("hello.mp3")  # supports mp3, wav, flac, ogg, ...
+```
+
+Subscribe a speaker twin to a peer microphone twin (Zenoh or WebRTC, your choice):
+
+```python
+import asyncio
+from cyberwave import Cyberwave
+from cyberwave.sensor.speaker import associate_speaker_to_microphone
+
+cw = Cyberwave()
+session = await associate_speaker_to_microphone(
+    cw,
+    speaker_twin_uuid="speaker-twin-uuid",
+    microphone_twin_uuid="mic-twin-uuid",
+    transport="webrtc",  # or "zenoh"
+)
+# ... run until done ...
+await session.stop()
+```
+
+The lower-level building blocks (`SpeakerAudioStreamer`, `SpeakerAudioTrack`, `HostSpeakerCapture`, `list_host_sound_devices`, plus volume/gain/routing helpers) are available directly from `cyberwave.sensor.speaker` for custom integrations.
+
 ### Drones and Flying Twins
 
 Twins whose asset has `can_fly: true` are returned as `FlyingTwin` instances.
@@ -502,42 +628,241 @@ See the full DJI Mini 4 Pro walkthrough in
 [examples/drone_dji_mini.py](examples/drone_dji_mini.py), and the simpler
 hovering-only flow in [examples/drone_hovering.py](examples/drone_hovering.py).
 
+## Twin control guide
+
+How to command twins in SDK **0.5.x**: grouped capability handles, asset-driven MQTT catalogs, and separate **simulation** vs **live** state buckets. Runnable scripts for each topic live under [examples/](examples) ([examples/README.md](examples/README.md)).
+
+### Prerequisites
+
+```bash
+export CYBERWAVE_API_KEY=your_key   # or: cyberwave login --token …
+pip install cyberwave
+```
+
+Use **asset slugs** (e.g. `the-robot-studio/so101`, `unitree/go2`) with `cw.twin(slug)`. Call `cw.affect("simulation")` or `cw.affect("live")` before locomotion and joint MQTT so commands and cached state target the right runtime.
+
+### Scene layout
+
+Editor placement does **not** go over MQTT. Use `edit_position` / `edit_rotation` to move the twin in the environment scene.
+
+```python
+arm = cw.twin("the-robot-studio/so101")
+arm.edit_position(x=1, y=0, z=0.5)
+arm.edit_rotation(yaw=90)
+```
+
+→ [examples/quickstart.py](examples/quickstart.py)
+
+### Joints
+
+Joint names come from `twin.joints.list()`. Read/write by **name** (not numeric index). Positions are radians unless you pass `degrees=True` on `joints.set`.
+
+```python
+joint_names = arm.joints.list()
+arm.set_joints({joint_names[0]: -0.2})
+print(arm.get_joints())
+# arm.get_joints(what_data=("position", "velocity", "effort"))
+```
+
+→ [examples/joints.py](examples/joints.py), [examples/compact.py](examples/compact.py). Deeper API: [Joint Control](#joint-control) below.
+
+### Locomotion
+
+Locomotion twins (Go2, UGV, …) accept velocity-style commands. The SDK publishes a **burst** of MQTT messages plus an explicit `stop` so edge drivers with velocity watchdogs stay alive.
+
+```python
+cw.affect("simulation")  # or "live"
+robot = cw.twin("unitree/go2")
+robot.locomotion.move_forward(0.3, duration=0.5, rate_hz=10)
+robot.turn_left(0.5, duration=0.3)
+# Top-level shortcuts: robot.move_forward(0.3, duration=0.5)
+```
+
+Speed is **m/s** (forward/back) or **rad/s** (turns), not travel distance. Do not use deprecated `move()` / `rotate()` for locomotion — use `edit_rotation()` for editor layout only.
+
+→ [examples/locomotion.py](examples/locomotion.py)
+
+### Command catalog
+
+Each asset can declare MQTT commands in `cw-driver.yml` (`metadata["mqtt"]["commands"]`). The SDK binds `twin.commands.<name>(**kwargs)` at runtime. Locomotion names delegate to `twin.locomotion` (burst); other names publish once.
+
+```python
+dog = cw.twin("unitree/go2")
+print(dog.commands.get_schema()["commands"]["supported"])
+dog.commands.move_forward(linear_x=0.3, duration=0.5, rate_hz=10)
+# dog.commands.sit_down()  # catalog-only, single publish
+```
+
+→ [examples/commands_catalog.py](examples/commands_catalog.py). Introspection: `twin.describe()`, `twin.commands.get_schema()`.
+
+### Inbound MQTT (`listen`)
+
+Subscribe to catalog **inbound** topics with `twin.listen(filters=[…])`. Returns a session; call `session.stop()` when done. Cached state is read with `get_joints()`, `pose.get()`, etc.
+
+```python
+session = arm.listen(filters=["joints", "pose"])
+time.sleep(2)
+print(arm.get_joints())
+session.stop()
+```
+
+Filter slugs match the asset driver manifest (e.g. `joints`, `pose`, `power`). Replaces deprecated `subscribe_position()` / `subscribe_rotation()`.
+
+→ [examples/listen_mqtt.py](examples/listen_mqtt.py)
+
+### Runtime mode (`affect`)
+
+`cw.affect("simulation")` and `cw.affect("live")` set `config.runtime_mode` and the default control `source_type`. Inbound MQTT updates land in separate **buckets**; `get_joints()` reads the bucket for the active mode.
+
+```python
+cw.affect("simulation")
+arm.set_joints({joint_names[0]: -0.2})
+cw.affect("live")
+arm.set_joints({joint_names[-1]: 0.2})
+```
+
+→ [examples/runtime_mode.py](examples/runtime_mode.py). Also: [Simulation vs. Live](#simulation-vs-live).
+
+### Teleop policy
+
+In **live** mode, attach a workspace controller policy before joint/locomotion MQTT when the platform expects teleop routing.
+
+```python
+cw.affect("live")
+arm.policy.ensure_attached()
+# arm.policy.assign(arm.policy.list()[0])
+arm.set_joints({joint_names[-1]: 0.2})
+```
+
+→ [examples/policy_assign.py](examples/policy_assign.py)
+
+### Pose reads
+
+| Twin kind | `get_pose()` meaning | Preferred handle |
+| --- | --- | --- |
+| Manipulator (arm) | Joint-space (alias for `get_joints()`) | `twin.get_joints()` / `twin.joints.get()` |
+| Locomote (Go2, …) | World pose from MQTT | `twin.pose.get()` |
+
+```python
+print(arm.get_pose())           # joint-space on SO101
+print(dog.pose.get())           # Cartesian on Go2
+```
+
+→ [examples/get_pose.py](examples/get_pose.py)
+
+### Outbound MQTT rate limits
+
+The MQTT client throttles **outbound** telemetry (not `listen` inbound):
+
+| Channel | Limit |
+| --- | --- |
+| Position, rotation, scale, joints | ~40 Hz per twin/channel (`time.monotonic()` window) |
+| GPS (`update_twin_gps`) | 2 Hz per twin; `fix_type="none"` is dropped without consuming the slot |
+
+Duplicate position/rotation payloads are deduplicated before publish.
+
+### Discovery
+
+```python
+print(twin.describe())  # handles, catalog commands, routing (via, continuous)
+```
+
+---
+
 ## Examples
 
-Check the [examples](examples) directory for complete examples:
+Runnable scripts in [examples/](examples). Full index: [examples/README.md](examples/README.md).
 
-- Basic twin control
-- Multi-robot coordination
-- Real-time synchronization
-- Joint manipulation for robot arms
-- Audio streaming (e.g. Go2 microphone) — [audio_stream.py](examples/audio_stream.py), [multimedia_stream.py](examples/multimedia_stream.py)
-- Drone takeoff, hovering status, and landing — [drone_hovering.py](examples/drone_hovering.py)
-- DJI Mini 4 Pro full flight + gimbal control — [drone_dji_mini.py](examples/drone_dji_mini.py)
+### Running examples
+
+```bash
+cd cyberwave-sdks/cyberwave-python
+export CYBERWAVE_API_KEY=your_key
+poetry install
+poetry run python examples/quickstart.py
+```
+
+Adjust twin slugs (`the-robot-studio/so101`, `unitree/go2`, …) to match your workspace catalog.
+
+### Twin API scripts
+
+| Script | Section |
+| --- | --- |
+| [quickstart.py](examples/quickstart.py) | [Scene layout](#scene-layout-rest), [Joints](#joints), [Locomotion](#locomotion) |
+| [joints.py](examples/joints.py) | [Joints](#joints) |
+| [compact.py](examples/compact.py) | [Joints](#joints) (one-liner) |
+| [locomotion.py](examples/locomotion.py) | [Locomotion](#locomotion) |
+| [commands_catalog.py](examples/commands_catalog.py) | [Command catalog](#command-catalog) |
+| [listen_mqtt.py](examples/listen_mqtt.py) | [Inbound MQTT](#inbound-mqtt-listen) |
+| [runtime_mode.py](examples/runtime_mode.py) | [Runtime mode](#runtime-mode-affect) |
+| [policy_assign.py](examples/policy_assign.py) | [Teleop policy](#teleop-policy) |
+| [get_pose.py](examples/get_pose.py) | [Pose reads](#pose-reads) |
+
+`go2_locomotion.py` was removed — use [locomotion.py](examples/locomotion.py) or [commands_catalog.py](examples/commands_catalog.py).
+
+### Streaming and cameras
+
+- [camera_stream.py](examples/camera_stream.py) — WebRTC / twin frames
+- [capture_frame.py](examples/capture_frame.py) — single frame capture
+- [audio_stream.py](examples/audio_stream.py), [multimedia_stream.py](examples/multimedia_stream.py) — Go2 mic + A/V
+- [realsense_stream.py](examples/realsense_stream.py) — RGB + depth
+- [webcam_pose_anonymize.py](examples/webcam_pose_anonymize.py) — local webcam + frame filters
+
+### Drones and flight
+
+- [drone_hovering.py](examples/drone_hovering.py) — takeoff, hover, land ([Drones](#drones-and-flying-twins))
+- [drone_dji_mini.py](examples/drone_dji_mini.py) — DJI Mini 4 Pro flight + gimbal
+- [flying.py](examples/flying.py) — general flight helpers
+
+### Edge, Zenoh, and workers
+
+- [edge_worker_detect_people.py](examples/edge_worker_detect_people.py), [edge_worker_hailo_detect.py](examples/edge_worker_hailo_detect.py) — edge ML workers
+- [zenoh_triad.py](examples/zenoh_triad.py), [zenoh_fanout.py](examples/zenoh_fanout.py), [zenoh_bench.py](examples/zenoh_bench.py) — Zenoh pub/sub
+- [command_receiver_simple.py](examples/command_receiver_simple.py) — inbound MQTT on edge
+
+### Workflows, missions, and data
+
+- [workflows.py](examples/workflows.py) — list, trigger, poll runs
+- [missions.py](examples/missions.py), [datasets.py](examples/datasets.py)
+- [alerts_example.py](examples/alerts_example.py)
+
+### Machine learning (Colab)
+
+- [examples/ai/yolo.ipynb](examples/ai/yolo.ipynb) — YOLO26 tasks ([Try on Google Colab](#try-on-google-colab))
+- [examples/ai/yolo_minimal_on_twin.ipynb](examples/ai/yolo_minimal_on_twin.ipynb) — live twin frame → predict
 
 ## Advanced Usage
 
 ### Joint Control
 
-You can change a specific joint actuation. You can use degrees or radiants:
+> **Getting started:** see [Joints](#joints) in the Twin control guide and [examples/joints.py](examples/joints.py).
+
+You can change a specific joint actuation. Positions are **radians by default**; pass ``degrees=True`` for degrees:
 
 ```python
+import math
+
 robot = cw.twin("the-robot-studio/so101")
 
-# Set individual joints (degrees by default)
-robot.joints.set("shoulder_joint", 45, degrees=True)
+# Set individual joints (radians by default)
+robot.joints.set("shoulder_joint", math.pi / 4)
 
-# Or use radians
-import math
-robot.joints.set("elbow_joint", math.pi/4, degrees=False)
+# Or use degrees
+robot.joints.set("elbow_joint", 45, degrees=True)
 
-# Get current joint position
-angle = robot.joints.get("shoulder_joint")
-
-# List all joints
+# List controllable joint names
 joint_names = robot.joints.list()
 
-# Get all joint states at once as a dict {name: radians}
-all_joints = robot.joints.get_all()
+# Read positions (radians) — all joints by default
+all_joints = robot.joints.get()
+
+# Subset + multiple state kinds (PR3: live MQTT cache; PR1: local cache)
+subset = robot.joints.get(what_joints=["shoulder_joint"], what_data=["position"])
+states = robot.joints.get(what_data=["position", "velocity"])
+
+# Set one joint or many (radians by default)
+robot.joints.set("shoulder_joint", math.pi / 4)
+robot.joints.set({"shoulder_joint": math.pi / 4, "elbow_joint": 0.5})
 
 # Print all joint states in a human-readable table (radians + degrees)
 robot.joints.print_joint_states()
@@ -573,6 +898,8 @@ robot.move_to_pose("Stand")         # snaps to the saved pose by name
 
 ### Simulation vs. Live
 
+> **Getting started:** see [Runtime mode (`affect`)](#runtime-mode-affect) and [examples/runtime_mode.py](examples/runtime_mode.py).
+
 Use `mode="simulation"` when you want a simulator-first client with simulation defaults for state publishing, or use `cw.affect()` to switch locomotion/control commands between the simulation and the live robot on an existing client.
 
 ```python
@@ -605,7 +932,7 @@ Runtime mode defaults:
 
 For lower-level integrations you can still pass `source_type` explicitly or use the `CYBERWAVE_SOURCE_TYPE` environment variable. Accepted raw values are `"sim"`, `"sim_tele"`, `"tele"`, `"edge"`, and `"edit"`. Legacy locomotion calls that pass `"sim"` are still accepted and normalized to `"sim_tele"` for simulator control commands.
 
-This same mode selection is also used by camera frame grabs (`get_latest_frame()` and `capture_frame()`), so frame retrieval stays consistent with the mode your script is affecting.
+This same mode selection is also used by ``twin.get_frame(source='cloud')``, so frame retrieval stays consistent with the mode your script is affecting.
 
 ### Agent SDK
 
@@ -793,6 +1120,44 @@ cw.edges.delete(edge.uuid)
 ```
 
 The fingerprint is a stable identifier derived from the host hardware (hostname, OS, architecture, and MAC address). The Edge Core generates and persists it automatically on first boot at `/etc/cyberwave/fingerprint.json`. When a twin has `metadata.edge_fingerprint` set to the same value, the Edge Core will automatically pull and start its driver container on boot.
+
+### GPS Telemetry
+
+Publish raw GNSS data for twins equipped with a GPS receiver. GPS data is
+stored in the backend as `twin_gps_update` telemetry events and does **not**
+affect the twin's rendered position (use `cw.mqtt.update_twin_position` for
+that). The MQTT client rate-limits GPS publishes to **2 Hz per twin**.
+
+```python
+# Via the MQTT client directly
+cw.mqtt.update_twin_gps(
+    twin_uuid="your-twin-uuid",
+    latitude=37.7749,
+    longitude=-122.4194,
+    altitude=10.5,
+    satellite_count=12,
+    signal_level=5,
+    compass_heading=270.0,
+)
+
+# Via BaseEdgeNode helper
+class MyGpsNode(BaseEdgeNode):
+    async def _setup(self):
+        pass
+
+    async def _main_loop(self):
+        while self.running:
+            fix = read_gps_receiver()
+            for twin_uuid in self._get_twin_uuids():
+                self.publish_gps(
+                    twin_uuid,
+                    latitude=fix.lat,
+                    longitude=fix.lon,
+                    altitude=fix.alt,
+                    satellite_count=fix.sats,
+                )
+            await asyncio.sleep(1.0)
+```
 
 ### Workflows
 
@@ -1069,9 +1434,11 @@ Unified catalog, edge/cloud runtime, optional cascade inference, and a typed pla
 
 **Catalog** (authenticated client): `cw.models.list()` with optional **`deployment`** (server-side) and **`filters`** (client-side shorthands — `edge`, `cloud`, `image`, unknown strings match tags), **`get` / `get_by_uuid` / `get_by_slug`**, **`delete`**. **`cw.models.create()` / `cw.models.update()`** are still stubs — use REST or generated `cw.api.*` helpers.
 
-**Runtime**: `cw.models.load(id_or_entry)` resolves **`sdk_load_id` → slug → UUID** when you pass an **`MLModelSchema`**. **`load([a, b, ...])`** returns a **`CascadeModel`** (same kwargs to every sub-model; **`CascadePredictionResult.draw_on_top()`** overlays all heads). **`predict()`** returns **`PredictionResult`**: prefer **`pred.describe()`** for a human summary across detection, classification, pose, segmentation, OBB; iterate detections with **`for d in pred:`** when the output is detection-shaped; use **`pred.output`** / helpers like **`pred.pose`** for typed fields. Legacy **`pred.describe_detections_text()`** is bbox-only shorthand.
+**Runtime**: `cw.models.load(id_or_entry)` resolves **`sdk_load_id` → slug → UUID** when you pass an **`MLModelSchema`**. **`load([a, b, ...])`** returns a **`CascadeModel`**. **`predict()`** returns a concrete **`PredictionResult` subclass** — **`TextResult`**, **`DetectionResult`**, **`ImageResult`**, etc. — not a wrapper. Example: `txt = model.predict(prompt="…")` is a **`TextResult`**; use **`txt.text`**, **`txt.save("out.txt")`**, **`txt.describe()`**. Images: **`img.save_jpg("out.jpg")`**, **`img.to_ndarray()`**. Detection-shaped models return **`DetectionResult`** (or pose/segment subtypes); use **`result.detections`** and **`for det in result:`** only there — STT and other runtimes use their own fields (`.text`, `.data`, …).
 
-**Playground**: `cw.models.playground(slug).run(prompt=..., structured_task=...)` → **`MLModelRunResultSchema`** or **`MLModelRunQueuedSchema`**, not **`PredictionResult`**.
+Cloud models map playground **`output_format`** into these types directly. **`input_data`** is optional for prompt-only text/image runs.
+
+**Playground**: `cw.models.playground(slug).run(...)` → raw **`MLModelRunResultSchema`**. Prefer **`cw.models.load(slug).predict(...)`** for typed results.
 
 ```python
 cw = Cyberwave()
@@ -1084,7 +1451,22 @@ for det in result:  # when output is DetectionResult-backed
 
 YOLO ONNX postprocessing applies per-class non-max suppression with the same default IoU threshold (`0.7`) as Ultralytics' `YOLO.predict`, so swapping `yolov8s.pt` for `yolov8s.onnx` produces the same number of boxes per object instead of a cluster of overlapping anchors. Tune via `model.predict(frame, iou=0.5)` (stricter) or pass `iou=1.0` to disable NMS entirely (raw output for custom trackers).
 
-NMS-free / end-to-end exports (YOLO26's default one-to-one head, YOLOv10) are detected automatically and routed through a separate decoder that parses the `[max_det, 6] = [x1, y1, x2, y2, conf, class_id]` layout directly. The `iou` knob is ignored on that path — suppression is already applied inside the model graph by consistent dual-assignment training. End-to-end pose and segmentation exports aren't decoded yet; re-export those tasks with `end2end=False` until the e2e pose branch lands.
+NMS-free / end-to-end exports (YOLO26's default one-to-one head, YOLOv10) are detected automatically and routed through a separate decoder that parses the leading `[x1, y1, x2, y2, conf, class_id]` fields directly. Detection exports use `[max_det, 6]`; segmentation e2e appends mask coefficients (`[max_det, 38]` by default); pose and OBB use `[max_det, 57]` and `[max_det, 7]` respectively. Mask/keypoint/angle columns are not decoded yet — boxes and labels work. The `iou` knob is ignored on the e2e path — suppression is already applied inside the model graph.
+
+### Hailo edge accelerator — *stub*
+
+Hailo HEFs (`.hef`) are first-class catalog entries alongside their `.pt` / `.onnx` siblings. Edge Core picks the `cyberwaveos/edge-ml-worker-hailo` worker image when `/dev/hailo0` is present and passes the device through to the container; inside the container `hailo_platform` is preinstalled and matched to the host HailoRT driver. The SDK detects the `hailo` runtime from the `.hef` extension or the `_h8` / `_h8l` / `_hailo` slug suffix used in the catalog to distinguish hardware variants (e.g. `yolov8s_h8` vs `yolov8s_h8l`):
+
+```python
+model = cw.models.load("yolov8s_h8")
+result = model.predict(frame, classes=["person"])
+```
+
+The `ml-hailo` extra is an opt-in marker only — `hailo_platform` is not on PyPI and is installed out-of-band by the worker image:
+
+```bash
+pip install "cyberwave[ml-hailo]"   # marker only; install HailoRT separately
+```
 
 ### Edge speech-to-text — *stub*
 
@@ -1106,6 +1488,26 @@ print(result.raw["text"])
 
 Workflow-generated `Audio Track -> Call Model` edge workers pass the seeded `download_url` automatically, so the first run downloads the Whisper weights into the local Cyberwave model cache and later runs reuse the cached file.
 
+Additional seeded whisper.cpp checkpoints include **Small EN** (`ggml-small.en-q5_1.bin`) and hybrid **multilingual** Tiny/Base (`ggml-tiny-q5_1.bin`, `ggml-base-q5_1.bin`) with cloud fallback via the whisper node.
+
+Hybrid catalog entries can use the `faster_whisper` runtime (CTranslate2) for higher throughput on CPU/GPU edge nodes:
+
+```bash
+pip install "cyberwave[ml-stt-faster]"
+```
+
+```python
+model = cw.models.load(
+    "models/whisper/faster-whisper-tiny.en",
+    runtime="faster_whisper",
+    faster_whisper_model_id="tiny.en",
+    compute_type="int8",
+    device="cpu",
+)
+result = model.predict(audio, sample_rate_hz=16000, channels=1, language="en")
+print(result.raw["text"])
+```
+
 ### Model warm-up — *stub*
 
 Eliminate cold-start latency by calling `warm_up()` after loading:
@@ -1116,7 +1518,7 @@ cold_ms, warm_ms = model.warm_up()  # two dummy inferences
 # cold_ms ≈ 150 ms (JIT/allocation), warm_ms ≈ 8 ms (steady-state)
 ```
 
-The worker runtime calls `warm_up()` automatically on startup for all loaded models.
+The worker runtime calls `warm_up()` on all loaded models **before** audio/frame hooks are activated, and serializes `predict()` per model so whisper.cpp / faster-whisper never see concurrent `transcribe()` calls.
 
 ### Frame resolution scaling — *stub*
 
@@ -1240,6 +1642,85 @@ Run basic import tests:
 poetry install
 poetry run python tests/test_imports.py
 ```
+
+## Version 0.5.0 twin API changelog (in progress)
+
+Migration reference for SDK **0.5.x**. For usage and examples, start with the [Twin control guide](#twin-control-guide) and [Examples](#examples).
+
+### Prefer this (unified surface)
+
+| Area | Use | Notes |
+| --- | --- | --- |
+| **Commands (catalog)** | `twin.commands.<name>(**kwargs)` | Names from seeded `metadata["mqtt"]["commands"]["supported"]` (driver `cw-driver.yml`). Per-command `commands.specs[name].continuous` triggers `publish_command_burst` (repeated MQTT + `stop`); otherwise delegates to capability handles or a single publish. |
+| **Locomotion** | `twin.locomotion.move_forward(distance, duration=…)` or top-level `twin.move_forward(…)` | Repeated publish + `stop` for velocity watchdogs. Speed is **m/s** (forward/back) or **rad/s** (turns), not travel distance. |
+| **Flight** | `twin.flight.takeoff(…)` / `drone.takeoff(…)` | Same MQTT envelope; catalog `twin.commands.takeoff` delegates when listed. |
+| **Joints (read)** | `twin.get_joints()` / `twin.get_pose()` (manipulators) or `twin.joints.get()` | Same API. Default: positions only; pass `what_data=("position", "velocity", "acceleration", "effort")` for multi-field state (effort = torque). MQTT-backed; sim/live buckets via `runtime_mode` + inbound `source_type`. |
+| **Joints (write)** | `twin.set_joints()` / `twin.set_pose()` or `twin.joints.set(...)` | Same API. `what_data` selects position / velocity / acceleration / effort on publish. |
+| **Cartesian pose (read)** | `twin.pose.get()` / `twin.get_pose()` (locomote twins) | World pose from position/rotation/kinematics topics; not the same as joint-space `get_pose()` on arms. |
+| **Policy / teleop** | `twin.policy.keyboard()` | `twin.controller` was removed. |
+| **Inbound MQTT** | `twin.listen(filters=["pose", "joints", …])` | Catalog-driven topics from asset `cw-driver.yml`; returns a session with `.stop()`. Replaces ad-hoc `subscribe_*` helpers. |
+| **Discovery** | `twin.describe()` | Handles, catalog methods, `command_routing` (`via`, `continuous`), `mqtt.specs`. |
+| **Runtime** | `cw.affect("live")` / `cw.affect("simulation")` | Sets `config.runtime_mode` and default control `source_type`; drives which MQTT bucket `get()` reads. |
+| **Frames** | `twin.get_frame()` / `twin.get_frames()` | `source=` cloud, local, remote_edge, zenoh. |
+| **Catalog introspection** | `twin.commands.get_schema()` | Topics, `commands.supported`, `commands.specs` (`continuous`, `rate_hz`), optional `joint_control`. Re-seed assets after editing `cw-driver.yml` (`seed_asset_driver_config`). |
+| **Register manifest** | `twin.commands.set_schema("cw-driver.yml")` | Compiles the YAML, persists `metadata["mqtt"]` on your twin, and re-binds catalog-derived `twin.commands.<name>` methods. |
+
+```python
+# Go2-style: catalog entry and locomotion share behavior when delegated
+rover.commands.move_forward(linear_x=0.5, duration=0.2, rate_hz=10)
+rover.locomotion.move_forward(0.5, duration=0.2, rate_hz=10)  # equivalent burst path
+
+joint_names = arm.joints.list()
+arm.set_joints({joint_names[0]: 0.5, joint_names[1]: -0.2})
+arm.get_joints(what_data=("position", "velocity", "effort"))
+
+session = arm.listen(filters=["joints", "pose"])
+# ... inbound MQTT updates cached state ...
+session.stop()
+```
+
+### Removed or renamed
+
+These are **gone or renamed** in the current SDK. Calling the old surface fails or no longer matches intent.
+
+| Old | Status | Use instead |
+| --- | --- | --- |
+| `twin.controller` | **Removed** (`AttributeError`) | `twin.policy` — `twin.policy.keyboard()`, `twin.policy.ensure_attached()`, etc. |
+| Ad-hoc command publish without catalog | **Replaced** by contract | `twin.commands.<name>()` from asset `commands.supported`, or capability handles (`locomotion`, `flight`, …) |
+
+**Stable shortcuts (not deprecated):** `twin.get_joints()`, `twin.get_pose()`, `twin.set_joints()`, `twin.set_pose()` on manipulator twins; on the handle use only `twin.joints.get()` / `twin.joints.set()`.
+
+### Deprecated (still works — migrate before removal)
+
+Still callable today; emits `DeprecationWarning` or a logged warning. Will be removed in a later release.
+
+| Old | Warning | Use instead |
+| --- | --- | --- |
+| `LocomoteTwin.move(position)` | Log warning; **no-op** | `twin.move_forward()` / `twin.locomotion.*`, or `edit_position()` for scene layout |
+| `LocomoteTwin.rotate(...)` | Log warning; delegates to `edit_rotation` | `edit_rotation()` for editor layout; locomotion via `turn_left` / `turn_right` |
+| `twin.subscribe(on_update)` | `DeprecationWarning` | `twin.listen(filters=[…])` or `handlers={slug: fn}` |
+| `twin.subscribe_position()` / `subscribe_rotation()` | `DeprecationWarning` | `twin.listen(filters=["pose"])` + `twin.pose.get()` (or poll) |
+| `examples/go2_locomotion.py` | **Removed** (duplicate) | [locomotion.py](examples/locomotion.py) or [commands_catalog.py](examples/commands_catalog.py) |
+| `twin.get_controllable_joint_names()` | `DeprecationWarning` | `twin.joints.list()` |
+| `twin.get_calibration()` / `update_calibration()` / `delete_calibration()` | `DeprecationWarning` | `twin.joints.calibration.get()` / `.set()` / `.delete()` |
+| `joints.get_all()` / `joints.set_joints()` | `DeprecationWarning` on **handle** | `joints.get()` / `joints.set(...)` (twin shortcuts above stay) |
+| `twin.get_latest_frame()` | `DeprecationWarning` | `twin.get_frame(source="cloud")` |
+| `twin.capture_frame()` / `twin.capture_frames()` | `DeprecationWarning` | `twin.get_frame()` / `twin.get_frames()` |
+| `twin.camera.latest_frame()`, `.capture()`, `.read()`, `.snapshot()`, `.edge_photo()`, `.edge_photos()` | `DeprecationWarning` | `twin.get_frame(source=…)` / `twin.get_frames()` |
+| `Cyberwave(token=…)` ctor kwarg | `DeprecationWarning` | `Cyberwave(api_key=…)` |
+| `client.video_stream(...)` | Documented deprecated; **still present** | Prefer twin-centric streaming (`twin.stream_camera()` / WebRTC helpers on camera twins) where available |
+| `client.controller(twin_uuid)` | Documented deprecated; **still present** | `twin.policy` + MQTT command handles — not `twin.controller` |
+
+### Not fully implemented yet
+
+| Surface | Status |
+| --- | --- |
+| `twin.pose.set()` | Raises `NotImplementedError` (use `edit_position()` / `edit_rotation()` for editor layout today). |
+| `twin.camera.rotate()` | Stub |
+| `twin.sensors` IMU / GPS / compass / LiDAR inbound | Listen hooks stub; MQTT decode not wired. |
+| Catalog-only commands (e.g. Go2 `camera_up`, `sit_down`) | Single MQTT publish via `twin.commands.*` (no capability delegate until a handle method exists). |
+| `cyberwave.zenoh_mqtt` bridge | Documented stub above. |
+| Some `cw.models` CRUD helpers | `create` / `update` not implemented on manager yet. |
 
 ## Contributing
 

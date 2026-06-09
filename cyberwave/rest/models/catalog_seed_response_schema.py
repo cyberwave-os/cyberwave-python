@@ -31,7 +31,8 @@ class CatalogSeedResponseSchema(BaseModel):
     workspace_uuid: StrictStr
     controllers: CatalogSeedGroupSchema
     mlmodels: CatalogSeedGroupSchema
-    __properties: ClassVar[List[str]] = ["workspace_uuid", "controllers", "mlmodels"]
+    workflow_templates: CatalogSeedGroupSchema
+    __properties: ClassVar[List[str]] = ["workspace_uuid", "controllers", "mlmodels", "workflow_templates"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -78,6 +79,9 @@ class CatalogSeedResponseSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of mlmodels
         if self.mlmodels:
             _dict['mlmodels'] = self.mlmodels.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of workflow_templates
+        if self.workflow_templates:
+            _dict['workflow_templates'] = self.workflow_templates.to_dict()
         return _dict
 
     @classmethod
@@ -92,7 +96,8 @@ class CatalogSeedResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "workspace_uuid": obj.get("workspace_uuid"),
             "controllers": CatalogSeedGroupSchema.from_dict(obj["controllers"]) if obj.get("controllers") is not None else None,
-            "mlmodels": CatalogSeedGroupSchema.from_dict(obj["mlmodels"]) if obj.get("mlmodels") is not None else None
+            "mlmodels": CatalogSeedGroupSchema.from_dict(obj["mlmodels"]) if obj.get("mlmodels") is not None else None,
+            "workflow_templates": CatalogSeedGroupSchema.from_dict(obj["workflow_templates"]) if obj.get("workflow_templates") is not None else None
         })
         return _obj
 

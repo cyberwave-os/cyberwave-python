@@ -74,8 +74,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Cyberwave": (".client", "Cyberwave"),
     # High-level abstractions
     "Twin": (".twin", "Twin"),
-    "JointController": (".twin", "JointController"),
-    "TwinControllerHandle": (".twin", "TwinControllerHandle"),
+    "JointTwin": (".twin", "JointTwin"),
     "TwinCameraHandle": (".twin", "TwinCameraHandle"),
     "CameraTwin": (".twin", "CameraTwin"),
     "DepthCameraTwin": (".twin", "DepthCameraTwin"),
@@ -103,7 +102,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "KeyboardBindings": (".keyboard", "KeyboardBindings"),
     "KeyboardTeleop": (".keyboard", "KeyboardTeleop"),
     # Compact API (twin, configure, get_client are eagerly imported above
-    # to avoid submodule name collision with cyberwave/twin.py)
+    # to avoid submodule name collision with cyberwave/twin/ package)
     # Resource managers (these pull in the heavy REST layer)
     "WorkspaceManager": (".resources", "WorkspaceManager"),
     "ProjectManager": (".resources", "ProjectManager"),
@@ -218,8 +217,7 @@ __all__ = [
     "set_config",
     # High-level abstractions
     "Twin",
-    "JointController",
-    "TwinControllerHandle",
+    "JointTwin",
     "TwinCameraHandle",
     "CameraTwin",
     "DepthCameraTwin",

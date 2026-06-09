@@ -38,6 +38,16 @@ __all__ = [
     "create_linux_microphone_monitor",
     "CallbackAudioTrack",
     "CallbackAudioStreamer",
+    # Speaker
+    "SpeakerAudioTrack",
+    "SpeakerAudioStreamer",
+    "HostSpeakerCapture",
+    "list_host_sound_devices",
+    "check_host_speaker_settings",
+    "create_linux_speaker_monitor",
+    "associate_speaker_to_microphone",
+    "associate_speaker_to_microphones",
+    "play_file",
     # Configuration
     "CameraType",
     "Resolution",
@@ -140,6 +150,15 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "AUDIO_PTIME": (".microphone", "AUDIO_PTIME"),
     "DEFAULT_SAMPLE_RATE": (".microphone", "DEFAULT_SAMPLE_RATE"),
     "MultimediaStreamer": (".av_streamer", "MultimediaStreamer"),
+    "SpeakerAudioTrack": (".speaker", "SpeakerAudioTrack"),
+    "SpeakerAudioStreamer": (".speaker", "SpeakerAudioStreamer"),
+    "HostSpeakerCapture": (".speaker", "HostSpeakerCapture"),
+    "list_host_sound_devices": (".speaker", "list_host_sound_devices"),
+    "check_host_speaker_settings": (".speaker", "check_host_speaker_settings"),
+    "create_linux_speaker_monitor": (".speaker", "create_linux_speaker_monitor"),
+    "associate_speaker_to_microphone": (".speaker", "associate_speaker_to_microphone"),
+    "associate_speaker_to_microphones": (".speaker", "associate_speaker_to_microphones"),
+    "play_file": (".speaker", "play_file"),
 }
 
 _MUJOCO_ATTRS: dict[str, tuple[str, str]] = {

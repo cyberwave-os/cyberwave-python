@@ -71,6 +71,46 @@ def _mask_url_credentials(source: str) -> str:
     return _URL_USERINFO_RE.sub("://***@", source)
 
 
+def _format_camera_source(camera_id: Union[int, str]) -> str:
+    """Render ``camera_id`` as a human-meaningful ``stream_config.source``.
+
+    A bare integer device index is what ``cv2.VideoCapture`` accepts on
+    every platform, but it isn't what an operator wants to read in the
+    Edge Details "src:" line — ``"0"`` could mean three different things
+    depending on the host OS, and the dashboard has no platform context
+    to disambiguate.  We resolve that here, at the publisher, by
+    rendering the index as the platform-native identifier:
+
+    * **Linux** → ``/dev/video<N>`` (the V4L2 path ``cv2`` opens under
+      the hood; matches the kernel device node operators inspect with
+      ``v4l2-ctl``).
+    * **macOS** → ``avfoundation:<N>`` (the AVFoundation device index;
+      no kernel path exists, so we use the OpenCV backend name as the
+      scheme prefix to make the format unambiguous).
+    * **Windows** → ``dshow:<N>`` (DirectShow device index, same
+      reasoning as macOS — no path, prefix the backend name).
+    * **Other / unknown** → ``index:<N>`` as a generic fallback so the
+      field stays useful when ``platform.system()`` returns something
+      we don't recognise (e.g. ``FreeBSD``, ``Java`` on Jython, ...).
+
+    Pre-formatted string sources (``/dev/video*`` paths, RTSP / HTTP
+    URLs, RealSense serial numbers, anything a driver hand-built) pass
+    through the credential mask unchanged — we never rewrite a string
+    the caller chose deliberately, only the bare integer that
+    ``CV2VideoTrack`` accepts as a shortcut.
+    """
+    if isinstance(camera_id, int) and not isinstance(camera_id, bool):
+        system = platform.system()
+        if system == "Linux":
+            return f"/dev/video{camera_id}"
+        if system == "Darwin":
+            return f"avfoundation:{camera_id}"
+        if system == "Windows":
+            return f"dshow:{camera_id}"
+        return f"index:{camera_id}"
+    return _mask_url_credentials(str(camera_id))
+
+
 def _capture_buffersize() -> int:
     # BUFFERSIZE=1 halves uvcvideo throughput (30fps MJPG -> 15fps); widen
     # the ring to 2 on Linux to restore native rate while keeping latency
@@ -1051,6 +1091,10 @@ class CV2VideoTrack(BaseVideoTrack):
             # subsequent read failures. Skip caching on freeze ticks so a
             # long outage can't drift the cache.
             self._last_good_frame_bgr = frame
+            try:
+                self._current_frame = frame.copy()
+            except Exception:
+                self._current_frame = frame
 
         # Create video frame
         video_frame = VideoFrame.from_ndarray(frame, format="bgr24")
@@ -1403,11 +1447,20 @@ class CV2CameraStreamer(BaseVideoStreamer):
         V4L2 stack has settled (``CV2VideoTrack.actual_fps``); we fall
         back to the requested ``self.fps`` only before the first frame,
         so the dashboard never claims a rate the camera literally
-        cannot deliver.  ``source`` is credential-masked: an RTSP URL
-        like ``rtsp://admin:hunter2@host`` becomes ``rtsp://***@host``
-        before it crosses the wire, so MQTT subscribers, Vector's
-        ``app_twintelemetry`` table, and the browser localStorage
-        cache never see secrets.
+        cannot deliver.
+
+        ``source`` goes through :func:`_format_camera_source` so a bare
+        integer index renders as the platform-native identifier
+        (``/dev/video<N>`` on Linux, ``avfoundation:<N>`` on macOS,
+        ``dshow:<N>`` on Windows) instead of a context-free ``"0"`` —
+        operators reading the Edge Details pane should be able to tell
+        which physical device the driver opened without cross-referencing
+        the host OS.  Pre-formatted string sources (paths, RTSP / HTTP
+        URLs, RealSense serials) pass through with credential masking:
+        an RTSP URL like ``rtsp://admin:hunter2@host`` becomes
+        ``rtsp://***@host`` before it crosses the wire, so MQTT
+        subscribers, Vector's ``app_twintelemetry`` table, and the
+        browser localStorage cache never see secrets.
         """
         if isinstance(self.resolution, Resolution):
             resolution_str = str(self.resolution)
@@ -1425,7 +1478,7 @@ class CV2CameraStreamer(BaseVideoStreamer):
 
         return {
             "kind": "camera",
-            "source": _mask_url_credentials(str(self.camera_id)),
+            "source": _format_camera_source(self.camera_id),
             "resolution": resolution_str,
             "fps": negotiated_fps,
             "camera_type": "cv2",

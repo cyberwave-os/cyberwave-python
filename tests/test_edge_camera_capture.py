@@ -1,7 +1,6 @@
-"""Tests for TwinCameraHandle.edge_photo and edge_photos."""
+"""Tests for twin.get_frame(source='remote_edge') (MQTT take_photo)."""
 
 import base64
-import json
 import threading
 import time
 from types import SimpleNamespace
@@ -35,6 +34,18 @@ def _make_mqtt_client():
     return mqtt
 
 
+def _take_photo_catalog_metadata() -> dict:
+    return {
+        "mqtt": {
+            "topics": {"cyberwave/twin/{twin_uuid}/command": {}},
+            "commands": {
+                "supported": ["take_photo"],
+                "specs": {"take_photo": {}},
+            },
+        },
+    }
+
+
 def _make_twin_with_mqtt():
     """Create a Twin with a mock client that has MQTT support.
 
@@ -53,9 +64,23 @@ def _make_twin_with_mqtt():
     outer_mqtt.unsubscribe = MagicMock(side_effect=inner_mqtt.unsubscribe)
     outer_mqtt.publish = MagicMock(side_effect=inner_mqtt.publish)
 
-    config = SimpleNamespace(topic_prefix="")
-    client = SimpleNamespace(twins=twins_manager, mqtt=outer_mqtt, config=config)
-    twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="TestTwin"))
+    config = SimpleNamespace(topic_prefix="", runtime_mode="live", source_type="tele")
+    client = SimpleNamespace(
+        twins=twins_manager,
+        mqtt=outer_mqtt,
+        config=config,
+        assets=MagicMock(),
+    )
+    twin = Twin(
+        client,
+        SimpleNamespace(
+            uuid="twin-uuid",
+            name="TestTwin",
+            asset_uuid="asset-uuid",
+            metadata=_take_photo_catalog_metadata(),
+        ),
+    )
+    twin._prepare_outbound_command = MagicMock()
     return twin, inner_mqtt
 
 
@@ -65,6 +90,44 @@ def _make_twin_with_mqtt():
 
 
 class TestEdgePhoto:
+    def test_simulation_runtime_rejects_non_cloud_source(self):
+        twin, _ = _make_twin_with_mqtt()
+        twin.client.config.runtime_mode = "simulation"
+        camera = TwinCameraHandle(twin)
+
+        with pytest.raises(ValueError, match="simulation runtime"):
+            camera.get_frame(source="remote_edge")
+
+    def test_raises_when_take_photo_not_in_catalog(self):
+        inner_mqtt = _make_mqtt_client()
+        outer_mqtt = MagicMock()
+        outer_mqtt.connected = True
+        outer_mqtt._client = inner_mqtt
+        client = SimpleNamespace(
+            twins=MagicMock(),
+            mqtt=outer_mqtt,
+            config=SimpleNamespace(topic_prefix="", runtime_mode="live", source_type="tele"),
+            assets=MagicMock(),
+        )
+        twin = Twin(
+            client,
+            SimpleNamespace(
+                uuid="twin-uuid",
+                name="TestTwin",
+                asset_uuid="asset-uuid",
+                metadata={
+                    "mqtt": {
+                        "topics": {"cyberwave/twin/{twin_uuid}/command": {}},
+                        "commands": {"supported": ["stop"], "specs": {"stop": {}}},
+                    },
+                },
+            ),
+        )
+        camera = TwinCameraHandle(twin)
+
+        with pytest.raises(CyberwaveError, match="cannot support take photo"):
+            camera.get_frame("bytes", source="remote_edge")
+
     def test_sends_take_photo_command(self):
         twin, mqtt = _make_twin_with_mqtt()
         camera = TwinCameraHandle(twin)
@@ -75,19 +138,17 @@ class TestEdgePhoto:
                 "cyberwave/twin/twin-uuid/camera/photo"
             )
             if handler:
-                handler(
-                    json.dumps({
-                        "image": FAKE_B64,
-                        "format": "jpeg",
-                        "width": 640,
-                        "height": 480,
-                    })
-                )
+                handler({
+                    "image": FAKE_B64,
+                    "format": "jpeg",
+                    "width": 640,
+                    "height": 480,
+                })
 
         t = threading.Thread(target=respond)
         t.start()
 
-        result = camera.edge_photo(format="bytes")
+        result = camera.get_frame("bytes", source="remote_edge")
         t.join()
 
         mqtt.publish.assert_called_once()
@@ -117,13 +178,13 @@ class TestEdgePhoto:
                 "cyberwave/twin/twin-uuid/camera/photo"
             )
             if handler:
-                handler(json.dumps({"image": FAKE_B64, "format": "jpeg"}))
+                handler({"image": FAKE_B64, "format": "jpeg"})
 
         t = threading.Thread(target=respond)
         t.start()
 
         with patch.dict("sys.modules", {"numpy": mock_np, "cv2": mock_cv2}):
-            result = camera.edge_photo(format="numpy")
+            result = camera.get_frame("numpy", source="remote_edge")
 
         t.join()
         assert result is sentinel
@@ -133,7 +194,7 @@ class TestEdgePhoto:
         camera = TwinCameraHandle(twin)
 
         with pytest.raises(CyberwaveError, match="Timed out.*take_photo"):
-            camera.edge_photo(timeout=0.2)
+            camera.get_frame(source="remote_edge", edge_timeout_s=0.2)
 
     def test_raises_on_edge_error_response(self):
         twin, mqtt = _make_twin_with_mqtt()
@@ -145,18 +206,16 @@ class TestEdgePhoto:
                 "cyberwave/twin/twin-uuid/camera/photo"
             )
             if handler:
-                handler(
-                    json.dumps({
-                        "status": "error",
-                        "message": "No camera frame available",
-                    })
-                )
+                handler({
+                    "status": "error",
+                    "message": "No camera frame available",
+                })
 
         t = threading.Thread(target=respond)
         t.start()
 
         with pytest.raises(CyberwaveError, match="No camera frame available"):
-            camera.edge_photo(timeout=2.0)
+            camera.get_frame(source="remote_edge", edge_timeout_s=2.0)
 
         t.join()
 
@@ -170,13 +229,13 @@ class TestEdgePhoto:
                 "cyberwave/twin/twin-uuid/camera/photo"
             )
             if handler:
-                handler(json.dumps({"format": "jpeg"}))
+                handler({"format": "jpeg"})
 
         t = threading.Thread(target=respond)
         t.start()
 
         with pytest.raises(CyberwaveError, match="missing"):
-            camera.edge_photo(timeout=2.0)
+            camera.get_frame(source="remote_edge", edge_timeout_s=2.0)
 
         t.join()
 
@@ -190,12 +249,12 @@ class TestEdgePhoto:
                 "cyberwave/twin/twin-uuid/camera/photo"
             )
             if handler:
-                handler(json.dumps({"image": FAKE_B64, "format": "jpeg"}))
+                handler({"image": FAKE_B64, "format": "jpeg"})
 
         t = threading.Thread(target=respond)
         t.start()
 
-        camera.edge_photo(format="bytes")
+        camera.get_frame("bytes", source="remote_edge")
         t.join()
 
         mqtt.unsubscribe.assert_called_once_with(
@@ -207,7 +266,7 @@ class TestEdgePhoto:
         camera = TwinCameraHandle(twin)
 
         with pytest.raises(CyberwaveError):
-            camera.edge_photo(timeout=0.1)
+            camera.get_frame(source="remote_edge", edge_timeout_s=0.1)
 
         mqtt.unsubscribe.assert_called_once_with(
             "cyberwave/twin/twin-uuid/camera/photo"
@@ -224,12 +283,12 @@ class TestEdgePhoto:
                 "custom/cyberwave/twin/twin-uuid/camera/photo"
             )
             if handler:
-                handler(json.dumps({"image": FAKE_B64, "format": "jpeg"}))
+                handler({"image": FAKE_B64, "format": "jpeg"})
 
         t = threading.Thread(target=respond)
         t.start()
 
-        camera.edge_photo(format="bytes")
+        camera.get_frame("bytes", source="remote_edge")
         t.join()
 
         call_args = mqtt.publish.call_args
@@ -256,15 +315,15 @@ class TestEdgePhotos:
             )
             if handler:
                 call_count += 1
-                handler(
-                    json.dumps({"image": FAKE_B64, "format": "jpeg"})
-                )
+                handler({"image": FAKE_B64, "format": "jpeg"})
 
         frames = []
         for _ in range(3):
             t = threading.Thread(target=respond)
             t.start()
-            frames.append(camera.edge_photo(format="bytes", timeout=2.0))
+            frames.append(
+                camera.get_frame("bytes", source="remote_edge", edge_timeout_s=2.0)
+            )
             t.join()
 
         assert len(frames) == 3
@@ -280,7 +339,7 @@ class TestEdgePhotos:
                     "cyberwave/twin/twin-uuid/camera/photo"
                 )
                 if handler:
-                    handler(json.dumps({"image": FAKE_B64, "format": "jpeg"}))
+                    handler({"image": FAKE_B64, "format": "jpeg"})
                 time.sleep(0.01)
 
         stop = threading.Event()
@@ -288,7 +347,12 @@ class TestEdgePhotos:
         t.start()
 
         try:
-            frames = camera.edge_photos(count=2, interval_ms=50, format="bytes", timeout=2.0)
+            frames = []
+            for _ in range(2):
+                frames.append(
+                    camera.get_frame("bytes", source="remote_edge", edge_timeout_s=2.0)
+                )
+                time.sleep(0.05)
             assert len(frames) == 2
         finally:
             stop.set()

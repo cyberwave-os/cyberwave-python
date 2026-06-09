@@ -29,8 +29,18 @@ def _make_client(*, runtime_mode: str = "simulation") -> SimpleNamespace:
     mqtt = MagicMock()
     mqtt.connected = True
     twins_manager = MagicMock()
-    return SimpleNamespace(
+    twins_manager.update.return_value = SimpleNamespace(uuid="drone-uuid", metadata={})
+    assets = MagicMock()
+    assets.get.return_value = SimpleNamespace(
+        metadata={"mqtt": {"topics": {}, "commands": {"supported": []}}}
+    )
+    policy = MagicMock()
+    policy.ensure_attached = MagicMock()
+
+    client = SimpleNamespace(
         mqtt=mqtt,
+        assets=assets,
+        policy=policy,
         config=SimpleNamespace(
             runtime_mode=runtime_mode,
             source_type="sim" if runtime_mode == "simulation" else "edge",
@@ -38,6 +48,7 @@ def _make_client(*, runtime_mode: str = "simulation") -> SimpleNamespace:
         ),
         twins=twins_manager,
     )
+    return client
 
 
 def _make_flying_twin(
@@ -49,29 +60,20 @@ def _make_flying_twin(
     data = SimpleNamespace(
         uuid="drone-uuid",
         name="Test Drone",
+        asset_uuid="asset-uuid",
         metadata=metadata or {},
     )
     twin = FlyingTwin(client, data)
+    twin._prepare_outbound_command = lambda: None  # type: ignore[method-assign]
     return twin, client
 
 
-def _published_command(client: SimpleNamespace, command: str) -> dict:
-    """
-    Return the canonical-command payload published for ``command``.
-
-    Fails the test (via assert) if no such call was made.
-    """
-    expected_topic = "cyberwave/twin/drone-uuid/command"
-    matching = [
-        call.args[1]
-        for call in client.mqtt.publish.call_args_list
-        if call.args[0] == expected_topic
-        and isinstance(call.args[1], dict)
-        and call.args[1].get("command") == command
-    ]
+def _published_command(twin: FlyingTwin, command: str) -> dict:
+    """Return the canonical-command payload from PR1 mock outbound log."""
+    matching = [r.payload for r in twin._outbound_log if r.command == command]
     assert matching, (
-        f"No publish() call to {expected_topic!r} with command={command!r}; "
-        f"actual calls: {client.mqtt.publish.call_args_list}"
+        f"No mock outbound command {command!r}; log: "
+        f"{[r.command for r in twin._outbound_log]}"
     )
     return matching[-1]
 
@@ -220,10 +222,10 @@ class TestSetHoveringStatus:
 
 class TestTakeoffSimMode:
     def test_publishes_canonical_takeoff_command(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
+        twin, _client = _make_flying_twin(runtime_mode="simulation")
         twin.takeoff(altitude=3.0)
 
-        payload = _published_command(client, "takeoff")
+        payload = _published_command(twin, "takeoff")
         assert payload["source_type"] == "sim_tele"
         assert payload["data"] == {"altitude": 3.0}
         assert "timestamp" in payload
@@ -258,10 +260,10 @@ class TestTakeoffSimMode:
 
 class TestTakeoffLiveMode:
     def test_publishes_canonical_takeoff_command_with_tele_source(self):
-        twin, client = _make_flying_twin(runtime_mode="live")
+        twin, _client = _make_flying_twin(runtime_mode="live")
         twin.takeoff(altitude=2.0)
 
-        payload = _published_command(client, "takeoff")
+        payload = _published_command(twin, "takeoff")
         assert payload["source_type"] == "tele"
         assert payload["data"] == {"altitude": 2.0}
 
@@ -284,13 +286,13 @@ class TestTakeoffLiveMode:
 
 class TestLandSimMode:
     def test_publishes_canonical_land_command(self):
-        twin, client = _make_flying_twin(
+        twin, _client = _make_flying_twin(
             runtime_mode="simulation",
             metadata={"status": {"controller_requested_hovering": True, "controller_requested_hovering_altitude": 2.0}},
         )
         twin.land()
 
-        payload = _published_command(client, "land")
+        payload = _published_command(twin, "land")
         assert payload["source_type"] == "sim_tele"
         assert payload["data"] == {}
 
@@ -321,10 +323,10 @@ class TestLandSimMode:
 
 class TestLandLiveMode:
     def test_publishes_canonical_land_command_with_tele_source(self):
-        twin, client = _make_flying_twin(runtime_mode="live")
+        twin, _client = _make_flying_twin(runtime_mode="live")
         twin.land()
 
-        payload = _published_command(client, "land")
+        payload = _published_command(twin, "land")
         assert payload["source_type"] == "tele"
         assert payload["data"] == {}
 
@@ -341,10 +343,10 @@ class TestLandLiveMode:
 
 class TestHoverSimMode:
     def test_publishes_canonical_hover_command(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
+        twin, _client = _make_flying_twin(runtime_mode="simulation")
         twin.hover()
 
-        payload = _published_command(client, "hover")
+        payload = _published_command(twin, "hover")
         assert payload["source_type"] == "sim_tele"
         assert payload["data"] == {}
 
@@ -394,19 +396,12 @@ class TestFullFlightWorkflow:
         assert twin.get_hovering_status()["controller_requested_hovering_altitude"] is None
 
     def test_canonical_commands_published_in_order(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
+        twin, _client = _make_flying_twin(runtime_mode="simulation")
 
         twin.takeoff(altitude=1.5)
         twin.land()
 
-        # Filter out the metadata-update calls and pluck out just the
-        # `command` field of every canonical-command publish.
-        topic = "cyberwave/twin/drone-uuid/command"
-        canonical_commands = [
-            call.args[1]["command"]
-            for call in client.mqtt.publish.call_args_list
-            if call.args[0] == topic
-        ]
+        canonical_commands = [r.command for r in twin._outbound_log]
         assert "takeoff" in canonical_commands
         assert "land" in canonical_commands
         assert canonical_commands.index("takeoff") < canonical_commands.index("land")

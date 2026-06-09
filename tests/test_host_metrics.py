@@ -275,7 +275,6 @@ class TestHostFactsToDict:
             thermal_source=None,
             has_hardware_watchdog=False,
             sdk_version=None,
-            cli_version=None,
             edge_core_version=None,
         )
         out = facts.to_dict()
@@ -294,7 +293,6 @@ class TestHostFactsToDict:
             thermal_source="thermal_zone0:cpu-thermal",
             has_hardware_watchdog=True,
             sdk_version="0.4.7",
-            cli_version="0.12.4",
             edge_core_version="0.1.4",
         )
         out = facts.to_dict()
@@ -306,12 +304,11 @@ class TestHostFactsToDict:
         assert out["thermal_source"] == "thermal_zone0:cpu-thermal"
         assert out["has_hardware_watchdog"] is True
         assert out["sdk_version"] == "0.4.7"
-        assert out["cli_version"] == "0.12.4"
         assert out["edge_core_version"] == "0.1.4"
 
     def test_partial_versions_omits_unset_packages(self) -> None:
-        """A standalone SDK install (no CLI, no edge-core) reports only
-        ``sdk_version`` — the absent companions must not leak as ``None``
+        """A standalone SDK install (no edge-core) reports only
+        ``sdk_version`` — the absent companion must not leak as ``None``
         into the JSON, since the dashboard distinguishes "missing key"
         from "key with null value"."""
         facts = HostFacts(
@@ -323,43 +320,57 @@ class TestHostFactsToDict:
             thermal_source=None,
             has_hardware_watchdog=False,
             sdk_version="0.4.7",
-            cli_version=None,
             edge_core_version=None,
         )
         out = facts.to_dict()
         assert out["sdk_version"] == "0.4.7"
-        assert "cli_version" not in out
         assert "edge_core_version" not in out
+        # ``cli_version`` is intentionally not part of the host_facts
+        # schema: edge-core (the sole producer) cannot observe the
+        # standalone CLI binary on production edges.
+        assert "cli_version" not in out
 
 
 class TestSoftwareVersions:
-    """Cover the ``importlib.metadata`` resolution path independently of
-    whatever happens to be installed in the test venv."""
+    """Cover the layered version resolution (in-process ``__version__``
+    first, then ``importlib.metadata``) independently of whatever happens
+    to be installed in the test venv."""
 
-    def test_returns_three_values_when_all_present(
+    def test_prefers_in_process_dunder_version_over_metadata(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        canned = {
+        """In-process ``__version__`` wins over ``importlib.metadata``.
+
+        This is what surfaces CI ``BUILD_VERSION`` stamps and survives
+        PyInstaller binaries that ship without ``.dist-info``.
+        """
+        module_versions = {
             "cyberwave": "1.2.3",
-            "cyberwave-cli": "4.5.6",
-            "cyberwave-edge-core": "7.8.9",
+            "cyberwave_edge_core": "7.8.9",
         }
         monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_module_version",
+            lambda name: module_versions.get(name),
+        )
+        monkeypatch.setattr(
             "cyberwave.edge.host_metrics._pkg_version",
-            lambda name: canned[name],
+            lambda name: "0.0.0",
         )
         from cyberwave.edge.host_metrics import _read_software_versions
 
-        assert _read_software_versions() == ("1.2.3", "4.5.6", "7.8.9")
+        assert _read_software_versions() == ("1.2.3", "7.8.9")
 
-    def test_missing_packages_resolve_to_none(
+    def test_falls_back_to_importlib_metadata(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from importlib.metadata import PackageNotFoundError
 
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_module_version",
+            lambda name: "0.4.7" if name == "cyberwave" else None,
+        )
+
         def fake(name: str) -> str:
-            if name == "cyberwave":
-                return "0.4.7"
             raise PackageNotFoundError(name)
 
         monkeypatch.setattr(
@@ -367,7 +378,7 @@ class TestSoftwareVersions:
         )
         from cyberwave.edge.host_metrics import _read_software_versions
 
-        assert _read_software_versions() == ("0.4.7", None, None)
+        assert _read_software_versions() == ("0.4.7", None)
 
     def test_metadata_corruption_does_not_crash(
         self, monkeypatch: pytest.MonkeyPatch
@@ -375,6 +386,11 @@ class TestSoftwareVersions:
         """A malformed ``METADATA`` file inside site-packages can raise
         non-``PackageNotFoundError`` exceptions on some Python builds; the
         defensive catch-all must keep the reader functional."""
+
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_module_version",
+            lambda name: None,
+        )
 
         def fake(name: str) -> str:
             raise RuntimeError("malformed metadata for " + name)
@@ -384,7 +400,7 @@ class TestSoftwareVersions:
         )
         from cyberwave.edge.host_metrics import _read_software_versions
 
-        assert _read_software_versions() == (None, None, None)
+        assert _read_software_versions() == (None, None)
 
 
 class TestReadHostFacts:

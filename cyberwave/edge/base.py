@@ -384,6 +384,52 @@ class BaseEdgeNode(ABC):
             },
         )
 
+    def publish_gps(
+        self,
+        twin_uuid: str,
+        latitude: float,
+        longitude: float,
+        altitude: float = 0.0,
+        *,
+        satellite_count: Optional[int] = None,
+        signal_level: Optional[int] = None,
+        compass_heading: Optional[float] = None,
+        horizontal_accuracy: Optional[float] = None,
+        vertical_accuracy: Optional[float] = None,
+        fix_type: Optional[str] = None,
+    ) -> None:
+        """
+        Publish raw GPS data for a twin.
+
+        Args:
+            twin_uuid: UUID of the twin
+            latitude: WGS-84 latitude in decimal degrees
+            longitude: WGS-84 longitude in decimal degrees
+            altitude: Altitude in meters
+            satellite_count: Number of satellites used in fix
+            signal_level: GPS signal quality level
+            compass_heading: Compass heading in degrees (0-360)
+            horizontal_accuracy: Horizontal accuracy estimate in meters
+            vertical_accuracy: Vertical accuracy estimate in meters
+            fix_type: Fix type (e.g. '3d', 'rtk_fixed')
+        """
+        if not self.client:
+            return
+
+        self.client.mqtt.update_twin_gps(
+            twin_uuid,
+            latitude=latitude,
+            longitude=longitude,
+            altitude=altitude,
+            satellite_count=satellite_count,
+            signal_level=signal_level,
+            compass_heading=compass_heading,
+            horizontal_accuracy=horizontal_accuracy,
+            vertical_accuracy=vertical_accuracy,
+            fix_type=fix_type,
+            source_type=self.config.source_type,
+        )
+
     def publish_telemetry(
         self,
         twin_uuid: str,

@@ -5,13 +5,14 @@ import json
 import numpy as np
 import pytest
 
-from cyberwave.models.types import BoundingBox, Detection
+from cyberwave.models.types import BoundingBox, Detection, Mask
 from cyberwave.vision.annotate import (
     OVERLAY_PAYLOAD_VERSION,
     _contrast_text_colour,
     _default_color_for,
     annotate_detections,
     build_overlay_payload,
+    mask_to_polygon,
 )
 
 cv2 = pytest.importorskip("cv2")
@@ -236,10 +237,24 @@ class TestBuildOverlayPayload:
             "line_width": 2,
             "font_scale": 0.5,  # font_size=14 / 28
             "show_confidence": True,
+            "mask_alpha": 0.35,
+            "mask_outline": True,
+            "box_color": "auto",
         }
+        from cyberwave.vision.annotate import _default_color_for
         assert payload["boxes"] == [
-            {"box_2d": [10.0, 10.0, 50.0, 80.0], "label": "person", "conf": 0.9},
-            {"box_2d": [60.0, 60.0, 120.0, 100.0], "label": "car", "conf": 0.5},
+            {
+                "box_2d": [10.0, 10.0, 50.0, 80.0],
+                "label": "person",
+                "conf": 0.9,
+                "color": list(_default_color_for("person", "auto")),
+            },
+            {
+                "box_2d": [60.0, 60.0, 120.0, 100.0],
+                "label": "car",
+                "conf": 0.5,
+                "color": list(_default_color_for("car", "auto")),
+            },
         ]
         # Round-trips cleanly through json — the camera driver
         # consumes it as raw JSON bytes off Zenoh.
@@ -260,3 +275,175 @@ class TestBuildOverlayPayload:
     def test_font_scale_overrides_font_size(self):
         payload = build_overlay_payload([], font_size=14, font_scale=1.25)
         assert payload["style"]["font_scale"] == 1.25
+
+
+def _square_mask(
+    *,
+    h: int = 100,
+    w: int = 100,
+    x1: int = 20,
+    y1: int = 20,
+    x2: int = 60,
+    y2: int = 60,
+) -> Mask:
+    data = np.zeros((h, w), dtype=np.uint8)
+    data[y1:y2, x1:x2] = 1
+    return Mask(data=data, h=h, w=w)
+
+
+def _det_with_mask(**kwargs) -> Detection:
+    mask = kwargs.pop("mask", _square_mask())
+    return Detection(
+        label=kwargs.get("label", "person"),
+        confidence=kwargs.get("confidence", 0.9),
+        bbox=BoundingBox(x1=20.0, y1=20.0, x2=60.0, y2=60.0),
+        mask=mask,
+    )
+
+
+class TestMaskExtraction:
+    def test_polygon_traces_square(self):
+        poly = mask_to_polygon(_square_mask())
+        assert poly is not None
+        xs = [p[0] for p in poly]
+        ys = [p[1] for p in poly]
+        assert min(xs) <= 21 and max(xs) >= 58
+        assert min(ys) <= 21 and max(ys) >= 58
+
+    def test_empty_mask_returns_none(self):
+        assert (
+            mask_to_polygon(
+                Mask(data=np.zeros((100, 100), dtype=np.uint8), h=100, w=100)
+            )
+            is None
+        )
+
+    def test_resizes_when_data_smaller_than_hw(self):
+        small = np.zeros((50, 50), dtype=np.uint8)
+        small[10:40, 10:40] = 1
+        poly = mask_to_polygon(Mask(data=small, h=200, w=200))
+        assert poly is not None
+        assert max(p[0] for p in poly) > 50
+
+    def test_publicly_exported_from_cyberwave_vision(self):
+        """``mask_to_polygon`` is the public name the backend's
+        codegen-inlined ``_detection_polygon`` imports at runtime.
+        Renaming this symbol breaks generated workers, so lock the
+        public path with an explicit assertion."""
+        from cyberwave.vision import mask_to_polygon as public
+
+        assert public is mask_to_polygon
+
+
+class TestDictDetectionInputs:
+    """Workflow-runtime producers (e.g. ``barcode_reader``) hand the
+    SDK plain dicts shaped ``{"label","class","confidence","bbox","bbox_pixels","text"}``
+    instead of ``Detection`` instances. The vision helpers must coerce
+    these on the fly — see ``cyberwave/vision/_detection_view.py``.
+    Regression for "barcode_reader → annotate raises 'dict' object has
+    no attribute 'bbox'" against the polymorphic coercion layer.
+    """
+
+    def _barcode_detection_dict(self) -> dict:
+        return {
+            "class": "QRCode",
+            "label": "QRCode",
+            "confidence": 1.0,
+            "bbox": {"x1": 10, "y1": 20, "x2": 50, "y2": 60},
+            "bbox_pixels": [10, 20, 50, 60],
+            "text": "https://cyberwave.com",
+        }
+
+    def test_build_overlay_payload_accepts_dict_detections(self):
+        payload = build_overlay_payload([self._barcode_detection_dict()])
+        assert len(payload["boxes"]) == 1
+        box = payload["boxes"][0]
+        assert box["box_2d"] == [10.0, 20.0, 50.0, 60.0]
+        assert box["label"] == "QRCode"
+        assert box["conf"] == 1.0
+
+    def test_build_overlay_payload_prefers_bbox_pixels_over_bbox(self):
+        det = {
+            "label": "QRCode",
+            "confidence": 1.0,
+            "bbox": [0, 0, 1, 1],
+            "bbox_pixels": [100, 200, 300, 400],
+        }
+        payload = build_overlay_payload([det])
+        assert payload["boxes"][0]["box_2d"] == [100.0, 200.0, 300.0, 400.0]
+
+    def test_build_overlay_payload_falls_back_to_class_key(self):
+        det = {
+            "class": "barcode",
+            "confidence": 0.5,
+            "bbox_pixels": [0, 0, 10, 10],
+        }
+        assert build_overlay_payload([det])["boxes"][0]["label"] == "barcode"
+
+    def test_annotate_detections_accepts_dict_detections(self):
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        out = annotate_detections(frame, [self._barcode_detection_dict()])
+        assert out.shape == frame.shape
+        assert out.any(), "expected at least one non-zero pixel from the bbox draw"
+
+    def test_dict_without_bbox_raises(self):
+        with pytest.raises(ValueError, match="no usable bbox"):
+            build_overlay_payload([{"label": "x", "confidence": 1.0}])
+
+
+class TestBuildOverlayPayloadMasks:
+    def test_polygon_emitted_per_detection(self):
+        payload = build_overlay_payload([_det_with_mask()])
+        box = payload["boxes"][0]
+        assert "polygon" in box
+        assert len(box["polygon"]) >= 4
+
+    def test_mask_format_png_emits_b64(self):
+        payload = build_overlay_payload([_det_with_mask()], mask_format="png")
+        box = payload["boxes"][0]
+        assert "mask_b64" in box
+        assert "polygon" not in box
+
+    def test_mask_format_both(self):
+        payload = build_overlay_payload([_det_with_mask()], mask_format="polygon+png")
+        box = payload["boxes"][0]
+        assert "polygon" in box and "mask_b64" in box
+
+    def test_style_carries_mask_keys(self):
+        payload = build_overlay_payload([], mask_alpha=0.5, mask_outline=False)
+        assert payload["style"]["mask_alpha"] == 0.5
+        assert payload["style"]["mask_outline"] is False
+
+    def test_payload_json_round_trips(self):
+        payload = build_overlay_payload([_det_with_mask()])
+        assert json.loads(json.dumps(payload)) == payload
+
+
+class TestAnnotateDetectionsMasks:
+    def test_mask_fill_blends_inside_polygon(self):
+        frame = np.full((100, 100, 3), 50, dtype=np.uint8)
+        out = annotate_detections(
+            frame,
+            [_det_with_mask()],
+            line_width=0,
+            font_scale=0,
+            mask_alpha=0.5,
+            mask_outline=False,
+        )
+        # Inside the square mask, the pixel value should have shifted
+        # from the original 50 toward the per-label colour.
+        assert not np.array_equal(out[40, 40], np.array([50, 50, 50], dtype=np.uint8))
+        # Outside the mask, pixels untouched.
+        assert np.array_equal(out[5, 5], np.array([50, 50, 50], dtype=np.uint8))
+
+    def test_mask_alpha_zero_skips_fill(self):
+        frame = np.full((100, 100, 3), 50, dtype=np.uint8)
+        out = annotate_detections(
+            frame,
+            [_det_with_mask()],
+            line_width=0,
+            font_scale=0,
+            mask_alpha=0.0,
+            mask_outline=False,
+        )
+        np.testing.assert_array_equal(out, frame)

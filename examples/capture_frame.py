@@ -1,75 +1,38 @@
 """
-Frame Capture & Manipulation Example
+Frame capture — grab frames from a twin camera via ``twin.get_frame()``.
 
-Grab frames from a twin's camera sensor and process them with OpenCV / PIL.
-
-The source of the frame — real camera ("real-world") or simulated 3-D
-render ("simulation") — is controlled by ``cw.affect()``.  When no
-explicit ``source_type`` is passed to ``capture_frame``, the active
-affect mode is used automatically.
+Sources:
+  - cloud (default) — platform REST latest-frame
+  - local — streamer cache or USB device
+  - zenoh — cw.data frames channel
+  - remote_edge — MQTT take_photo on the edge driver
 
 Requirements:
     pip install cyberwave numpy opencv-python Pillow
 """
 
 import cv2
-import numpy as np
+
 from cyberwave import Cyberwave
 
 cw = Cyberwave()
 robot = cw.twin("the-robot-studio/so101")
 
-# ── Affect-based source selection ─────────────────────────────────────
+# Cloud (default) — first imaging sensor when sensor_id omitted
+# frame = robot.get_frame("numpy")
 
-cw.affect("simulation")
-sim_frame = robot.capture_frame("numpy")   # rendered frame from the 3-D camera
+# Local streamer / USB
+frame = robot.get_frame("numpy", source="local")
+cv2.imwrite("frame.jpg", frame)
 
-cw.affect("real-world")
-real_frame = robot.capture_frame("numpy")  # live frame from the real camera
+# Or save to disk (same transport kwargs as get_frame)
+# path = robot.get_frame("path", path="frame.jpg", source="local")
+# folder = robot.get_frames(5, interval_ms=200)
 
-# ── Single frame as numpy array (uses the current affect mode) ────────
+# Edge driver photo command
+# edge_jpeg = robot.get_frame("bytes", source="remote_edge")
 
-frame = robot.capture_frame("numpy")  # BGR numpy array
-
-# Draw a timestamp overlay
-cv2.putText(
-    frame,
-    "Cyberwave live",
-    (10, 30),
-    cv2.FONT_HERSHEY_SIMPLEX,
-    0.8,
-    (0, 255, 0),
-    2,
-)
-
-cv2.imwrite("annotated_frame.jpg", frame)
-print("Saved annotated_frame.jpg")
-
-# ── Edge detection ────────────────────────────────────────────────────
-
-gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-edges = cv2.Canny(gray, 50, 150)
-cv2.imwrite("edges.jpg", edges)
-print("Saved edges.jpg")
-
-# ── Batch capture → side-by-side composite ────────────────────────────
-
-frames = robot.capture_frames(3, interval_ms=500, format="numpy")
-composite = np.hstack(frames)
-cv2.imwrite("composite.jpg", composite)
-print(f"Saved composite.jpg ({len(frames)} frames stitched)")
-
-# ── Using the twin.camera namespace ───────────────────────────────────
-
-frame2 = robot.camera.read()  # numpy by default, like cv2.VideoCapture
-path = robot.camera.snapshot()  # temp JPEG file
-print(f"Snapshot saved to {path}")
-
-# ── PIL example: resize + thumbnail ───────────────────────────────────
-
-pil_frame = robot.capture_frame("pil")
-pil_frame.thumbnail((320, 240))
-pil_frame.save("thumbnail.jpg")
-print("Saved thumbnail.jpg (320×240)")
+# Zenoh (requires cyberwave[zenoh] + publisher)
+# frame = robot.get_frame("numpy", source="zenoh")
 
 cw.disconnect()

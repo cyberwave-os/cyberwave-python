@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.workflow_node_hint_schema import WorkflowNodeHintSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -36,7 +37,8 @@ class AgentSetupAndDraftSchema(BaseModel):
     mode: Optional[StrictStr] = 'simulation'
     simulation_backend: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
-    __properties: ClassVar[List[str]] = ["prompt", "confirmed_actions", "agent_plan", "mlmodel_uuid", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "visibility"]
+    node_hints: Optional[List[WorkflowNodeHintSchema]] = None
+    __properties: ClassVar[List[str]] = ["prompt", "confirmed_actions", "agent_plan", "mlmodel_uuid", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "visibility", "node_hints"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -87,6 +89,13 @@ class AgentSetupAndDraftSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in node_hints (list)
+        _items = []
+        if self.node_hints:
+            for _item_node_hints in self.node_hints:
+                if _item_node_hints:
+                    _items.append(_item_node_hints.to_dict())
+            _dict['node_hints'] = _items
         # set to None if agent_plan (nullable) is None
         # and model_fields_set contains the field
         if self.agent_plan is None and "agent_plan" in self.model_fields_set:
@@ -132,7 +141,8 @@ class AgentSetupAndDraftSchema(BaseModel):
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "mode": obj.get("mode") if obj.get("mode") is not None else 'simulation',
             "simulation_backend": obj.get("simulation_backend"),
-            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private'
+            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
+            "node_hints": [WorkflowNodeHintSchema.from_dict(_item) for _item in obj["node_hints"]] if obj.get("node_hints") is not None else None
         })
         return _obj
 

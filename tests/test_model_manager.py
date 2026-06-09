@@ -259,6 +259,95 @@ class TestResolveModelPath:
         with pytest.raises(FileNotFoundError, match="not found"):
             mgr._resolve_model_path("missing", "onnxruntime")
 
+    # ----------------------------------------------------------------------
+    # Self-heal: orphan staging directory left by a previously failed
+    # Edge Core download.
+    #
+    # Regression for the ``IsADirectoryError`` wedge described in
+    # ``cyberwave-edge-core/cyberwave_edge_core/model_manager.py`` —
+    # ``_download_runtime_managed`` / ``_download_model`` ``mkdir`` the
+    # per-model directory *before* the network fetch, so any download
+    # error leaves it on disk. Without the SDK-side prune the resolver
+    # would return that directory and ``torch.load`` would crash on
+    # every worker start.
+    # ----------------------------------------------------------------------
+
+    def test_empty_orphan_subdir_pruned_for_ultralytics(self, tmp_path):
+        """Empty staging dir + ultralytics → prune dir, return non-existent file."""
+        orphan = tmp_path / "yoloe-26m-seg.pt"
+        orphan.mkdir()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == tmp_path / "yoloe-26m-seg.pt"
+        assert not orphan.exists(), "empty orphan staging dir must be pruned"
+        assert not result.exists(), (
+            "resolver must hand back a non-existent path so the runtime "
+            "auto-download branch can take over"
+        )
+
+    def test_metadata_only_orphan_subdir_pruned_for_ultralytics(self, tmp_path):
+        """Dir with only a metadata sidecar counts as orphan and is pruned."""
+        orphan = tmp_path / "yoloe-26m-seg.pt"
+        orphan.mkdir()
+        (orphan / "metadata.json").write_text("{}")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == tmp_path / "yoloe-26m-seg.pt"
+        assert not orphan.exists()
+
+    def test_partial_download_orphan_subdir_pruned_for_ultralytics(self, tmp_path):
+        """Dir with only ``.dl_*.part`` cruft is also treated as orphan."""
+        orphan = tmp_path / "yoloe-26m-seg.pt"
+        orphan.mkdir()
+        (orphan / ".dl_abc123.part").write_bytes(b"partial")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == tmp_path / "yoloe-26m-seg.pt"
+        assert not orphan.exists()
+
+    def test_orphan_subdir_with_real_weight_file_left_alone(self, tmp_path):
+        """Directory with a recognized weight file must NEVER be pruned."""
+        sub = tmp_path / "yoloe-26m-seg.pt"
+        sub.mkdir()
+        (sub / "yoloe-26m-seg.pt").write_bytes(b"fake weights")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == sub / "yoloe-26m-seg.pt"
+        assert sub.exists()
+
+    def test_orphan_subdir_with_unknown_file_raises_actionable_error(
+        self, tmp_path
+    ):
+        """Operator-staged content (a README, a half-staged weight) +
+        no recognized weight file → raise a clear error and **preserve**
+        the directory. Returning the directory path here would only
+        relocate the ``IsADirectoryError`` to ``torch.load`` later, and
+        rmtree-ing it would destroy the operator's hand-staged work.
+        """
+        sub = tmp_path / "yoloe-26m-seg.pt"
+        sub.mkdir()
+        (sub / "README.txt").write_text("hand-staged by operator")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        with pytest.raises(FileNotFoundError) as excinfo:
+            mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        msg = str(excinfo.value)
+        assert "no recognized weight file" in msg
+        assert "README.txt" in msg, "error must name the offending file(s)"
+        # Operator's hand-staged content survives.
+        assert sub.exists()
+        assert (sub / "README.txt").exists()
+
+    def test_empty_orphan_subdir_for_non_ultralytics_raises_explicit_error(
+        self, tmp_path
+    ):
+        """Non-ultralytics runtimes get a clear error mentioning the prune."""
+        orphan = tmp_path / "my_model.onnx"
+        orphan.mkdir()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        with pytest.raises(FileNotFoundError, match="staging directory"):
+            mgr._resolve_model_path("my_model.onnx", "onnxruntime")
+        assert not orphan.exists()
+
 
 # ---------------------------------------------------------------------------
 # local public weight auto-download

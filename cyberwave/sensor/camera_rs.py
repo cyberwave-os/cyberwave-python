@@ -290,6 +290,11 @@ class RealSenseVideoTrack(BaseVideoTrack):
         else:
             color_image, depth_image = frames
 
+        try:
+            self._current_frame = color_image.copy()  # type: ignore[union-attr]
+        except Exception:
+            self._current_frame = color_image
+
         # Capture current timestamp at frame capture moment for accuracy.
         timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 

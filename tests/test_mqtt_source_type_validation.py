@@ -1,5 +1,6 @@
 """Tests for MQTT source_type validation and fallback behavior."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -87,3 +88,16 @@ def test_update_joints_state_rejects_invalid_source_type_before_publish(mqtt_cli
 
     mqtt_client._handle_twin_update_with_telemetry.assert_not_called()
     mqtt_client.publish.assert_not_called()
+
+
+def test_publish_success_does_not_emit_debug_publish_noise(mqtt_client, caplog):
+    mqtt_client.connected = True
+    mqtt_client.client.publish = MagicMock(return_value=MagicMock(rc=0))
+    caplog.set_level(logging.DEBUG, logger="cyberwave.mqtt")
+
+    mqtt_client.publish("cyberwave/twin/test/driverlog", {"message": "ok"})
+
+    assert not any(
+        "Published to cyberwave/twin/test/driverlog" in record.getMessage()
+        for record in caplog.records
+    )

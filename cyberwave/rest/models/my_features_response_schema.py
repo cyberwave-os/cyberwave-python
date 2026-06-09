@@ -30,7 +30,8 @@ class MyFeaturesResponseSchema(BaseModel):
     """ # noqa: E501
     features: List[FeatureStatusSchema]
     is_staff: StrictBool
-    __properties: ClassVar[List[str]] = ["features", "is_staff"]
+    is_admin: StrictBool
+    __properties: ClassVar[List[str]] = ["features", "is_staff", "is_admin"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -91,7 +92,8 @@ class MyFeaturesResponseSchema(BaseModel):
 
         _obj = cls.model_validate({
             "features": [FeatureStatusSchema.from_dict(_item) for _item in obj["features"]] if obj.get("features") is not None else None,
-            "is_staff": obj.get("is_staff")
+            "is_staff": obj.get("is_staff"),
+            "is_admin": obj.get("is_admin")
         })
         return _obj
 

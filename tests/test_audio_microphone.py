@@ -22,14 +22,17 @@ from aiortc.mediastreams import MediaStreamError  # noqa: E402
 
 from cyberwave.sensor.microphone import (  # noqa: E402
     AUDIO_PTIME,
+    DEFAULT_AUDIO_SENSOR_ID,
     DEFAULT_LAYOUT,
     DEFAULT_SAMPLE_RATE,
+    MICROPHONE_SENSOR_TYPES,
     HostMicrophoneCapture,
     MicrophoneAudioStreamer,
     MicrophoneAudioTrack,
     check_host_microphone_settings,
     list_host_microphone_devices,
 )
+from cyberwave.sensor.speaker import SPEAKER_SENSOR_TYPES  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -241,6 +244,8 @@ class TestOfferPayload:
         assert payload["target"] == "backend"
         assert payload["sender"] == "edge"
         assert payload["sensor"] == "mic"
+        assert payload["sensor_type"] == "audio"
+        assert payload["role"] == "producer"
         assert payload["recording"] is False
 
     def test_offer_payload_can_request_recording(self):
@@ -294,6 +299,30 @@ class TestOfferPayload:
 
 
 class TestCommandRecordingControl:
+    @pytest.mark.asyncio
+    async def test_catalog_default_mic_name_recording_relay_uses_audio_sensor(
+        self, monkeypatch
+    ):
+        """Driver/SDK relay must match catalog ``sensors[].id`` (``audio``)."""
+        s = MicrophoneAudioStreamer(
+            _make_mqtt_client(),
+            get_audio=_silent_get_audio,
+            twin_uuid="twin-123",
+            mic_name=DEFAULT_AUDIO_SENSOR_ID,
+            auto_reconnect=True,
+            recording=False,
+        )
+        s.pc = MagicMock()
+
+        await s._handle_stop_command()
+
+        _, payload = s.client.publish.call_args[0]
+        assert payload == {
+            "command": "stop_recording",
+            "source_type": "edge",
+            "sensor": "audio",
+        }
+
     @pytest.mark.asyncio
     async def test_start_command_publishes_recording_command_when_connected(self, monkeypatch):
         s = MicrophoneAudioStreamer(
@@ -454,3 +483,11 @@ class TestAnswerRouting:
         topics = [c[0][0] for c in s.client.subscribe.call_args_list]
         assert "cyberwave/twin/twin-123/webrtc-answer" in topics
         assert "cyberwave/twin/twin-123/webrtc-candidate" in topics
+
+
+class TestAudioSensorClassification:
+    def test_default_sensor_id_is_audio(self):
+        assert DEFAULT_AUDIO_SENSOR_ID == "audio"
+
+    def test_microphone_and_speaker_types_are_disjoint(self):
+        assert MICROPHONE_SENSOR_TYPES.isdisjoint(SPEAKER_SENSOR_TYPES)

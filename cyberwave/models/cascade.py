@@ -33,7 +33,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Iterator
 
-from cyberwave.models.types import PredictionResult
+from cyberwave.models.types import DetectionResult, PredictionResult
 
 if TYPE_CHECKING:
     from cyberwave.models.cloud import CloudLoadedModel
@@ -152,7 +152,12 @@ class CascadePredictionResult:
         return any(bool(r) for r in self._results.values())
 
     def __repr__(self) -> str:
-        summary = {name: len(r) for name, r in self._results.items()}
+        summary: dict[str, Any] = {}
+        for name, r in self._results.items():
+            if isinstance(r, DetectionResult):
+                summary[name] = len(r.detections)
+            else:
+                summary[name] = type(r).__name__
         return f"CascadePredictionResult({summary})"
 
     # ------------------------------------------------------------------
@@ -165,16 +170,27 @@ class CascadePredictionResult:
         return list(self._results.keys())
 
     def total_detections(self) -> int:
-        """Total number of detections across all models."""
-        return sum(len(r) for r in self._results.values())
+        """Total number of detections across detection-shaped models only."""
+        return sum(
+            len(r.detections)
+            for r in self._results.values()
+            if isinstance(r, DetectionResult)
+        )
 
     def describe(self) -> str:
         """Human-readable summary of all predictions (useful in notebooks)."""
         lines: list[str] = []
         for name, pred in self._results.items():
-            lines.append(f"[{name}] {len(pred)} detection(s)")
-            if pred:
-                lines.append(pred.describe_detections_text(indent="    "))
+            if isinstance(pred, DetectionResult):
+                lines.append(f"[{name}] {len(pred.detections)} detection(s)")
+                if pred.detections:
+                    lines.append(
+                        pred.describe_detections_text(indent="    ")
+                    )
+            else:
+                lines.append(f"[{name}] {type(pred).__name__}")
+                if pred:
+                    lines.append(f"    {pred.describe()}")
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
@@ -220,6 +236,9 @@ class CascadePredictionResult:
             ).copy()
 
             for idx, (name, pred) in enumerate(self._results.items()):
+                if not isinstance(pred, DetectionResult):
+                    continue
+
                 if pred.raw is not None and len(pred.raw) > 0:
                     try:
                         plotted = pred.raw[0].plot(pil=True, img=current_bgr)
@@ -272,6 +291,8 @@ class CascadePredictionResult:
 
         draw = ImageDraw.Draw(canvas)
         for idx, (name, pred) in enumerate(self._results.items()):
+            if not isinstance(pred, DetectionResult):
+                continue
             color = _PALETTE[idx % len(_PALETTE)]
             short_name = name[:14]
             for detection in pred.detections:

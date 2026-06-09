@@ -99,6 +99,17 @@ DEFAULT_FRONTEND_TYPE = "audio"
 DEFAULT_STREAM_SOURCE = "live"
 DEFAULT_STREAM_INSTANCE_ID = "default"
 
+# Shared WebRTC routing key for mic + speaker legs (``sensor`` field in offers).
+# Must match ``DEFAULT_AUDIO_SENSOR_ID`` in media-service ``audio_sensor.rs``.
+DEFAULT_AUDIO_SENSOR_ID = "audio"
+DEFAULT_MIC_NAME = DEFAULT_AUDIO_SENSOR_ID
+
+# Active microphone twin sensor *types* — edge producers only.
+# Keep in sync with ``MICROPHONE_SENSOR_TYPES`` in ``audio_sensor.rs``.
+MICROPHONE_SENSOR_TYPES = frozenset(
+    {"mic", "microphone", "audio_in", "audio", "audio_mono", "audio_stereo"}
+)
+
 # Reused from sensor package to avoid circular import
 _AUDIO_TURN_SERVERS = [
     {"urls": ["stun:turn.cyberwave.com:3478"]},
@@ -327,15 +338,41 @@ class BaseAudioTrack(AudioStreamTrack):
     Subclasses must implement:
         - recv: Return the next AudioFrame (e.g. s16, 48kHz, 20ms)
         - close: Release resources
+
+    The ``frame_count`` counter exists for the streamer's health-check
+    poller to detect liveness — concrete subclasses are responsible for
+    bumping it once per emitted frame.  Without that, an audio twin
+    would always look stale on the dashboard even when the track is
+    happily streaming over WebRTC (the pre-CYB-2005 bug).
     """
 
     def __init__(self) -> None:
         super().__init__()
         self._closed = False
+        self.frame_count: int = 0
 
     def get_stream_attributes(self) -> dict[str, Any]:
         """Stream attributes included in the WebRTC offer payload."""
         return {}
+
+    def get_stream_config(self) -> dict[str, Any] | None:
+        """Return a typed ``stream_config`` block for ``edge_health``, or ``None``.
+
+        Mirrors :meth:`cyberwave.sensor.base_video.BaseVideoStreamer._build_stream_config`
+        for the audio side.  Default implementation returns ``None`` so a
+        generic ``BaseAudioTrack`` stays on the no-``stream_config`` wire
+        shape; concrete subclasses (``MicrophoneAudioTrack``, future
+        codec-specific tracks) override to declare their kind, source,
+        and runtime parameters.
+
+        Called on every heartbeat via the ``stream_config_provider`` the
+        streamer wires into ``EdgeHealthCheck``, so subclasses can return
+        post-negotiation values (Opus FEC state, ALSA-reopened device
+        path, ...) without registering at startup.  Credentials in
+        ``source`` must already be masked by the override; the publisher
+        does not redact.
+        """
+        return None
 
     def close(self) -> None:
         """Release audio resources. Override in subclasses."""
@@ -388,6 +425,33 @@ class MicrophoneAudioTrack(BaseAudioTrack):
             "ptime_ms": int(AUDIO_PTIME * 1000),
         }
 
+    def get_stream_config(self) -> dict[str, Any] | None:
+        """Advertise the microphone config in every ``edge_health`` heartbeat.
+
+        The dashboard otherwise has to guess "is this twin an audio
+        source?" from the asset spec, which is fragile when the twin
+        carries multiple sensors or was provisioned without a sensor
+        kind.  Wiring the ``audio`` discriminator on the wire moves
+        that decision into the producer where the truth lives.
+
+        Intentionally omits ``source``.  Across the rest of the SDK
+        ``source`` is a device path, URL, or ROS topic (camera publishes
+        ``/dev/video0``, lidar publishes ``/point_cloud2``); a WebRTC
+        microphone has no equivalent — the host ALSA / CoreAudio device
+        path is a security leak (it would describe the operator's host
+        filesystem), and publishing the codec instead would overload
+        the field's semantics.  The audio-kind validator accepts a
+        missing ``source`` for exactly this reason.  Drivers that DO
+        have a meaningful identifier (e.g. a JACK port name on a
+        multi-mic edge) can override and attach it.
+        """
+        return {
+            "kind": "audio",
+            "sample_rate_hz": self.sample_rate,
+            "channels": 2 if self.layout == "stereo" else 1,
+            "codec": "opus",
+        }
+
     async def recv(self) -> AudioFrame:
         if self._closed:
             raise MediaStreamError("Track is closed")
@@ -414,6 +478,10 @@ class MicrophoneAudioTrack(BaseAudioTrack):
         frame.time_base = fractions.Fraction(1, self.sample_rate)
         frame.planes[0].update(raw[: self._bytes_per_frame])
         self._pts += self._samples_per_frame
+        # Liveness signal for the streamer's health-check poller — bump
+        # AFTER the wait/encode so a track that's still blocking on the
+        # get_audio callable doesn't look "fresh" forever.
+        self.frame_count += 1
 
         return frame
 
@@ -441,6 +509,7 @@ class BaseAudioStreamer:
         frontend_type: str = DEFAULT_FRONTEND_TYPE,
         stream_source: Optional[str] = None,
         stream_instance_id: Optional[str] = None,
+        enable_health_check: bool = True,
     ) -> None:
         self.client = client
         self.twin_uuid: str | None = twin_uuid
@@ -451,6 +520,7 @@ class BaseAudioStreamer:
         self.frontend_type = frontend_type
         self.stream_source = stream_source
         self.stream_instance_id = stream_instance_id
+        self.enable_health_check = enable_health_check
 
         self.pc: RTCPeerConnection | None = None
         self.streamer: BaseAudioTrack | None = None
@@ -469,6 +539,17 @@ class BaseAudioStreamer:
         # Owned background task for run_with_auto_reconnect (created by run())
         self._run_task: asyncio.Task | None = None
         self._run_stop_event: asyncio.Event | None = None
+
+        # ``edge_health`` plumbing — pre-CYB-2005 ``BaseAudioStreamer``
+        # didn't publish a heartbeat at all, which made paired
+        # microphone twins always show "Edge service not running" in
+        # the dashboard even when audio was streaming fine over WebRTC.
+        # The lifecycle mirrors ``av_streamer.MultimediaStreamer``: start
+        # after a successful ``_start_webrtc``, stop on disconnect /
+        # ``stop()``.
+        self._health_check: Any = None
+        self._health_monitor_task: asyncio.Task | None = None
+        self._last_frame_count: int = 0
 
     # -------------------------------------------------------------------------
     # Abstract
@@ -518,6 +599,8 @@ class BaseAudioStreamer:
                 self.streamer = None
             raise
         logger.debug("WebRTC audio connection established")
+        if self.enable_health_check:
+            self._start_health_check()
 
     async def start(self) -> None:
         """Start streaming with auto-reconnect in a background task.
@@ -537,6 +620,12 @@ class BaseAudioStreamer:
         Signals the background task started by start(), awaits its
         completion, then closes the WebRTC peer connection.
         """
+        # Tear down the health publisher first so we don't keep
+        # emitting heartbeats after the WebRTC track is gone — would
+        # otherwise look like a phantom-live audio stream in the
+        # dashboard for ``stale_timeout`` seconds.
+        self._stop_health_check()
+
         # Tear down the owned background task first
         if self._run_stop_event is not None:
             self._run_stop_event.set()
@@ -687,6 +776,10 @@ class BaseAudioStreamer:
             "track_id": self.streamer.id if self.streamer else None,
             "frontend_type": self.frontend_type,
             "session_id": f"{self.client.client_id}_{self.mic_name}",
+            # Active twin — produces audio into the SFU (passive speakers consume).
+            # ``sensor_type`` matches catalog microphone metadata (``type: "audio"``).
+            "sensor_type": "audio",
+            "role": "producer",
         }
         if self.stream_source:
             offer_payload["stream_source"] = self.stream_source
@@ -967,6 +1060,9 @@ class BaseAudioStreamer:
         self._is_running = False
         self._should_reconnect = False
         self._event_loop = None
+        # Stop the heartbeat first so the dashboard doesn't see a brief
+        # "stale stream" flash between cleanup and final teardown.
+        self._stop_health_check()
         if self._monitor_task:
             self._monitor_task.cancel()
             try:
@@ -983,6 +1079,137 @@ class BaseAudioStreamer:
                 await self._close_peer_connection()
             except Exception as e:
                 logger.error("Error closing connection during cleanup: %s", e)
+
+    # -------------------------------------------------------------------------
+    # Health check
+    # -------------------------------------------------------------------------
+
+    def _start_health_check(self) -> None:
+        """Spin up an ``EdgeHealthCheck`` for this audio track.
+
+        Mirrors the pattern in ``av_streamer.MultimediaStreamer._start_health_check``
+        and ``base_video.BaseVideoStreamer._start_health_check``: construct
+        with a ``stream_config_provider`` so the wire reflects current
+        track state on every heartbeat (sample rate / channels / codec
+        post-negotiation), start the publisher, and kick off a frame
+        monitor that forwards the track's frame counter to the
+        publisher so ``is_stale`` reacts to real liveness rather than
+        a static "we're connected" flag.
+
+        Pre-CYB-2005, ``BaseAudioStreamer`` skipped this entirely and
+        paired microphone twins always rendered "Edge service not
+        running" in the dashboard even when audio was streaming fine
+        over WebRTC.
+        """
+        if not self.enable_health_check or not self.twin_uuid:
+            return
+        try:
+            from ..edge.health import EdgeHealthCheck
+            from .base_video import (
+                SDK_EDGE_HEALTH_INTERVAL_SECONDS,
+                SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
+            )
+
+            self._health_check = EdgeHealthCheck(
+                mqtt_client=self.client,
+                twin_uuids=[self.twin_uuid],
+                edge_id=self.twin_uuid,
+                stale_timeout=SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
+                interval=SDK_EDGE_HEALTH_INTERVAL_SECONDS,
+                stream_config_provider=self._collect_stream_configs,
+            )
+            self._health_check.start()
+            self._last_frame_count = 0
+            # ``_start_health_check`` is normally called from inside
+            # the async ``_start_webrtc`` so an event loop is always
+            # running.  Guard for sync callers (test harness, manual
+            # repls) by closing the coroutine cleanly when no loop is
+            # available — without this, the unawaited coroutine
+            # triggers ``RuntimeWarning`` on GC.
+            monitor_coro = self._monitor_frame_count()
+            try:
+                self._health_monitor_task = asyncio.create_task(monitor_coro)
+            except RuntimeError:
+                monitor_coro.close()
+                self._health_monitor_task = None
+            logger.debug("Audio health check started")
+        except Exception as e:
+            # Never let a health-check failure tank the audio stream
+            # itself — the WebRTC track is the load-bearing surface.
+            logger.warning("Failed to start audio health check: %s", e)
+
+    def _stop_health_check(self) -> None:
+        if self._health_monitor_task:
+            self._health_monitor_task.cancel()
+            self._health_monitor_task = None
+        if self._health_check:
+            try:
+                self._health_check.stop()
+            except Exception as e:
+                logger.warning("Error stopping audio health check: %s", e)
+            self._health_check = None
+        self._last_frame_count = 0
+
+    def _collect_stream_configs(self) -> dict[str, dict[str, Any]]:
+        """Bridge from the track's ``get_stream_config()`` to the provider shape.
+
+        ``EdgeHealthCheck.stream_config_provider`` returns
+        ``{stream_id: config}``; ``BaseAudioStreamer`` is single-stream
+        by design, so the dict has at most one entry under the
+        canonical ``"stream"`` key.  Returns ``{}`` when the track
+        hasn't been initialised yet, the track is a generic
+        ``BaseAudioTrack`` that hasn't overridden the hook, or the
+        override raises — the heartbeat must keep flowing in all of
+        those.
+        """
+        track = self.streamer
+        if track is None:
+            return {}
+        try:
+            cfg = track.get_stream_config()
+        except Exception as exc:
+            logger.debug("Audio track get_stream_config raised: %s", exc)
+            return {}
+        if cfg is None:
+            return {}
+        return {"stream": cfg}
+
+    async def _monitor_frame_count(self) -> None:
+        """Forward audio-track liveness to the health publisher.
+
+        Polls every 100 ms.  When the track's ``frame_count`` has
+        advanced since the previous poll, calls
+        :meth:`EdgeHealthCheck.mark_alive` **once** — not once per
+        emitted audio frame.
+
+        Per-frame forwarding (the pattern the video side uses via
+        ``update_frame_count``) would put ``fps: 50.0`` and
+        ``frames_sent: <packet count>`` on the wire for a microphone,
+        because aiortc emits a 20 ms Opus frame at 50 Hz.  Those
+        numbers are correct WebRTC terminology but operationally
+        meaningless — sample rate / channels live in
+        ``stream_config`` and that's what the dashboard renders.  See
+        ``EdgeHealthCheck.mark_alive`` for the full rationale.
+
+        The track-level ``frame_count`` counter is still incremented
+        in ``MicrophoneAudioTrack.recv`` because we need a monotone
+        signal to detect "new frames since last poll" — we just
+        don't forward each increment.
+        """
+        while self._is_running or self.pc is not None:
+            try:
+                track = self.streamer
+                if track is not None and self._health_check is not None:
+                    current = getattr(track, "frame_count", 0)
+                    if current < self._last_frame_count:
+                        # Reset on track replacement / reconnect.
+                        self._last_frame_count = current
+                    if current > self._last_frame_count:
+                        self._health_check.mark_alive()
+                        self._last_frame_count = current
+            except Exception as e:
+                logger.debug("Audio health monitor error: %s", e)
+            await asyncio.sleep(0.1)
 
 
 # =============================================================================
@@ -1021,6 +1248,7 @@ class MicrophoneAudioStreamer(BaseAudioStreamer):
         frontend_type: str = DEFAULT_FRONTEND_TYPE,
         stream_source: Optional[str] = None,
         stream_instance_id: Optional[str] = None,
+        enable_health_check: bool = True,
     ) -> None:
         super().__init__(
             client,
@@ -1032,6 +1260,7 @@ class MicrophoneAudioStreamer(BaseAudioStreamer):
             frontend_type=frontend_type,
             stream_source=stream_source,
             stream_instance_id=stream_instance_id,
+            enable_health_check=enable_health_check,
         )
         self._get_audio = get_audio
         self._sample_rate = sample_rate

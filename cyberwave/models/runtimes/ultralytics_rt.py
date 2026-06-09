@@ -9,20 +9,21 @@ Supports all Ultralytics task types:
   backward compatibility).
 * **obb** — each :class:`Detection` carries an :class:`OrientedBoundingBox`
   in ``.obb``; ``.bbox`` is the tightest axis-aligned bounding box.
-* **classify** — :class:`ClassificationPrediction` in ``PredictionResult.classification``.
+* **classify** — :class:`ClassificationResult` (top-K class scores).
 """
 
 from __future__ import annotations
 
+import logging
 import os
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from cyberwave.models.runtimes.base import ModelRuntime
 from cyberwave.models.types import (
     BoundingBox,
     ClassificationCandidate,
-    ClassificationPrediction,
+    ClassificationResult,
     Detection,
     DetectionResult,
     InstanceSegmentationResult,
@@ -33,6 +34,8 @@ from cyberwave.models.types import (
     PoseResult,
     PredictionResult,
 )
+
+_logger = logging.getLogger("cyberwave.models.runtimes.ultralytics")
 
 
 class UltralyticsRuntime(ModelRuntime):
@@ -59,23 +62,53 @@ class UltralyticsRuntime(ModelRuntime):
 
         p = Path(model_path)
 
-        # Ultralytics strips the directory from missing weights and downloads
-        # to CWD.  When the file doesn't exist yet, chdir into a writable
-        # model directory so the auto-downloaded weights don't land in an
-        # unwritable CWD (common in containers).
-        #
-        # NOTE: os.chdir() is process-global.  Concurrent load() calls for
-        # missing models will race on CWD.  In practice model loading is a
-        # one-time startup operation so this is acceptable.
-        download_dir = self._writable_model_dir(p) if not p.exists() else None
-        old_cwd = os.getcwd() if download_dir else None
+        # Defensive guard for the ``IsADirectoryError`` wedge: if
+        # ``p`` is a directory we must NOT forward it to ``YOLO()``
+        # because Ultralytics would then call ``torch.load(<dir>)`` and
+        # crash on every worker start. The SDK's
+        # ``ModelManager._resolve_model_path`` is the authoritative
+        # place that decides whether a staging directory is orphan
+        # cruft (prune + auto-download) or operator-staged content
+        # (raise with an actionable error). Reaching this branch means
+        # a caller bypassed the manager and handed us a raw directory
+        # path — surface a clear error rather than silently destroying
+        # whatever the operator put there.
+        if p.is_dir():
+            try:
+                contents = sorted(item.name for item in p.iterdir())
+            except OSError:
+                contents = []
+            raise FileNotFoundError(
+                f"UltralyticsRuntime.load() received a directory at "
+                f"{p}, not a weight file. This is usually an orphan "
+                f"staging directory left by a previously failed Edge "
+                f"Core download. Resolve it via "
+                f"``ModelManager.load(model_id)`` (the SDK manager "
+                f"handles this case) or manually remove the directory "
+                f"if it only contains stale partial-download cruft. "
+                f"Found inside: {contents}."
+            )
+
+        # Ultralytics resolves missing weights against CWD; chdir into a
+        # writable dir so auto-downloads don't land in an unwritable
+        # container WORKDIR. The same dir is stashed on the handle for
+        # ``_apply_text_prompt`` to reuse for the lazy MobileCLIP text
+        # encoder download triggered by open-vocab heads (YOLOE,
+        # YOLO-World) at the first ``predict(prompt=...)`` call.
+        # ``os.chdir`` is process-global — load() is a one-time startup
+        # op so the race is acceptable.
+        writable_dir = self._writable_model_dir(p)
+        needs_primary_download = not p.is_file()
+        old_cwd = os.getcwd() if needs_primary_download else None
         try:
-            if download_dir:
-                os.chdir(download_dir)
-            model = YOLO(p.name if download_dir else model_path)
+            if needs_primary_download:
+                os.chdir(writable_dir)
+            model = YOLO(p.name if needs_primary_download else model_path)
         finally:
             if old_cwd is not None:
                 os.chdir(old_cwd)
+
+        model._cw_writable_dir = str(writable_dir)  # type: ignore[assignment]
 
         if device:
             # ``model.to(device)`` raises ``TypeError`` for any non-PyTorch
@@ -92,6 +125,134 @@ class UltralyticsRuntime(ModelRuntime):
             except TypeError:
                 pass
         return model
+
+    @staticmethod
+    def _normalize_prompt(
+        prompt: str | list[str] | tuple[str, ...] | None,
+    ) -> list[str]:
+        """Coerce a prompt input into a clean, stripped list of class strings.
+
+        Accepts three shapes:
+
+        - ``None`` → ``[]`` (caller treats as "no prompt configured").
+        - ``str`` → **split on commas**. The workflow editor surfaces
+          ``prompt`` as a single STRING input today, so the only way to
+          author a multi-class YOLOE prompt from the inspector is to
+          type ``"helmet, safety vest"`` — we parse that into the list
+          form the open-vocab head wants. A bare ``"helmet"`` (no comma)
+          becomes ``["helmet"]``.
+        - ``list`` / ``tuple`` → already a class list (e.g. an upstream
+          node whose output is a sequence of strings).
+
+        In every case the result is **stripped** and empty entries are
+        dropped. This keeps the per-handle cache key stable
+        (``" helmet "`` ≡ ``"helmet"`` ≡ ``"helmet, "``) and prevents a
+        default-empty inspector field from triggering a spurious head
+        reset on every frame.
+        """
+        if prompt is None:
+            return []
+        if isinstance(prompt, str):
+            parts: list[str] = prompt.split(",")
+        elif isinstance(prompt, list | tuple):
+            parts = [str(p) for p in prompt]
+        else:
+            return []
+        return [p.strip() for p in parts if isinstance(p, str) and p.strip()]
+
+    @staticmethod
+    def _apply_text_prompt(
+        model_handle: Any,
+        prompt: str | list[str] | tuple[str, ...] | None,
+    ) -> None:
+        """Configure an open-vocab YOLO head from a text prompt, with caching.
+
+        Single string (``"helmet"``), comma-separated string
+        (``"helmet, safety vest"``), or list/tuple of strings — all
+        normalize to a clean class list via :meth:`_normalize_prompt`.
+
+        Cache strategy: the **normalized** prompt tuple is stored on
+        the model handle. Subsequent calls with the same logical
+        prompts (regardless of whitespace / single-string vs list
+        encoding) skip the (cheap but not free) re-parameterization.
+
+        Failure modes:
+
+        - Handle lacks ``set_classes`` / ``get_text_pe`` (closed-set
+          YOLOv8 / classifier nets): silently skip. The backend
+          compile-time gate (``text_prompt_unsupported``) already
+          rejects this case at workflow sync time, so reaching here
+          means a hand-crafted API caller — nothing to do.
+        - ``clip`` (or another optional dep) is not importable in the
+          worker image: ``ultralytics.nn.text_model`` does a lazy
+          ``import clip`` inside ``get_text_pe``, so the failure
+          surfaces here as ``ModuleNotFoundError`` rather than at
+          ``load`` time. Edge worker images are supposed to bundle
+          ``ultralytics/CLIP`` (see ``edge-ml-worker/Dockerfile``);
+          this branch only fires on stripped-down or hand-built
+          worker images where that bake step was skipped. Log a
+          warning with the missing module name and keep the previous
+          class set so the worker keeps emitting detections instead
+          of crashing the predict loop on every frame.
+        - The Ultralytics call itself raises (bad tokenizer state,
+          OOM during text encoding, GPU disconnect): log a **warning**
+          and continue. The previous class set stays active so the
+          worker keeps producing detections instead of crashing — but
+          the operator gets a loud signal that the new prompt isn't
+          live. Silently no-op'ing here was the original behaviour and
+          was a footgun ("I changed the prompt and nothing happened").
+        """
+        prompts = UltralyticsRuntime._normalize_prompt(prompt)
+        if not prompts:
+            return
+        if not hasattr(model_handle, "set_classes") or not hasattr(
+            model_handle, "get_text_pe"
+        ):
+            return
+        key = tuple(prompts)
+        if getattr(model_handle, "_cw_active_prompt", None) == key:
+            return
+        # ``get_text_pe`` triggers Ultralytics' lazy MobileCLIP download
+        # which writes to a bare filename → CWD. Sandbox it to the dir
+        # stashed by :meth:`load` so the write lands somewhere writable.
+        # Narrowed to str/PurePath rather than os.PathLike because
+        # MagicMock implements __fspath__ by default.
+        writable_dir = getattr(model_handle, "_cw_writable_dir", None)
+        if not isinstance(writable_dir, (str, PurePath)):
+            writable_dir = None
+        old_cwd = os.getcwd() if writable_dir else None
+        try:
+            try:
+                if writable_dir:
+                    os.chdir(writable_dir)
+                model_handle.set_classes(prompts, model_handle.get_text_pe(prompts))
+            finally:
+                if old_cwd is not None:
+                    os.chdir(old_cwd)
+        except ModuleNotFoundError as exc:
+            _logger.warning(
+                "Failed to apply YOLOE text prompt %s because %r is not "
+                "installed in this worker image. Open-vocab YOLO heads "
+                "(YOLOE text/visual, YOLO-World) need the 'ultralytics/CLIP' "
+                "fork to be importable for `get_text_pe`; rebuild the edge "
+                "worker image so CLIP is bundled, or switch this workflow "
+                "to a prompt-free model variant (e.g. yoloe-26*-seg-pf). "
+                "Previous class set (%s) remains active.",
+                prompts,
+                exc.name,
+                getattr(model_handle, "_cw_active_prompt", None),
+            )
+            return
+        except (AttributeError, RuntimeError) as exc:
+            _logger.warning(
+                "Failed to apply YOLOE text prompt %s; previous class set "
+                "(%s) remains active. Underlying error: %s",
+                prompts,
+                getattr(model_handle, "_cw_active_prompt", None),
+                exc,
+            )
+            return
+        model_handle._cw_active_prompt = key
 
     @staticmethod
     def _writable_model_dir(model_path: Path) -> Path:
@@ -126,11 +287,27 @@ class UltralyticsRuntime(ModelRuntime):
         *,
         confidence: float = 0.5,
         classes: list[str] | None = None,
+        prompt: str | list[str] | tuple[str, ...] | None = None,
         **kwargs: Any,
     ) -> PredictionResult:
+        # Open-vocab YOLO heads (YOLOE / YOLO-World) are steered by a text
+        # prompt re-parameterized into the classification head via
+        # ``model.set_classes(prompts, model.get_text_pe(prompts))``. The
+        # closed-set YOLOv8/YOLOv11 models don't expose either method, so
+        # the ``hasattr`` guards inside :meth:`_apply_text_prompt` keep
+        # the legacy path untouched.
+        #
+        # Authoring contract: a single string is split on commas, so
+        # ``prompt="helmet, safety vest"`` and ``prompt=["helmet",
+        # "safety vest"]`` are equivalent. ``set_classes`` is cheap but
+        # not free, so the normalized prompt tuple is cached on the
+        # handle and re-parameterization is skipped when the next call
+        # uses the same prompts — the common case for an edge worker
+        # chewing through 10–30 frames per second.
+        self._apply_text_prompt(model_handle, prompt)
         results = model_handle(input_data, conf=confidence, verbose=False)
         detections: list[Detection] = []
-        classification: ClassificationPrediction | None = None
+        class_result: ClassificationResult | None = None
         # Resolved during the loop; last result wins (all frames share one task).
         task = "detect"
 
@@ -140,7 +317,7 @@ class UltralyticsRuntime(ModelRuntime):
 
             if getattr(result, "probs", None) is not None:
                 task = "classify"
-                classification = _parse_classification(result)
+                class_result = _parse_classification(result)
                 continue
 
             if getattr(result, "obb", None) is not None:
@@ -192,14 +369,14 @@ class UltralyticsRuntime(ModelRuntime):
 
         # Return the most specific result type matching the detected task.
         if task == "classify":
-            return PredictionResult(output=classification, raw=results)
+            return ClassificationResult(top=class_result.top, raw=results)
         if task == "obb":
-            return PredictionResult(output=OBBResult(detections), raw=results)
+            return OBBResult(detections, raw=results)
         if task == "pose":
-            return PredictionResult(output=PoseResult(detections), raw=results)
+            return PoseResult(detections, raw=results)
         if task == "segment":
-            return PredictionResult(output=InstanceSegmentationResult(detections), raw=results)
-        return PredictionResult(output=DetectionResult(detections), raw=results)
+            return InstanceSegmentationResult(detections, raw=results)
+        return DetectionResult(detections, raw=results)
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +434,7 @@ def _box_bbox(box: Any) -> BoundingBox:
     return BoundingBox(x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2))
 
 
-def _parse_classification(result: Any) -> ClassificationPrediction:
+def _parse_classification(result: Any) -> ClassificationResult:
     probs = result.probs
     names = _names_dict(result)
     top_indices: list[int] = []
@@ -280,7 +457,7 @@ def _parse_classification(result: Any) -> ClassificationPrediction:
         for idx, conf in zip(top_indices, top_confs)
     ]
     candidates.sort(key=lambda c: c.confidence, reverse=True)
-    return ClassificationPrediction(top=candidates)
+    return ClassificationResult(top=candidates)
 
 
 def _parse_obb(
@@ -299,7 +476,7 @@ def _parse_obb(
         xywhr = (_xywhr if _xywhr is not None else obb.xywha).cpu().numpy()
         confs = obb.conf.cpu().numpy()
         clss = obb.cls.cpu().numpy()
-        xyxy = obb.xyxy.cpu().numpy()    # (N, 4) axis-aligned bbox
+        xyxy = obb.xyxy.cpu().numpy()  # (N, 4) axis-aligned bbox
     except AttributeError:
         return detections
     for i in range(len(xywhr)):

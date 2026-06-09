@@ -118,6 +118,7 @@ class CyberwaveMQTTClient:
         # Rate limiting
         self._last_update_times: Dict[str, float] = {}
         self._min_update_interval = 0.025  # 40 Hz max
+        self._gps_min_update_interval = 0.5  # 2 Hz for GNSS telemetry storage
 
         # Setup MQTT callbacks
         self.client.on_connect = self._on_connect
@@ -158,15 +159,16 @@ class CyberwaveMQTTClient:
                 return False
         return True
 
-    def _is_rate_limited(self, key: str) -> bool:
-        """Check if this update is being sent too frequently."""
-        current_time = time.time()
-        last_time = self._last_update_times.get(key, 0)
+    def _is_rate_limited(self, key: str, min_interval: float | None = None) -> bool:
+        """Check if this update is being sent too frequently (uses monotonic clock)."""
+        interval = self._min_update_interval if min_interval is None else min_interval
+        now = time.monotonic()
+        last_time = self._last_update_times.get(key, 0.0)
 
-        if current_time - last_time < self._min_update_interval:
+        if now - last_time < interval:
             return True
 
-        self._last_update_times[key] = current_time
+        self._last_update_times[key] = now
         return False
 
     def _add_handler(self, topic: str, handler: Callable) -> bool:
@@ -484,8 +486,6 @@ class CyberwaveMQTTClient:
 
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
                 logger.error(f"Failed to publish to {topic}: {result.rc}")
-            else:
-                logger.debug(f"Published to {topic}")
         except Exception as e:
             logger.error(f"Error publishing to {topic}: {e}")
 
@@ -677,22 +677,17 @@ class CyberwaveMQTTClient:
 
     def update_twin_position(self, twin_uuid: str, position: Dict[str, float]):
         """Update twin position via MQTT."""
-        # Check if this position is the same as the last one sent
-        self._handle_twin_update_with_telemetry(twin_uuid)
-
         if twin_uuid in self._last_positions:
             if self._positions_equal(self._last_positions[twin_uuid], position):
-                # Position hasn't changed, skip the update
                 logger.debug(f"Position hasn't changed for twin {twin_uuid}")
                 return
 
-        # Check rate limiting
         rate_key = f"twin:{twin_uuid}:position"
         if self._is_rate_limited(rate_key):
             logger.warning(f"Rate limited for twin {twin_uuid}")
             return
 
-        # Store the new position
+        self._handle_twin_update_with_telemetry(twin_uuid)
         self._last_positions[twin_uuid] = position.copy()
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/position"
@@ -706,22 +701,17 @@ class CyberwaveMQTTClient:
 
     def update_twin_rotation(self, twin_uuid: str, rotation: Dict[str, float]):
         """Update twin rotation via MQTT."""
-        # Check if this rotation is the same as the last one sent
-
-        self._handle_twin_update_with_telemetry(twin_uuid)
         if twin_uuid in self._last_rotations:
             if self._positions_equal(self._last_rotations[twin_uuid], rotation):
-                # Rotation hasn't changed, skip the update
                 logger.debug(f"Rotation hasn't changed for twin {twin_uuid}")
                 return
 
-        # Check rate limiting
         rate_key = f"twin:{twin_uuid}:rotation"
         if self._is_rate_limited(rate_key):
             logger.warning(f"Rate limited for twin {twin_uuid}")
             return
 
-        # Store the new rotation
+        self._handle_twin_update_with_telemetry(twin_uuid)
         self._last_rotations[twin_uuid] = rotation.copy()
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/rotation"
@@ -735,12 +725,11 @@ class CyberwaveMQTTClient:
 
     def update_twin_scale(self, twin_uuid: str, scale: Dict[str, float]):
         """Update twin scale via MQTT."""
-
-        self._handle_twin_update_with_telemetry(twin_uuid)
-        # Check rate limiting
         rate_key = f"twin:{twin_uuid}:scale"
         if self._is_rate_limited(rate_key):
             return
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/scale"
         message = {
@@ -749,6 +738,74 @@ class CyberwaveMQTTClient:
             "scale": scale,
             "timestamp": time.time(),
         }
+        self.publish(topic, message)
+
+    def update_twin_gps(
+        self,
+        twin_uuid: str,
+        latitude: float,
+        longitude: float,
+        altitude: float = 0.0,
+        *,
+        satellite_count: Optional[int] = None,
+        signal_level: Optional[int] = None,
+        compass_heading: Optional[float] = None,
+        horizontal_accuracy: Optional[float] = None,
+        vertical_accuracy: Optional[float] = None,
+        fix_type: Optional[str] = None,
+        source_type: Optional[str] = None,
+    ):
+        """
+        Publish raw GPS data for a twin.
+
+        The GPS payload is stored as a ``twin_gps_update`` telemetry event
+        in the backend database via Vector.  It does **not** update the
+        twin's rendered position — use ``update_twin_position`` for that.
+
+        Args:
+            twin_uuid: UUID of the twin.
+            latitude: WGS-84 latitude in decimal degrees.
+            longitude: WGS-84 longitude in decimal degrees.
+            altitude: Altitude in meters (MSL or HAE depending on receiver).
+            satellite_count: Number of satellites used in fix.
+            signal_level: GPS signal quality level (receiver-specific).
+            compass_heading: Compass heading in degrees (0-360).
+            horizontal_accuracy: Horizontal accuracy estimate in meters.
+            vertical_accuracy: Vertical accuracy estimate in meters.
+            fix_type: Fix type string (e.g. ``'3d'``, ``'rtk_fixed'``).
+            source_type: Override the default source type.
+        """
+        effective_source_type = self._get_effective_source_type(source_type)
+
+        if fix_type == "none":
+            return
+
+        rate_key = f"twin:{twin_uuid}:gps"
+        if self._is_rate_limited(rate_key, self._gps_min_update_interval):
+            logger.debug(f"GPS rate limited for twin {twin_uuid}")
+            return
+
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/gps"
+        message: Dict[str, Any] = {
+            "source_type": effective_source_type,
+            "latitude": latitude,
+            "longitude": longitude,
+            "altitude": altitude,
+            "timestamp": time.time(),
+        }
+        if satellite_count is not None:
+            message["satellite_count"] = satellite_count
+        if signal_level is not None:
+            message["signal_level"] = signal_level
+        if compass_heading is not None:
+            message["compass_heading"] = compass_heading
+        if horizontal_accuracy is not None:
+            message["horizontal_accuracy"] = horizontal_accuracy
+        if vertical_accuracy is not None:
+            message["vertical_accuracy"] = vertical_accuracy
+        if fix_type is not None:
+            message["fix_type"] = fix_type
+
         self.publish(topic, message)
 
     # Joint state MQTT methods
@@ -786,11 +843,11 @@ class CyberwaveMQTTClient:
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
-        self._handle_twin_update_with_telemetry(twin_uuid)
-        # Check rate limiting
         rate_key = f"joint:{twin_uuid}:{joint_name}"
         if self._is_rate_limited(rate_key):
             return
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
 
         joint_state = {}
         if position is not None:

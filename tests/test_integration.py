@@ -361,15 +361,31 @@ class TestIntegrationRegressions:
         found`` because ``get_by_registry_id`` tried ``GET /assets/vendor/model``
         which Django's URL router split at the slash, returning 404.
 
-        The fix routes slash-containing identifiers through the
+        The SDK fix routes slash-containing identifiers through the
         ``?registry_id=`` query parameter instead of the URL path.
+
+        The registry_id prefix must match an existing workspace slug so the
+        created asset stays in a workspace visible to the API token (backend
+        derives workspace from the ``vendor/`` segment of ``vendor/model``).
         """
         print("\n" + "=" * 70)
         print("Regression: cw.twin() with slash-containing registry_id")
         print("=" * 70)
 
         client = cyberwave_client
-        registry_id = f"test-vendor/test-robot-{int(time.time())}"
+        workspace_slug = None
+        workspace_id = client.config.workspace_id or os.getenv("CYBERWAVE_WORKSPACE_ID")
+        if workspace_id:
+            workspace = client.workspaces.get(workspace_id)
+            workspace_slug = getattr(workspace, "slug", None)
+        if not workspace_slug:
+            workspaces = client.workspaces.list()
+            if not workspaces:
+                pytest.skip("No workspaces available for regression test")
+            workspace_slug = getattr(workspaces[0], "slug", None)
+        if not workspace_slug:
+            pytest.skip("Workspace has no slug for registry_id prefix")
+        registry_id = f"{workspace_slug}/test-robot-{int(time.time())}"
 
         created_resources: dict = {"asset": None, "environment": None, "project": None}
 
@@ -404,9 +420,7 @@ class TestIntegrationRegressions:
 
             assert twin is not None, "twin() must return a Twin instance"
             assert twin.uuid is not None, "returned twin must have a valid UUID"
-            print(
-                f"✓ cw.twin('{registry_id}') succeeded (twin UUID: {twin.uuid})"
-            )
+            print(f"✓ cw.twin('{registry_id}') succeeded (twin UUID: {twin.uuid})")
 
         finally:
             if created_resources["asset"]:

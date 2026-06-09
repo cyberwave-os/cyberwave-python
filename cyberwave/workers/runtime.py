@@ -41,6 +41,7 @@ FALLBACK_WORKERS_DIR = os.path.expanduser("~/.cyberwave/workers")
 
 MONITOR_PUBLISH_INTERVAL_S = 2.0
 SCHEDULE_POLL_INTERVAL_S = 1.0
+HOOK_ERROR_ALERT_COOLDOWN_S = 60.0
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,39 @@ class _ScheduleRegistration:
     options: dict[str, Any]
 
 
-def _cron_matches(cron: str, local_now: datetime) -> bool:
+def _hook_min_interval_seconds(hook: HookRegistration) -> float:
+    """Return the minimum dispatch interval enforced by ``hook.options['fps']``.
+
+    ``@cw.on_frame(..., fps=N)`` stores ``fps`` in
+    :attr:`HookRegistration.options`. The dispatcher consults this helper
+    once per hook to derive a wall-clock floor (``1 / fps`` seconds)
+    between callback invocations; samples arriving faster than that are
+    counted as drops and skipped. ``0.0`` means "no throttling" and is
+    returned for missing, non-numeric, boolean, or non-positive values
+    so the gate stays a no-op when ``fps`` was never set.
+    """
+    fps = hook.options.get("fps")
+    if isinstance(fps, bool) or not isinstance(fps, int | float) or fps <= 0:
+        return 0.0
+    return 1.0 / float(fps)
+
+
+def _previous_cron_fire(cron: str, local_now: datetime) -> datetime | None:
+    """Return the most recent cron "fire time" at or before *local_now*.
+
+    Returns ``None`` when the expression is unparseable or croniter is
+    missing. Uses ``second_at_beginning=True`` so 6-field expressions
+    (``second minute hour dom month dow``) are interpreted with seconds
+    as the leading field — matching the cloud's
+    :mod:`src.lib.schedule_utils` and Quartz convention. This is what
+    makes sub-minute schedules work on edge.
+
+    ``croniter.get_prev`` is strict-less-than, so the candidate tick
+    that lands exactly on ``local_now`` is treated as "future" and only
+    picked up by the next poll. With the 1 s edge poll cadence that's
+    at worst a 1 s delay, which is well inside the 5 s minimum sub-
+    minute interval enforced by the cloud.
+    """
     try:
         from croniter import CroniterBadCronError, croniter
     except ImportError:
@@ -62,15 +95,29 @@ def _cron_matches(cron: str, local_now: datetime) -> bool:
             "Schedule trigger requires croniter. Install cyberwave[schedule] "
             "or add croniter to the worker image."
         )
-        return False
+        return None
     try:
-        previous_minute = local_now.replace(second=0, microsecond=0) - timedelta(
-            minutes=1
-        )
-        next_due = croniter(cron, previous_minute).get_next(datetime)
+        itr = croniter(cron, local_now, second_at_beginning=True)
+        return itr.get_prev(datetime)
     except (CroniterBadCronError, ValueError):
+        return None
+
+
+def _cron_matches(cron: str, local_now: datetime) -> bool:
+    """Back-compat shim: ``True`` when the most recent cron tick falls
+    in the same wall-clock minute as ``local_now``.
+
+    Kept for tests and external callers that still mock or call this
+    helper directly. The runtime itself now uses
+    :func:`_previous_cron_fire` so it can fire sub-minute schedules
+    multiple times per minute.
+    """
+    prev_fire = _previous_cron_fire(cron, local_now)
+    if prev_fire is None:
         return False
-    return next_due == local_now.replace(second=0, microsecond=0)
+    return prev_fire.replace(second=0, microsecond=0) == local_now.replace(
+        second=0, microsecond=0
+    )
 
 
 class WorkerRuntime:
@@ -90,7 +137,13 @@ class WorkerRuntime:
         self._schedule_registrations: list[_ScheduleRegistration] = []
         self._schedule_thread: threading.Thread | None = None
         self._schedule_lock = threading.Lock()
-        self._schedule_last_run_minute: dict[str, str] = {}
+        # Per-registration last cron tick that successfully fired.
+        # Keyed by ``"{module}:{node_uuid}"``. Used for instant-level
+        # dedup so a single tick is dispatched at most once even when
+        # the 1 s poll wakes multiple times between ticks; replaces the
+        # old minute-string key that prevented sub-minute schedules
+        # from firing more than once per minute.
+        self._schedule_last_fire: dict[str, datetime] = {}
         self._schedule_running: set[str] = set()
         self._schedule_run_threads: list[threading.Thread] = []
 
@@ -98,6 +151,10 @@ class WorkerRuntime:
         self._hook_stats_lock = threading.Lock()
         self._hook_stats: dict[str, dict[str, int]] = {}
         self._stats_thread: threading.Thread | None = None
+
+        # Per-hook error alert cooldown: {alert_key: last_alert_monotonic_time}
+        self._hook_error_alert_times: dict[str, float] = {}
+        self._hook_error_alert_lock = threading.Lock()
 
     # ── lifecycle ────────────────────────────────────────────────
 
@@ -120,7 +177,14 @@ class WorkerRuntime:
         return loaded
 
     def start(self) -> None:
-        """Wire registered hooks to data-layer subscriptions."""
+        """Warm up loaded models, then wire hooks to data-layer subscriptions.
+
+        Models are warmed up before any hook can call ``predict()`` so
+        backends that are not thread-safe (e.g. whisper.cpp) never see
+        concurrent inference during worker startup.
+        """
+        self._warm_up_models()
+
         for hook in self._registry.hooks:
             self._subscribe_hook(hook)
             logger.info(
@@ -156,7 +220,6 @@ class WorkerRuntime:
         )
         logger.info("Worker runtime started with %d hook(s)", total)
 
-        self._warm_up_models()
         self._start_schedule_dispatcher()
         self._start_stats_publisher()
 
@@ -295,12 +358,23 @@ class WorkerRuntime:
                     registration.timezone,
                 )
                 continue
-            minute_key = local_now.strftime("%Y-%m-%dT%H:%M")
             registration_key = f"{registration.module_name}:{registration.node_uuid}"
-            if not _cron_matches(registration.cron, local_now):
+            prev_fire = _previous_cron_fire(registration.cron, local_now)
+            if prev_fire is None:
                 continue
             with self._schedule_lock:
-                if self._schedule_last_run_minute.get(registration_key) == minute_key:
+                last_fire = self._schedule_last_fire.get(registration_key)
+                # Instant-level dedup. The first time we see a
+                # registration we anchor at ``local_now`` so we only
+                # fire for ticks strictly after worker startup — this
+                # mirrors the cloud's ``reference = created_at`` seed
+                # and avoids replaying a tick that already passed
+                # before the worker came online. Subsequent polls fire
+                # whenever a strictly newer cron instant has elapsed.
+                if last_fire is None:
+                    self._schedule_last_fire[registration_key] = local_now
+                    continue
+                if prev_fire <= last_fire:
                     continue
                 if registration_key in self._schedule_running:
                     logger.warning(
@@ -308,7 +382,7 @@ class WorkerRuntime:
                         registration_key,
                     )
                     continue
-                self._schedule_last_run_minute[registration_key] = minute_key
+                self._schedule_last_fire[registration_key] = prev_fire
                 self._schedule_running.add(registration_key)
 
             def run_registration(
@@ -332,11 +406,20 @@ class WorkerRuntime:
                         )
                     else:
                         reg.callback(self._cw)
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "Scheduled workflow run failed for %s from %s",
                         reg.node_uuid,
                         reg.module_name,
+                    )
+                    schedule_twin = getattr(
+                        self._cw.config, "twin_uuid", None
+                    ) or ""
+                    self._publish_hook_error_alert(
+                        twin_uuid=schedule_twin,
+                        hook_name=f"schedule:{reg.node_uuid}",
+                        channel="schedule",
+                        error=exc,
                     )
                 finally:
                     with self._schedule_lock:
@@ -378,7 +461,10 @@ class WorkerRuntime:
         loaded_models: dict[str, Any] = getattr(models_mgr, "_loaded", {})
         if not loaded_models:
             return
-        logger.info("Warming up %d loaded model(s)...", len(loaded_models))
+        logger.info(
+            "Warming up %d loaded model(s) (startup inference only — not a wake-word trigger)...",
+            len(loaded_models),
+        )
         for model in loaded_models.values():
             warm_up_fn = getattr(model, "warm_up", None)
             if warm_up_fn is not None:
@@ -388,6 +474,52 @@ class WorkerRuntime:
                     logger.warning(
                         "Model warm-up failed for %s", getattr(model, "name", "?"), exc_info=True,
                     )
+
+    def _publish_hook_error_alert(
+        self,
+        *,
+        twin_uuid: str,
+        hook_name: str,
+        channel: str,
+        error: Exception,
+    ) -> None:
+        """Send a ``worker_runtime_error`` alert when a hook raises an exception.
+
+        Rate-limited per hook: at most one alert every
+        :data:`HOOK_ERROR_ALERT_COOLDOWN_S` seconds to avoid flooding the
+        alert feed when a hook fails on every incoming sample.
+        """
+        if not twin_uuid:
+            return
+
+        alert_key = f"{twin_uuid}:{hook_name}:{channel}"
+        now = time.monotonic()
+        with self._hook_error_alert_lock:
+            last = self._hook_error_alert_times.get(alert_key)
+            if last is not None and now - last < HOOK_ERROR_ALERT_COOLDOWN_S:
+                return
+            self._hook_error_alert_times[alert_key] = now
+
+        error_msg = str(error)[:500]
+        try:
+            self._cw.publish_alert(
+                twin_uuid,
+                f"Worker runtime error in {hook_name}",
+                description=(
+                    f"Hook '{hook_name}' on channel '{channel}' raised "
+                    f"{type(error).__name__}: {error_msg}"
+                ),
+                alert_type="worker_runtime_error",
+                severity="error",
+                category="technical",
+            )
+        except Exception:
+            logger.debug(
+                "Could not send worker_runtime_error alert for hook %s: %s",
+                hook_name,
+                error_msg,
+                exc_info=True,
+            )
 
     def _build_context(
         self,
@@ -481,9 +613,17 @@ class WorkerRuntime:
             slot[0] = sample
             ready.set()
 
+        fps_min_interval = _hook_min_interval_seconds(hook)
+
         def dispatch_loop() -> None:
             hint = hook.content_hint
             frames_processed = 0
+            # Monotonic timestamp of the last dispatched sample. Used to
+            # enforce ``fps=`` on frame hooks: samples that arrive faster
+            # than ``1 / fps`` are counted as drops and skipped without
+            # invoking the user callback. ``None`` means "never dispatched"
+            # — the first sample after start always passes the gate.
+            last_dispatched_at: float | None = None
             while not self._stop_event.is_set():
                 if not ready.wait(timeout=1.0):
                     continue
@@ -492,6 +632,19 @@ class WorkerRuntime:
                 slot[0] = None
                 if sample is None:
                     continue
+                if fps_min_interval > 0.0:
+                    now_monotonic = time.monotonic()
+                    if (
+                        last_dispatched_at is not None
+                        and now_monotonic - last_dispatched_at < fps_min_interval
+                    ):
+                        drop_counter[0] += 1
+                        with self._hook_stats_lock:
+                            entry = self._hook_stats.get(hook_name)
+                            if entry is not None:
+                                entry["drops"] = drop_counter[0]
+                        continue
+                    last_dispatched_at = now_monotonic
                 decoded_data, wire_ts = decode_sample_payload(sample, content_hint=hint)
                 wire_meta = extract_wire_metadata(sample)
                 ctx = self._build_context(hook, sample, wire_ts=wire_ts, wire_metadata=wire_meta)
@@ -509,11 +662,17 @@ class WorkerRuntime:
                             hook.callback.__name__,
                             frames_processed,
                         )
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "Error in hook %s for channel %s",
                         hook.callback.__name__,
                         hook.channel,
+                    )
+                    self._publish_hook_error_alert(
+                        twin_uuid=hook.twin_uuid,
+                        hook_name=hook.callback.__name__,
+                        channel=hook.channel,
+                        error=exc,
                     )
 
         data_bus = self._get_data_bus()
@@ -609,11 +768,17 @@ class WorkerRuntime:
                     entry = self._hook_stats.get(hook_name)
                     if entry is not None:
                         entry["frames"] += 1
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "Error in MQTT hook %s for topic %s",
                     hook_name,
                     full_topic,
+                )
+                self._publish_hook_error_alert(
+                    twin_uuid=hook.twin_uuid,
+                    hook_name=hook_name,
+                    channel=f"mqtt/{subtopic}",
+                    error=exc,
                 )
 
         try:
@@ -685,10 +850,16 @@ class WorkerRuntime:
                 )
                 try:
                     group.callback(dict(latest_samples), ctx)
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "Error in synchronized hook %s",
                         group.callback.__name__,
+                    )
+                    self._publish_hook_error_alert(
+                        twin_uuid=group.twin_uuid,
+                        hook_name=group.callback.__name__,
+                        channel=",".join(labels),
+                        error=exc,
                     )
 
         def _key_for_sync_channel(ch: str, twin_uuid: str) -> str:

@@ -32,7 +32,8 @@ class CatalogSeedOptionSchema(BaseModel):
     description: StrictStr
     controller_type: Optional[StrictStr] = None
     model_provider_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["key", "name", "description", "controller_type", "model_provider_name"]
+    template_kind: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["key", "name", "description", "controller_type", "model_provider_name", "template_kind"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -83,6 +84,11 @@ class CatalogSeedOptionSchema(BaseModel):
         if self.model_provider_name is None and "model_provider_name" in self.model_fields_set:
             _dict['model_provider_name'] = None
 
+        # set to None if template_kind (nullable) is None
+        # and model_fields_set contains the field
+        if self.template_kind is None and "template_kind" in self.model_fields_set:
+            _dict['template_kind'] = None
+
         return _dict
 
     @classmethod
@@ -99,7 +105,8 @@ class CatalogSeedOptionSchema(BaseModel):
             "name": obj.get("name"),
             "description": obj.get("description"),
             "controller_type": obj.get("controller_type"),
-            "model_provider_name": obj.get("model_provider_name")
+            "model_provider_name": obj.get("model_provider_name"),
+            "template_kind": obj.get("template_kind")
         })
         return _obj
 

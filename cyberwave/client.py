@@ -20,6 +20,11 @@ from cyberwave.constants import (
 )
 from cyberwave.controller import EdgeController
 from cyberwave.data.api import DataBus
+from cyberwave.data.backend import DataBackend
+from cyberwave.data.utils import (
+    close_frame_subscribe_caches_for_backend,
+    fetch_twin_frame,
+)
 from cyberwave.exceptions import (
     CyberwaveAPIError,
     CyberwaveError,
@@ -174,6 +179,7 @@ class Cyberwave:
 
         self._setup_rest_client()
         self._mqtt_client: Optional[CyberwaveMQTTClient] = None
+        self._data_backend: Optional[DataBackend] = None
         self._data_bus: Optional[DataBus] = None
         self._hook_registry = HookRegistry()
         self._init_managers()
@@ -284,6 +290,9 @@ class Cyberwave:
         self.datasets = DatasetManager(self.api)
         self.edges = EdgeManager(self.api)
         self.twins = TwinManager(self.api, client=self)
+        from cyberwave.managers.policies import PolicyManager
+
+        self.policies = PolicyManager(self)
         self.actions = ActionsClient(self._api_client)
         self.agents = AgentManager(self._api_client)
         self.control = self.agents.control
@@ -343,6 +352,111 @@ class Cyberwave:
 
         return wrapped
 
+    def _get_data_backend(self) -> DataBackend:
+        """Shared Zenoh/filesystem backend (one session per :class:`Cyberwave` client)."""
+        if self._data_backend is None:
+            import os
+
+            from cyberwave.data.config import BackendConfig, get_backend
+
+            cfg = BackendConfig()
+            if (
+                cfg.backend == "zenoh"
+                and not cfg.zenoh_connect
+                and not cfg.zenoh_listen
+            ):
+                host = os.environ.get("ZENOH_ROUTER_HOST", "127.0.0.1")
+                port = os.environ.get("ZENOH_ROUTER_PORT", "7447")
+                cfg.zenoh_connect = [f"tcp/{host}:{port}"]
+                logger.info(
+                    "ZENOH_CONNECT unset; connecting to edge router at %s",
+                    cfg.zenoh_connect[0],
+                )
+            self._data_backend = get_backend(cfg)
+        return self._data_backend
+
+    def data_bus_for(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str | None = None,
+    ) -> DataBus:
+        """Return a :class:`~cyberwave.data.api.DataBus` for any twin on the shared backend."""
+        return DataBus(self._get_data_backend(), twin_uuid, sensor_name=sensor_name)
+
+    def fetch_zenoh_frame(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str = "default",
+        timeout_s: float = 1.0,
+        max_age_ms: float | None = None,
+    ) -> Any | None:
+        """Return the next camera frame on the Zenoh ``frames`` stream (subscribe path)."""
+        return fetch_twin_frame(
+            self._get_data_backend(),
+            twin_uuid,
+            sensor_name=sensor_name,
+            timeout_s=timeout_s,
+            max_age_ms=max_age_ms,
+        )
+
+    def diagnose_zenoh_frames(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str = "default",
+        timeout_s: float = 0.5,
+    ) -> dict[str, Any]:
+        """Return Zenoh connectivity hints for ``get_frame(source='zenoh')`` debugging."""
+        from cyberwave.data.keys import build_key, build_wildcard
+
+        try:
+            backend = self._get_data_backend()
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": str(exc),
+                "hint": (
+                    "Install eclipse-zenoh: pip install 'cyberwave[zenoh]'"
+                ),
+            }
+
+        prefix = getattr(backend, "key_prefix", "cw")
+        frame_key = build_key(
+            twin_uuid,
+            "frames",
+            sensor_name,
+            prefix=prefix,
+        )
+        wildcard = build_wildcard(twin_uuid, "frames", prefix=prefix)
+        frame = fetch_twin_frame(
+            backend,
+            twin_uuid,
+            sensor_name=sensor_name,
+            timeout_s=timeout_s,
+        )
+        stats: dict[str, Any] = {}
+        stats_fn = getattr(backend, "stats", None)
+        if stats_fn is not None:
+            stats = stats_fn()
+
+        recv = stats.get("recv", {})
+        frame_keys = [k for k in recv if "/data/frames" in k]
+        return {
+            "ok": frame is not None,
+            "frame_key": frame_key,
+            "wildcard_key": wildcard,
+            "recv_counts": recv,
+            "frame_keys_seen": frame_keys,
+            "stats": stats,
+            "hint": (
+                "No frame on subscribe within the probe window. Use the same "
+                "ZENOH_CONNECT as the camera driver and match sensor_name to "
+                "the driver's frames/<sensor> segment."
+            ),
+        }
+
     @property
     def data(self) -> DataBus:
         """Data-layer bus (lazy initialization).
@@ -354,8 +468,6 @@ class Cyberwave:
             CyberwaveError: If ``CYBERWAVE_TWIN_UUID`` is not set.
         """
         if self._data_bus is None:
-            from cyberwave.data.config import get_backend
-
             twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
             if not twin_uuid:
                 raise CyberwaveError(
@@ -363,8 +475,7 @@ class Cyberwave:
                     "for cw.data but is not set.  Export it before accessing "
                     "the data bus, e.g.: export CYBERWAVE_TWIN_UUID=<uuid>"
                 )
-            backend = get_backend()
-            self._data_bus = DataBus(backend, twin_uuid)
+            self._data_bus = self.data_bus_for(twin_uuid)
         return self._data_bus
 
     def _try_get_data_bus(self) -> DataBus | None:
@@ -373,6 +484,11 @@ class Cyberwave:
             return self.data
         except (CyberwaveError, ImportError, Exception):
             return None
+
+    @property
+    def mlmodels(self) -> ModelManager:
+        """Alias for :attr:`models` (used by generated workflow workers)."""
+        return self.models
 
     @property
     def mqtt(self) -> CyberwaveMQTTClient:
@@ -1036,6 +1152,7 @@ class Cyberwave:
         severity: str = "info",
         category: str = "business",
         force: bool = False,
+        source_type: str = "edge",
         metadata: Optional[dict[str, Any]] = None,
         workflow_uuid: Optional[str] = None,
         workflow_node_uuid: Optional[str] = None,
@@ -1055,6 +1172,7 @@ class Cyberwave:
             severity: One of ``info``, ``warning``, ``error``, ``critical``.
             category: ``business`` (default) or ``technical``.
             force: If True, bypass backend alert deduplication.
+            source_type: Alert origin (``edge``, ``cloud``, ``simulation``, etc.).
             metadata: Optional dict of extra data stored on the alert.
             workflow_uuid: UUID of the workflow that produced the alert. When
                 provided the backend sets ``Alert.workflow`` so the alert is
@@ -1072,7 +1190,7 @@ class Cyberwave:
             "description": description,
             "alert_type": alert_type,
             "severity": severity.lower(),
-            "source_type": "edge",
+            "source_type": source_type,
             "category": category,
             "twin_uuid": twin_uuid,
         }
@@ -1141,9 +1259,11 @@ class Cyberwave:
         """Disconnect all connections (REST, MQTT, and data bus)."""
         if self._mqtt_client:
             self._mqtt_client.disconnect()
-        if self._data_bus is not None:
-            self._data_bus.close()
-            self._data_bus = None
+        self._data_bus = None
+        if self._data_backend is not None:
+            close_frame_subscribe_caches_for_backend(self._data_backend)
+            self._data_backend.close()
+            self._data_backend = None
 
     def __enter__(self):
         return self

@@ -25,7 +25,7 @@ Segmentation:
 Classification:
 
     ClassificationCandidate   — single (label, confidence, class-index) triple
-    ClassificationPrediction  — ranked top-K list with ``top1``, ``describe()``,
+    ClassificationResult      — ranked top-K list with ``top1``, ``describe()``,
                                 iteration, and length
 
 Detection (bbox-based, covers detect / segment / pose / OBB):
@@ -36,12 +36,14 @@ Detection (bbox-based, covers detect / segment / pose / OBB):
                             runtimes), ``keypoint_set`` (structured), and
                             ``obb`` for oriented-bbox models.
 
-Result containers:
+Result containers (all subclass :class:`PredictionResult`):
 
-    PredictionResult      — holds a ``detections`` list plus an optional
-                            ``classification`` for models that classify rather
-                            than detect.  ``raw`` carries the unprocessed
-                            runtime output for callers that need it.
+    PredictionResult      — base with ``raw`` and ``metadata``; ``predict()``
+                            returns a concrete subclass, not a wrapper.
+    DetectionResult       — bbox-based detect / segment / pose / OBB lists.
+    TextResult            — plain-text LLM / VLM playground output.
+    JsonResult            — parsed JSON object or array from cloud models.
+    ImageResult           — generated image payloads (data URLs / base64).
 
 Backward compatibility
 ----------------------
@@ -58,8 +60,10 @@ numpy arrays or ``None``.
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterator, Protocol, runtime_checkable
 
 # ---------------------------------------------------------------------------
@@ -346,6 +350,110 @@ class Mask:
 
 
 # ---------------------------------------------------------------------------
+# PredictionResult base
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PredictionResult:
+    """Base type for every ``model.predict()`` return value.
+
+    ``predict()`` returns a **concrete subclass** — :class:`TextResult`,
+    :class:`DetectionResult`, :class:`ImageResult`, … — not a wrapper around
+    another object.
+
+    Attributes:
+        raw:       Unprocessed runtime / provider payload when available.
+        metadata:  Transport context (``output_format``, ``model_slug``, …).
+    """
+
+    raw: Any | None = field(default=None, kw_only=True)
+    metadata: dict[str, Any] = field(default_factory=dict, kw_only=True)
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> PredictionResult:
+        """Legacy factory: ``PredictionResult(detections=...)`` → :class:`DetectionResult`."""
+        if cls is not PredictionResult:
+            return super().__new__(cls)
+
+        detections = kwargs.pop("detections", None)
+        output = kwargs.pop("output", None)
+        raw = kwargs.pop("raw", None)
+        metadata = kwargs.pop("metadata", None)
+        meta = metadata if metadata is not None else {}
+
+        if output is not None:
+            if not isinstance(output, PredictionResult):
+                raise TypeError(
+                    "legacy PredictionResult(output=...) requires a "
+                    f"PredictionResult subclass, got {type(output)!r}"
+                )
+            if raw is not None:
+                output.raw = raw
+            if metadata is not None:
+                output.metadata = meta
+            return output
+
+        inst = object.__new__(DetectionResult)
+        dets = list(detections) if detections is not None else []
+        object.__setattr__(inst, "detections", dets)
+        object.__setattr__(inst, "raw", raw)
+        object.__setattr__(inst, "metadata", meta)
+        return inst
+
+    def describe(self) -> str:
+        return "(empty prediction)"
+
+    def describe_detections_lines(
+        self,
+        *,
+        indent: str = "  ",
+        empty_marker: str = "(no detections)",
+    ) -> list[str]:
+        """Fallback for non-detection results; :class:`DetectionResult` overrides."""
+        _ = indent
+        return [empty_marker]
+
+    def describe_detections_text(
+        self,
+        *,
+        indent: str = "  ",
+        empty_marker: str = "(no detections)",
+    ) -> str:
+        """Fallback for non-detection results; :class:`DetectionResult` overrides."""
+        if self:
+            return self.describe()
+        _ = indent
+        return empty_marker
+
+    def __len__(self) -> int:
+        return 0
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@dataclass
+class QueuedPredictionResult(PredictionResult):
+    """Placeholder returned while an async cloud workload is still running."""
+
+    def describe(self) -> str:
+        wl = self.metadata.get("workload_uuid", "?")
+        poll = self.metadata.get("poll_url", "")
+        suffix = f", poll_url={poll!r}" if poll else ""
+        return f"Queued(workload_uuid={wl!r}{suffix})"
+
+    @property
+    def workload_uuid(self) -> str | None:
+        value = self.metadata.get("workload_uuid")
+        return str(value) if value is not None else None
+
+    @property
+    def poll_url(self) -> str | None:
+        value = self.metadata.get("poll_url")
+        return str(value) if value is not None else None
+
+
+# ---------------------------------------------------------------------------
 # Classification
 # ---------------------------------------------------------------------------
 
@@ -375,24 +483,44 @@ class ClassificationCandidate:
 
 
 @dataclass
-class ClassificationPrediction:
+class ClassificationResult(PredictionResult):
     """Top-K output from a classification model.
-
-    A pure result type — no ``raw`` or ``metadata``; those belong on the
-    :class:`PredictionResult` transport wrapper.
 
     Attributes:
         top:  Candidates sorted **high → low** by confidence.
 
     Usage::
 
-        if pred.classification:
-            print(pred.classification.top1.label)
-            for c in pred.classification:
-                print(c.describe())
+        result = model.predict(frame)
+        print(result.top1.label)
+        for c in result:
+            print(c.describe())
     """
 
     top: list[ClassificationCandidate] = field(default_factory=list)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        top = kwargs.pop("top", None)
+        if args:
+            top = args[0]
+        raw = kwargs.pop("raw", None)
+        metadata = kwargs.pop("metadata", None)
+        if kwargs:
+            raise TypeError(
+                f"unexpected keyword arguments: {list(kwargs)}"
+            )
+        if top is not None:
+            self.top = list(top)
+        elif not hasattr(self, "top"):
+            self.top = []
+        if raw is not None:
+            self.raw = raw
+        elif not hasattr(self, "raw"):
+            self.raw = None
+        if metadata is not None:
+            self.metadata = metadata
+        elif not hasattr(self, "metadata"):
+            self.metadata = {}
 
     def __len__(self) -> int:
         return len(self.top)
@@ -520,20 +648,19 @@ class Detection:
 
 
 # ---------------------------------------------------------------------------
-# Result containers
+# Detection-shaped results
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class DetectionResult:
+class DetectionResult(PredictionResult):
     """An ordered list of :class:`Detection` objects from a single model run.
 
-    Covers detection, instance segmentation, pose, and OBB tasks.  The class
-    owns all boilerplate so that :class:`PredictionResult` stays a thin wrapper.
+    Covers detection, instance segmentation, pose, and OBB tasks.
 
     Usage::
 
-        result = pred.output           # DetectionResult
+        result = model.predict(frame)
         for det in result:
             print(det.label, det.confidence)
 
@@ -542,6 +669,31 @@ class DetectionResult:
     """
 
     detections: list[Detection] = field(default_factory=list)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.pop("output", None)
+        kwargs.pop("classification", None)
+        detections = kwargs.pop("detections", None)
+        if args:
+            detections = args[0]
+        raw = kwargs.pop("raw", None)
+        metadata = kwargs.pop("metadata", None)
+        if kwargs:
+            raise TypeError(
+                f"unexpected keyword arguments: {list(kwargs)}"
+            )
+        if detections is not None:
+            self.detections = list(detections)
+        elif not hasattr(self, "detections"):
+            self.detections = []
+        if raw is not None:
+            self.raw = raw
+        elif not hasattr(self, "raw"):
+            self.raw = None
+        if metadata is not None:
+            self.metadata = metadata
+        elif not hasattr(self, "metadata"):
+            self.metadata = {}
 
     def __iter__(self) -> Iterator[Detection]:
         return iter(self.detections)
@@ -596,6 +748,24 @@ class DetectionResult:
         """Multi-line human-readable summary."""
         return "\n".join(self.describe_lines(indent=indent, empty_marker=empty_marker))
 
+    def describe_detections_lines(
+        self,
+        *,
+        indent: str = "  ",
+        empty_marker: str = "(no detections)",
+    ) -> list[str]:
+        """Backward-compat alias for :meth:`describe_lines`."""
+        return self.describe_lines(indent=indent, empty_marker=empty_marker)
+
+    def describe_detections_text(
+        self,
+        *,
+        indent: str = "  ",
+        empty_marker: str = "(no detections)",
+    ) -> str:
+        """Backward-compat alias for :meth:`describe`."""
+        return self.describe(indent=indent, empty_marker=empty_marker)
+
 
 # ---------------------------------------------------------------------------
 # Specialised DetectionResult subtypes
@@ -647,7 +817,7 @@ class OBBResult(DetectionResult):
 
 
 @dataclass
-class SemanticSegmentationResult:
+class SemanticSegmentationResult(PredictionResult):
     """Full-image pixel-level class labelling (no per-instance bounding boxes).
 
     Produced by semantic segmentation models where every pixel is assigned the
@@ -695,17 +865,17 @@ class SemanticSegmentationResult:
 
 
 @dataclass
-class EmbeddingResult:
+class EmbeddingResult(PredictionResult):
     """Feature embedding vector(s) from an encoder model (CLIP, ViT, etc.).
 
     Attributes:
-        vector:   ``np.ndarray`` of shape ``(D,)`` for a single embedding or
-                  ``(N, D)`` for a batch.
-        metadata: Arbitrary extra fields (e.g. ``source_layer``).
+        vector: ``np.ndarray`` of shape ``(D,)`` for a single embedding or
+                ``(N, D)`` for a batch.
+        extras: Model-specific fields (e.g. ``source_layer``).
     """
 
-    vector: Any  # np.ndarray
-    metadata: dict[str, Any] = field(default_factory=dict)
+    vector: Any = None  # np.ndarray
+    extras: dict[str, Any] = field(default_factory=dict)
 
     def __len__(self) -> int:
         shape = getattr(self.vector, "shape", ())
@@ -725,15 +895,268 @@ class EmbeddingResult:
         import numpy as np  # type: ignore[import-untyped]
 
         norm = np.linalg.norm(self.vector, axis=-1, keepdims=True)
-        return EmbeddingResult(vector=self.vector / (norm + 1e-8), metadata=self.metadata)
+        return EmbeddingResult(
+            vector=self.vector / (norm + 1e-8),
+            extras=dict(self.extras),
+            raw=self.raw,
+            metadata=dict(self.metadata),
+        )
 
     def describe(self) -> str:
         shape = getattr(self.vector, "shape", "?")
         return f"Embedding(shape={shape})"
 
 
+# ---------------------------------------------------------------------------
+# Cloud / LLM text, JSON, and image outputs
+# ---------------------------------------------------------------------------
+
+
 @dataclass
-class CustomResult:
+class TextResult(PredictionResult):
+    """Plain-text model output from cloud LLM / VLM playground runs.
+
+    Returned when the backend declares ``output_format="text"`` — free-form
+    prompts, captions, Q&A, etc.
+    """
+
+    text: str = ""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.pop("output", None)
+        kwargs.pop("classification", None)
+        kwargs.pop("detections", None)
+        text = kwargs.pop("text", "")
+        if args:
+            text = args[0]
+        raw = kwargs.pop("raw", None)
+        metadata = kwargs.pop("metadata", None)
+        if kwargs:
+            raise TypeError(
+                f"unexpected keyword arguments: {list(kwargs)}"
+            )
+        if text != "" or not hasattr(self, "text"):
+            self.text = str(text)
+        if raw is not None:
+            self.raw = raw
+        elif not hasattr(self, "raw"):
+            self.raw = None
+        if metadata is not None:
+            self.metadata = metadata
+        elif not hasattr(self, "metadata"):
+            self.metadata = {}
+
+    def __len__(self) -> int:
+        return len(self.text)
+
+    def __bool__(self) -> bool:
+        return bool(self.text)
+
+    def describe(self) -> str:
+        preview = self.text[:120] + ("…" if len(self.text) > 120 else "")
+        return f"Text({len(self.text)} chars): {preview!r}"
+
+    def save(self, path: str | Path, *, encoding: str = "utf-8") -> str:
+        """Write the text payload to *path* and return the resolved path."""
+        target = Path(path)
+        target.write_text(self.text, encoding=encoding)
+        return str(target.resolve())
+
+
+@dataclass
+class JsonResult(PredictionResult):
+    """Parsed JSON object or array from a cloud model run.
+
+    :attr:`PredictionResult.raw` keeps the provider wire string when the
+    backend supplies one; :attr:`data` holds the parsed canonical payload.
+    """
+
+    data: Any = None
+
+    def __len__(self) -> int:
+        try:
+            return len(self.data)
+        except TypeError:
+            return 1
+
+    def __bool__(self) -> bool:
+        return self.data is not None
+
+    def describe(self) -> str:
+        kind = type(self.data).__name__
+        return f"Json({kind}, n={len(self)})"
+
+    def save(
+        self,
+        path: str | Path,
+        *,
+        indent: int | None = 2,
+        encoding: str = "utf-8",
+    ) -> str:
+        """Serialize :attr:`data` as JSON to *path* and return the resolved path."""
+        target = Path(path)
+        with target.open("w", encoding=encoding) as handle:
+            json.dump(self.data, handle, indent=indent)
+        return str(target.resolve())
+
+
+@dataclass
+class ImageResult(PredictionResult):
+    """Generated or returned image payload from a cloud model run.
+
+    Normalizes ``{"data_url": ...}`` and ``{"image_url": ...}`` into
+    :attr:`url`.  Use :meth:`save`, :meth:`to_ndarray`, and :meth:`to_pil`
+    to materialize the image bytes.
+    """
+
+    data_url: str | None = None
+    base64: str | None = None
+    remote_url: str | None = None
+    mime_type: str = "image/png"
+
+    @classmethod
+    def from_output(cls, output: Any) -> ImageResult:
+        """Build from a playground ``output`` field (dict, data URL, or base64)."""
+        if isinstance(output, str):
+            if output.startswith("data:"):
+                return cls(data_url=output)
+            if output.startswith(("http://", "https://")):
+                return cls(remote_url=output)
+            return cls(base64=output)
+
+        if isinstance(output, dict):
+            for key in ("data_url", "image_url"):
+                value = output.get(key)
+                if isinstance(value, str) and value:
+                    if value.startswith("data:"):
+                        return cls(data_url=value)
+                    if value.startswith(("http://", "https://")):
+                        return cls(
+                            remote_url=value,
+                            mime_type=_mime_from_dict(output),
+                        )
+                    return cls(base64=value, mime_type=_mime_from_dict(output))
+
+            b64 = output.get("base64")
+            if isinstance(b64, str) and b64:
+                mime = _mime_from_dict(output)
+                if b64.startswith("data:"):
+                    return cls(data_url=b64, mime_type=mime)
+                return cls(base64=b64, mime_type=mime)
+
+        if output is None:
+            return cls()
+        return cls(data_url=str(output))
+
+    @property
+    def url(self) -> str | None:
+        """Best display URL — data URL, synthesized base64 URL, or remote http(s)."""
+        if self.data_url:
+            return self.data_url
+        if self.remote_url:
+            return self.remote_url
+        if self.base64:
+            payload = self.base64
+            if payload.startswith("data:"):
+                return payload
+            return f"data:{self.mime_type};base64,{payload}"
+        return None
+
+    def __len__(self) -> int:
+        return 1 if self.url else 0
+
+    def __bool__(self) -> bool:
+        return self.url is not None
+
+    def describe(self) -> str:
+        url = self.url
+        if not url:
+            return "Image(empty)"
+        if url.startswith("data:"):
+            return f"Image({self.mime_type}, {len(url)} chars)"
+        return f"Image(url={url!r})"
+
+    def bytes(self) -> bytes:
+        """Return decoded image bytes (JPEG/PNG/WebP as returned by the provider)."""
+        if self.remote_url:
+            return _fetch_remote_image_bytes(self.remote_url)
+        url = self.url
+        if not url:
+            raise ValueError("ImageResult has no image payload")
+        from cyberwave.image import decode_image_base64
+
+        return decode_image_base64(url)
+
+    def save(self, path: str | Path) -> str:
+        """Write decoded image bytes to *path* (extension selects container format).
+
+        No re-encoding — the provider bytes are written as-is, so a JPEG
+        payload saved to ``out.jpg`` stays JPEG. Returns the resolved path.
+        """
+        target = Path(path)
+        target.write_bytes(self.bytes())
+        return str(target.resolve())
+
+    def save_jpg(self, path: str | Path) -> str:
+        """Write bytes to *path*, appending ``.jpg`` when no suffix is present."""
+        target = Path(path)
+        if not target.suffix:
+            target = target.with_suffix(".jpg")
+        return self.save(target)
+
+    def save_png(self, path: str | Path) -> str:
+        """Write bytes to *path*, appending ``.png`` when no suffix is present."""
+        target = Path(path)
+        if not target.suffix:
+            target = target.with_suffix(".png")
+        return self.save(target)
+
+    def to_pil(self) -> Any:
+        """Return a ``PIL.Image`` (requires ``pip install cyberwave[image]``)."""
+        try:
+            from PIL import Image
+        except ImportError as exc:
+            raise ImportError(
+                "ImageResult.to_pil() requires Pillow. "
+                "Install with: pip install cyberwave[image]"
+            ) from exc
+
+        import io
+
+        return Image.open(io.BytesIO(self.bytes()))
+
+    def to_ndarray(self) -> Any:
+        """Return an ``H×W×C`` RGB ``numpy.ndarray`` (requires Pillow)."""
+        import numpy as np
+
+        return np.asarray(self.to_pil())
+
+
+def _mime_from_dict(payload: dict[str, Any]) -> str:
+    mime = payload.get("mime_type") or payload.get("content_type")
+    return mime if isinstance(mime, str) and mime else "image/png"
+
+
+def _fetch_remote_image_bytes(image_url: str) -> bytes:
+    """Download image bytes from an http(s) URL (cloud playground payloads)."""
+    import urllib3
+
+    http = urllib3.PoolManager()
+    response = http.request(
+        "GET",
+        image_url,
+        timeout=urllib3.Timeout(connect=5, read=30),
+    )
+    if response.status >= 400:
+        body = response.data.decode("utf-8", errors="replace")
+        raise ValueError(
+            f"Failed to download image from {image_url!r}: HTTP {response.status} {body}"
+        )
+    return bytes(response.data)
+
+
+@dataclass
+class CustomResult(PredictionResult):
     """Escape hatch for arbitrary model outputs.
 
     Use when the model produces data that doesn't fit any structured result
@@ -767,164 +1190,8 @@ class CustomResult:
 
 @runtime_checkable
 class ModelOutput(Protocol):
-    """Structural interface satisfied by every concrete result type.
-
-    :class:`PredictionResult` holds any ``ModelOutput`` and can dispatch to it
-    via ``describe()`` without branching on the concrete type.  Downstream code
-    can use ``isinstance(pred.output, PoseResult)`` for task-specific access.
-    """
+    """Structural interface satisfied by every :class:`PredictionResult` subclass."""
 
     def __len__(self) -> int: ...
     def __bool__(self) -> bool: ...
     def describe(self) -> str: ...
-
-
-class PredictionResult:
-    """Thin transport wrapper over any :class:`ModelOutput`.
-
-    Holds one concrete result type (e.g. :class:`DetectionResult`,
-    :class:`PoseResult`, :class:`ClassificationPrediction`, …) as ``output``,
-    plus ``raw`` (unprocessed runtime object) and ``metadata``.
-
-    **Preferred construction** (new code)::
-
-        PredictionResult(output=PoseResult(dets), raw=results)
-        PredictionResult(output=ClassificationPrediction(candidates), raw=results)
-        PredictionResult(output=EmbeddingResult(vector=vec), raw=results)
-
-    **Legacy construction** (backward compat)::
-
-        PredictionResult(detections=dets, raw=results)
-        PredictionResult(classification=cls_pred, raw=results)
-
-    **Type-check shortcuts**::
-
-        pred.classification     # ClassificationPrediction | None
-        pred.pose               # PoseResult | None
-        pred.instance_segmentation  # InstanceSegmentationResult | None
-        pred.obb_result         # OBBResult | None
-        pred.embedding          # EmbeddingResult | None
-
-    **Generic access** (unchanged from previous API)::
-
-        for det in pred:    ...    # iterates detections (DetectionResult variants)
-        len(pred)                  # item count
-        bool(pred)                 # truthy when output is present and non-empty
-        pred.detections            # list[Detection] ([] for non-detection types)
-    """
-
-    __slots__ = ("output", "raw", "metadata")
-
-    def __init__(
-        self,
-        # Legacy positional/keyword — kept for backward compat
-        detections: list[Detection] | None = None,
-        *,
-        output: ModelOutput | None = None,
-        # Legacy keyword — kept for backward compat
-        classification: ClassificationPrediction | None = None,
-        raw: Any | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        if output is not None:
-            self.output: ModelOutput | None = output
-        elif classification is not None:
-            self.output = classification
-        elif detections is not None:
-            self.output = DetectionResult(detections)
-        else:
-            self.output = None
-        self.raw = raw
-        self.metadata: dict[str, Any] = metadata if metadata is not None else {}
-
-    # ------------------------------------------------------------------
-    # Type-check convenience properties
-    # ------------------------------------------------------------------
-
-    @property
-    def detections(self) -> list[Detection]:
-        """All :class:`Detection` objects, or ``[]`` for non-detection models."""
-        if isinstance(self.output, DetectionResult):
-            return self.output.detections
-        return []
-
-    @property
-    def classification(self) -> ClassificationPrediction | None:
-        """Classification output, or ``None`` for other model types."""
-        return self.output if isinstance(self.output, ClassificationPrediction) else None
-
-    @property
-    def pose(self) -> PoseResult | None:
-        """Pose estimation output, or ``None`` for other model types."""
-        return self.output if isinstance(self.output, PoseResult) else None
-
-    @property
-    def instance_segmentation(self) -> InstanceSegmentationResult | None:
-        """Instance segmentation output, or ``None`` for other model types."""
-        return self.output if isinstance(self.output, InstanceSegmentationResult) else None
-
-    @property
-    def obb_result(self) -> OBBResult | None:
-        """Oriented bounding box output, or ``None`` for other model types."""
-        return self.output if isinstance(self.output, OBBResult) else None
-
-    @property
-    def embedding(self) -> EmbeddingResult | None:
-        """Embedding output, or ``None`` for other model types."""
-        return self.output if isinstance(self.output, EmbeddingResult) else None
-
-    # ------------------------------------------------------------------
-    # Delegation — operate on whatever output type is stored
-    # ------------------------------------------------------------------
-
-    def __iter__(self) -> Iterator[Detection]:
-        if isinstance(self.output, DetectionResult):
-            return iter(self.output)
-        return iter([])
-
-    def __len__(self) -> int:
-        return len(self.output) if self.output is not None else 0
-
-    def __bool__(self) -> bool:
-        return bool(self.output) if self.output is not None else False
-
-    def __getitem__(self, index: int) -> Detection:
-        if isinstance(self.output, DetectionResult):
-            return self.output[index]
-        raise IndexError(f"No detections — cannot index with {index!r}")
-
-    def __repr__(self) -> str:
-        return f"PredictionResult(output={self.output!r})"
-
-    # ------------------------------------------------------------------
-    # Describe helpers — backward compat names kept
-    # ------------------------------------------------------------------
-
-    def describe_detections_lines(
-        self,
-        *,
-        indent: str = "  ",
-        empty_marker: str = "(no detections)",
-    ) -> list[str]:
-        """Delegates to :meth:`DetectionResult.describe_lines`."""
-        if isinstance(self.output, DetectionResult):
-            return self.output.describe_lines(indent=indent, empty_marker=empty_marker)
-        return [empty_marker]
-
-    def describe_detections_text(
-        self,
-        *,
-        indent: str = "  ",
-        empty_marker: str = "(no detections)",
-    ) -> str:
-        """Concatenates :meth:`describe_detections_lines` with newlines."""
-        return "\n".join(
-            self.describe_detections_lines(indent=indent, empty_marker=empty_marker)
-        )
-
-    def describe(self) -> str:
-        """Full summary — delegates to the stored output type's ``describe()``.
-
-        No branching: every :class:`ModelOutput` owns its own ``describe()``.
-        """
-        return self.output.describe() if self.output is not None else "(empty prediction)"

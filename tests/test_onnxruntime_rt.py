@@ -623,17 +623,20 @@ def _yolo26_e2e_output(
     rows: list[tuple[float, float, float, float, float, int]],
     *,
     max_det: int = 300,
+    mask_coeffs: int = 0,
 ) -> np.ndarray:
-    """Build a YOLO26-style ``(1, max_det, 6)`` end-to-end output tensor.
+    """Build a YOLO26-style ``(1, max_det, 6 [+ nm])`` end-to-end output tensor.
 
     ``rows`` is a list of ``(x1, y1, x2, y2, conf, class_id)`` tuples.
     Any slots beyond ``len(rows)`` are zero-padded — matching Ultralytics'
     behaviour when the one-to-one head emits fewer than ``max_det``
-    real detections.
+    real detections.  Set ``mask_coeffs=32`` for segmentation e2e
+    exports (``feat_dim=38``).
     """
-    out = np.zeros((1, max_det, 6), dtype=np.float32)
+    feat_dim = 6 + mask_coeffs
+    out = np.zeros((1, max_det, feat_dim), dtype=np.float32)
     for i, (x1, y1, x2, y2, conf, cls) in enumerate(rows):
-        out[0, i] = [x1, y1, x2, y2, conf, cls]
+        out[0, i, :6] = [x1, y1, x2, y2, conf, cls]
     return out
 
 
@@ -718,6 +721,41 @@ class TestIsE2ELayout:
         preds = np.zeros((0, 6), dtype=np.float32)
         assert _is_e2e_layout(preds, {}) is False
 
+    def test_seg_e2e_feat_dim_38_detected(self):
+        # YOLOE-26 prompt-free seg ONNX: (300, 38) = 6 box fields + 32 mask coefs.
+        preds = np.zeros((300, 38), dtype=np.float32)
+        assert _is_e2e_layout(preds, {}) is True
+
+    def test_seg_anchor_grid_with_same_feat_dim_rejected(self):
+        # A 34-class anchor head can also be (8400, 38); row count disambiguates.
+        preds = np.zeros((8400, 38), dtype=np.float32)
+        assert _is_e2e_layout(preds, {}) is False
+
+    def test_pose_e2e_feat_dim_57_detected(self):
+        preds = np.zeros((300, 57), dtype=np.float32)
+        assert _is_e2e_layout(preds, {}) is True
+
+    def test_obb_e2e_feat_dim_7_detected(self):
+        preds = np.zeros((300, 7), dtype=np.float32)
+        assert _is_e2e_layout(preds, {}) is True
+
+    def test_obb_e2e_parsed_without_value_error(self):
+        raw = np.zeros((1, 300, 7), dtype=np.float32)
+        raw[0, 0] = [10.0, 10.0, 50.0, 50.0, 0.9, 0.0, 0.25]  # + angle col
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names={0: "object"},
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert len(result) == 1
+        assert result[0].confidence == pytest.approx(0.9)
+
 
 class TestPostprocessE2E:
     """End-to-end parsing of the YOLO26 / YOLOv10 ``(N, 6)`` layout.
@@ -727,6 +765,44 @@ class TestPostprocessE2E:
     the class-id column as a confidence.  These tests pin the new
     branch so that regression can't recur.
     """
+
+    def test_yoloe_seg_pf_output_parsed_without_value_error(self):
+        # YOLOE-26 prompt-free seg e2e: (1, 300, 38).  Class id 4097 is the
+        # value that surfaced as ``confidence must be in [0, 1], got 4097.0``
+        # when the anchor parser read column 5 as a class score.
+        raw = _yolo26_e2e_output(
+            [(10.0, 10.0, 50.0, 50.0, 0.88, 4097)],
+            mask_coeffs=32,
+        )
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names={},
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert len(result) == 1
+        assert result[0].label == "4097"
+        assert result[0].confidence == pytest.approx(0.88)
+
+    def test_seg_e2e_all_zero_tensor_yields_no_detections(self):
+        raw = np.zeros((1, 300, 38), dtype=np.float32)
+
+        result = _postprocess(
+            raw,
+            confidence=0.5,
+            classes=None,
+            class_names={},
+            img_w=640,
+            img_h=640,
+            input_shape=[1, 3, 640, 640],
+        )
+
+        assert result == []
 
     def test_yolo26_output_parsed_without_value_error(self):
         # Three real detections + zero-padded slots up to max_det.

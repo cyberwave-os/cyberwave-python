@@ -10,11 +10,16 @@ from typing import Any
 import numpy as np
 
 from cyberwave.models.runtimes.base import ModelRuntime
-from cyberwave.models.types import PredictionResult
+from cyberwave.models.types import PredictionResult, TextResult
 
 
 class WhisperCppRuntime(ModelRuntime):
-    """Run local Whisper transcription through ``pywhispercpp``."""
+    """Run local Whisper transcription through ``pywhispercpp``.
+
+    A single ``Model`` handle must not run ``transcribe()`` concurrently.
+    :class:`~cyberwave.models.loaded_model.LoadedModel` serializes
+    ``predict()`` and ``warm_up()`` with an inference lock.
+    """
 
     name = "whisper_cpp"
 
@@ -73,10 +78,10 @@ class WhisperCppRuntime(ModelRuntime):
                     pass
 
         payload = _segments_to_payload(segments, language=language)
-        return PredictionResult(
+        return TextResult(
+            text=payload["text"],
             raw=payload,
             metadata={
-                "text": payload["text"],
                 "segments": payload["segments"],
                 "language": payload.get("language"),
             },

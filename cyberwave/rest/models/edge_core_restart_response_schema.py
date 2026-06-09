@@ -18,21 +18,23 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class EdgeCoreRestartResponseSchema(BaseModel):
     """
-    Schema for requesting an edge-core restart.
+    Schema for requesting an edge-core restart.  The ``alert_uuid`` field is the lifecycle alert that tracks this restart through its ``requested → in_progress → completed/failed/ timed_out`` phases (see ``EDGE_CORE_RESTART_ALERT_TYPE``).  It is ``None`` only when no environment-scoped alert could be created (typically: edge has no bound twin yet, so we have nothing to attach the alert to).  The MQTT command published to the edge carries the same UUID so edge-core can transition the same alert through its phases without doing a lookup.  ``pre_resolved_alert_uuids`` lists any prior runtime-failure alerts (see ``EDGE_CORE_RESTART_RESOLVABLE_ALERT_TYPES``) that this restart auto-resolved on the edge's bound twins.  Empty when no matching alerts were active.  The frontend's toast can read this directly so it can say \"Restart requested. Cleared N prior failure alerts\" without waiting for a re-fetch.
     """ # noqa: E501
     success: StrictBool
     edge_uuid: StrictStr
     request_id: StrictStr
     command: StrictStr
     topic: StrictStr
-    __properties: ClassVar[List[str]] = ["success", "edge_uuid", "request_id", "command", "topic"]
+    alert_uuid: Optional[StrictStr] = None
+    pre_resolved_alert_uuids: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["success", "edge_uuid", "request_id", "command", "topic", "alert_uuid", "pre_resolved_alert_uuids"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -73,6 +75,11 @@ class EdgeCoreRestartResponseSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if alert_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.alert_uuid is None and "alert_uuid" in self.model_fields_set:
+            _dict['alert_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -89,7 +96,9 @@ class EdgeCoreRestartResponseSchema(BaseModel):
             "edge_uuid": obj.get("edge_uuid"),
             "request_id": obj.get("request_id"),
             "command": obj.get("command"),
-            "topic": obj.get("topic")
+            "topic": obj.get("topic"),
+            "alert_uuid": obj.get("alert_uuid"),
+            "pre_resolved_alert_uuids": obj.get("pre_resolved_alert_uuids")
         })
         return _obj
 

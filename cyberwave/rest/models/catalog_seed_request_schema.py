@@ -30,9 +30,11 @@ class CatalogSeedRequestSchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     seed_controller_policies: Optional[StrictBool] = True
     seed_mlmodels: Optional[StrictBool] = True
+    seed_workflow_templates: Optional[StrictBool] = False
     controller_keys: Optional[List[StrictStr]] = None
     mlmodel_keys: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["workspace_uuid", "seed_controller_policies", "seed_mlmodels", "controller_keys", "mlmodel_keys"]
+    workflow_template_keys: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["workspace_uuid", "seed_controller_policies", "seed_mlmodels", "seed_workflow_templates", "controller_keys", "mlmodel_keys", "workflow_template_keys"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -88,6 +90,11 @@ class CatalogSeedRequestSchema(BaseModel):
         if self.mlmodel_keys is None and "mlmodel_keys" in self.model_fields_set:
             _dict['mlmodel_keys'] = None
 
+        # set to None if workflow_template_keys (nullable) is None
+        # and model_fields_set contains the field
+        if self.workflow_template_keys is None and "workflow_template_keys" in self.model_fields_set:
+            _dict['workflow_template_keys'] = None
+
         return _dict
 
     @classmethod
@@ -103,8 +110,10 @@ class CatalogSeedRequestSchema(BaseModel):
             "workspace_uuid": obj.get("workspace_uuid"),
             "seed_controller_policies": obj.get("seed_controller_policies") if obj.get("seed_controller_policies") is not None else True,
             "seed_mlmodels": obj.get("seed_mlmodels") if obj.get("seed_mlmodels") is not None else True,
+            "seed_workflow_templates": obj.get("seed_workflow_templates") if obj.get("seed_workflow_templates") is not None else False,
             "controller_keys": obj.get("controller_keys"),
-            "mlmodel_keys": obj.get("mlmodel_keys")
+            "mlmodel_keys": obj.get("mlmodel_keys"),
+            "workflow_template_keys": obj.get("workflow_template_keys")
         })
         return _obj
 

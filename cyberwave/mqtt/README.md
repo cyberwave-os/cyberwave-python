@@ -7,6 +7,7 @@ This module provides a high-level MQTT client for real-time communication with t
 ## Features
 
 - **Digital Twin Updates**: Subscribe and publish position, rotation, and scale updates
+- **GPS Telemetry**: Publish raw GNSS data (lat/lon/alt/satellites) for historical storage
 - **Joint States**: Real-time joint state updates for robotic twins
 - **Sensor Streams**: Video, depth, and point cloud data streaming
 - **WebRTC Signaling**: WebRTC connection setup via MQTT
@@ -125,7 +126,8 @@ client.disconnect()
 
 ### Rate Limiting
 
-The client automatically rate-limits updates to 40 Hz (25ms interval) per resource to prevent message flooding:
+The client automatically rate-limits twin pose updates to 40 Hz (25 ms interval) per
+resource, and GPS updates to 2 Hz per twin, to prevent message flooding:
 
 ```python
 # These will be rate-limited automatically

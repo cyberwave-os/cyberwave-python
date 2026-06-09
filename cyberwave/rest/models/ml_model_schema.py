@@ -37,6 +37,8 @@ class MLModelSchema(BaseModel):
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     workspace_uuid: StrictStr
+    workspace_name: Optional[StrictStr] = None
+    workspace_slug: Optional[StrictStr] = None
     metadata: Dict[str, Any]
     visibility: StrictStr
     tags: List[StrictStr]
@@ -61,7 +63,8 @@ class MLModelSchema(BaseModel):
     sdk_load_id: Optional[StrictStr] = None
     edge_catalog_id: Optional[StrictStr] = None
     edge_runtime: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime"]
+    supports_builtin_vad_filter: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -116,6 +119,16 @@ class MLModelSchema(BaseModel):
         # and model_fields_set contains the field
         if self.updated_by is None and "updated_by" in self.model_fields_set:
             _dict['updated_by'] = None
+
+        # set to None if workspace_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_name is None and "workspace_name" in self.model_fields_set:
+            _dict['workspace_name'] = None
+
+        # set to None if workspace_slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_slug is None and "workspace_slug" in self.model_fields_set:
+            _dict['workspace_slug'] = None
 
         # set to None if mapped_model_id (nullable) is None
         # and model_fields_set contains the field
@@ -173,6 +186,8 @@ class MLModelSchema(BaseModel):
             "created_by": obj.get("created_by"),
             "updated_by": obj.get("updated_by"),
             "workspace_uuid": obj.get("workspace_uuid"),
+            "workspace_name": obj.get("workspace_name"),
+            "workspace_slug": obj.get("workspace_slug"),
             "metadata": obj.get("metadata"),
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),
@@ -196,7 +211,8 @@ class MLModelSchema(BaseModel):
             "execution_surfaces": obj.get("execution_surfaces"),
             "sdk_load_id": obj.get("sdk_load_id"),
             "edge_catalog_id": obj.get("edge_catalog_id"),
-            "edge_runtime": obj.get("edge_runtime")
+            "edge_runtime": obj.get("edge_runtime"),
+            "supports_builtin_vad_filter": obj.get("supports_builtin_vad_filter") if obj.get("supports_builtin_vad_filter") is not None else False
         })
         return _obj
 

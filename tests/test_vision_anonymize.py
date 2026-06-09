@@ -32,6 +32,45 @@ def _make_det(
     )
 
 
+class TestDictDetectionInputs:
+    """Workflow-runtime producers (e.g. ``barcode_reader``) hand dicts
+    shaped ``{"label","class","confidence","bbox","bbox_pixels",...}``
+    rather than ``Detection`` instances. ``blank_persons`` /
+    ``anonymize_frame`` must coerce them via
+    ``cyberwave/vision/_detection_view.py`` instead of raising
+    ``'dict' object has no attribute 'bbox'``.
+    """
+
+    def _dict_det(self, label: str = "person") -> dict:
+        return {
+            "label": label,
+            "confidence": 0.95,
+            "bbox": {"x1": 10, "y1": 10, "x2": 50, "y2": 80},
+            "bbox_pixels": [10, 10, 50, 80],
+        }
+
+    def test_blank_persons_accepts_dict_detections(self):
+        frame = np.full((100, 100, 3), 255, dtype=np.uint8)
+        out = blank_persons(frame, [self._dict_det()], mode="bbox", color=(0, 0, 0))
+        assert tuple(out[20, 20]) == (0, 0, 0)
+        assert tuple(out[90, 90]) == (255, 255, 255)
+
+    def test_anonymize_frame_accepts_dict_detections(self):
+        frame = np.full((100, 100, 3), 255, dtype=np.uint8)
+        out = anonymize_frame(frame, [self._dict_det()], mode="bbox", color=(0, 0, 0))
+        assert tuple(out[20, 20]) == (0, 0, 0)
+
+    def test_dict_falls_back_to_class_key_for_label(self):
+        det = {
+            "class": "person",
+            "confidence": 0.9,
+            "bbox_pixels": [10, 10, 50, 80],
+        }
+        frame = np.full((100, 100, 3), 255, dtype=np.uint8)
+        out = blank_persons(frame, [det], mode="bbox", color=(0, 0, 0))
+        assert tuple(out[20, 20]) == (0, 0, 0)
+
+
 class TestBlankPersons:
     def test_does_not_mutate_input(self):
         frame = np.full((100, 100, 3), 255, dtype=np.uint8)

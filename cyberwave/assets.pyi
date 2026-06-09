@@ -7,7 +7,7 @@ Do not edit manually.
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .twin import Twin, JointController
+from .twin import Twin, JointTwin
 
 class TheRobotStudioso101Twin(Twin):
     """
@@ -15,7 +15,7 @@ class TheRobotStudioso101Twin(Twin):
     Registry ID: the-robot-studio/so101
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -31,7 +31,7 @@ class BerkeleyberkeleyHumanoidTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -41,7 +41,7 @@ class AgileXRoboticspiperTwin(Twin):
     Registry ID: agile-x-robotics/piper
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -57,7 +57,7 @@ class AnyboticsanymalBTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -85,7 +85,7 @@ class UnitreeunitreeG1Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -101,7 +101,7 @@ class Unitreego2Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -117,7 +117,7 @@ class UnitreelaikagoTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -127,7 +127,7 @@ class Kukakr6R900Twin(Twin):
     Registry ID: kuka/kr6-r900
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -137,7 +137,7 @@ class ArxRoboticsxr5aTwin(Twin):
     Registry ID: arx-roboticsx/r5a
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -153,7 +153,7 @@ class ArxarxRoboticsxTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -181,7 +181,7 @@ class BoosterRoboticst1Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -197,7 +197,7 @@ class BostonDynamicsspotTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -213,7 +213,7 @@ class Fftaigr2Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -223,7 +223,7 @@ class KinovajacoTwin(Twin):
     Registry ID: kinova/jaco
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -233,7 +233,7 @@ class Fanucm710ic70Twin(Twin):
     Registry ID: fanuc/m-710ic70
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -243,7 +243,7 @@ class PoppyProjectpoppyErgoJrTwin(Twin):
     Registry ID: poppy-project/poppy-ergo-jr
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -253,7 +253,7 @@ class Interbotixvx300sTwin(Twin):
     Registry ID: interbotix/vx300s
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -269,7 +269,7 @@ class GepettoboltTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -285,7 +285,7 @@ class DisneybdxTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -301,7 +301,7 @@ class AgilityRoboticscassieTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -317,7 +317,7 @@ class GLevinerheaTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -333,7 +333,7 @@ class BenBoksersprypedTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -349,7 +349,7 @@ class UpkieupkieTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -359,7 +359,7 @@ class RethinkRoboticsbaxterTwin(Twin):
     Registry ID: rethink-robotics/baxter
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -369,7 +369,7 @@ class KawadaIndustriesnextageTwin(Twin):
     Registry ID: kawada-industries/nextage
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -379,7 +379,7 @@ class PoppyProjectpoppyTorsoTwin(Twin):
     Registry ID: poppy-project/poppy-torso
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -389,7 +389,7 @@ class OrebroUniversityyumiTwin(Twin):
     Registry ID: orebro-university/yumi
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -399,7 +399,7 @@ class Interbotixwx250sTwin(Twin):
     Registry ID: interbotix/wx250s
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -415,7 +415,7 @@ class Robotisop3Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -425,17 +425,17 @@ class RethinkRoboticssawyerTwin(Twin):
     Registry ID: rethink-robotics/sawyer
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
-class KinovaRoboticskortexGen3Twin(Twin):
+class KinovakortexGen3LiteTwin(Twin):
     """
-    Digital twin for Kortex Gen3
-    Registry ID: kinova-robotics/kortex-gen3
+    Digital twin for Kortex Gen3 Lite
+    Registry ID: kinova/kortex-gen3-lite
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -451,7 +451,7 @@ class AnyboticsanymalCTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -461,7 +461,7 @@ class ComauedoTwin(Twin):
     Registry ID: comau/edo
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -501,7 +501,7 @@ class FourierfftaiGr1t1Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -517,7 +517,7 @@ class FourierfftaiGr1t2Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -533,7 +533,7 @@ class UnitreeunitreeH1Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -543,7 +543,7 @@ class RtNetsciurus17Twin(Twin):
     Registry ID: rt-net/sciurus17
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -553,7 +553,7 @@ class GepettofingerEduGepettosTwin(Twin):
     Registry ID: gepetto/finger-edu-gepettos
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -563,7 +563,7 @@ class DexsuiteleapHandLeapTwin(Twin):
     Registry ID: dexsuite/leap-hand-leap
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -579,7 +579,7 @@ class TimqianbambotB0Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -595,7 +595,7 @@ class TimqianbambotB0BaseTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -623,7 +623,7 @@ class Robotisturtlebot3WafflePiTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -639,14 +639,14 @@ class Robotisturtlebot3BurgerTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
-class UnitreeunitreeGo1Twin(Twin):
+class Unitreego1Twin(Twin):
     """
     Digital twin for Unitree Go1
-    Registry ID: unitree/unitree_go1
+    Registry ID: unitree/go1
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -655,7 +655,7 @@ class UnitreeunitreeGo1Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -671,7 +671,7 @@ class UnitreeunitreeB1Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -687,7 +687,7 @@ class UnitreeunitreeA1Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -703,7 +703,7 @@ class KukakukaIiwa14Twin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -713,7 +713,7 @@ class UnitreeunitreeZ1Twin(Twin):
     Registry ID: unitree/unitree_z1
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -729,7 +729,7 @@ class FictionlableoRoverTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -760,7 +760,7 @@ class UniversalRobotsur5Twin(Twin):
     Registry ID: universal_robots/UR5
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -837,7 +837,7 @@ class CyberwavegenericAuvTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -847,18 +847,6 @@ class CyberwavesubstationTwin(Twin):
     Registry ID: cyberwave/substation
     """
     pass
-
-class DjidjiMini3ProTwin(Twin):
-    """
-    Digital twin for DJI Mini 3 Pro
-    Registry ID: dji/DJI-Mini-3-Pro
-    """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
 
 class Holybropx4visionTwin(Twin):
     """
@@ -884,7 +872,7 @@ class HoverspectavientoryPlatformTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -914,7 +902,7 @@ class TheRobotStudioso101WithCameraTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -924,7 +912,7 @@ class UniversalRobotsur7Twin(Twin):
     Registry ID: universal_robots/UR7
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -940,7 +928,7 @@ class WaveshareugvBeastTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -956,7 +944,7 @@ class AltoRoboticsnodeTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -972,7 +960,7 @@ class AgiloxagiloxOflTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1025,7 +1013,7 @@ class EnacticopenarmTwin(Twin):
     Registry ID: enactic/openarm
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1096,7 +1084,7 @@ class Unitreez1GripperTwin(Twin):
     Registry ID: unitree/z1-gripper
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1120,7 +1108,7 @@ class FwrroboticArmTwin(Twin):
     Registry ID: FWR/Robotic-Arm
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1130,7 +1118,7 @@ class PollenRoboticsreachyMiniTwin(Twin):
     Registry ID: pollen-robotics/reachy-mini
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1146,7 +1134,7 @@ class Djimavic3EnterpriseTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1163,7 +1151,7 @@ class NeuraRoboticsmaira7sTwin(Twin):
     Registry ID: neura-robotics/maira7s
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1173,7 +1161,7 @@ class NeuraRoboticsmaira6mTwin(Twin):
     Registry ID: neura-robotics/maira6m
     """
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1189,7 +1177,7 @@ class DjidjiMini4ProTwin(Twin):
         """Move to a specific position [x, y, z]"""
         ...
     @property
-    def joints(self) -> JointController:
+    def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
@@ -1204,6 +1192,46 @@ class CyberwaveepalTwin(Twin):
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
         ...
+
+class DjidjiMini3Twin(Twin):
+    """
+    Digital twin for DJI Mini 3
+    Registry ID: dji/dji-mini-3
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class MlsTeammathScavator9000Twin(Twin):
+    """
+    Digital twin for Math Scavator 9000
+    Registry ID: mls-team/math-scavator-9000
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class CyberwavegenericMicrophoneTwin(Twin):
+    """
+    Digital twin for Generic Microphone
+    Registry ID: cyberwave/generic-microphone
+    """
+    pass
+
+class CyberwavegenericSpeakerTwin(Twin):
+    """
+    Digital twin for Generic Speaker
+    Registry ID: cyberwave/generic-speaker
+    """
+    pass
 
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
@@ -1239,7 +1267,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "interbotix/wx250s": Interbotixwx250sTwin,
     "robotis/op3": Robotisop3Twin,
     "rethink-robotics/sawyer": RethinkRoboticssawyerTwin,
-    "kinova-robotics/kortex-gen3": KinovaRoboticskortexGen3Twin,
+    "kinova/kortex-gen3-lite": KinovakortexGen3LiteTwin,
     "anybotics/anymal-c": AnyboticsanymalCTwin,
     "comau/edo": ComauedoTwin,
     "dji/DJI-Tello": DjidjiTelloTwin,
@@ -1255,7 +1283,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "robotis/turtlebot3-waffle": Robotisturtlebot3WaffleTwin,
     "robotis/turtlebot3-waffle-pi": Robotisturtlebot3WafflePiTwin,
     "robotis/turtlebot3-burger": Robotisturtlebot3BurgerTwin,
-    "unitree/unitree_go1": UnitreeunitreeGo1Twin,
+    "unitree/go1": Unitreego1Twin,
     "unitree/unitree-b1": UnitreeunitreeB1Twin,
     "unitree/unitree_a1": UnitreeunitreeA1Twin,
     "kuka/kuka_iiwa14": KukakukaIiwa14Twin,
@@ -1278,7 +1306,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "prox-dynamics/black-hornet-nano": ProxDynamicsblackHornetNanoTwin,
     "cyberwave/generic-auv": CyberwavegenericAuvTwin,
     "cyberwave/substation": CyberwavesubstationTwin,
-    "dji/DJI-Mini-3-Pro": DjidjiMini3ProTwin,
     "Holybro/PX4Vision": Holybropx4visionTwin,
     "hoverspect/Avientory-Platform": HoverspectavientoryPlatformTwin,
     "apeiroon/bx100": Apeiroonbx100Twin,
@@ -1315,4 +1342,8 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "neura-robotics/maira6m": NeuraRoboticsmaira6mTwin,
     "dji/dji-mini-4-pro": DjidjiMini4ProTwin,
     "cyberwave/epal": CyberwaveepalTwin,
+    "dji/dji-mini-3": DjidjiMini3Twin,
+    "mls-team/math-scavator-9000": MlsTeammathScavator9000Twin,
+    "cyberwave/generic-microphone": CyberwavegenericMicrophoneTwin,
+    "cyberwave/generic-speaker": CyberwavegenericSpeakerTwin,
 }

@@ -19,7 +19,15 @@ import pytest
 
 from cyberwave.models import CloudLoadedModel, ModelManager
 from cyberwave.models.cloud import _to_prediction_result
-from cyberwave.models.types import PredictionResult
+from cyberwave.models.types import (
+    CustomResult,
+    DetectionResult,
+    ImageResult,
+    JsonResult,
+    PredictionResult,
+    QueuedPredictionResult,
+    TextResult,
+)
 from cyberwave.rest.models.ml_model_run_queued_schema import MLModelRunQueuedSchema
 from cyberwave.rest.models.ml_model_run_result_schema import MLModelRunResultSchema
 from cyberwave.rest.models.ml_model_schema import MLModelSchema
@@ -343,19 +351,96 @@ class TestResultTranslation:
         assert len(pr) == 1
         assert pr[0].mask == "iVBORw0KGgo"
 
-    def test_text_output_leaves_detections_empty_but_preserves_raw(self) -> None:
-        result = _completed_result("text", "A cup is on the table.")
-        pr = _to_prediction_result(result)
-        assert len(pr) == 0
-        assert pr.raw == "A cup is on the table."
-        assert pr.metadata["output_format"] == "text"
+    def test_text_output_maps_to_text_result(self) -> None:
+        body = (
+            "There are 20 regions in Italy: 15 ordinary regions and "
+            "5 autonomous regions with special statutes."
+        )
+        result = _completed_result("text", body)
+        txt = _to_prediction_result(result)
+        assert isinstance(txt, TextResult)
+        assert txt.text == body
+        assert txt.raw == body
+        assert txt.metadata["output_format"] == "text"
+        assert "detections" not in dir(txt)
 
-    def test_queued_result_carries_workload_uuid_on_metadata(self) -> None:
+    def test_prompt_only_text_question(self) -> None:
+        """Free-form Q&A with no image input should return TextResult directly."""
+        summary = _summary()
+        answer = "There are 20 regions in Italy."
+        fake_client = _FakePlaygroundClient(summary, _completed_result("text", answer))
+        model = CloudLoadedModel(summary=summary, client=fake_client)
+
+        txt = model.predict(prompt="how many regions are there in italy")
+
+        assert isinstance(txt, TextResult)
+        assert txt.text == answer
+        call = fake_client.run_calls[0]
+        assert call["image"] is None
+        assert call["prompt"] == "how many regions are there in italy"
+
+    def test_json_output_maps_to_json_result(self) -> None:
+        payload = {"mock": True, "count": 3}
+        result = _completed_result("json", payload)
+        parsed = _to_prediction_result(result)
+        assert isinstance(parsed, JsonResult)
+        assert parsed.data == payload
+
+    def test_image_output_normalizes_data_url(self) -> None:
+        data_url = "data:image/png;base64,iVBORw0KGgo="
+        result = _completed_result("image", {"data_url": data_url})
+        img = _to_prediction_result(result)
+        assert isinstance(img, ImageResult)
+        assert img.url == data_url
+        assert "save_jpg" in dir(img)
+        assert "detections" not in dir(img)
+
+    def test_image_output_normalizes_image_url_base64(self) -> None:
+        b64 = "iVBORw0KGgo="
+        result = _completed_result("image", {"image_url": b64})
+        img = _to_prediction_result(result)
+        assert isinstance(img, ImageResult)
+        assert img.url == f"data:image/png;base64,{b64}"
+
+    def test_image_output_normalizes_https_image_url(self) -> None:
+        url = "https://example.com/generated.png"
+        img = ImageResult.from_output({"image_url": url})
+        assert img.remote_url == url
+        assert img.url == url
+        assert img.base64 is None
+        assert not (img.url or "").startswith("data:image/png;base64,https://")
+
+    def test_plan_steps_maps_to_custom_result(self) -> None:
+        steps = [{"step": 1, "description": "find cup"}]
+        result = _completed_result("plan_steps", steps)
+        custom = _to_prediction_result(result)
+        assert isinstance(custom, CustomResult)
+        assert custom.label == "plan_steps"
+        assert custom.data == steps
+
+    def test_queued_result_is_queued_prediction_result(self) -> None:
         result = _queued_result("wl-1")
-        pr = _to_prediction_result(result)
-        assert len(pr) == 0
-        assert pr.metadata["workload_uuid"] == "wl-1"
-        assert pr.metadata["poll_url"] == "/cloud-node-workloads/wl-1"
+        queued = _to_prediction_result(result)
+        assert isinstance(queued, QueuedPredictionResult)
+        assert queued.workload_uuid == "wl-1"
+        assert queued.poll_url == "/cloud-node-workloads/wl-1"
+
+    def test_image_result_save_and_ndarray(self, tmp_path) -> None:
+        # 1×1 PNG from the backend mock contract.
+        b64 = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+            "YAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        )
+        data_url = f"data:image/png;base64,{b64}"
+        image = ImageResult.from_output({"data_url": data_url})
+
+        out = tmp_path / "gen.png"
+        assert image.save(out) == str(out.resolve())
+        assert out.read_bytes() == image.bytes()
+
+        pytest.importorskip("PIL")
+        arr = image.to_ndarray()
+        assert arr.shape[0] == 1 and arr.shape[1] == 1
 
 
 # ---------------------------------------------------------------------------

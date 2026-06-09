@@ -34,6 +34,7 @@ from __future__ import annotations
 import platform
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
@@ -108,12 +109,19 @@ class HostFacts:
     ``platform`` is always populated since :mod:`platform` works
     cross-platform.
 
-    Software identity (``sdk_version``, ``cli_version``,
-    ``edge_core_version``) comes from :mod:`importlib.metadata` and is
-    platform-agnostic.  Each is the version of the corresponding
-    ``cyberwave`` distribution installed in the calling process, or
-    ``None`` when the package is not installed (e.g. a standalone SDK
-    user who has neither the CLI nor edge-core).
+    Software identity (``sdk_version``, ``edge_core_version``) reflects
+    the version effectively in use by the calling process — in-process
+    ``__version__`` first (which honors CI ``BUILD_VERSION`` stamps even
+    when ``.dist-info`` is stripped, as in PyInstaller builds), falling
+    back to :mod:`importlib.metadata`.  Each is ``None`` when the
+    corresponding package is not loaded in the calling process.
+
+    ``cli_version`` is intentionally **not** part of this schema: the
+    CLI ships as a separate PyInstaller binary on production edges, so
+    edge-core's Python process cannot observe its ``__version__`` and
+    ``importlib.metadata`` does not see the standalone binary either.
+    Surfacing it would require subprocess-probing ``cyberwave --version``
+    from edge-core, which is out of scope for the host_facts uploader.
     """
 
     platform: str
@@ -124,12 +132,11 @@ class HostFacts:
     thermal_source: Optional[str]
     has_hardware_watchdog: bool
     # Software identity: which Cyberwave packages are running on this host.
-    # Each is the installed distribution version (e.g. "0.4.7") or ``None``
-    # when the package is not installed in the environment that called
-    # :func:`read_host_facts`.  This matters for rollout tracking on the
-    # dashboard ("how many edges are still on the previous CLI release").
+    # Each is the version effectively in use by the calling process or
+    # ``None`` when the package is not loaded.  This matters for rollout
+    # tracking on the dashboard ("how many edges are still on the
+    # previous SDK/edge-core release").
     sdk_version: Optional[str]
-    cli_version: Optional[str]
     edge_core_version: Optional[str]
 
     def to_dict(self) -> dict[str, object]:
@@ -156,8 +163,6 @@ class HostFacts:
             out["thermal_source"] = self.thermal_source
         if self.sdk_version is not None:
             out["sdk_version"] = self.sdk_version
-        if self.cli_version is not None:
-            out["cli_version"] = self.cli_version
         if self.edge_core_version is not None:
             out["edge_core_version"] = self.edge_core_version
         return out
@@ -429,18 +434,49 @@ def _read_package_version(distribution: str) -> Optional[str]:
         return None
 
 
-def _read_software_versions() -> tuple[Optional[str], Optional[str], Optional[str]]:
-    """Return ``(sdk_version, cli_version, edge_core_version)``.
+def _read_module_version(module_name: str) -> Optional[str]:
+    """Return ``module.__version__`` if the module is already in ``sys.modules``.
 
-    Reads from :mod:`importlib.metadata` — the canonical source for the
-    installed distribution version.  Each is independent: a standalone SDK
-    install (no CLI, no edge-core) returns ``(version, None, None)`` and
-    that is correctly serialised as just ``sdk_version`` in the upload.
+    Checks ``sys.modules`` rather than calling :func:`importlib.import_module`
+    so probing a companion package that merely happens to be installed in
+    the venv doesn't trigger its import side effects.
+    """
+    module = sys.modules.get(module_name)
+    if module is None:
+        return None
+    version = getattr(module, "__version__", None)
+    if isinstance(version, str) and version:
+        return version
+    return None
+
+
+def _resolve_effective_version(module_name: str, distribution: str) -> Optional[str]:
+    """In-process ``__version__`` first, then :mod:`importlib.metadata`.
+
+    The first step is what surfaces CI ``BUILD_VERSION`` stamps and
+    survives PyInstaller binaries that ship without ``.dist-info``.
+    """
+    version = _read_module_version(module_name)
+    if version is not None:
+        return version
+    return _read_package_version(distribution)
+
+
+def _read_software_versions() -> tuple[Optional[str], Optional[str]]:
+    """Return ``(sdk_version, edge_core_version)`` effectively in use.
+
+    Each entry resolves only when the corresponding package is imported
+    in the calling process (or its distribution metadata is installed).
+
+    CLI version is intentionally not reported: on production edges the
+    CLI is a standalone PyInstaller binary, so neither ``sys.modules``
+    nor ``importlib.metadata`` can observe it from edge-core's process.
+    Surfacing it would require subprocess-probing ``cyberwave --version``,
+    which the host_facts uploader deliberately avoids.
     """
     return (
-        _read_package_version("cyberwave"),
-        _read_package_version("cyberwave-cli"),
-        _read_package_version("cyberwave-edge-core"),
+        _resolve_effective_version("cyberwave", "cyberwave"),
+        _resolve_effective_version("cyberwave_edge_core", "cyberwave-edge-core"),
     )
 
 
@@ -554,7 +590,7 @@ def read_host_facts(
     )
     has_hardware_watchdog = system == "Linux" and wd_path.exists()
 
-    sdk_version, cli_version, edge_core_version = _read_software_versions()
+    sdk_version, edge_core_version = _read_software_versions()
 
     return HostFacts(
         platform=platform.platform(),
@@ -565,7 +601,6 @@ def read_host_facts(
         thermal_source=thermal_source,
         has_hardware_watchdog=has_hardware_watchdog,
         sdk_version=sdk_version,
-        cli_version=cli_version,
         edge_core_version=edge_core_version,
     )
 

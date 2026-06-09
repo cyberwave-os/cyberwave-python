@@ -114,6 +114,16 @@ def _distinct_rotations(count: int) -> list[dict]:
     return result
 
 
+def _publish_count_for_channel(mock_publish: MagicMock, channel: str) -> int:
+    """Count ``publish()`` calls for a twin position/rotation/scale topic suffix."""
+    suffix = f"/{channel}"
+    return sum(
+        1
+        for call in mock_publish.call_args_list
+        if str(call.args[0]).endswith(suffix)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Rate-limit unit tests (no real sleeping – time is faked)
 # ---------------------------------------------------------------------------
@@ -132,10 +142,12 @@ class TestRateLimiting:
 
     def test_position_call_after_interval_is_published(self, mqtt_client):
         rate_key = f"twin:{TWIN_UUID}:position"
-        mqtt_client._last_update_times[rate_key] = time.time() - MIN_UPDATE_INTERVAL - 0.001
+        mqtt_client._last_update_times[rate_key] = (
+            time.monotonic() - MIN_UPDATE_INTERVAL - 0.001
+        )
 
         mqtt_client.update_twin_position(TWIN_UUID, {"x": 3.0, "y": 0.0, "z": 0.0})
-        mqtt_client.publish.assert_called_once()
+        assert _publish_count_for_channel(mqtt_client.publish, "position") == 1
 
     def test_first_rotation_call_is_published(self, mqtt_client):
         mqtt_client.update_twin_rotation(TWIN_UUID, {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0})
@@ -144,7 +156,7 @@ class TestRateLimiting:
     def test_second_immediate_rotation_call_is_dropped(self, mqtt_client):
         mqtt_client.update_twin_rotation(TWIN_UUID, {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0})
         mqtt_client.update_twin_rotation(TWIN_UUID, {"x": 0.0, "y": 0.0, "z": 0.1, "w": 0.99})
-        assert mqtt_client.publish.call_count == 1
+        assert _publish_count_for_channel(mqtt_client.publish, "rotation") == 1
 
     def test_position_and_rotation_rate_limits_are_independent(self, mqtt_client):
         """Sending position then rotation without delay should publish both – different keys."""
@@ -167,11 +179,13 @@ class TestDeduplication:
 
         # Advance time past the rate-limit window.
         rate_key = f"twin:{TWIN_UUID}:position"
-        mqtt_client._last_update_times[rate_key] = time.time() - MIN_UPDATE_INTERVAL - 0.001
+        mqtt_client._last_update_times[rate_key] = (
+            time.monotonic() - MIN_UPDATE_INTERVAL - 0.001
+        )
 
         # Same payload: should be deduped.
         mqtt_client.update_twin_position(TWIN_UUID, pos.copy())
-        assert mqtt_client.publish.call_count == 1
+        assert _publish_count_for_channel(mqtt_client.publish, "position") == 1
 
     def test_identical_rotation_is_not_republished(self, mqtt_client):
         rot = {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
@@ -179,19 +193,23 @@ class TestDeduplication:
         mqtt_client.update_twin_rotation(TWIN_UUID, rot.copy())
 
         rate_key = f"twin:{TWIN_UUID}:rotation"
-        mqtt_client._last_update_times[rate_key] = time.time() - MIN_UPDATE_INTERVAL - 0.001
+        mqtt_client._last_update_times[rate_key] = (
+            time.monotonic() - MIN_UPDATE_INTERVAL - 0.001
+        )
 
         mqtt_client.update_twin_rotation(TWIN_UUID, rot.copy())
-        assert mqtt_client.publish.call_count == 1
+        assert _publish_count_for_channel(mqtt_client.publish, "rotation") == 1
 
     def test_changed_position_is_republished_after_interval(self, mqtt_client):
         mqtt_client.update_twin_position(TWIN_UUID, {"x": 1.0, "y": 0.0, "z": 0.0})
 
         rate_key = f"twin:{TWIN_UUID}:position"
-        mqtt_client._last_update_times[rate_key] = time.time() - MIN_UPDATE_INTERVAL - 0.001
+        mqtt_client._last_update_times[rate_key] = (
+            time.monotonic() - MIN_UPDATE_INTERVAL - 0.001
+        )
 
         mqtt_client.update_twin_position(TWIN_UUID, {"x": 2.0, "y": 0.0, "z": 0.0})
-        assert mqtt_client.publish.call_count == 2
+        assert _publish_count_for_channel(mqtt_client.publish, "position") == 2
 
 
 # ---------------------------------------------------------------------------

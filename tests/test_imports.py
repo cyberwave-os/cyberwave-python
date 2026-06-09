@@ -118,8 +118,7 @@ def test_twin_classes():
     """Test that twin classes can be imported"""
     from cyberwave import (
         Twin,
-        JointController,
-        TwinControllerHandle,
+        JointTwin,
         CameraTwin,
         DepthCameraTwin,
         FlyingTwin,
@@ -137,8 +136,7 @@ def test_twin_classes():
     assert callable(FlyingCameraTwin)
     assert callable(GripperCameraTwin)
     assert callable(create_twin)
-    assert JointController is not None
-    assert TwinControllerHandle is not None
+    assert JointTwin is not None
     print("✓ Twin classes import successful")
 
 

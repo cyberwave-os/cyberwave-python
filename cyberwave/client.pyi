@@ -143,7 +143,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["kinova-robotics/kortex-gen3"],
+        asset_key: Literal["kinova/kortex-gen3-lite"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -386,15 +386,6 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["dji/DJI-Mini-3-Pro"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> FlyingCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
         asset_key: Literal["Holybro/PX4Vision"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -423,6 +414,15 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["dji/dji-mini-4-pro"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> FlyingCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["dji/dji-mini-3"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -539,7 +539,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["unitree/unitree_go1"],
+        asset_key: Literal["unitree/go1"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

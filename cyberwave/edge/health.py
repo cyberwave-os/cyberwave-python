@@ -49,11 +49,25 @@ KNOWN_STREAM_CONFIG_KINDS = frozenset({"camera", "audio", "lidar", "imu"})
 #: wire payloads that pass Pydantic ``extra="allow"`` on the backend
 #: but render as empty rows on the frontend.
 #:
+#: ``source`` is required for kinds whose source is a device path,
+#: URL, or ROS topic (``camera``, ``lidar``, ``imu``) because the
+#: dashboard renders it as the under-row detail line and operators
+#: rely on it for "which physical sensor is this?".  ``audio`` does
+#: NOT require ``source``: a WebRTC microphone has no
+#: dashboard-meaningful source string — the host ALSA / CoreAudio
+#: device path is a leak risk, and publishing the codec instead
+#: would overload the field's semantics (camera publishes
+#: ``/dev/video0``, lidar publishes ``/point_cloud2`` — audio
+#: publishing ``"opus"`` was the CYB-2005 contract drift this
+#: relaxation fixes).  Audio drivers may still attach ``source``
+#: when they have a meaningful identifier (e.g. a JACK port name);
+#: the validator just doesn't demand one.
+#:
 #: Unknown kinds (forward-compat for future sensor types) bypass field
 #: validation entirely — they only need to carry ``kind`` itself.
 _STREAM_CONFIG_REQUIRED_FIELDS: Dict[str, frozenset] = {
     "camera": frozenset({"source", "resolution", "fps"}),
-    "audio": frozenset({"source", "sample_rate_hz", "channels"}),
+    "audio": frozenset({"sample_rate_hz", "channels"}),
     "lidar": frozenset({"source", "scan_rate_hz"}),
     "imu": frozenset({"source", "rate_hz"}),
 }
@@ -151,6 +165,17 @@ class EdgeHealthCheck:
         self.start_time = time.time()
         self.frame_count = 0
         self.last_frame_time = time.time()
+        # Liveness signal for kinds where ``frame_count`` is not the
+        # right wire-side counter (audio: a microphone's 20 ms Opus
+        # packets are correct WebRTC frames but reporting ``fps: 50``
+        # and ``frames_sent: <packet count>`` would mislead anyone
+        # reading the raw payload; future IMU / encoder publishers
+        # have the same shape).  ``mark_alive()`` updates
+        # ``last_frame_time`` without bumping ``frame_count`` and
+        # sets this flag so ``ice_connection_state`` still flips to
+        # ``connected`` once data has been seen.  See ``mark_alive``
+        # for the full rationale.
+        self._has_alive_signal = False
 
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -244,9 +269,50 @@ class EdgeHealthCheck:
 
 
     def update_frame_count(self):
-        """Update frame count and timestamp (call this when sending frames)."""
+        """Update frame count and timestamp (call this when sending frames).
+
+        Use this when the wire-side ``fps`` and ``frames_sent`` numbers
+        carry meaning to operators — that's the case for cameras
+        (frames per second is the standard quality signal) and lidar
+        (scan rate matters for navigation latency).  For audio /
+        future IMU / encoder publishers prefer :meth:`mark_alive`
+        instead so the wire isn't polluted with a packetisation-rate
+        ``fps`` field the dashboard has to suppress.
+        """
         self.frame_count += 1
         self.last_frame_time = time.time()
+        self._has_alive_signal = True
+
+    def mark_alive(self) -> None:
+        """Signal "data observed since last call" without bumping the counter.
+
+        Use for kinds where ``fps`` and ``frames_sent`` are not the
+        right wire metrics:
+
+        - **Audio**: a WebRTC microphone emits a frame every 20 ms,
+          so ``update_frame_count`` per frame would put ``fps: 50.0``
+          and ``frames_sent: <packet count>`` on the wire.  The
+          dashboard explicitly hides these fields for audio rows
+          (see ``computeStreamMetaFromWire``'s audio branch) but raw
+          MQTT subscribers and Vector's ``app_twintelemetry`` table
+          would still see misleading numbers.  ``mark_alive`` keeps
+          those fields at ``0``.
+        - **Future IMU / encoder / GPS**: same shape — sample rate
+          belongs in ``stream_config.rate_hz`` (the configured
+          target), not as an SDK-derived running average.
+
+        Only the staleness clock and the "have we ever seen data?"
+        flag get updated.  ``is_stale``, ``connection_state``, and
+        ``ice_connection_state`` therefore behave exactly as they do
+        under ``update_frame_count``; only ``fps`` and ``frames_sent``
+        differ on the wire.
+
+        Idempotent under back-to-back calls; cheap (one
+        ``time.time()`` call, no allocations).  Safe to call from any
+        thread.
+        """
+        self.last_frame_time = time.time()
+        self._has_alive_signal = True
     
 
     def start(self):
@@ -306,13 +372,50 @@ class EdgeHealthCheck:
         is_stale = time_since_last > self.stale_timeout
 
         effective_configs = self._collect_effective_stream_configs()
-        stream_ids = sorted(effective_configs) if effective_configs else ["stream"]
+        if effective_configs:
+            # New path: drivers (or the cv2 streamer) registered or
+            # provided a stream_config — emit one entry per stream id.
+            stream_ids = sorted(effective_configs)
+        elif self._has_alive_signal:
+            # Legacy compat path: a driver that signals liveness without
+            # ever calling ``register_stream_config`` still gets the
+            # historical single-stream entry so its fps / staleness
+            # surfaces on the dashboard.  Covers two flavours:
+            # ``update_frame_count`` callers (``camera_sim``, the
+            # pre-CYB-2004 ``av_streamer`` path) AND ``mark_alive``
+            # callers (the microphone publisher, future IMU / encoder
+            # publishers — see :meth:`mark_alive`).  Keying off
+            # ``_has_alive_signal`` rather than ``frame_count > 0`` is
+            # what lets the audio path surface at all: ``mark_alive``
+            # deliberately keeps ``frame_count == 0`` to avoid
+            # polluting the wire-side ``fps`` / ``frames_sent``
+            # fields, so the old counter-based heuristic would have
+            # silently dropped audio twins to the bootstrap shape and
+            # the dashboard would render them as "no streams" forever.
+            stream_ids = ["stream"]
+        else:
+            # No registered config, no provider, no liveness signal
+            # ever — most commonly the edge-core bootstrap publisher
+            # in the gap before a real driver container starts.  Emit
+            # an empty ``streams`` map rather than a phantom "0.0 fps"
+            # row; the dashboard's ``StreamsSection`` then renders
+            # nothing instead of a misleading entry that flickers
+            # away when the driver takes over.  See CYB-2004 PR 2.
+            stream_ids = []
 
         def _build_stream_entry(stream_id: str) -> Dict[str, Any]:
             entry: Dict[str, Any] = {
                 "camera_id": stream_id,
                 "connection_state": "disconnected" if is_stale else "connected",
-                "ice_connection_state": "connected" if self.frame_count > 0 else "new",
+                # ``_has_alive_signal`` flips on the first
+                # ``update_frame_count`` or ``mark_alive`` call.  Using
+                # the flag rather than ``frame_count > 0`` lets audio
+                # publishers (which use ``mark_alive`` to avoid wire
+                # pollution — see :meth:`mark_alive`) still surface as
+                # ``connected`` once their first frame has been seen.
+                "ice_connection_state": (
+                    "connected" if self._has_alive_signal else "new"
+                ),
                 "frames_sent": self.frame_count,
                 "last_frame_ts": self.last_frame_time,
                 "fps": round(fps, 2),

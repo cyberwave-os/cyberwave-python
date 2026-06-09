@@ -32,7 +32,17 @@ import logging
 import warnings
 from typing import TYPE_CHECKING, Any
 
-from cyberwave.models.types import BoundingBox, Detection, PredictionResult
+from cyberwave.models.types import (
+    BoundingBox,
+    CustomResult,
+    Detection,
+    DetectionResult,
+    ImageResult,
+    JsonResult,
+    PredictionResult,
+    QueuedPredictionResult,
+    TextResult,
+)
 
 if TYPE_CHECKING:
     from cyberwave.models.playground import PlaygroundClient
@@ -93,7 +103,7 @@ class CloudLoadedModel:
 
     def predict(
         self,
-        input_data: Any,
+        input_data: Any | None = None,
         *,
         prompt: str | None = None,
         structured_task: str | None = None,
@@ -167,62 +177,120 @@ def _to_prediction_result(
     so *nothing* is lost — callers that need ``output_format``, ``raw``,
     or the async ``workload_uuid`` find them there.
 
-    The ``detections`` list is populated only when the cloud output maps
-    cleanly onto the detection contract:
+    Output mapping by ``output_format``:
 
-    * ``boxes``: each box becomes a :class:`Detection` with a
-      :class:`BoundingBox` — the obvious case where cloud and edge align.
-    * ``points``: wrapped as zero-size boxes at ``[y, x]`` so point-style
-      overlays (e.g. Molmo / Gemini Robotics-ER) still render with edge
-      visualization code. ``Detection.mask`` carries the original
-      ``[y, x]`` tuple for callers that want the raw point.
-    * ``masks``: boxes from the canonical ``box_2d`` field, plus the
-      base64 ``mask`` on ``Detection.mask`` — matches how YOLO-seg
-      returns mask payloads on edge.
-
-    For everything else (``text``, ``trajectory``, ``plan_steps``,
-    ``detections_3d``, ``grasps``, ``relations``) we leave ``detections``
-    empty and let the caller reach through ``metadata`` — forcing those
-    shapes into ``Detection`` would lose structure.
+    * ``text`` → :class:`TextResult`
+    * ``json`` → :class:`JsonResult`
+    * ``image`` → :class:`ImageResult` (``data_url`` / ``image_url`` / base64)
+    * ``boxes`` / ``points`` / ``masks`` → :class:`DetectionResult` (spatial)
+    * ``trajectory``, ``plan_steps``, ``detections_3d``, ``grasps``,
+      ``relations``, ``raw`` → :class:`CustomResult` preserving structure
     """
     from cyberwave.rest.models.ml_model_run_queued_schema import MLModelRunQueuedSchema as _Queued
 
-    detections: list[Detection] = []
+    metadata: dict[str, Any] = {
+        "mlmodel_run_result": result,
+        "model_slug": model_slug,
+    }
     is_queued = isinstance(result, _Queued)
 
     if is_queued:
-        output = None
-        output_format: str | None = None
-    else:
-        output = result.output  # type: ignore[union-attr]
-        output_format = result.output_format  # type: ignore[union-attr]
-
-    if isinstance(output, list):
-        fmt = (output_format or "").lower()
-        if fmt == "boxes":
-            detections = [_detection_from_box(item) for item in output if _is_dict(item)]
-            detections = [d for d in detections if d is not None]  # type: ignore[misc]
-        elif fmt == "points":
-            detections = [_detection_from_point(item) for item in output if _is_dict(item)]
-            detections = [d for d in detections if d is not None]  # type: ignore[misc]
-        elif fmt == "masks":
-            detections = [_detection_from_mask(item) for item in output if _is_dict(item)]
-            detections = [d for d in detections if d is not None]  # type: ignore[misc]
-
-    metadata: dict[str, Any] = {
-        "mlmodel_run_result": result,
-        "output_format": output_format,
-        "model_slug": model_slug,
-    }
-    if is_queued:
+        metadata["output_format"] = None
         metadata["workload_uuid"] = result.workload_uuid  # type: ignore[union-attr]
         metadata["poll_url"] = result.poll_url  # type: ignore[union-attr]
+        return QueuedPredictionResult(raw=None, metadata=metadata)
 
-    return PredictionResult(
-        detections=detections,
+    output = result.output  # type: ignore[union-attr]
+    output_format: str | None = result.output_format  # type: ignore[union-attr]
+    provider_raw: str | None = getattr(result, "raw", None)
+    metadata["output_format"] = output_format
+
+    return _model_output_for_cloud(
+        output_format=output_format,
+        output=output,
+        provider_raw=provider_raw,
         raw=output,
         metadata=metadata,
     )
+
+
+def _model_output_for_cloud(
+    *,
+    output_format: str | None,
+    output: Any,
+    provider_raw: str | None,
+    raw: Any,
+    metadata: dict[str, Any],
+) -> PredictionResult:
+    fmt = (output_format or "").lower()
+
+    if fmt == "text":
+        text = output if isinstance(output, str) else (provider_raw or "")
+        return TextResult(text=text, raw=raw, metadata=metadata)
+
+    if fmt == "json":
+        if isinstance(output, dict | list):
+            return JsonResult(data=output, raw=raw, metadata=metadata)
+        if isinstance(provider_raw, str) and provider_raw:
+            import json
+
+            try:
+                return JsonResult(
+                    data=json.loads(provider_raw),
+                    raw=raw,
+                    metadata=metadata,
+                )
+            except json.JSONDecodeError:
+                pass
+        return JsonResult(data=output, raw=raw, metadata=metadata)
+
+    if fmt == "image":
+        image = ImageResult.from_output(output)
+        image.raw = raw
+        image.metadata = metadata
+        return image
+
+    if isinstance(output, list):
+        detections = _detections_from_list(output, fmt)
+        if detections:
+            return DetectionResult(detections, raw=raw, metadata=metadata)
+
+    if fmt in _STRUCTURED_OBJECT_FORMATS and output is not None:
+        return CustomResult(data=output, label=fmt, raw=raw, metadata=metadata)
+
+    if fmt == "raw" and output is not None:
+        return CustomResult(data=output, label="raw", raw=raw, metadata=metadata)
+
+    if isinstance(output, str):
+        return TextResult(text=output, raw=raw, metadata=metadata)
+
+    if output is not None:
+        return CustomResult(data=output, label=fmt or "unknown", raw=raw, metadata=metadata)
+
+    return DetectionResult(detections=[], raw=raw, metadata=metadata)
+
+
+_STRUCTURED_OBJECT_FORMATS = frozenset(
+    {
+        "trajectory",
+        "plan_steps",
+        "detections_3d",
+        "grasps",
+        "relations",
+    }
+)
+
+
+def _detections_from_list(output: list[Any], fmt: str) -> list[Detection]:
+    if fmt == "boxes":
+        detections = [_detection_from_box(item) for item in output if _is_dict(item)]
+    elif fmt == "points":
+        detections = [_detection_from_point(item) for item in output if _is_dict(item)]
+    elif fmt == "masks":
+        detections = [_detection_from_mask(item) for item in output if _is_dict(item)]
+    else:
+        return []
+    return [d for d in detections if d is not None]  # type: ignore[misc]
 
 
 def _is_dict(item: Any) -> bool:

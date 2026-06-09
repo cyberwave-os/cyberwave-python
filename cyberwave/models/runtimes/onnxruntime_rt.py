@@ -17,10 +17,14 @@ Two YOLO-family output layouts are handled:
 
 2. End-to-end / one-to-one head (YOLO26 default export, YOLOv10):
    ``[batch, max_det, 6]`` where each row is
-   ``[x1, y1, x2, y2, conf, class_id]``.  Suppression is folded into
-   the model graph by consistent dual-assignment training, so the
-   runtime returns the boxes verbatim — no anchor decoding, no NMS.
-   :func:`_postprocess_e2e` handles this layout.
+   ``[x1, y1, x2, y2, conf, class_id]``.  Task variants append extra
+   per-detection columns (segmentation mask coefficients, pose
+   keypoints, OBB angle) but the leading six fields are unchanged.
+   Suppression is folded into the model graph by consistent dual-
+   assignment training, so the runtime returns the boxes verbatim —
+   no anchor decoding, no NMS.  :func:`_postprocess_e2e` handles these
+   layouts (mask/keypoint columns are ignored until a dedicated
+   decoder lands).
 """
 
 from __future__ import annotations
@@ -31,9 +35,19 @@ from typing import Any
 import numpy as np
 
 from cyberwave.models.runtimes.base import ModelRuntime
-from cyberwave.models.types import BoundingBox, Detection, PredictionResult
+from cyberwave.models.types import BoundingBox, Detection, DetectionResult, PredictionResult
 
 logger = logging.getLogger(__name__)
+
+# End-to-end exports cap at ``max_det`` (300 by default; may be raised at
+# export time).  Anchor one-to-many heads emit ~8400 rows at 640×640 —
+# use the row count to disambiguate seg e2e ``(max_det, 6+nm)`` from a
+# rare ``(8400, 6+nm)`` anchor layout with the same feat_dim.
+_E2E_MAX_DET_ROWS = 1200
+_E2E_DETECT_FEAT_DIM = 6
+_E2E_OBB_FEAT_DIM = 7  # base six + rotation angle
+_E2E_POSE_FEAT_DIM = 57  # base six + 17 keypoints × 3
+_E2E_MAX_MASK_COEFFS = 256
 
 
 class OnnxRuntime(ModelRuntime):
@@ -116,7 +130,7 @@ class OnnxRuntime(ModelRuntime):
             kp_dim=kp_dim,
             iou=iou,
         )
-        return PredictionResult(detections=detections, raw=outputs)
+        return DetectionResult(detections, raw=outputs)
 
 
 # ------------------------------------------------------------------
@@ -152,7 +166,7 @@ def _parse_kpt_shape(meta: Any) -> tuple[int, int]:
 
     Pose exports include ``kpt_shape`` (e.g. ``[17, 3]``) in
     ``custom_metadata_map``; ``dim`` is ``3`` for ``(x, y, visibility)``
-    and ``2`` for visibility-less variants. Returns ``(0, 0)`` for
+    and ``2`` for visibility-less variants.  Returns ``(0, 0)`` for
     non-pose models so callers can short-circuit on ``num_keypoints == 0``.
     """
     props = meta.custom_metadata_map if meta else {}
@@ -173,58 +187,83 @@ def _parse_kpt_shape(meta: Any) -> tuple[int, int]:
     return 0, 0
 
 
-def _is_e2e_layout(preds: np.ndarray, class_names: dict[int, str]) -> bool:
-    """Detect YOLO26 / YOLOv10 NMS-free output: ``(N, 6)``.
+def _e2e_class_count_mismatch(feat_dim: int, class_names: dict[int, str]) -> bool:
+    """True when ``feat_dim`` cannot be an anchor head for ``class_names``."""
+    return bool(class_names) and (4 + len(class_names)) != feat_dim
 
-    The end-to-end one-to-one head emits ``[x1, y1, x2, y2, conf, class_id]``
-    per detection, capped at ``max_det`` (300 in Ultralytics' default
-    export).  Layout collides with a YOLOv8 anchor output that happens
-    to have exactly two classes (also ``feat_dim == 6``); we
-    disambiguate using two signals in priority order:
 
-    1. **Class-count vs feat-dim mismatch** — an anchor detect output
-       has ``feat_dim == 4 + len(class_names)``, so for a ``(N, 6)``
-       array the only consistent anchor class count is 2.  When
-       ``names`` metadata is embedded and ``len(class_names) != 2``,
-       the shape can't possibly be an anchor output for that model —
-       it must be e2e.  Covers every seeded YOLO26 model in the
-       catalog (80-class COCO) and any 1-class retrained model that
-       embedded ``names``.
-
-    2. **Data check** (used only when ``class_names`` is empty or
-       exactly two entries — the cases where shape alone is
-       ambiguous).  Column 5 in e2e is a non-negative integer class id
-       and at least one row reports a class id > 1.  A YOLOv8 2-class
-       anchor output puts a continuous probability in column 5 —
-       fractional in practice, always in ``[0, 1]``.
-
-    Picks up YOLOv8 exports with embedded NMS (``end2end=True`` /
-    ``nms=True``) as a side effect — they produce the same ``(N, 6)``
-    shape and the e2e parser handles them correctly.
-
-    The single edge case we deliberately misclassify is a YOLO26 e2e
-    export with empty ``names`` metadata that only ever produces
-    class-0 or class-1 detections (e.g. a 2-class retrained model that
-    also failed to embed names).  The data check returns ``False`` for
-    that case to stay safe; users who hit it should re-export with
-    ``names`` set, which then flips on signal 1.
-    """
-    if preds.ndim != 2 or preds.shape[1] != 6:
-        return False
-    # Signal 1: shape disagrees with anchor's expected feat_dim for the
-    # advertised class count.  Anchor detect: feat_dim = 4 + |class_names|.
-    if class_names and (4 + len(class_names)) != 6:
-        return True
+def _e2e_col5_looks_like_class_ids(preds: np.ndarray) -> bool:
+    """Column 5 is an integer class id, not a 2-class anchor probability."""
     col5 = preds[:, 5]
     if col5.size == 0:
         return False
-    # Signal 2: column 5 is a non-negative integer class id, with at
-    # least one row above class 1 (so we can rule out a 2-class
-    # anchor's continuous probability output).
     is_int = bool(np.all(np.equal(np.mod(col5, 1.0), 0.0)))
     non_negative = bool(np.all(col5 >= 0))
     has_class_above_one = bool(np.any(col5 > 1.5))
     return is_int and non_negative and has_class_above_one
+
+
+def _is_e2e_layout(
+    preds: np.ndarray,
+    class_names: dict[int, str],
+    *,
+    num_keypoints: int = 0,
+    kp_dim: int = 3,
+) -> bool:
+    """Detect YOLO26 / YOLOv10 NMS-free output.
+
+    The end-to-end one-to-one head emits ``[x1, y1, x2, y2, conf, class_id]``
+    per detection, capped at ``max_det`` (300 in Ultralytics' default
+    export).  Task variants append trailing columns:
+
+    * **Segmentation** — ``(N, 6 + nm)`` (default ``nm=32`` → ``feat_dim=38``)
+    * **OBB** — ``(N, 7)``
+    * **Pose** — ``(N, 57)``
+
+    Plain detection stays at ``(N, 6)``.  That shape collides with a
+    YOLOv8 anchor output that happens to have exactly two classes; we
+    disambiguate using class-count mismatch and a column-5 data check.
+
+    Seg/OBB/pose e2e tensors are distinguished from anchor grids by row
+    count: e2e exports have ``N <= max_det`` while anchor heads emit
+    thousands of rows (≈8400 at 640×640).
+    """
+    if preds.ndim != 2:
+        return False
+
+    feat_dim = preds.shape[1]
+    n_rows = preds.shape[0]
+
+    # Anchor pose exports: ``feat_dim = 4 + num_classes + K*kp_dim``.
+    if num_keypoints > 0 and kp_dim > 0:
+        n_classes = len(class_names) if class_names else 1
+        anchor_pose_dim = 4 + max(1, n_classes) + num_keypoints * kp_dim
+        if feat_dim == anchor_pose_dim:
+            return False
+
+    # Seg / OBB / pose e2e — feat_dim > 6, bounded row count.
+    if feat_dim > _E2E_DETECT_FEAT_DIM:
+        if n_rows > _E2E_MAX_DET_ROWS:
+            return False
+        if feat_dim in (_E2E_OBB_FEAT_DIM, _E2E_POSE_FEAT_DIM):
+            return True
+        nm = feat_dim - _E2E_DETECT_FEAT_DIM
+        if not (1 <= nm <= _E2E_MAX_MASK_COEFFS):
+            return False
+        if _e2e_class_count_mismatch(feat_dim, class_names):
+            return True
+        if _e2e_col5_looks_like_class_ids(preds):
+            return True
+        # Bounded-row ``(N, 6+nm)`` is seg e2e (e.g. YOLOE-26 prompt-free
+        # warm-up on a zero frame has no class id > 1 yet).
+        return True
+
+    if feat_dim != _E2E_DETECT_FEAT_DIM:
+        return False
+
+    if _e2e_class_count_mismatch(feat_dim, class_names):
+        return True
+    return _e2e_col5_looks_like_class_ids(preds)
 
 
 def _postprocess_e2e(
@@ -237,13 +276,15 @@ def _postprocess_e2e(
     img_h: int,
     input_shape: list[Any],
 ) -> list[Detection]:
-    """Parse YOLO26 / YOLOv10 NMS-free output ``(N, 6)``.
+    """Parse YOLO26 / YOLOv10 NMS-free output.
 
-    Each row is ``[x1, y1, x2, y2, conf, class_id]`` in model-input
-    coordinates.  Suppression is already applied by the model's
-    one-to-one head, so the only work here is the confidence filter
-    (which also removes the zero-padded slots Ultralytics emits up to
-    ``max_det``), coordinate rescaling, and label lookup.
+    Each row begins with ``[x1, y1, x2, y2, conf, class_id]`` in model-input
+    coordinates.  Segmentation, pose, and OBB exports append task-specific
+    columns that this routine ignores (boxes and labels only for now).
+
+    Suppression is already applied by the model's one-to-one head, so the
+    only work here is the confidence filter (which also removes zero-padded
+    slots up to ``max_det``), coordinate rescaling, and label lookup.
     """
     if preds.size == 0:
         return []
@@ -428,11 +469,14 @@ def _postprocess(
        (Ultralytics' :py:meth:`YOLO.predict` default).  Pass
        ``iou=1.0`` to keep every surviving anchor.
 
-    2. End-to-end / one-to-one head — ``[1, max_det, 6]`` with rows
-       ``[x1, y1, x2, y2, conf, class_id]``, emitted by YOLO26's
-       default export and by YOLOv10.  The model itself folds NMS
-       into the graph, so this branch only filters by confidence,
-       rescales coordinates, and looks up labels.  ``iou`` is ignored
+    2. End-to-end / one-to-one head — ``[1, max_det, 6 (+ extras)]`` with
+       rows starting ``[x1, y1, x2, y2, conf, class_id]``, emitted by
+       YOLO26's default export and by YOLOv10.  Segmentation appends
+       ``nm`` mask coefficients (default 32 → ``feat_dim=38``); pose
+       and OBB append keypoints or an angle.  The model itself folds
+       NMS into the graph, so this branch only filters by confidence,
+       rescales coordinates, and looks up labels (mask/keypoint columns
+       are ignored until dedicated decoders land).  ``iou`` is ignored
        (no NMS to run).
 
     Pose models extend layout 1 with ``K * kp_dim`` keypoint values
@@ -440,9 +484,7 @@ def _postprocess(
     ``[1, 4 + num_classes + kp_dim*K, num_anchors]``. Standard
     exports use ``kp_dim=3`` (``x, y, visibility``); some variants
     drop the visibility column (``kp_dim=2``). Pass ``num_keypoints=K``
-    to enable parsing.  End-to-end pose / segmentation exports have a
-    different column layout that this routine does not yet decode —
-    re-export with ``end2end=False`` until that branch lands.
+    to enable parsing on the anchor path.
     """
     preds = raw_output[0]  # drop batch dim
 
@@ -456,11 +498,9 @@ def _postprocess(
     if preds.ndim != 2 or preds.shape[1] < 5:
         return []
 
-    # YOLO26 / YOLOv10 end-to-end head: ``(N, 6) = (x1, y1, x2, y2, conf, cls)``.
-    # Detect-only — pose / segmentation e2e exports have a different
-    # column layout, so we restrict to ``num_keypoints == 0`` and let
-    # pose models continue through the anchor-decoding path below.
-    if num_keypoints == 0 and _is_e2e_layout(preds, class_names):
+    # YOLO26 / YOLOv10 end-to-end head.  Leading six columns are always
+    # ``(x1, y1, x2, y2, conf, cls)``; seg/pose/OBB append extra fields.
+    if _is_e2e_layout(preds, class_names, num_keypoints=num_keypoints, kp_dim=kp_dim):
         return _postprocess_e2e(
             preds,
             confidence=confidence,

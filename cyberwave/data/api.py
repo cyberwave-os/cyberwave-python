@@ -181,15 +181,22 @@ class DataBus:
         *,
         policy: str = "latest",
         raw: bool = False,
+        twin_uuid: str | None = None,
     ) -> Subscription:
         """Subscribe to *channel*.
 
         *callback* receives decoded data (numpy array, dict, or bytes)
         unless *raw* is ``True``, in which case it receives the raw
         :class:`~.backend.Sample`.
+
+        Args:
+            twin_uuid: Optional override to subscribe to a *different* twin
+                than the one this bus is scoped to (e.g. for fan-in
+                pipelines).  When ``None`` the bus's own twin is used.
         """
+        effective_twin = twin_uuid if twin_uuid is not None else self._twin_uuid
         key = build_key(
-            self._twin_uuid,
+            effective_twin,
             channel,
             self._sensor_name,
             prefix=self._key_prefix,

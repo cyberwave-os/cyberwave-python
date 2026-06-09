@@ -30,7 +30,8 @@ class CatalogSeedOptionsResponseSchema(BaseModel):
     """ # noqa: E501
     controllers: List[CatalogSeedOptionSchema]
     mlmodels: List[CatalogSeedOptionSchema]
-    __properties: ClassVar[List[str]] = ["controllers", "mlmodels"]
+    workflow_templates: List[CatalogSeedOptionSchema]
+    __properties: ClassVar[List[str]] = ["controllers", "mlmodels", "workflow_templates"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -85,6 +86,13 @@ class CatalogSeedOptionsResponseSchema(BaseModel):
                 if _item_mlmodels:
                     _items.append(_item_mlmodels.to_dict())
             _dict['mlmodels'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in workflow_templates (list)
+        _items = []
+        if self.workflow_templates:
+            for _item_workflow_templates in self.workflow_templates:
+                if _item_workflow_templates:
+                    _items.append(_item_workflow_templates.to_dict())
+            _dict['workflow_templates'] = _items
         return _dict
 
     @classmethod
@@ -98,7 +106,8 @@ class CatalogSeedOptionsResponseSchema(BaseModel):
 
         _obj = cls.model_validate({
             "controllers": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["controllers"]] if obj.get("controllers") is not None else None,
-            "mlmodels": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["mlmodels"]] if obj.get("mlmodels") is not None else None
+            "mlmodels": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["mlmodels"]] if obj.get("mlmodels") is not None else None,
+            "workflow_templates": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["workflow_templates"]] if obj.get("workflow_templates") is not None else None
         })
         return _obj
 

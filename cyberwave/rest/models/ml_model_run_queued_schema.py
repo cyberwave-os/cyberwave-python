@@ -30,7 +30,8 @@ class MLModelRunQueuedSchema(BaseModel):
     status: Optional[StrictStr] = 'queued'
     workload_uuid: StrictStr
     poll_url: StrictStr
-    __properties: ClassVar[List[str]] = ["status", "workload_uuid", "poll_url"]
+    execution_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["status", "workload_uuid", "poll_url", "execution_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -71,6 +72,11 @@ class MLModelRunQueuedSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if execution_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_uuid is None and "execution_uuid" in self.model_fields_set:
+            _dict['execution_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -85,7 +91,8 @@ class MLModelRunQueuedSchema(BaseModel):
         _obj = cls.model_validate({
             "status": obj.get("status") if obj.get("status") is not None else 'queued',
             "workload_uuid": obj.get("workload_uuid"),
-            "poll_url": obj.get("poll_url")
+            "poll_url": obj.get("poll_url"),
+            "execution_uuid": obj.get("execution_uuid")
         })
         return _obj
 

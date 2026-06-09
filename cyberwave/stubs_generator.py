@@ -40,10 +40,10 @@ CAPABILITY_METHODS = {
         ),
     ],
     "can_actuate": [
-        ("joints", "JointController", "Controller for robot joints"),
+        ("joints", "JointsHandle", "Controller for robot joints"),
     ],
     "has_joints": [
-        ("joints", "JointController", "Controller for robot joints"),
+        ("joints", "JointsHandle", "Controller for robot joints"),
     ],
 }
 
@@ -315,7 +315,7 @@ Do not edit manually.
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .twin import Twin, JointController
+from .twin import Twin, JointTwin
 
 '''
 

@@ -8,6 +8,12 @@ from .schema import (
     ResourcesSchema,
     detect_dispatch_mode,
 )
+from .cw_driver import (
+    compile_cw_driver_file,
+    compile_driver_mqtt_bundle,
+    load_cw_driver_yml,
+    resolve_mqtt_bundle_from_driver_config,
+)
 from .validator import ManifestFieldError, ManifestValidationResult, validate_manifest
 
 __all__ = [
@@ -21,4 +27,8 @@ __all__ = [
     "validate_manifest",
     "ManifestValidationResult",
     "ManifestFieldError",
+    "compile_cw_driver_file",
+    "compile_driver_mqtt_bundle",
+    "load_cw_driver_yml",
+    "resolve_mqtt_bundle_from_driver_config",
 ]

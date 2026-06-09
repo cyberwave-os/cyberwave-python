@@ -5,11 +5,19 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as metadata_version
 
-STATIC_VERSION = "0.4.9"
+STATIC_VERSION = "0.5.0"
+
+try:
+    from ._build_version import BUILD_VERSION
+except ImportError:
+    BUILD_VERSION = None
 
 
 def get_version() -> str:
-    """Prefer installed package metadata with a source fallback."""
+    """Resolve build, installed, or source version in that order."""
+    if BUILD_VERSION:
+        return BUILD_VERSION
+
     try:
         return metadata_version("cyberwave")
     except PackageNotFoundError:

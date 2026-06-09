@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from cyberwave.models.runtimes.whisper_cpp_rt import WhisperCppRuntime
+from cyberwave.models.types import TextResult
 
 
 class TestWhisperCppRuntimeAvailability:
@@ -62,7 +63,8 @@ class TestWhisperCppRuntime:
         result = WhisperCppRuntime().predict(handle, str(audio_file), language="en")
 
         handle.transcribe.assert_called_once_with(str(audio_file), language="en")
-        assert result.detections == []
+        assert isinstance(result, TextResult)
+        assert result.text == "hello world"
         assert result.raw == {
             "text": "hello world",
             "segments": [
@@ -71,4 +73,4 @@ class TestWhisperCppRuntime:
             ],
             "language": "en",
         }
-        assert result.metadata["text"] == "hello world"
+        assert result.metadata["segments"][0]["text"] == "hello"

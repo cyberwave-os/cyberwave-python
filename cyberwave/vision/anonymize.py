@@ -59,6 +59,7 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 from cyberwave.models.types import Detection
+from cyberwave.vision._detection_view import as_detection
 
 # COCO-17 keypoint connectivity. Each tuple is a pair of keypoint indices
 # that should be connected with a line segment to form the skeleton.
@@ -276,7 +277,8 @@ def blank_persons(
     cv2 = _require_cv2()
     out = frame if inplace else frame.copy()
 
-    for det in detections:
+    for raw_det in detections:
+        det = as_detection(raw_det)
         if det.label not in active_labels:
             continue
         x1, y1, x2, y2 = _bbox_int(det, frame.shape)
@@ -495,7 +497,7 @@ def anonymize_frame(
         frozenset(labels) if labels is not None else frozenset({label})
     )
 
-    dets = list(detections)
+    dets = [as_detection(d) for d in detections]
     out = blank_persons(
         frame,
         dets,

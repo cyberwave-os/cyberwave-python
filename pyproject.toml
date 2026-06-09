@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.4.9"
+version = "0.5.0"
 description = "Python SDK for Cyberwave"
 authors = [
     "Simone Di Somma <sdisomma@cyberwave.com>",
@@ -43,15 +43,25 @@ ultralytics = { version = ">=8.0.0", optional = true }
 onnxruntime = { version = ">=1.16.0", optional = true }
 tflite-runtime = { version = ">=2.14.0", optional = true }
 pywhispercpp = { version = "1.4.1", optional = true }
-# Optional VAD (Voice Activity Detection) dependencies
+faster-whisper = { version = ">=1.1.1", optional = true }
+# Optional wake word detection dependency
+openwakeword = { version = ">=0.6.0", optional = true }
+# Optional audio workflow dependencies (Silero VAD, etc.)
 silero-vad = { version = ">=6.0", optional = true }
 torchaudio = { version = ">=2.0.0", optional = true }
+# Optional fuzzy text matching for workflow fuzzy_matcher nodes
+rapidfuzz = { version = ">=3.0.0", optional = true }
+# Optional 1D/2D barcode decoding for workflow barcode_reader nodes.
+# Apache-2.0; prebuilt wheels for manylinux x86_64 / aarch64 / musllinux /
+# macOS / Windows. Lightweight enough for Raspberry Pi (~few MB native + numpy).
+zxing-cpp = { version = "3.0.0", optional = true }
 
 [tool.poetry.extras]
 image = ["pillow"]
 schedule = ["croniter"]
 camera = ["aiortc", "av", "opencv-python"]
-microphone = ["aiortc", "av", "sounddevice", "pyudev", "silero-vad", "torchaudio"]
+microphone = ["aiortc", "av", "sounddevice", "pyudev"]
+speaker = ["aiortc", "av", "sounddevice", "pyudev"]
 realsense = ["aiortc", "av", "opencv-python", "pyrealsense2"]
 zenoh = ["eclipse-zenoh"]
 data = ["eclipse-zenoh"]
@@ -60,8 +70,54 @@ ml-onnx = ["onnxruntime"]
 ml-opencv = ["opencv-python"]
 ml-tflite = ["tflite-runtime"]
 ml-stt = ["pywhispercpp"]
-ml-vad = ["silero-vad", "torchaudio"]
-ml-all = ["ultralytics", "onnxruntime", "opencv-python", "tflite-runtime"]
+ml-stt-faster = ["faster-whisper"]
+ml-wakeword = ["openwakeword", "onnxruntime"]
+# Silero VAD only (Audio Assistant). Torch is pulled transitively by silero-vad;
+# do not add torchaudio here — it is unused by workflow codegen and bloats Pi images.
+ml-audio = ["silero-vad"]
+fuzzy-match = ["rapidfuzz"]
+# 1D/2D barcode decoding (workflow ``barcode_reader`` node). Permissively
+# licensed (Apache-2.0); wheels are prebuilt for Pi-class hardware so this
+# adds a few MB to the image without a system package or build toolchain.
+barcode = ["zxing-cpp"]
+# Hailo HEF support runs on the worker container; the ``hailo_platform`` wheel
+# ships out-of-band with HailoRT (the .deb installs it into the system
+# site-packages alongside the kernel-matched driver), so this extra is an
+# opt-in marker only — no PyPI wheel is resolved.
+ml-hailo = []
+# Vision / detection — unrelated to speech workflows.
+ml-all-vision = [
+    "ultralytics",
+    "onnxruntime",
+    "opencv-python",
+    "tflite-runtime",
+]
+# Speech / voice-assistant — every audio workflow + STT runtime dep (fat image / CI).
+ml-all-audio = [
+    "openwakeword",
+    "onnxruntime",
+    "pywhispercpp",
+    "faster-whisper",
+    "silero-vad",
+    "torchaudio",
+    "rapidfuzz",
+]
+# Union of ml-all-vision + ml-all-audio (all optional ML deps for workflow/catalog).
+# Includes torchaudio (declared optional dep; not in minimal ml-audio extra).
+# Per-model catalog entries still declare one minimal extra (ml-stt, ml-stt-faster, …).
+ml-all = [
+    "ultralytics",
+    "onnxruntime",
+    "opencv-python",
+    "tflite-runtime",
+    "openwakeword",
+    "pywhispercpp",
+    "faster-whisper",
+    "silero-vad",
+    "torchaudio",
+    "rapidfuzz",
+    "zxing-cpp",
+]
 onnx = ["onnxruntime"]
 tflite = ["tflite-runtime"]
 
@@ -71,6 +127,8 @@ pytest-cov = "^2.8.1"
 pytest-asyncio = "^0.23"
 mypy = "^1.5"
 types-python-dateutil = "^2.8.19.14"
+croniter = ">=6.2.2"
+pillow = ">=10.0.0"
 
 [tool.poetry.scripts]
 cyberwave-generate-stubs = "cyberwave.stubs_generator:main"
@@ -78,6 +136,9 @@ cyberwave-generate-stubs = "cyberwave.stubs_generator:main"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+    "hailo: requires a Hailo accelerator (/dev/hailo0) and hailo_platform; skipped by default on x86 CI",
+]
 
 [build-system]
 requires = ["poetry-core"]

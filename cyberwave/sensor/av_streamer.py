@@ -524,6 +524,14 @@ class MultimediaStreamer:
                 edge_id=self.twin_uuid,
                 stale_timeout=SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
                 interval=SDK_EDGE_HEALTH_INTERVAL_SECONDS,
+                # CYB-2005: surface the audio track's typed config on the
+                # wire so multimedia twins render ``48 kHz · stereo``
+                # from the heartbeat instead of falling back to the
+                # asset spec (which silently mis-classifies multi-sensor
+                # twins).  Video is left to a future ticket — the
+                # video track here is a generic ``BaseVideoTrack`` that
+                # does not implement ``get_stream_config`` yet.
+                stream_config_provider=self._collect_stream_configs,
             )
             self._health_check.start()
             self._last_frame_count = 0
@@ -533,6 +541,58 @@ class MultimediaStreamer:
             logger.debug("Multimedia health check started")
         except Exception as e:
             logger.warning("Failed to start multimedia health check: %s", e)
+
+    def _collect_stream_configs(self) -> dict[str, dict[str, Any]]:
+        """Build the per-stream ``stream_config`` dict.
+
+        Invoked on every heartbeat via the ``stream_config_provider``
+        wiring above.  Returns the audio track's
+        :meth:`BaseAudioTrack.get_stream_config` under the ``"audio"``
+        key — NOT the legacy ``"stream"`` key that audio-only
+        publishers use — so when the video side gets a
+        ``get_stream_config`` hook in a future ticket the wire shape
+        is already prepared for ``{"video": …, "audio": …}`` per the
+        CYB-2004 multi-stream design.  Stuffing audio into ``"stream"``
+        today would force a wire-breaking rename then.
+
+        Known limitation (shared liveness counters).  ``EdgeHealthCheck``
+        tracks ``frame_count`` / ``last_frame_time`` at the instance
+        level, and :meth:`_monitor_frame_count` above forwards the
+        *video* track's increments via ``update_frame_count``.  After
+        this rename, the wire entry ``streams["audio"].frames_sent``
+        therefore reflects video frames, not audio packets, while the
+        ``stream_config.kind`` says ``"audio"``.  This mismatch is not
+        new — pre-CYB-2005 the same wire data lived under the
+        ambiguous ``streams["stream"]`` key — but the rename surfaces
+        it.  The dashboard hides ``fps`` / ``frames_sent`` for audio
+        rows so users don't see the mismatch; raw MQTT subscribers do.
+        Proper fix is one ``EdgeHealthCheck`` per stream (see the
+        ``get_health_data`` docstring's "inadequate for drivers with
+        truly independent per-stream live metrics" note) — out of
+        scope for CYB-2005.
+
+        Empty when the audio track is gone (between reconnects) or
+        hasn't implemented the hook — keeps the wire on the legacy
+        single-``streams.stream`` shape rather than emitting a
+        half-built block.  This causes a transient one-heartbeat
+        key flap ("stream" → "audio") during reconnects, accepted
+        because ``MultimediaStreamer`` has no production drivers
+        today; revisit if/when it does.
+        """
+        result: dict[str, dict[str, Any]] = {}
+        track = self.audio_track
+        if track is not None:
+            try:
+                cfg = track.get_stream_config()
+            except Exception as exc:
+                logger.debug("Audio track get_stream_config raised: %s", exc)
+                cfg = None
+            if cfg is not None:
+                result["audio"] = cfg
+        # Video track is intentionally absent today: ``BaseVideoTrack``
+        # has no ``get_stream_config`` hook yet.  When it lands, slot
+        # the result in under ``result["video"]`` here.
+        return result
 
     def _stop_health_check(self) -> None:
         if self._health_monitor_task:

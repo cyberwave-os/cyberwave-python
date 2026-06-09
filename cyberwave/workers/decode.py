@@ -16,9 +16,9 @@ is set (e.g. ``640x480``), resizing numpy image frames before dispatch.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import json
 from typing import Any
 
 from cyberwave.data.backend import Sample

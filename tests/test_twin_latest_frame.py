@@ -7,6 +7,8 @@ from cyberwave.exceptions import CyberwaveAPIError, CyberwaveError
 from cyberwave.resources import TwinManager
 from cyberwave.twin import CameraTwin, Twin
 
+_CAMERA_CAPS = {"sensors": [{"id": "front_camera", "type": "rgb", "name": "front"}]}
+
 
 def _make_manager() -> tuple[TwinManager, MagicMock]:
     mock_api = MagicMock()
@@ -94,7 +96,10 @@ def test_twin_get_latest_frame_delegates_to_manager():
     twins_manager = MagicMock()
     twins_manager.get_latest_frame.return_value = b"frame"
     client = SimpleNamespace(twins=twins_manager)
-    twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+    twin = CameraTwin(
+        client,
+        SimpleNamespace(uuid="twin-uuid", name="Twin", capabilities=_CAMERA_CAPS),
+    )
 
     result = twin.get_latest_frame(sensor_id="front_camera")
 
@@ -110,7 +115,10 @@ def test_twin_get_latest_frame_wraps_errors():
     twins_manager = MagicMock()
     twins_manager.get_latest_frame.side_effect = RuntimeError("boom")
     client = SimpleNamespace(twins=twins_manager)
-    twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+    twin = CameraTwin(
+        client,
+        SimpleNamespace(uuid="twin-uuid", name="Twin", capabilities=_CAMERA_CAPS),
+    )
 
     with pytest.raises(CyberwaveError, match="Failed to get latest frame"):
         twin.get_latest_frame()
@@ -123,14 +131,17 @@ def test_twin_get_latest_frame_uses_client_affect_source_type():
         twins=twins_manager,
         config=SimpleNamespace(source_type="sim"),
     )
-    twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+    twin = CameraTwin(
+        client,
+        SimpleNamespace(uuid="twin-uuid", name="Twin", capabilities=_CAMERA_CAPS),
+    )
 
     result = twin.get_latest_frame()
 
     assert result == b"frame"
     twins_manager.get_latest_frame.assert_called_once_with(
         "twin-uuid",
-        sensor_id=None,
+        sensor_id="front_camera",
         mock=False,
         source_type="sim",
     )
@@ -144,30 +155,36 @@ def test_twin_get_latest_frame_maps_edge_source_type_to_tele():
         twins=twins_manager,
         config=SimpleNamespace(source_type="edge"),
     )
-    twin = Twin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+    twin = CameraTwin(
+        client,
+        SimpleNamespace(uuid="twin-uuid", name="Twin", capabilities=_CAMERA_CAPS),
+    )
 
     twin.get_latest_frame()
 
     twins_manager.get_latest_frame.assert_called_once_with(
         "twin-uuid",
-        sensor_id=None,
+        sensor_id="front_camera",
         mock=False,
         source_type="tele",
     )
 
 
-def test_camera_twin_capture_frame_inherits_unified_method():
-    """CameraTwin no longer overrides capture_frame; it inherits Twin.capture_frame."""
+def test_camera_twin_capture_frame_uses_local_capture_not_rest():
+    """capture_frame delegates to camera.capture (local path), not latest-frame REST."""
+    import numpy as np
+    from unittest.mock import patch
+
     twins_manager = MagicMock()
-    twins_manager.get_latest_frame.return_value = b"jpeg"
     client = SimpleNamespace(twins=twins_manager)
-    camera_twin = CameraTwin(client, SimpleNamespace(uuid="cam-twin", name="CamTwin"))
-
-    result = camera_twin.capture_frame("bytes", sensor_id="front")
-
-    assert result == b"jpeg"
-    twins_manager.get_latest_frame.assert_called_once_with(
-        "cam-twin",
-        sensor_id="front",
-        mock=False,
+    camera_twin = CameraTwin(
+        client,
+        SimpleNamespace(uuid="cam-twin", name="CamTwin", capabilities=_CAMERA_CAPS),
     )
+    fake = np.zeros((8, 8, 3), dtype=np.uint8)
+
+    with patch.object(camera_twin.camera, "_capture_local_array", return_value=fake):
+        result = camera_twin.capture_frame("numpy", sensor_id="front")
+
+    assert result.shape == (8, 8, 3)
+    twins_manager.get_latest_frame.assert_not_called()

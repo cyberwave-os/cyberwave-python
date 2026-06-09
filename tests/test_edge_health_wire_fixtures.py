@@ -1,11 +1,20 @@
 """Cross-language wire-format contract for ``edge_health``.
 
 Asserts that the Python SDK's ``EdgeHealthCheck`` produces a payload
-whose structural shape matches the shared JSON fixture under
-``cyberwave-sdks/test-fixtures/edge_health/``.  The same fixtures will
-be loaded by the C++ SDK's wire-format test in CYB-2004 PR 2, giving
-us a deliberately-blunt cross-language guarantee that the two
-publishers cannot drift on field names, casing, or types.
+whose structural shape matches the JSON fixtures under
+``tests/fixtures/edge_health/``.  The C++ SDK's wire-format test in
+CYB-2004 PR 2 reads fixtures with identical content from its own
+``tests/`` (via the canonical monorepo path while in-tree, vendored
+copy when published), giving us a deliberately-blunt cross-language
+guarantee that the two publishers cannot drift on field names,
+casing, or types.
+
+The fixtures live inside this SDK's ``tests/`` rather than at a
+shared monorepo root so they ship with the package when it is
+published to ``cyberwave-os/cyberwave-python``.  Reaching above
+``cyberwave-python/`` for any asset breaks the standalone publish
+(see the run that exposed it: cyberwave-os/cyberwave-python actions
+run 26058310626).
 
 The fixture is intentionally minimal: it omits all timing /
 publisher-runtime fields (``timestamp``, ``uptime_seconds``,
@@ -26,17 +35,11 @@ import pytest
 from cyberwave.edge.health import EdgeHealthCheck
 
 
-# The shared fixtures live one level above the Python SDK so the C++
-# SDK can reference the same files without either tree owning them
-# (`cyberwave-sdks/test-fixtures/edge_health/`). This path only
-# resolves in the monorepo — when the SDK is cloned standalone
-# (e.g. the open-source `cyberwave-os/cyberwave-python` mirror) the
-# directory does not exist and the test gracefully skips. See the
-# "TODO — cross-language wire-format fixtures" entry in
-# `cyberwave-sdks/README.md` for the long-term plan to ship them with
-# the OSS mirrors.
-_SDKS_ROOT = Path(__file__).resolve().parents[2]
-_FIXTURES_DIR = _SDKS_ROOT / "test-fixtures" / "edge_health"
+# Fixtures live in-tree so they ship with the SDK when it is mirrored
+# to the standalone open-source repo.  A missing file here is a real
+# failure, not a "skip silently in OSS CI" situation — that defeats
+# the entire point of pinning the wire format.
+_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "edge_health"
 
 
 # Fields that vary with publisher runtime state and therefore cannot be
@@ -160,13 +163,6 @@ def test_python_publisher_matches_shared_fixture(
     heartbeat.
     """
     fixture_path = _FIXTURES_DIR / fixture_name
-    if not fixture_path.is_file():
-        pytest.skip(
-            f"edge_health wire fixture {fixture_name!r} not present at "
-            f"{fixture_path} — only ships with the monorepo, see "
-            f"cyberwave-sdks/README.md (TODO: cross-language wire-format "
-            f"fixtures) for the open-source-mirror plan."
-        )
     fixture_payload = json.loads(fixture_path.read_text())
 
     checker = EdgeHealthCheck(

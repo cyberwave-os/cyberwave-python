@@ -29,11 +29,12 @@ class MLModelRunResultSchema(BaseModel):
     Synchronous run result returned with HTTP 200.
     """ # noqa: E501
     status: Optional[StrictStr] = 'completed'
+    execution_uuid: Optional[StrictStr] = None
     output_format: StrictStr
     output: Optional[Any]
     raw: Optional[StrictStr] = None
     actions: Optional[MotionEpisodeSchema] = None
-    __properties: ClassVar[List[str]] = ["status", "output_format", "output", "raw", "actions"]
+    __properties: ClassVar[List[str]] = ["status", "execution_uuid", "output_format", "output", "raw", "actions"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,6 +78,11 @@ class MLModelRunResultSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of actions
         if self.actions:
             _dict['actions'] = self.actions.to_dict()
+        # set to None if execution_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_uuid is None and "execution_uuid" in self.model_fields_set:
+            _dict['execution_uuid'] = None
+
         # set to None if output (nullable) is None
         # and model_fields_set contains the field
         if self.output is None and "output" in self.model_fields_set:
@@ -105,6 +111,7 @@ class MLModelRunResultSchema(BaseModel):
 
         _obj = cls.model_validate({
             "status": obj.get("status") if obj.get("status") is not None else 'completed',
+            "execution_uuid": obj.get("execution_uuid"),
             "output_format": obj.get("output_format"),
             "output": obj.get("output"),
             "raw": obj.get("raw"),

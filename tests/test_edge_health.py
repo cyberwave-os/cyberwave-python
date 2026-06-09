@@ -221,13 +221,19 @@ class TestRegisterStreamConfig:
     lidar wiring) reads this contract.
     """
 
-    def test_payload_without_register_has_no_stream_config(self) -> None:
-        """Default shape is unchanged when no driver registered a config.
+    def test_payload_without_register_and_no_frames_has_empty_streams(self) -> None:
+        """Bootstrap-style publishers emit no phantom stream entry.
 
-        Protects the legacy wire format: a publisher that does not call
-        ``register_stream_config`` must produce exactly the pre-CYB-2004
-        payload so old consumers do not see new fields appear without
-        explanation.
+        A publisher that has never called ``register_stream_config``,
+        has no ``stream_config_provider``, and has never seen a frame
+        (``frame_count == 0``) is almost always the edge-core bootstrap
+        publisher running in the gap before a driver container starts.
+        Before CYB-2004 PR 2 we forced a single ``streams["stream"]``
+        entry on the wire even in that case, which rendered as a
+        misleading "0.0 fps" row in the dashboard's StreamsSection
+        until the real driver took over.  The fix is to emit an empty
+        ``streams`` map so the section renders nothing, and the legacy
+        ``camera_config`` slot stays ``None``.
         """
         mqtt = _FakeMQTT()
         checker = EdgeHealthCheck(
@@ -239,11 +245,46 @@ class TestRegisterStreamConfig:
         _drain_one_publish_cycle(checker)
 
         _, payload = mqtt.calls[0]
-        stream_entry = payload["streams"]["stream"]
-        assert "stream_config" not in stream_entry
+        assert payload["streams"] == {}
+        assert payload["stream_count"] == 0
+        assert payload["healthy_streams"] == 0
         # Legacy slot stays ``None`` when no camera-kind config is
-        # registered — this is the historical wire shape we promise to
-        # preserve for one release.
+        # registered — preserved for out-of-tree consumers that read
+        # the deprecated top-level field.
+        assert payload["camera_config"] is None
+
+    def test_payload_without_register_keeps_single_stream_when_frames_flow(
+        self,
+    ) -> None:
+        """Legacy drivers that drive ``update_frame_count`` keep their entry.
+
+        ``camera_sim`` and the pre-CYB-2004 ``av_streamer`` path don't
+        call ``register_stream_config``; they call ``update_frame_count``
+        from the streamer's render loop.  Those drivers must still
+        surface in the dashboard as soon as the first frame flows, so
+        the historical single-stream wire shape (``streams["stream"]``
+        with live fps + staleness) is preserved when ``frame_count > 0``.
+        Only the truly idle case (no register, no frames) drops to an
+        empty ``streams`` map.
+        """
+        mqtt = _FakeMQTT()
+        checker = EdgeHealthCheck(
+            mqtt_client=mqtt,
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        checker.update_frame_count()
+
+        _drain_one_publish_cycle(checker)
+
+        _, payload = mqtt.calls[0]
+        assert list(payload["streams"]) == ["stream"]
+        assert payload["stream_count"] == 1
+        stream_entry = payload["streams"]["stream"]
+        # No ``stream_config`` block because no driver registered one —
+        # only the live counters are present.
+        assert "stream_config" not in stream_entry
+        assert stream_entry["frames_sent"] == 1
         assert payload["camera_config"] is None
 
     def test_camera_kind_stream_config_inlined_into_streams_entry(self) -> None:
@@ -442,7 +483,16 @@ class TestRegisterStreamConfig:
         assert cfg["fps"] == 15
 
     def test_unregister_drops_stream_config(self) -> None:
-        """Symmetric API: drivers can retract a config when tearing down."""
+        """Symmetric API: drivers can retract a config when tearing down.
+
+        After unregister, with no frames seen and no other configs, the
+        publisher falls back to the same empty-streams shape as the
+        bootstrap publisher (CYB-2004 PR 2): an entry that was only
+        announced via ``register_stream_config`` disappears entirely
+        rather than leaving a stub row behind.  Drivers that called
+        ``update_frame_count`` keep their legacy ``streams["stream"]``
+        entry — see ``test_unregister_with_frames_keeps_legacy_entry``.
+        """
         mqtt = _FakeMQTT()
         checker = EdgeHealthCheck(
             mqtt_client=mqtt,
@@ -464,6 +514,42 @@ class TestRegisterStreamConfig:
         _drain_one_publish_cycle(checker)
 
         _, payload = mqtt.calls[0]
+        assert payload["streams"] == {}
+        assert payload["camera_config"] is None
+
+    def test_unregister_with_frames_keeps_legacy_entry(self) -> None:
+        """Legacy compat: drivers that drive ``update_frame_count`` keep their row after unregister.
+
+        A driver that registered a config, kept ticking ``frame_count``,
+        and then unregistered must still surface its live counters under
+        the legacy single-stream entry — that's the only way the
+        dashboard can tell whether the unregistered stream is still
+        flowing or has fully torn down.  The ``stream_config`` block
+        is gone, but the entry remains.
+        """
+        mqtt = _FakeMQTT()
+        checker = EdgeHealthCheck(
+            mqtt_client=mqtt,
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        checker.register_stream_config(
+            "stream",
+            {
+                "kind": "camera",
+                "source": "/dev/video0",
+                "resolution": "640x480",
+                "fps": 30,
+                "camera_type": "cv2",
+            },
+        )
+        checker.update_frame_count()
+        checker.unregister_stream_config("stream")
+
+        _drain_one_publish_cycle(checker)
+
+        _, payload = mqtt.calls[0]
+        assert list(payload["streams"]) == ["stream"]
         assert "stream_config" not in payload["streams"]["stream"]
         assert payload["camera_config"] is None
 
@@ -673,6 +759,154 @@ class TestRequiredFieldValidation:
             )
         assert "source" in str(exc.value)
 
+    def test_audio_accepts_missing_source(self) -> None:
+        """``kind: "audio"`` deliberately does not require ``source``.
+
+        Across the SDK ``source`` is a device path / URL / ROS topic
+        (camera publishes ``/dev/video0``, lidar publishes ``/point_cloud2``).
+        A WebRTC microphone has no equivalent: publishing the host
+        ALSA / CoreAudio device path is a leak risk, and publishing
+        the codec instead would overload the field's cross-publisher
+        semantics.  This test pins the validator's allowance — if a
+        future change tightens ``audio``'s required set to include
+        ``source``, ``MicrophoneAudioStreamer`` would fail to register
+        on startup and every paired microphone twin in the field
+        would silently stop publishing heartbeats.
+        """
+        checker = EdgeHealthCheck(
+            mqtt_client=_FakeMQTT(),
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        # Should NOT raise.
+        checker.register_stream_config(
+            "stream",
+            {"kind": "audio", "sample_rate_hz": 48000, "channels": 2},
+        )
+
+    def test_audio_still_requires_sample_rate_and_channels(self) -> None:
+        """Relaxing ``source`` must not weaken the other audio requirements.
+
+        Audio rows render ``48 kHz · stereo`` from these two fields;
+        without them the row collapses to an empty meta string.  The
+        validator must keep enforcing them at the driver boundary so
+        the dashboard never has to defensively render audio-without-rate.
+        """
+        checker = EdgeHealthCheck(
+            mqtt_client=_FakeMQTT(),
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        with pytest.raises(ValueError, match="sample_rate_hz"):
+            checker.register_stream_config(
+                "stream",
+                {"kind": "audio", "channels": 2},
+            )
+        with pytest.raises(ValueError, match="channels"):
+            checker.register_stream_config(
+                "stream",
+                {"kind": "audio", "sample_rate_hz": 48000},
+            )
+
+
+class TestMarkAlive:
+    """``mark_alive()`` — liveness without ``fps`` / ``frames_sent`` pollution.
+
+    Companion path to ``update_frame_count()`` for kinds whose
+    packetisation rate is not the right wire metric (audio's 50 Hz
+    Opus packets, future IMU's 100/200/1000 Hz samples).  Pins the
+    behavioural difference: same liveness signal, no counter
+    inflation.
+    """
+
+    def test_mark_alive_does_not_increment_frame_count(self) -> None:
+        """``frame_count`` stays at zero so ``frames_sent`` / ``fps`` stay honest.
+
+        This is the whole reason ``mark_alive`` exists.  If a future
+        refactor merges it back into ``update_frame_count`` the audio
+        wire shape will silently regress to publishing
+        ``frames_sent: <packet count>`` and ``fps: 50.0`` — both
+        terminology-correct but operationally misleading.  Failing
+        this test catches that.
+        """
+        checker = EdgeHealthCheck(
+            mqtt_client=_FakeMQTT(),
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        for _ in range(100):
+            checker.mark_alive()
+        assert checker.frame_count == 0
+
+    def test_mark_alive_updates_last_frame_time(self) -> None:
+        """The staleness clock advances so ``is_stale`` clears as expected."""
+        checker = EdgeHealthCheck(
+            mqtt_client=_FakeMQTT(),
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        before = checker.last_frame_time
+        # ``time.time()`` has at least µs resolution on the platforms
+        # we ship to; one call is enough for monotonic ordering.
+        checker.mark_alive()
+        assert checker.last_frame_time >= before
+        assert checker.last_frame_time > 0
+
+    def test_mark_alive_flips_ice_connection_state_to_connected(self) -> None:
+        """Without this the dashboard would render audio twins as 'new' forever.
+
+        Before the CYB-2005 self-review fix ``ice_connection_state``
+        was derived from ``frame_count > 0``.  Since ``mark_alive``
+        doesn't bump ``frame_count``, that heuristic would never
+        trip for audio publishers and the row would render with the
+        "not yet handshaken" UI state regardless of how long data
+        had been flowing.  Pin the new ``_has_alive_signal``-based
+        derivation so the row renders ``connected`` after the first
+        ``mark_alive``.
+
+        The "before" snapshot follows CYB-2004 PR 2's bootstrap-phantom
+        contract: with no registered config and no liveness signal,
+        ``streams`` is empty rather than carrying a single
+        ``streams["stream"]`` row in the ``"new"`` state — the
+        dashboard reads that emptiness as "publisher exists but has
+        nothing to report yet", which is the same UX as the old
+        ``"new"`` row without the misleading "0.0 fps" line.
+        """
+        checker = EdgeHealthCheck(
+            mqtt_client=_FakeMQTT(),
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        before = checker.get_health_data()
+        assert before["streams"] == {}
+        assert before["stream_count"] == 0
+
+        checker.mark_alive()
+        after = checker.get_health_data()
+        assert after["streams"]["stream"]["ice_connection_state"] == "connected"
+        assert after["streams"]["stream"]["frames_sent"] == 0
+        assert after["streams"]["stream"]["fps"] == 0.0
+
+    def test_update_frame_count_also_sets_alive_signal(self) -> None:
+        """``update_frame_count`` callers don't have to dual-call ``mark_alive``.
+
+        The video publishers (``CV2CameraStreamer``,
+        ``BaseVideoStreamer``) use ``update_frame_count`` per
+        emitted frame.  They must continue to flip
+        ``ice_connection_state`` to ``connected`` on first call —
+        otherwise we'd silently break video staleness reporting
+        while landing audio's coarsening.
+        """
+        checker = EdgeHealthCheck(
+            mqtt_client=_FakeMQTT(),
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+        )
+        checker.update_frame_count()
+        snapshot = checker.get_health_data()
+        assert snapshot["streams"]["stream"]["ice_connection_state"] == "connected"
+        assert snapshot["streams"]["stream"]["frames_sent"] == 1
+
 
 class TestMultiStreamEmission:
     """Per-stream emission: one ``streams[…]`` entry per registered id."""
@@ -719,13 +953,17 @@ class TestMultiStreamEmission:
         assert depth["resolution"] == "640x480"
         assert depth["camera_type"] == "realsense"
 
-    def test_legacy_no_registration_path_preserved(self) -> None:
-        """Drivers that don't register get the same single ``"stream"`` shape they always had.
+    def test_legacy_drivers_get_stream_entry_once_frames_flow(self) -> None:
+        """Untouched legacy publishers keep the single ``"stream"`` shape — once frames flow.
 
-        Back-compat: a streamer that has never been touched by CYB-2004
-        (e.g. a third-party SDK fork still on the old SDK version) must
-        produce the historical wire shape so the frontend doesn't have
-        to special-case missing streams.
+        Back-compat for camera_sim / pre-CYB-2004 av_streamer / older
+        third-party SDK forks: as soon as the first frame ticks
+        ``frame_count``, the publisher emits the historical single-stream
+        wire shape so the frontend doesn't have to special-case missing
+        streams.  Before the first frame those publishers look just like
+        the bootstrap publisher (no register, no frames) and emit an
+        empty ``streams`` map — see
+        ``TestRegisterStreamConfig.test_payload_without_register_and_no_frames_has_empty_streams``.
         """
         mqtt = _FakeMQTT()
         checker = EdgeHealthCheck(
@@ -733,6 +971,7 @@ class TestMultiStreamEmission:
             twin_uuids=["twin-a"],
             edge_id="edge-1",
         )
+        checker.update_frame_count()
 
         _drain_one_publish_cycle(checker)
 
@@ -855,10 +1094,13 @@ class TestStreamConfigProvider:
         _, payload = mqtt.calls[0]
         assert payload["type"] == "edge_health"
         assert "streams" in payload
-        # Fall-through preserves the legacy single-stream shape so the
-        # dashboard keeps rendering a row even when the provider is
-        # broken — better a missing config block than no row at all.
-        assert list(payload["streams"]) == ["stream"]
+        # Fall-through path: no static registration, provider raised,
+        # no frames seen → empty ``streams`` map (same shape as the
+        # bootstrap publisher).  The heartbeat itself still flows so
+        # the dashboard knows the edge is alive; it just doesn't
+        # render a misleading phantom row for a stream that isn't
+        # actually being published.  See CYB-2004 PR 2.
+        assert payload["streams"] == {}
 
     def test_provider_invalid_kind_payload_falls_back_to_registered(self) -> None:
         """A provider that emits an invalid kind-specific block is ignored for that stream.

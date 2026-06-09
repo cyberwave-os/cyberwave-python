@@ -2,7 +2,15 @@
 
 import pytest
 
-from cyberwave.models.types import BoundingBox, Detection, PredictionResult
+from cyberwave.models.types import (
+    BoundingBox,
+    ClassificationCandidate,
+    ClassificationResult,
+    Detection,
+    DetectionResult,
+    PredictionResult,
+    TextResult,
+)
 
 
 # ── BoundingBox ───────────────────────────────────────────────────
@@ -220,11 +228,34 @@ class TestPredictionResult:
         result = PredictionResult(metadata={"model": "yolov8n"})
         assert result.metadata["model"] == "yolov8n"
 
-    def test_detections_default_empty(self) -> None:
-        a = PredictionResult()
-        b = PredictionResult()
-        a.detections.append(self._make_det())
-        assert len(b.detections) == 0
+    def test_text_result_has_no_detections_attribute(self) -> None:
+        assert not hasattr(TextResult(text="hi"), "detections")
+
+    def test_empty_factory_returns_detection_result(self) -> None:
+        result = PredictionResult()
+        assert isinstance(result, DetectionResult)
+        assert result.detections == []
+
+    def test_legacy_factory_output(self) -> None:
+        inner = DetectionResult(
+            detections=[self._make_det("cup")],
+            raw={"n": 1},
+        )
+        wrapped = PredictionResult(output=inner, metadata={"source": "test"})
+        assert wrapped is inner
+        assert len(wrapped.detections) == 1
+        assert wrapped.metadata["source"] == "test"
+
+    def test_classification_result(self) -> None:
+        result = ClassificationResult(
+            top=[ClassificationCandidate("cat", 0.9, 0)],
+            raw="raw",
+        )
+        assert isinstance(result, ClassificationResult)
+        assert result.top1 is not None
+        assert result.top1.label == "cat"
+        assert result.raw == "raw"
+        assert not hasattr(result, "detections")
 
     def test_describe_detections_lines_empty(self) -> None:
         assert PredictionResult().describe_detections_lines() == ["(no detections)"]

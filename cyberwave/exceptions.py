@@ -307,3 +307,11 @@ class CyberwaveMQTTError(CyberwaveError):
     This includes connection failures, publishing errors, and subscription issues.
     """
     pass
+
+
+class TwinStateTimeoutError(CyberwaveMQTTError):
+    """Raised when no MQTT inbound message arrives within the timeout."""
+
+
+class TwinStateUnavailableError(CyberwaveMQTTError):
+    """Raised when MQTT is required for state read but cannot connect."""
