@@ -8,7 +8,7 @@
 
 <p align="center">
   <b>Making the physical world programmable.</b><br/>
-  Connect, control, and simulate any robot — the same code runs in simulation and on real hardware.
+  Connect, control, and simulate any robot; the same code runs in simulation and on real hardware.
 </p>
 
 <p align="center">
