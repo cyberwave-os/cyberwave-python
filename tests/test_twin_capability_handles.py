@@ -132,8 +132,8 @@ def test_joints_index_access_uses_list_order() -> None:
         client,
         SimpleNamespace(uuid="arm", name="Arm", asset_uuid="asset-1"),
     )
-    with patch(
-        "cyberwave.twin.capabilities.joints.controllable_joint_names",
+    with patch_twin(
+        "capabilities.joints.controllable_joint_names",
         return_value=["alpha", "beta"],
     ):
         assert twin.joints.list() == ["alpha", "beta"]
