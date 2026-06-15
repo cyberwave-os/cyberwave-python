@@ -91,6 +91,29 @@ The same script targets real hardware by switching `cw.affect("live")`, no other
 - **Simulation vs. live** — `cw.affect("simulation")` and `cw.affect("live")` switch where commands and state go. The same code drives both.
 - **Edge & cloud** — stream camera/sensor data and run AI models on the edge or in the cloud, without managing the infrastructure in between.
 
+## Demos
+
+Watch the SDK in action — click a thumbnail to play the tutorial on YouTube.
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="https://youtu.be/kUxSxCMCQgc">
+        <img src="https://img.youtube.com/vi/kUxSxCMCQgc/hqdefault.jpg" alt="Build a natural language voice agent on SO101" width="100%" />
+      </a>
+      <br/>
+      <b><a href="https://youtu.be/kUxSxCMCQgc">Build a natural language voice agent on SO101</a></b>
+    </td>
+    <td width="50%">
+      <a href="https://youtu.be/ITz9zMf0ObA">
+        <img src="https://img.youtube.com/vi/ITz9zMf0ObA/hqdefault.jpg" alt="Controlling a DJI Mini 4 Pro with the Cyberwave Python SDK" width="100%" />
+      </a>
+      <br/>
+      <b><a href="https://youtu.be/ITz9zMf0ObA">Controlling a DJI Mini 4 Pro with the Cyberwave Python SDK</a></b>
+    </td>
+  </tr>
+</table>
+
 ## Examples
 
 Runnable scripts live in [examples/](examples) and see the [examples index](examples/README.md) for the full list.
