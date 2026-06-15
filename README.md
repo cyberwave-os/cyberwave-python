@@ -93,7 +93,7 @@ The same script targets real hardware by switching `cw.affect("live")`, no other
 
 ## Demos
 
-Watch the SDK in action — click a thumbnail to play the tutorial on YouTube.
+Watch the SDK in action with our demos.
 
 <table>
   <tr>
