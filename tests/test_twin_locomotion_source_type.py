@@ -4,8 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.twin_patch import patch_twin
-
 from cyberwave.twin import LocomoteTwin
 
 
@@ -47,7 +45,7 @@ def test_move_forward_normalizes_legacy_sim_source_type() -> None:
     twin, mqtt_client = _build_twin(source_type="tele")
 
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch_twin("transport.time.sleep"):
+        with patch("cyberwave.twin.transport.time.sleep"):
             twin.move_forward(1.0, duration=0.1, rate_hz=10, source_type="sim")
 
     assert mqtt_client.publish.call_count >= 1
@@ -60,7 +58,7 @@ def test_move_forward_uses_runtime_mode_control_source_type() -> None:
     twin, mqtt_client = _build_twin(runtime_mode="live", source_type="edge")
 
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch_twin("transport.time.sleep"):
+        with patch("cyberwave.twin.transport.time.sleep"):
             twin.move_forward(1.0, duration=0.1, rate_hz=10)
 
     assert mqtt_client.publish.call_count >= 1
@@ -93,7 +91,7 @@ def test_joint_set_defaults_sim_config_source_type_to_sim_tele() -> None:
     twin = JointTwin(
         client, SimpleNamespace(uuid="arm-1", name="Arm", asset_uuid="asset-1")
     )
-    with patch_twin("capabilities.joints.controllable_joint_names", return_value=["j1"]):
+    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["j1"]):
         with patch.object(twin, "_prepare_outbound_command"):
             twin.joints.set({"j1": 1.0})
     assert twin._outbound_log[-1].payload["source_type"] == "sim_tele"
@@ -113,7 +111,7 @@ def test_locomotion_methods_use_simulation_control_source_type(
     twin, mqtt_client = _build_twin(runtime_mode="simulation", source_type="sim")
 
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch_twin("transport.time.sleep"):
+        with patch("cyberwave.twin.transport.time.sleep"):
             getattr(twin, method_name)(*args, duration=0.1, rate_hz=10)
 
     assert mqtt_client.publish.call_count >= 1
@@ -126,7 +124,7 @@ def test_move_forward_burst_then_stop() -> None:
     twin, mqtt_client = _build_twin(runtime_mode="live", source_type="edge")
 
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch_twin("transport.time.sleep"):
+        with patch("cyberwave.twin.transport.time.sleep"):
             twin.locomotion.move_forward(0.3, duration=0.2, rate_hz=10)
 
     commands = [entry.command for entry in twin._outbound_log]
@@ -166,7 +164,7 @@ def test_joint_set_uses_runtime_mode_control_source_type() -> None:
     twin = JointTwin(
         client, SimpleNamespace(uuid="twin-uuid", name="Arm", asset_uuid="asset-1")
     )
-    with patch_twin("capabilities.joints.controllable_joint_names", return_value=["joint_1"]):
+    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["joint_1"]):
         with patch.object(twin, "_prepare_outbound_command"):
             twin.joints.set("joint_1", 90.0)
     mqtt_client.update_joint_state.assert_not_called()

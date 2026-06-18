@@ -6,8 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.twin_patch import patch_twin
-
 from cyberwave.exceptions import CyberwaveError
 from cyberwave.managers.policies import PolicyManager
 from cyberwave.twin import JointTwin, LocomoteTwin, Twin
@@ -294,7 +292,7 @@ def test_locomotion_ensure_attached_before_mqtt_publish() -> None:
     twin, mqtt = _locomote_twin_with_mqtt(policies=policies)
     with patch.object(twin.policy, "list", return_value=policies):
         with patch.object(twin.policy, "_pick_controller_policy", return_value=policies[0]):
-            with patch_twin("transport.time.sleep"):
+            with patch("cyberwave.twin.transport.time.sleep"):
                 twin.locomotion.move_forward(1.0, duration=0.1, rate_hz=10)
     assert mqtt.publish.call_count >= 1
 
@@ -324,7 +322,7 @@ def test_joints_ensure_attached_before_mqtt_publish() -> None:
         ),
     )
     twin._get_workspace_uuid = lambda: None  # type: ignore[method-assign]
-    with patch_twin("capabilities.joints.controllable_joint_names", return_value=["j1"]):
+    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["j1"]):
         with patch.object(twin.policy, "list", return_value=policies):
             with patch.object(twin.policy, "_pick_controller_policy", return_value=policies[0]):
                 twin.joints.set({"j1": 1.0})
@@ -397,6 +395,6 @@ def test_ensure_attached_logs_retry_warning_when_policy_newly_attached(
     caplog.set_level(logging.WARNING)
     with patch.object(twin.policy, "list", return_value=policies):
         with patch.object(twin.policy, "_pick_controller_policy", return_value=policies[0]):
-            with patch_twin("transport.time.sleep"):
+            with patch("cyberwave.twin.transport.time.sleep"):
                 twin.locomotion.move_forward(1.0, duration=0.1, rate_hz=10)
     assert any("retry in a few seconds" in record.message for record in caplog.records)

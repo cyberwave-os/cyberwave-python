@@ -7,8 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.twin_patch import patch_twin
-
 from cyberwave.manifest.driver_config import JOINT_UPDATE_TOPIC_SLUG, TWIN_COMMAND_TOPIC_SLUG
 from cyberwave.twin import FlyingTwin, LocomoteTwin
 from cyberwave.twin.classes import JointTwin
@@ -138,7 +136,7 @@ def test_publish_connects_mqtt_when_disconnected() -> None:
     twin = _make_locomote_twin()
     twin.client.mqtt.connected = False
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch_twin("transport.time.sleep"):
+        with patch("cyberwave.twin.transport.time.sleep"):
             twin.locomotion.move_forward(1.0, duration=0.2, rate_hz=10)
     assert twin.client.mqtt.connect.call_count >= 1
     assert twin.client.mqtt.publish.call_count >= 1
@@ -147,7 +145,7 @@ def test_publish_connects_mqtt_when_disconnected() -> None:
 def test_publish_resolved_calls_mqtt_publish() -> None:
     twin = _make_locomote_twin()
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch_twin("transport.time.sleep"):
+        with patch("cyberwave.twin.transport.time.sleep"):
             twin.locomotion.move_forward(1.5, duration=0.2, rate_hz=10)
     first_topic, first_payload = twin.client.mqtt.publish.call_args_list[0][0]
     assert first_topic == "cyberwave/twin/twin-uuid/command"
@@ -182,7 +180,7 @@ def test_joint_update_uses_joint_topic_slug() -> None:
             },
         ),
     )
-    with patch_twin("capabilities.joints.controllable_joint_names", return_value=["j1"]):
+    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["j1"]):
         with patch.object(twin, "_prepare_outbound_command"):
             twin.joints.set({"j1": 90.0}, degrees=True)
     assert JOINT_UPDATE_TOPIC_SLUG.replace("{twin_uuid}", "arm-1") in twin._outbound_log[0].topic

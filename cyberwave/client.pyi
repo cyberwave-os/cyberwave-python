@@ -143,15 +143,6 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["kinova/kortex-gen3-lite"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> GripperTwin: ...
-    
-    @overload
-    def twin(
-        self,
         asset_key: Literal["comau/edo"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -179,7 +170,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["universal_robots/UR7"],
+        asset_key: Literal["universal_robots/ur7"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -368,7 +359,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["dji/DJI-Tello"],
+        asset_key: Literal["dji/dji-tello"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -386,7 +377,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["Holybro/PX4Vision"],
+        asset_key: Literal["holybro/px4vision"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -395,7 +386,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["hoverspect/Avientory-Platform"],
+        asset_key: Literal["hoverspect/avientory-platform"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -800,6 +791,24 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["kinova-robotics/kortex-gen3-6dof-vision-robotiq2f85"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["kinova-robotics/kortex-gen3-7dof-vision-robotiq2f85"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> GripperCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["intel/realsensed455"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -846,6 +855,24 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["neura-robotics/maira6m"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> DepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["kinova-robotics/kortex-gen3-6dof-vision"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> DepthCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["kinova-robotics/kortex-gen3-7dof-vision"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

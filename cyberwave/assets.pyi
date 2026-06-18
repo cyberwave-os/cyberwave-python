@@ -429,16 +429,6 @@ class RethinkRoboticssawyerTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class KinovakortexGen3LiteTwin(Twin):
-    """
-    Digital twin for Kortex Gen3 Lite
-    Registry ID: kinova/kortex-gen3-lite
-    """
-    @property
-    def joints(self) -> JointsHandle:
-        """Controller for robot joints"""
-        ...
-
 class AnyboticsanymalCTwin(Twin):
     """
     Digital twin for Anymal C
@@ -468,7 +458,7 @@ class ComauedoTwin(Twin):
 class DjidjiTelloTwin(Twin):
     """
     Digital twin for DJI Tello
-    Registry ID: dji/DJI-Tello
+    Registry ID: dji/dji-tello
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -757,7 +747,7 @@ class CyberwavegenericBoxTwin(Twin):
 class UniversalRobotsur5Twin(Twin):
     """
     Digital twin for UR5e
-    Registry ID: universal_robots/UR5
+    Registry ID: universal_robots/ur5
     """
     @property
     def joints(self) -> JointsHandle:
@@ -841,17 +831,10 @@ class CyberwavegenericAuvTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class CyberwavesubstationTwin(Twin):
-    """
-    Digital twin for Electric Substation
-    Registry ID: cyberwave/substation
-    """
-    pass
-
 class Holybropx4visionTwin(Twin):
     """
     Digital twin for PX4 Vision
-    Registry ID: Holybro/PX4Vision
+    Registry ID: holybro/px4vision
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -863,7 +846,7 @@ class Holybropx4visionTwin(Twin):
 class HoverspectavientoryPlatformTwin(Twin):
     """
     Digital twin for Avientory Platform
-    Registry ID: hoverspect/Avientory-Platform
+    Registry ID: hoverspect/avientory-platform
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -909,7 +892,7 @@ class TheRobotStudioso101WithCameraTwin(Twin):
 class UniversalRobotsur7Twin(Twin):
     """
     Digital twin for UR7
-    Registry ID: universal_robots/UR7
+    Registry ID: universal_robots/ur7
     """
     @property
     def joints(self) -> JointsHandle:
@@ -1105,7 +1088,7 @@ class GenericDronePayloadsrfScannerPodTwin(Twin):
 class FwrroboticArmTwin(Twin):
     """
     Digital twin for Robotic Arm
-    Registry ID: FWR/Robotic-Arm
+    Registry ID: fwr/robotic-arm
     """
     @property
     def joints(self) -> JointsHandle:
@@ -1233,6 +1216,80 @@ class CyberwavegenericSpeakerTwin(Twin):
     """
     pass
 
+class KinovaRoboticskortexGen36dofVisionRobotiq2f85Twin(Twin):
+    """
+    Digital twin for Kortex Gen3 6dof + Robotiq gripper
+    Registry ID: kinova-robotics/kortex-gen3-6dof-vision-robotiq2f85
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KinovaRoboticskortexGen36dofVisionTwin(Twin):
+    """
+    Digital twin for Kortex Gen3 6dof vision
+    Registry ID: kinova-robotics/kortex-gen3-6dof-vision
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KinovaRoboticskortexGen37dofVisionTwin(Twin):
+    """
+    Digital twin for Kinova Gen3 7dof vision
+    Registry ID: kinova-robotics/kortex-gen3-7dof-vision
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KinovaRoboticskortexGen37dofVisionRobotiq2f85Twin(Twin):
+    """
+    Digital twin for Kinova Gen3 7dof vision + Robotiq gripper
+    Registry ID: kinova-robotics/kortex-gen3-7dof-vision-robotiq2f85
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KinovaRoboticskinovaGen3LitTwin(Twin):
+    """
+    Digital twin for Kortex Gen3 Lite
+    Registry ID: kinova-robotics/kinova-gen-3-lit
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class CyberwaveelectricSubstationTwin(Twin):
+    """
+    Digital twin for Electric Substation
+    Registry ID: cyberwave/electric-substation
+    """
+    pass
+
+class MlsTeamobsbotTiny3Twin(Twin):
+    """
+    Digital twin for Obsbot Tiny 3
+    Registry ID: mls-team/obsbot-tiny-3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Cyberwavego2BackpackTwin(Twin):
+    """
+    Digital twin for Go2 backpack
+    Registry ID: cyberwave/go2-backpack
+    """
+    pass
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1267,10 +1324,9 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "interbotix/wx250s": Interbotixwx250sTwin,
     "robotis/op3": Robotisop3Twin,
     "rethink-robotics/sawyer": RethinkRoboticssawyerTwin,
-    "kinova/kortex-gen3-lite": KinovakortexGen3LiteTwin,
     "anybotics/anymal-c": AnyboticsanymalCTwin,
     "comau/edo": ComauedoTwin,
-    "dji/DJI-Tello": DjidjiTelloTwin,
+    "dji/dji-tello": DjidjiTelloTwin,
     "bitcraze/crazyflie-2": Bitcrazecrazyflie2Twin,
     "fourier/fftai-gr1t1": FourierfftaiGr1t1Twin,
     "fourier/fftai-gr1t2": FourierfftaiGr1t2Twin,
@@ -1294,7 +1350,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave/generictable": CyberwavegenerictableTwin,
     "table": CyberwavegenerictableTwin,
     "cyberwave/generic-box": CyberwavegenericBoxTwin,
-    "universal_robots/UR5": UniversalRobotsur5Twin,
+    "universal_robots/ur5": UniversalRobotsur5Twin,
     "cyberwave/generic-nvr": CyberwavegenericNvrTwin,
     "intel/realsensed455": Intelrealsensed455Twin,
     "basler/basler_ag_ace_gige": BaslerbaslerAgAceGigeTwin,
@@ -1305,13 +1361,12 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave/generic_ipcamera": CyberwavegenericIpcameraTwin,
     "prox-dynamics/black-hornet-nano": ProxDynamicsblackHornetNanoTwin,
     "cyberwave/generic-auv": CyberwavegenericAuvTwin,
-    "cyberwave/substation": CyberwavesubstationTwin,
-    "Holybro/PX4Vision": Holybropx4visionTwin,
-    "hoverspect/Avientory-Platform": HoverspectavientoryPlatformTwin,
+    "holybro/px4vision": Holybropx4visionTwin,
+    "hoverspect/avientory-platform": HoverspectavientoryPlatformTwin,
     "apeiroon/bx100": Apeiroonbx100Twin,
     "logitech/c920": Logitechc920Twin,
     "the-robot-studio/so101-with-camera": TheRobotStudioso101WithCameraTwin,
-    "universal_robots/UR7": UniversalRobotsur7Twin,
+    "universal_robots/ur7": UniversalRobotsur7Twin,
     "waveshare/ugv-beast": WaveshareugvBeastTwin,
     "alto-robotics/node": AltoRoboticsnodeTwin,
     "agilox/agilox-ofl": AgiloxagiloxOflTwin,
@@ -1334,7 +1389,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "unitree/z1-gripper": Unitreez1GripperTwin,
     "generic-drone-payloads/uwb-radar-pod": GenericDronePayloadsuwbRadarPodTwin,
     "generic-drone-payloads/rf-scanner-pod": GenericDronePayloadsrfScannerPodTwin,
-    "FWR/Robotic-Arm": FwrroboticArmTwin,
+    "fwr/robotic-arm": FwrroboticArmTwin,
     "pollen-robotics/reachy-mini": PollenRoboticsreachyMiniTwin,
     "dji/mavic-3-enterprise": Djimavic3EnterpriseTwin,
     "sam-wilcocks-workspace/d500-lidar-2": SamWilcocksWorkspaced500Lidar2Twin,
@@ -1346,4 +1401,12 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "mls-team/math-scavator-9000": MlsTeammathScavator9000Twin,
     "cyberwave/generic-microphone": CyberwavegenericMicrophoneTwin,
     "cyberwave/generic-speaker": CyberwavegenericSpeakerTwin,
+    "kinova-robotics/kortex-gen3-6dof-vision-robotiq2f85": KinovaRoboticskortexGen36dofVisionRobotiq2f85Twin,
+    "kinova-robotics/kortex-gen3-6dof-vision": KinovaRoboticskortexGen36dofVisionTwin,
+    "kinova-robotics/kortex-gen3-7dof-vision": KinovaRoboticskortexGen37dofVisionTwin,
+    "kinova-robotics/kortex-gen3-7dof-vision-robotiq2f85": KinovaRoboticskortexGen37dofVisionRobotiq2f85Twin,
+    "kinova-robotics/kinova-gen-3-lit": KinovaRoboticskinovaGen3LitTwin,
+    "cyberwave/electric-substation": CyberwaveelectricSubstationTwin,
+    "mls-team/obsbot-tiny-3": MlsTeamobsbotTiny3Twin,
+    "cyberwave/go2-backpack": Cyberwavego2BackpackTwin,
 }

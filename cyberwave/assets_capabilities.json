@@ -70,16 +70,11 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": true,
       "manipulator_count": 1,
       "payload_capacity_kg": 1.5,
       "power_source": "tethered",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
@@ -276,6 +271,7 @@
           "name": "camera_front_left",
           "type": "rgb",
           "model": "Skydio X2 navigation camera",
+          "fov_degrees": 58.72,
           "parent_link": "x2",
           "offset": {
             "position": {
@@ -302,6 +298,7 @@
           "name": "camera_back_right",
           "type": "rgb",
           "model": "Skydio X2 navigation camera",
+          "fov_degrees": 58.72,
           "parent_link": "x2",
           "offset": {
             "position": {
@@ -328,6 +325,7 @@
           "name": "camera_front_right",
           "type": "rgb",
           "model": "Skydio X2 navigation camera",
+          "fov_degrees": 58.72,
           "parent_link": "x2",
           "offset": {
             "position": {
@@ -354,6 +352,7 @@
           "name": "camera_back_left",
           "type": "rgb",
           "model": "Skydio X2 navigation camera",
+          "fov_degrees": 58.72,
           "parent_link": "x2",
           "offset": {
             "position": {
@@ -380,6 +379,7 @@
           "name": "camera_chasis_top",
           "type": "rgb",
           "model": "Skydio X2 navigation camera",
+          "fov_degrees": 58.72,
           "parent_link": "x2",
           "offset": {
             "position": {
@@ -406,6 +406,7 @@
           "name": "camera_chasis_bottom",
           "type": "rgb",
           "model": "Skydio X2 navigation camera",
+          "fov_degrees": 58.72,
           "parent_link": "x2",
           "offset": {
             "position": {
@@ -432,6 +433,7 @@
           "name": "payload_color_camera",
           "type": "rgb",
           "model": "Skydio X2 payload RGB camera",
+          "fov_degrees": 26.86,
           "parent_link": "x2",
           "offset": {
             "position": {
@@ -469,16 +471,11 @@
       "has_legs": true,
       "has_wheels": false,
       "locomotion_mode": "legged",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": true,
       "manipulator_count": 2,
-      "payload_capacity_kg": 2.0,
+      "payload_capacity_kg": 2,
       "power_source": "battery",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "semi_autonomous",
       "navigation_obstacle_avoidance": true,
       "maximum_frequency_hz": 0,
@@ -489,24 +486,26 @@
           "name": "Unitree G1 camera",
           "type": "rgb",
           "model": null,
-          "parent_link": "pelvis",
+          "parent_link": "head_servo_link",
           "offset": {
             "position": {
-              "x": 0.0786,
-              "y": 1.3031,
-              "z": 0.0327
+              "x": 0.0632,
+              "y": 5.000000000032756e-06,
+              "z": 0.4783
             },
             "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "w": -0.6796,
+              "x": -0.2843,
+              "y": 0.2966,
+              "z": 0.6078
             }
           },
           "parameters": {
-            "width": null,
-            "height": null,
-            "update_rate": null
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_horizontal": 90,
+            "fov_vertical": 60
           }
         },
         {
@@ -514,24 +513,30 @@
           "name": "Unitree G1 camera2",
           "type": "depth",
           "model": null,
-          "parent_link": "pelvis",
+          "fov_degrees": 90,
+          "parent_link": "d455_link",
           "offset": {
             "position": {
-              "x": 0.0978,
-              "y": 1.3137,
-              "z": -0.0279
+              "x": 0.04340108302542229,
+              "y": 5.000000000032756e-06,
+              "z": -0.021927091980219634
             },
             "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
+              "w": 0.6089707903708289,
+              "x": 0.3755387815433645,
+              "y": -0.3428373177982935,
+              "z": -0.608717277196011
             }
           },
           "parameters": {
-            "width": null,
-            "height": null,
-            "update_rate": null
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fov_degrees": 90,
+            "fov_horizontal": 90,
+            "fov_vertical": 60,
+            "min_depth": 0.1,
+            "max_depth": 10
           }
         }
       ]
@@ -594,6 +599,7 @@
           "name": "front_camera",
           "type": "rgb",
           "model": "go2_hd_camera",
+          "fov_degrees": 88.5072,
           "parent_link": "front_camera",
           "offset": {
             "position": {
@@ -804,6 +810,7 @@
           "name": "head_camera",
           "type": "rgb",
           "model": "Intel RealSense D455",
+          "fov_degrees": 58.0,
           "parent_link": "H2",
           "offset": {
             "position": {
@@ -830,6 +837,7 @@
           "name": "head_depth_camera",
           "type": "depth",
           "model": "Intel RealSense D455",
+          "fov_degrees": 58.0,
           "parent_link": "H2",
           "offset": {
             "position": {
@@ -1061,6 +1069,7 @@
           "name": "head_camera",
           "type": "rgb",
           "model": "Raspberry Pi Camera Module 2",
+          "fov_degrees": 41.41,
           "parent_link": "base_link",
           "offset": {
             "position": {
@@ -1446,11 +1455,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": true,
       "manipulator_count": 2,
       "payload_capacity_kg": 0,
@@ -1662,31 +1666,6 @@
     "registry_id": "rethink-robotics/sawyer",
     "registry_id_alias": null
   },
-  "kinova/kortex-gen3-lite": {
-    "uuid": "6cb1a4a7-ed24-4e2b-b126-5ac665ddf80a",
-    "name": "Kortex Gen3 Lite",
-    "capabilities": {
-      "has_joints": true,
-      "can_actuate": true,
-      "can_locomote": false,
-      "can_fly": false,
-      "has_legs": false,
-      "has_wheels": false,
-      "locomotion_mode": "stationary",
-      "can_grip": true,
-      "manipulator_count": 1,
-      "payload_capacity_kg": 0,
-      "power_source": null,
-      "power_capacity_wh": -1,
-      "navigation_autonomy_level": null,
-      "navigation_obstacle_avoidance": false,
-      "maximum_frequency_hz": 30,
-      "minimum_frequency_hz": 0,
-      "sensors": []
-    },
-    "registry_id": "kinova/kortex-gen3-lite",
-    "registry_id_alias": null
-  },
   "anybotics/anymal-c": {
     "uuid": "c5d62885-da65-4939-ad91-552a4bbd4248",
     "name": "Anymal C",
@@ -1796,7 +1775,7 @@
     "registry_id": "comau/edo",
     "registry_id_alias": null
   },
-  "dji/DJI-Tello": {
+  "dji/dji-tello": {
     "uuid": "45393ad1-3c4b-4005-813f-281d6d46a417",
     "name": "DJI Tello",
     "capabilities": {
@@ -1851,7 +1830,7 @@
         }
       ]
     },
-    "registry_id": "dji/DJI-Tello",
+    "registry_id": "dji/dji-tello",
     "registry_id_alias": null
   },
   "bitcraze/crazyflie-2": {
@@ -2027,6 +2006,7 @@
           "name": "head_camera",
           "type": "rgb",
           "model": "Intel RealSense D435i",
+          "fov_degrees": 42.5,
           "parent_link": "d435_rgb_module_link",
           "offset": {
             "position": {
@@ -2053,6 +2033,7 @@
           "name": "head_depth_camera",
           "type": "depth",
           "model": "Intel RealSense D435i",
+          "fov_degrees": 58.0,
           "parent_link": "d435_left_imager_link",
           "offset": {
             "position": {
@@ -2112,6 +2093,7 @@
           "name": "head_camera",
           "type": "depth",
           "model": "Intel RealSense",
+          "fov_degrees": 58.0,
           "parent_link": "camera_link",
           "offset": {
             "position": {
@@ -2140,6 +2122,7 @@
           "name": "chest_camera",
           "type": "rgb",
           "model": "Intel RealSense",
+          "fov_degrees": 58.0,
           "parent_link": "chest_camera_link",
           "offset": {
             "position": {
@@ -2317,6 +2300,7 @@
           "name": "Color camera",
           "type": "rgb",
           "model": "Intel RealSense R200",
+          "fov_degrees": 43.0,
           "parent_link": "__namespace_camera_rgb_frame",
           "offset": {
             "position": {
@@ -2343,6 +2327,7 @@
           "name": "Depth Camera",
           "type": "depth",
           "model": "Intel RealSense R200",
+          "fov_degrees": 46.0,
           "parent_link": "__namespace_camera_depth_frame",
           "offset": {
             "position": {
@@ -2568,6 +2553,7 @@
           "name": "head_front_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
+          "fov_degrees": 58.0,
           "parent_link": "head_camera_1_link",
           "offset": {
             "position": {
@@ -2596,6 +2582,7 @@
           "name": "head_chin_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
+          "fov_degrees": 58.0,
           "parent_link": "head_camera_2_link",
           "offset": {
             "position": {
@@ -2624,6 +2611,7 @@
           "name": "left_side_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
+          "fov_degrees": 58.0,
           "parent_link": "left_side_camera_link",
           "offset": {
             "position": {
@@ -2652,6 +2640,7 @@
           "name": "right_side_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
+          "fov_degrees": 58.0,
           "parent_link": "right_side_camera_link",
           "offset": {
             "position": {
@@ -2680,6 +2669,7 @@
           "name": "tail_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
+          "fov_degrees": 58.0,
           "parent_link": "tail_camera_link",
           "offset": {
             "position": {
@@ -2853,6 +2843,7 @@
           "name": "camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 41.41,
           "parent_link": "camera_frame",
           "offset": {
             "position": {
@@ -3024,7 +3015,7 @@
     "registry_id": "cyberwave/generic-box",
     "registry_id_alias": null
   },
-  "universal_robots/UR5": {
+  "universal_robots/ur5": {
     "uuid": "2325755a-fa07-4150-9091-b6c7b33bb551",
     "name": "UR5e",
     "capabilities": {
@@ -3051,7 +3042,7 @@
       "minimum_frequency_hz": 0,
       "sensors": []
     },
-    "registry_id": "universal_robots/UR5",
+    "registry_id": "universal_robots/ur5",
     "registry_id_alias": null
   },
   "cyberwave/generic-nvr": {
@@ -3141,6 +3132,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 60.0,
           "parent_link": "realsense_d455_link",
           "offset": {
             "position": {
@@ -3167,6 +3159,7 @@
           "name": "depth_camera",
           "type": "depth",
           "model": null,
+          "fov_degrees": 60.0,
           "parent_link": "realsense_d455_link",
           "offset": {
             "position": {
@@ -3226,6 +3219,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 45.0,
           "parent_link": "camera",
           "offset": {
             "position": {
@@ -3283,6 +3277,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 28.6341,
           "parent_link": "logitech_c275HD_link",
           "offset": {
             "position": {
@@ -3340,6 +3335,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 41.0,
           "parent_link": "pi_camerav3_link",
           "offset": {
             "position": {
@@ -3397,6 +3393,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 58.7155,
           "parent_link": "generic_camera_link",
           "offset": {
             "position": {
@@ -3454,6 +3451,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 58.7155,
           "parent_link": "generic_camera_link",
           "offset": {
             "position": {
@@ -3511,6 +3509,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 58.7155,
           "parent_link": "ip_camera_link",
           "offset": {
             "position": {
@@ -3649,32 +3648,7 @@
     "registry_id": "cyberwave/generic-auv",
     "registry_id_alias": null
   },
-  "cyberwave/substation": {
-    "uuid": "d5db027d-5320-49cd-b616-961124dc2035",
-    "name": "Electric Substation",
-    "capabilities": {
-      "has_joints": false,
-      "can_actuate": false,
-      "can_locomote": false,
-      "can_fly": false,
-      "has_legs": false,
-      "has_wheels": false,
-      "locomotion_mode": "stationary",
-      "can_grip": false,
-      "manipulator_count": 0,
-      "payload_capacity_kg": 0,
-      "power_source": null,
-      "power_capacity_wh": -1,
-      "navigation_autonomy_level": null,
-      "navigation_obstacle_avoidance": false,
-      "maximum_frequency_hz": 30,
-      "minimum_frequency_hz": 0,
-      "sensors": []
-    },
-    "registry_id": "cyberwave/substation",
-    "registry_id_alias": null
-  },
-  "Holybro/PX4Vision": {
+  "holybro/px4vision": {
     "uuid": "36e7e7c0-696c-410f-83f0-0d6a3f239bde",
     "name": "PX4 Vision",
     "capabilities": {
@@ -3705,6 +3679,7 @@
           "name": "front_color_camera",
           "type": "rgb",
           "model": "12.3-megapixel Sony IMX412",
+          "fov_degrees": 100.0,
           "parent_link": "base_link",
           "offset": {
             "position": {
@@ -3731,6 +3706,7 @@
           "name": "front_depth_camera",
           "type": "depth",
           "model": "12.3-megapixel Sony IMX412",
+          "fov_degrees": 46.0,
           "parent_link": "base_link",
           "offset": {
             "position": {
@@ -3756,10 +3732,10 @@
         }
       ]
     },
-    "registry_id": "Holybro/PX4Vision",
+    "registry_id": "holybro/px4vision",
     "registry_id_alias": null
   },
-  "hoverspect/Avientory-Platform": {
+  "hoverspect/avientory-platform": {
     "uuid": "fdcf5f96-16a5-4072-bcb5-362b4e6caa00",
     "name": "Avientory Platform",
     "capabilities": {
@@ -3812,7 +3788,7 @@
         }
       ]
     },
-    "registry_id": "hoverspect/Avientory-Platform",
+    "registry_id": "hoverspect/avientory-platform",
     "registry_id_alias": null
   },
   "apeiroon/bx100": {
@@ -3876,6 +3852,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 43.3,
           "parent_link": "base_link",
           "offset": {
             "position": {
@@ -3933,6 +3910,7 @@
           "name": "wrist_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 73.74,
           "parent_link": "gripper",
           "offset": {
             "position": {
@@ -3959,7 +3937,7 @@
     "registry_id": "the-robot-studio/so101-with-camera",
     "registry_id_alias": null
   },
-  "universal_robots/UR7": {
+  "universal_robots/ur7": {
     "uuid": "89605c93-8a1b-4d14-aa88-c6f592a08837",
     "name": "UR7",
     "capabilities": {
@@ -3986,7 +3964,7 @@
       "minimum_frequency_hz": 0,
       "sensors": []
     },
-    "registry_id": "universal_robots/UR7",
+    "registry_id": "universal_robots/ur7",
     "registry_id_alias": null
   },
   "waveshare/ugv-beast": {
@@ -4015,6 +3993,7 @@
           "name": "default",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 153.5398,
           "parent_link": "base_link",
           "offset": {
             "position": {
@@ -4376,6 +4355,7 @@
           "name": "default",
           "type": "depth",
           "model": "Estimated Depth Camera",
+          "fov_degrees": 60.0,
           "parent_link": "generic_camera_link",
           "offset": {
             "position": {
@@ -4465,6 +4445,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 68.0,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
@@ -4491,6 +4472,7 @@
           "name": "depth_camera",
           "type": "depth",
           "model": null,
+          "fov_degrees": 65.0,
           "parent_link": "camera_depth_frame",
           "offset": {
             "position": {
@@ -4550,6 +4532,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 68.0,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
@@ -4576,6 +4559,7 @@
           "name": "depth_camera",
           "type": "depth",
           "model": null,
+          "fov_degrees": 65.0,
           "parent_link": "camera_depth_frame",
           "offset": {
             "position": {
@@ -4870,6 +4854,7 @@
           "name": "uwb_radar",
           "type": "uwb_radar",
           "model": "UWB Radar Pod Alpha",
+          "fov_degrees": 60,
           "parent_link": "radar_cone_link",
           "offset": {
             "position": {
@@ -4920,6 +4905,7 @@
           "name": "rf_scanner",
           "type": "rf_scanner",
           "model": "RF Scanner Pod Beta",
+          "fov_degrees": 120,
           "parent_link": "antenna_link",
           "offset": {
             "position": {
@@ -4944,7 +4930,7 @@
     "registry_id": "generic-drone-payloads/rf-scanner-pod",
     "registry_id_alias": null
   },
-  "FWR/Robotic-Arm": {
+  "fwr/robotic-arm": {
     "uuid": "5d93f765-ee7f-4b91-82bb-e1b07637fd72",
     "name": "Robotic Arm",
     "capabilities": {
@@ -4971,7 +4957,7 @@
       "minimum_frequency_hz": 10,
       "sensors": []
     },
-    "registry_id": "FWR/Robotic-Arm",
+    "registry_id": "fwr/robotic-arm",
     "registry_id_alias": null
   },
   "pollen-robotics/reachy-mini": {
@@ -5000,6 +4986,7 @@
           "name": "head_camera",
           "type": "rgb",
           "model": "Wide-angle RGB",
+          "fov_degrees": 70.0,
           "parent_link": "camera",
           "offset": {
             "position": {
@@ -5057,6 +5044,7 @@
           "name": "hasselblad_camera",
           "type": "rgb",
           "model": "Hasselblad 4/3 CMOS",
+          "fov_degrees": 84,
           "parent_link": "base_link",
           "offset": {
             "position": {
@@ -5116,6 +5104,7 @@
           "name": "lidar-scan",
           "type": "lidar_2d",
           "model": "Waveshare D500",
+          "fov_degrees": 360,
           "parent_link": "base_link",
           "offset": {
             "position": {
@@ -5328,11 +5317,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "surface",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -5373,6 +5357,7 @@
           "name": "main_camera",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 85,
           "parent_link": "camera_gimbal",
           "offset": {
             "position": {
@@ -5474,6 +5459,459 @@
       "sensors": []
     },
     "registry_id": "cyberwave/generic-speaker",
+    "registry_id_alias": null
+  },
+  "kinova-robotics/kortex-gen3-6dof-vision-robotiq2f85": {
+    "uuid": "0bd0610b-c226-43e8-8057-f2446b994d36",
+    "name": "Kortex Gen3 6dof + Robotiq gripper",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": true,
+      "manipulator_count": 1,
+      "payload_capacity_kg": 4.0,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 1000,
+      "minimum_frequency_hz": 40,
+      "sensors": [
+        {
+          "id": "wrist_color_camera",
+          "name": "wrist_color_camera",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 69.0,
+          "parent_link": "camera_color_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1920,
+            "height": 1080,
+            "update_rate": 30.0,
+            "fovy": 69.0
+          }
+        },
+        {
+          "id": "wrist_depth_camera",
+          "name": "wrist_depth_camera",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 65.0,
+          "parent_link": "camera_depth_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 30.0,
+            "fovy": 65.0,
+            "min_depth": 0.2,
+            "max_depth": 6.0
+          }
+        }
+      ]
+    },
+    "registry_id": "kinova-robotics/kortex-gen3-6dof-vision-robotiq2f85",
+    "registry_id_alias": null
+  },
+  "kinova-robotics/kortex-gen3-6dof-vision": {
+    "uuid": "589a1de9-36ad-4be6-b532-73127a5e153a",
+    "name": "Kortex Gen3 6dof vision",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 1,
+      "payload_capacity_kg": 4.0,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 1000,
+      "minimum_frequency_hz": 40,
+      "sensors": [
+        {
+          "id": "wrist_color_camera",
+          "name": "wrist_color_camera",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 69.0,
+          "parent_link": "camera_color_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1920,
+            "height": 1080,
+            "update_rate": 30.0,
+            "fovy": 69.0
+          }
+        },
+        {
+          "id": "wrist_depth_camera",
+          "name": "wrist_depth_camera",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 65.0,
+          "parent_link": "camera_depth_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 30.0,
+            "fovy": 65.0,
+            "min_depth": 0.2,
+            "max_depth": 6.0
+          }
+        }
+      ]
+    },
+    "registry_id": "kinova-robotics/kortex-gen3-6dof-vision",
+    "registry_id_alias": null
+  },
+  "kinova-robotics/kortex-gen3-7dof-vision": {
+    "uuid": "5b7af0c5-796a-49e2-89a4-2f2a61f8da62",
+    "name": "Kinova Gen3 7dof vision",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 1,
+      "payload_capacity_kg": 4.0,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 1000,
+      "minimum_frequency_hz": 40,
+      "sensors": [
+        {
+          "id": "wrist_color_camera",
+          "name": "wrist_color_camera",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 69.0,
+          "parent_link": "camera_color_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1920,
+            "height": 1080,
+            "update_rate": 30.0,
+            "fovy": 69.0
+          }
+        },
+        {
+          "id": "wrist_depth_camera",
+          "name": "wrist_depth_camera",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 65.0,
+          "parent_link": "camera_depth_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 30.0,
+            "fovy": 65.0,
+            "min_depth": 0.2,
+            "max_depth": 6.0
+          }
+        }
+      ]
+    },
+    "registry_id": "kinova-robotics/kortex-gen3-7dof-vision",
+    "registry_id_alias": null
+  },
+  "kinova-robotics/kortex-gen3-7dof-vision-robotiq2f85": {
+    "uuid": "472936c8-56cd-41ad-977e-b2275cc9fa49",
+    "name": "Kinova Gen3 7dof vision + Robotiq gripper",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": true,
+      "manipulator_count": 1,
+      "payload_capacity_kg": 4.0,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 1000,
+      "minimum_frequency_hz": 40,
+      "sensors": [
+        {
+          "id": "wrist_color_camera",
+          "name": "wrist_color_camera",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 69.0,
+          "parent_link": "camera_color_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1920,
+            "height": 1080,
+            "update_rate": 30.0,
+            "fovy": 69.0
+          }
+        },
+        {
+          "id": "wrist_depth_camera",
+          "name": "wrist_depth_camera",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 65.0,
+          "parent_link": "camera_depth_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 30.0,
+            "fovy": 65.0,
+            "min_depth": 0.2,
+            "max_depth": 6.0
+          }
+        }
+      ]
+    },
+    "registry_id": "kinova-robotics/kortex-gen3-7dof-vision-robotiq2f85",
+    "registry_id_alias": null
+  },
+  "kinova-robotics/kinova-gen-3-lit": {
+    "uuid": "6b3bda32-e934-472d-b5ae-813fd358434a",
+    "name": "Kortex Gen3 Lite",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "kinova-robotics/kinova-gen-3-lit",
+    "registry_id_alias": null
+  },
+  "cyberwave/electric-substation": {
+    "uuid": "294cdb7f-ef68-4d6b-ad2a-56df79d4aae5",
+    "name": "Electric Substation",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/electric-substation",
+    "registry_id_alias": null
+  },
+  "mls-team/obsbot-tiny-3": {
+    "uuid": "0f33e406-73c2-49fe-9da3-230b3f7d5e72",
+    "name": "Obsbot Tiny 3",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "mls-team/obsbot-tiny-3",
+    "registry_id_alias": null
+  },
+  "cyberwave/go2-backpack": {
+    "uuid": "45a1b0c5-02a0-46ba-9d4d-63ba2fb319ab",
+    "name": "Go2 backpack",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/go2-backpack",
     "registry_id_alias": null
   }
 }

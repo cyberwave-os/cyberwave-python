@@ -21,8 +21,6 @@ from cyberwave.manifest.driver_config import (
 from cyberwave.twin import LocomoteTwin
 from cyberwave.twin.classes import JointTwin
 
-from tests.twin_patch import patch_twin
-
 
 def _fake_mqtt() -> MagicMock:
     subs: dict[str, object] = {}
@@ -243,8 +241,8 @@ def _make_joint_twin(*, metadata: dict) -> JointTwin:
     )
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1", "j2"],
 )
 def test_joints_state_get_parses_joint_update_payload(_mock_names: MagicMock) -> None:
@@ -269,8 +267,8 @@ def test_joints_state_get_parses_joint_update_payload(_mock_names: MagicMock) ->
     assert result[0]["j2"] == 1.0
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1"],
 )
 def test_joints_state_get_falls_back_when_catalog_has_no_joint_slug(
@@ -295,8 +293,8 @@ def test_joints_state_get_falls_back_when_catalog_has_no_joint_slug(
     twin.client.mqtt.subscribe.assert_called()
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1"],
 )
 def test_joints_listener_starts_when_handle_created(_mock_names: MagicMock) -> None:
@@ -312,8 +310,8 @@ def test_joints_listener_starts_when_handle_created(_mock_names: MagicMock) -> N
     twin.client.mqtt.subscribe.assert_called()
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1"],
 )
 def test_joints_get_reflects_continuous_mqtt_updates(_mock_names: MagicMock) -> None:
@@ -347,8 +345,8 @@ def test_joints_get_reflects_continuous_mqtt_updates(_mock_names: MagicMock) -> 
     assert got["j1"] == 0.9
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1", "j2"],
 )
 def test_joints_get_timeout_returns_zeros_from_schema(_mock_names: MagicMock) -> None:
@@ -366,8 +364,8 @@ def test_joints_get_timeout_returns_zeros_from_schema(_mock_names: MagicMock) ->
     assert again == {"j1": 0.0, "j2": 0.0}
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1", "j2"],
 )
 def test_joints_get_partial_mqtt_fills_missing_joints_with_zero(
@@ -394,8 +392,8 @@ def test_joints_get_partial_mqtt_fills_missing_joints_with_zero(
     assert result[0]["j2"] == 0.0
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1", "j2"],
 )
 def test_joints_get_uses_runtime_mode_bucket(_mock_names: MagicMock) -> None:
@@ -420,8 +418,8 @@ def test_joints_get_uses_runtime_mode_bucket(_mock_names: MagicMock) -> None:
     assert twin.joints.get() == {"j1": 0.1, "j2": 0.0}
 
 
-@patch_twin(
-    "capabilities.joints.controllable_joint_names",
+@patch(
+    "cyberwave.twin.capabilities.joints.controllable_joint_names",
     return_value=["j1"],
 )
 def test_joints_sim_mqtt_ignored_when_runtime_mode_live(_mock_names: MagicMock) -> None:

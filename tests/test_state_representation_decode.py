@@ -119,8 +119,6 @@ def test_joints_listener_applies_single_joint_payload() -> None:
     from cyberwave.twin.capabilities.joints import JointsHandle
     from cyberwave.twin.classes import JointTwin
 
-    from tests.twin_patch import patch_twin
-
     mqtt = MagicMock()
     mqtt.connected = True
     mqtt._subs = {}
@@ -138,8 +136,8 @@ def test_joints_listener_applies_single_joint_payload() -> None:
         client,
         SimpleNamespace(uuid="arm-1", name="Arm", capabilities={"has_joints": True}),
     )
-    with patch_twin(
-        "capabilities.joints.controllable_joint_names",
+    with patch(
+        "cyberwave.twin.capabilities.joints.controllable_joint_names",
         return_value=["shoulder"],
     ):
         handle = JointsHandle(twin)
