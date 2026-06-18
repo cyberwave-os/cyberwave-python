@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cyberwave.twin.capabilities import joints as _joints
 from cyberwave.data.state_representation import (
     CartesianPose,
     cartesian_pose_from_position_payload,
@@ -136,8 +137,8 @@ def test_joints_listener_applies_single_joint_payload() -> None:
         client,
         SimpleNamespace(uuid="arm-1", name="Arm", capabilities={"has_joints": True}),
     )
-    with patch(
-        "cyberwave.twin.capabilities.joints.controllable_joint_names",
+    with patch.object(
+        _joints, "controllable_joint_names",
         return_value=["shoulder"],
     ):
         handle = JointsHandle(twin)

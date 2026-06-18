@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from cyberwave.twin import transport as _transport
 
 import pytest
 
@@ -69,7 +70,7 @@ def test_move_forward_delegates_to_locomotion_handle() -> None:
 def test_locomotion_move_forward_calls_resolve_topic_and_payload() -> None:
     twin = _make_locomote_twin()
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch("cyberwave.twin.transport.time.sleep"):
+        with patch.object(_transport.time, "sleep"):
             twin.locomotion.move_forward(2.0, duration=0.2, rate_hz=10)
     assert twin._outbound_log[0].command == "move_forward"
     assert twin._outbound_log[0].payload["data"]["linear_x"] == 2.0
@@ -79,7 +80,7 @@ def test_locomotion_move_forward_calls_resolve_topic_and_payload() -> None:
 def test_publish_resolved_calls_mqtt_and_logs() -> None:
     twin = _make_locomote_twin()
     with patch.object(twin, "_prepare_outbound_command"):
-        with patch("cyberwave.twin.transport.time.sleep"):
+        with patch.object(_transport.time, "sleep"):
             twin.locomotion.move_forward(1.0, duration=0.2, rate_hz=10)
     assert twin.client.mqtt.publish.call_count >= 1
     assert twin._outbound_log[0].command == "move_forward"

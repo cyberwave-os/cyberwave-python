@@ -3,6 +3,7 @@
 import math
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from cyberwave.twin.capabilities import joints as _joints
 
 import pytest
 
@@ -54,7 +55,7 @@ def test_joint_twin_set_publishes_joint_update() -> None:
     twin = JointTwin(
         client, SimpleNamespace(uuid="arm-1", name="Arm", asset_uuid="asset-1")
     )
-    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["j1"]):
+    with patch.object(_joints, "controllable_joint_names", return_value=["j1"]):
         with patch.object(twin, "_prepare_outbound_command"):
             twin.joints.set({"j1": 90.0}, degrees=True)
     assert len(twin._outbound_log) == 1
@@ -88,7 +89,7 @@ def test_joints_get_default_and_subset() -> None:
     twin = JointTwin(
         client, SimpleNamespace(uuid="arm-1", name="Arm", asset_uuid="asset-1")
     )
-    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["j1", "j2"]):
+    with patch.object(_joints, "controllable_joint_names", return_value=["j1", "j2"]):
         with patch.object(twin, "_prepare_outbound_command"):
             twin.joints.set({"j1": 1.0, "j2": 2.0})
         all_pos = twin.joints.get()
@@ -103,5 +104,5 @@ def test_joints_get_default_and_subset() -> None:
 def test_joints_list_matches_controllable_names() -> None:
     client = SimpleNamespace(twins=SimpleNamespace())
     twin = JointTwin(client, SimpleNamespace(uuid="arm-1", name="Arm"))
-    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["a", "b"]):
+    with patch.object(_joints, "controllable_joint_names", return_value=["a", "b"]):
         assert twin.joints.list() == ["a", "b"]
