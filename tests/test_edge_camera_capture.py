@@ -309,13 +309,19 @@ class TestEdgePhotos:
 
         def respond():
             nonlocal call_count
-            time.sleep(0.05)
-            handler = mqtt._test_handlers.get(
-                "cyberwave/twin/twin-uuid/camera/photo"
-            )
-            if handler:
-                call_count += 1
-                handler({"image": FAKE_B64, "format": "jpeg"})
+            # Poll until the photo handler is registered (it is registered by
+            # the main thread inside ``twin.listen``); a fixed sleep races with
+            # slow runners and leaves the handler unregistered.
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                handler = mqtt._test_handlers.get(
+                    "cyberwave/twin/twin-uuid/camera/photo"
+                )
+                if handler:
+                    call_count += 1
+                    handler({"image": FAKE_B64, "format": "jpeg"})
+                    return
+                time.sleep(0.01)
 
         frames = []
         for _ in range(3):
