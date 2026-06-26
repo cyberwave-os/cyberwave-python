@@ -12,7 +12,7 @@ from cyberwave import Cyberwave
 cw = Cyberwave()
 cw.affect("simulation")
 
-drone = cw.twin("dji/dji-mini-4-pro")
+drone = cw.twin("dji/mini-4-pro")
 print(f"Drone: {drone.name}")
 
 # Take off and hover

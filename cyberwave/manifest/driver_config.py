@@ -26,8 +26,9 @@ TWIN_ROTATION_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/rotation"
 TWIN_KINEMATICS_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/state/kinematics"
 TWIN_TELEMETRY_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/telemetry"
 TWIN_CAMERA_PHOTO_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/camera/photo"
+TWIN_IMU_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/imu"
 
-InboundStream = Literal["pose", "joints", "power", "camera"]
+InboundStream = Literal["pose", "joints", "power", "camera", "imu"]
 
 INBOUND_STREAM_SLUGS: dict[InboundStream, tuple[str, ...]] = {
     "pose": (
@@ -38,9 +39,10 @@ INBOUND_STREAM_SLUGS: dict[InboundStream, tuple[str, ...]] = {
     "joints": (JOINT_UPDATE_TOPIC_SLUG,),
     "power": (),  # resolved by battery slug pattern below
     "camera": (TWIN_CAMERA_PHOTO_TOPIC_SLUG,),
+    "imu": (TWIN_IMU_TOPIC_SLUG,),
 }
 
-_LISTEN_FILTER_NAMES = frozenset({"pose", "joints", "power", "camera"})
+_LISTEN_FILTER_NAMES = frozenset({"pose", "joints", "power", "camera", "imu"})
 
 _LOCOMOTION_COMMANDS = frozenset(
     {
@@ -109,6 +111,25 @@ def extract_mqtt_from_asset_metadata(
 ) -> dict[str, Any] | None:
     """Alias for :func:`extract_mqtt_bundle_from_metadata` (asset/twin metadata dict)."""
     return extract_mqtt_bundle_from_metadata(metadata)
+
+
+def _is_zenoh_bundle(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    channels = value.get("channels")
+    return isinstance(channels, dict) and bool(channels)
+
+
+def extract_zenoh_bundle_from_metadata(
+    metadata: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return the compiled Zenoh interface catalog from asset or twin metadata."""
+    if not isinstance(metadata, dict):
+        return None
+    candidate = metadata.get("zenoh")
+    if _is_zenoh_bundle(candidate):
+        return copy.deepcopy(candidate)
+    return None
 
 
 def extract_driver_config_from_metadata(
@@ -186,6 +207,15 @@ def command_spec(bundle: dict[str, Any] | None, command: str) -> dict[str, Any]:
     return copy.deepcopy(command_specs(bundle).get(command, {}))
 
 
+def command_args(bundle: dict[str, Any] | None, command: str) -> list[dict[str, Any]]:
+    """Return declared argument descriptors for *command* (empty when none)."""
+    spec = command_spec(bundle, command)
+    raw = spec.get("args")
+    if not isinstance(raw, list):
+        return []
+    return [dict(a) for a in raw if isinstance(a, dict) and a.get("name")]
+
+
 def mqtt_topic_slugs(bundle: dict[str, Any] | None) -> list[str]:
     """Return topic slug keys from a compiled MQTT bundle."""
     if not isinstance(bundle, dict):
@@ -194,6 +224,30 @@ def mqtt_topic_slugs(bundle: dict[str, Any] | None) -> list[str]:
     if not isinstance(topics, dict):
         return []
     return sorted(str(k) for k in topics.keys())
+
+
+def zenoh_channel_names(bundle: dict[str, Any] | None) -> list[str]:
+    """Return Zenoh channel keys from a compiled edge catalog bundle."""
+    if not isinstance(bundle, dict):
+        return []
+    channels = bundle.get("channels")
+    if not isinstance(channels, dict):
+        return []
+    return sorted(str(k) for k in channels.keys())
+
+
+def supported_transports_from_metadata(
+    metadata: dict[str, Any] | None,
+) -> list[str]:
+    """Return transport names present on twin/asset metadata (``mqtt``, ``zenoh``)."""
+    transports: list[str] = []
+    mqtt = extract_mqtt_bundle_from_metadata(metadata)
+    if mqtt and mqtt_topic_slugs(mqtt):
+        transports.append("mqtt")
+    zenoh = extract_zenoh_bundle_from_metadata(metadata)
+    if zenoh and zenoh_channel_names(zenoh):
+        transports.append("zenoh")
+    return transports
 
 
 def has_locomotion_commands(bundle: dict[str, Any] | None) -> bool:
@@ -288,6 +342,14 @@ def resolve_inbound_topics(
                     f"{prefix}{JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
                 )
             )
+    elif stream == "imu":
+        if TWIN_IMU_TOPIC_SLUG in catalog_slugs:
+            resolved.append(
+                (
+                    TWIN_IMU_TOPIC_SLUG,
+                    f"{prefix}{TWIN_IMU_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+                )
+            )
     else:
         for slug in candidates:
             if slug not in catalog_slugs and stream != "pose":
@@ -327,6 +389,13 @@ def resolve_inbound_topics(
             (
                 JOINT_UPDATE_TOPIC_SLUG,
                 f"{prefix}{JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+            ),
+        ]
+    if not resolved and stream == "imu":
+        resolved = [
+            (
+                TWIN_IMU_TOPIC_SLUG,
+                f"{prefix}{TWIN_IMU_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
             ),
         ]
 

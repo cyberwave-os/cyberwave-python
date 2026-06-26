@@ -40,6 +40,7 @@ class AssetSchema(BaseModel):
     slug: Optional[StrictStr] = None
     glb_file: Optional[StrictStr] = None
     urdf_file: Optional[StrictStr] = None
+    zip_file: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     kinematics: Optional[Dict[str, Any]] = None
@@ -53,7 +54,7 @@ class AssetSchema(BaseModel):
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -129,6 +130,11 @@ class AssetSchema(BaseModel):
         if self.urdf_file is None and "urdf_file" in self.model_fields_set:
             _dict['urdf_file'] = None
 
+        # set to None if zip_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.zip_file is None and "zip_file" in self.model_fields_set:
+            _dict['zip_file'] = None
+
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -193,6 +199,7 @@ class AssetSchema(BaseModel):
             "slug": obj.get("slug"),
             "glb_file": obj.get("glb_file"),
             "urdf_file": obj.get("urdf_file"),
+            "zip_file": obj.get("zip_file"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
             "kinematics": obj.get("kinematics"),

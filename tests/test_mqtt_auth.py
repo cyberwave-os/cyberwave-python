@@ -97,6 +97,22 @@ def test_wrapper_client_prefers_explicit_mqtt_password_over_api_key(clean_api_ke
     )
 
 
+def test_wrapper_client_prefers_config_mqtt_password_over_api_key(clean_api_key_env):
+    config = CyberwaveConfig(
+        api_key="api_key_secret",
+        mqtt_username="user",
+        mqtt_password="env_mqtt_secret",
+    )
+
+    with patch("cyberwave.mqtt.mqtt.Client") as mqtt_client_cls:
+        WrapperMQTTClient(config=config)
+
+    mqtt_client_cls.return_value.username_pw_set.assert_called_once_with(
+        username="user",
+        password="env_mqtt_secret",
+    )
+
+
 def test_wrapper_client_requires_api_key_or_mqtt_password(clean_api_key_env):
     config = CyberwaveConfig(api_key=None, token=None)
 

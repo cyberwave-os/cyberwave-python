@@ -12,7 +12,7 @@ from cyberwave import Cyberwave
 cw = Cyberwave()
 cw.affect("simulation")
 
-drone = cw.twin("dji/DJI-Mini-4-Pro")
+drone = cw.twin("dji/mini-4-pro")
 drone.flight.takeoff(altitude=2.0)
 time.sleep(2)
 drone.flight.land()

@@ -551,6 +551,16 @@ class BaseAudioStreamer:
         self._health_monitor_task: asyncio.Task | None = None
         self._last_frame_count: int = 0
 
+        # Serialize offer/answer so monitor + run-loop cannot publish duplicate
+        # offers that make media-service tear down the active producer session.
+        self._webrtc_negotiation_lock: asyncio.Lock | None = None
+        self._reconnect_in_progress: bool = False
+
+    @property
+    def is_reconnecting(self) -> bool:
+        """True while a WebRTC reconnect negotiation is in flight."""
+        return self._reconnect_in_progress
+
     # -------------------------------------------------------------------------
     # Abstract
     # -------------------------------------------------------------------------
@@ -601,6 +611,13 @@ class BaseAudioStreamer:
         logger.debug("WebRTC audio connection established")
         if self.enable_health_check:
             self._start_health_check()
+
+    async def _negotiate_webrtc(self, twin_uuid: str | None = None) -> None:
+        """Run :meth:`_start_webrtc` under a single negotiation lock."""
+        if self._webrtc_negotiation_lock is None:
+            self._webrtc_negotiation_lock = asyncio.Lock()
+        async with self._webrtc_negotiation_lock:
+            await self._start_webrtc(twin_uuid)
 
     async def start(self) -> None:
         """Start streaming with auto-reconnect in a background task.
@@ -673,42 +690,51 @@ class BaseAudioStreamer:
 
         self._is_running = True
         self._event_loop = asyncio.get_running_loop()
+        if self._webrtc_negotiation_lock is None:
+            self._webrtc_negotiation_lock = asyncio.Lock()
         stop = stop_event or asyncio.Event()
         self._subscribe_to_commands(command_callback)
         if not self._subscribed_to_answer:
             self._subscribe_to_answer()
             self._subscribed_to_answer = True
 
+        initial_connect_succeeded = False
         if self.pc is None:
             try:
                 _notify(command_callback, "connecting", "Starting audio stream")
-                await self._start_webrtc()
+                await self._negotiate_webrtc()
                 self._should_reconnect = self.auto_reconnect
+                initial_connect_succeeded = True
                 _notify(command_callback, "ok", "Audio streaming started")
             except Exception as e:
                 logger.error("Auto-start audio stream failed: %s", e, exc_info=True)
                 _notify(command_callback, "error", str(e))
+        else:
+            initial_connect_succeeded = True
+            self._should_reconnect = self.auto_reconnect
 
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
 
+        # Backoff retry only when the *initial* connect failed. Ongoing drops are
+        # handled exclusively by _monitor_connection to avoid duplicate offers.
         _next_retry_at = time.monotonic() + 15.0
         _retry_backoff = 30.0
-        _initial_connected = False
 
         try:
             while not stop.is_set() and self._is_running:
                 if (
                     self.pc is None
                     and self.auto_reconnect
-                    and not _initial_connected
+                    and not initial_connect_succeeded
+                    and not self._reconnect_in_progress
                 ):
                     if time.monotonic() >= _next_retry_at:
                         try:
                             logger.info("No active audio stream — retrying offer...")
-                            await self._start_webrtc()
+                            await self._negotiate_webrtc()
                             self._should_reconnect = self.auto_reconnect
-                            _initial_connected = True
+                            initial_connect_succeeded = True
                         except Exception as exc:
                             logger.info(
                                 "Audio stream retry failed (%s). Will retry in %.0fs.",
@@ -831,6 +857,12 @@ class BaseAudioStreamer:
                 )
                 if payload.get("type") == "offer":
                     return
+                if payload.get("type") == "wait" and payload.get("target") == "edge":
+                    logger.info(
+                        "WebRTC consumer waiting for producer: %s",
+                        payload.get("message") or payload.get("error"),
+                    )
+                    return
                 if payload.get("type") == "answer" and payload.get("target") == "edge":
                     # Reject answers whose SDP doesn't contain an audio track —
                     # this is a backwards-compatible way to distinguish video
@@ -873,9 +905,17 @@ class BaseAudioStreamer:
             except Exception as e:
                 logger.error("Error in on_answer: %s", e)
 
-        self.client.subscribe(answer_topic, on_answer)
+        # Key the handler by this stream's identity (media + mic + source +
+        # instance) — the same tuple on_answer uses to claim an answer. A
+        # reconnect or a fresh instance for the same mic re-subscribes under
+        # the same key (replace, no storm), while a different sensor/stream on
+        # this shared, twin-scoped topic keeps its own handler.
+        subscriber_key = (
+            f"audio:{self.mic_name}:{self.stream_source}:{self.stream_instance_id}"
+        )
+        self.client.subscribe(answer_topic, on_answer, subscriber_key=subscriber_key)
         candidate_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-candidate"
-        self.client.subscribe(candidate_topic, on_answer)
+        self.client.subscribe(candidate_topic, on_answer, subscriber_key=subscriber_key)
 
     def _handle_candidate(self, payload: dict[str, Any]) -> None:
         if not self.pc or not payload.get("candidate") or not self._event_loop:
@@ -926,7 +966,7 @@ class BaseAudioStreamer:
                 self._publish_webrtc_recording_command("start_recording")
                 _notify(callback, "ok", "Audio recording started")
                 return
-            await self._start_webrtc()
+            await self._negotiate_webrtc()
             self._should_reconnect = self.auto_reconnect
             self._publish_webrtc_recording_command("start_recording")
             _notify(callback, "ok", "Audio streaming started")
@@ -1033,28 +1073,38 @@ class BaseAudioStreamer:
         base_delay: float,
         max_attempts: int,
     ) -> int:
-        try:
-            try:
-                # Close only the peer connection; do NOT call stop() here because
-                # _attempt_reconnect runs inside _monitor_task, and stop() would
-                # tear down _run_task and cancel _monitor_task itself.
-                await self._close_peer_connection()
-            except Exception as e:
-                logger.warning("Error closing connection during reconnect: %s", e)
-            await asyncio.sleep(base_delay)
-            if not self._should_reconnect or stop_event.is_set():
-                return -1
-            logger.info("Reconnecting audio stream (attempt %s)...", attempt + 1)
-            await self._start_webrtc()
-            return 0
-        except Exception as e:
-            attempt += 1
-            logger.error("Reconnect attempt failed: %s", e, exc_info=True)
-            if attempt >= max_attempts:
-                self._should_reconnect = False
-                return -1
-            await asyncio.sleep(min(base_delay * (2 ** attempt), 30.0))
+        if self._webrtc_negotiation_lock is None:
+            self._webrtc_negotiation_lock = asyncio.Lock()
+        if self._webrtc_negotiation_lock.locked():
+            logger.debug("WebRTC reconnect already in progress; skipping duplicate attempt")
             return attempt
+
+        async with self._webrtc_negotiation_lock:
+            self._reconnect_in_progress = True
+            try:
+                try:
+                    # Close only the peer connection; do NOT call stop() here because
+                    # _attempt_reconnect runs inside _monitor_task, and stop() would
+                    # tear down _run_task and cancel _monitor_task itself.
+                    await self._close_peer_connection()
+                except Exception as e:
+                    logger.warning("Error closing connection during reconnect: %s", e)
+                await asyncio.sleep(base_delay)
+                if not self._should_reconnect or stop_event.is_set():
+                    return -1
+                logger.info("Reconnecting audio stream (attempt %s)...", attempt + 1)
+                await self._start_webrtc()
+                return 0
+            except Exception as e:
+                attempt += 1
+                logger.error("Reconnect attempt failed: %s", e, exc_info=True)
+                if attempt >= max_attempts:
+                    self._should_reconnect = False
+                    return -1
+                await asyncio.sleep(min(base_delay * (2 ** attempt), 30.0))
+                return attempt
+            finally:
+                self._reconnect_in_progress = False
 
     async def _cleanup_run(self) -> None:
         self._is_running = False

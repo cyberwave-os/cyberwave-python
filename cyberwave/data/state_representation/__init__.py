@@ -13,9 +13,12 @@ from .geometry.primitives import Quaterniond, Vector3d
 from .robot_state import RobotStateMessage
 from .space.cartesian import CartesianPose
 from .space.joint import (
+    MEASURED_JOINT_FIELDS,
+    TARGET_JOINT_FIELDS,
     JointState,
     ParsedJointMqttUpdate,
     joint_dict_from_payload,
+    joint_target_dict_from_payload,
     parse_joint_mqtt_payload,
 )
 from .space.spatial_state import SpatialState
@@ -23,6 +26,8 @@ from .space.spatial_state import SpatialState
 __all__ = [
     "CartesianPose",
     "JointState",
+    "MEASURED_JOINT_FIELDS",
+    "TARGET_JOINT_FIELDS",
     "ParsedJointMqttUpdate",
     "Quaterniond",
     "RobotStateMessage",
@@ -34,6 +39,7 @@ __all__ = [
     "decode_json_payload",
     "decode_kinematics_protobuf_stub",
     "joint_dict_from_payload",
+    "joint_target_dict_from_payload",
     "parse_joint_mqtt_payload",
     "merge_cartesian_pose",
     "merge_legacy_position_rotation",

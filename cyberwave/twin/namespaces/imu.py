@@ -10,7 +10,7 @@ from .base import SensorFamilyNamespace
 if TYPE_CHECKING:
     from ..base import Twin
 
-IMU_HANDLE_PUBLIC_METHODS: tuple[str, ...] = ("metadata", "get_sample")
+IMU_HANDLE_PUBLIC_METHODS: tuple[str, ...] = ("metadata", "get", "get_sample")
 
 
 class ImusNamespace(SensorFamilyNamespace):

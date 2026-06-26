@@ -14,6 +14,8 @@ from .classes import (
     FlyingTwin,
     GripperCameraTwin,
     GripperDepthCameraTwin,
+    GripperJointCameraTwin,
+    GripperJointDepthCameraTwin,
     GripperJointTwin,
     GripperTwin,
     JointTwin,
@@ -22,6 +24,9 @@ from .classes import (
     LocomoteGripperCameraTwin,
     LocomoteGripperDepthCameraTwin,
     LocomoteGripperTwin,
+    LocomoteJointCameraTwin,
+    LocomoteJointDepthCameraTwin,
+    LocomoteJointTwin,
     LocomoteTwin,
 )
 
@@ -48,6 +53,7 @@ def _select_twin_class(capabilities: Dict[str, Any]) -> Type[Twin]:
     """
     has_sensors = bool(capabilities.get("sensors", []))
     has_depth = any(s.get("type") == "depth" for s in capabilities.get("sensors", []))
+    has_joints = bool(capabilities.get("has_joints"))
     can_fly = capabilities.get("can_fly", False)
     can_locomote = capabilities.get("can_locomote", False)
     can_grip = capabilities.get("can_grip", False)
@@ -73,16 +79,22 @@ def _select_twin_class(capabilities: Dict[str, Any]) -> Type[Twin]:
             return LocomoteGripperCameraTwin
         elif can_grip:
             return LocomoteGripperTwin
+        elif has_joints and has_depth:
+            return LocomoteJointDepthCameraTwin
+        elif has_joints and has_sensors:
+            return LocomoteJointCameraTwin
+        elif has_joints:
+            return LocomoteJointTwin
         elif has_depth:
             return LocomoteDepthCameraTwin
         elif has_sensors:
             return LocomoteCameraTwin
         else:
             return LocomoteTwin
-    elif can_grip and has_sensors:
-        return GripperCameraTwin
     elif can_grip and has_depth:
-        return GripperDepthCameraTwin
+        return GripperJointDepthCameraTwin if _is_joint_manipulator(capabilities) else GripperDepthCameraTwin
+    elif can_grip and has_sensors:
+        return GripperJointCameraTwin if _is_joint_manipulator(capabilities) else GripperCameraTwin
     elif can_fly:
         return FlyingTwin
     elif can_locomote:

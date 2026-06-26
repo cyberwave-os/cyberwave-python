@@ -104,7 +104,9 @@ def _make_twin(
 
 
 def test_commands_handle_binds_catalog_methods_at_init() -> None:
-    twin = _make_twin(FlyingTwin, metadata=_dji_metadata(), capabilities={"can_fly": True})
+    twin = _make_twin(
+        FlyingTwin, metadata=_dji_metadata(), capabilities={"can_fly": True}
+    )
     handle = twin.commands
     assert "gimbal_rotate" in handle._bound_catalog_commands
     assert callable(handle.gimbal_rotate)
@@ -161,6 +163,19 @@ def test_catalog_locomotion_command_burst_delegates() -> None:
     assert turn_payloads[0]["angular_z"] == 0.4
 
 
+def test_commands_get_schema_shortcuts_match_driver() -> None:
+    twin = _make_twin(
+        LocomoteTwin,
+        metadata=_go2_metadata(),
+        capabilities={"can_locomote": True},
+    )
+    assert (
+        twin.commands.get_supported_commands() == twin.driver.get_supported_commands()
+    )
+    assert twin.commands.get_schema() == twin.driver.get_mqtt_schema()
+    assert "move_forward" in twin.commands.get_supported_commands()
+
+
 def test_catalog_go2_move_forward_delegates_burst() -> None:
     twin = _make_twin(
         LocomoteTwin,
@@ -171,9 +186,7 @@ def test_catalog_go2_move_forward_delegates_burst() -> None:
         with patch.object(_transport.time, "sleep"):
             twin.commands.move_forward(linear_x=0.5, duration=0.2, rate_hz=10)
 
-    forward = [
-        entry for entry in twin._outbound_log if entry.command == "move_forward"
-    ]
+    forward = [entry for entry in twin._outbound_log if entry.command == "move_forward"]
     assert len(forward) == 2
     assert forward[0].payload["data"]["linear_x"] == 0.5
     assert twin._outbound_log[-1].command == "stop"
@@ -248,16 +261,28 @@ def test_describe_lists_catalog_command_methods() -> None:
         capabilities={"can_locomote": True},
     )
     info = twin.describe()
+    assert "driver" in info
+    assert info["driver"] is info["handles"]["driver"]
+    assert "get_schemas" in info["driver"]["methods"]
     assert "commands" in info
     assert info["commands"] is info["handles"]["commands"]
     methods = info["commands"]["methods"]
-    assert "get_schema" in methods
     assert "teleoperate" in methods
     assert "teleoperate" in info["commands"]["catalog_methods"]
     assert info["commands"]["access"] == "twin.commands"
-    assert "teleoperate" in info["commands"]["mqtt"]["supported"]
-    assert info["commands"]["mqtt"]["has_joint_update_topic"] is True
+    assert "twin.commands.get_schema" in info["commands"]["catalog_introspection"]
+    assert "get_schema" in info["commands"]["methods"]
+    assert "get_supported_commands" in info["commands"]["methods"]
+    assert "teleoperate" in info["commands"]["supported_commands"]
+    assert "teleoperate" in info["driver"]["mqtt"]["supported_commands"]
+    assert info["driver"]["mqtt"]["has_joint_update_topic"] is True
     assert "publish" in info["commands"]
+    assert info["interfaces"]["driver"]["access"] == "twin.driver"
+    assert (
+        "twin.commands.get_schema"
+        in info["interfaces"]["commands"]["catalog_introspection"]
+    )
+    assert "driver" in info["flat_methods"]
     assert "commands" in info["flat_methods"]
 
 
@@ -299,4 +324,49 @@ def test_describe_includes_command_routing_for_locomote() -> None:
     assert routing["move_forward"]["via"] == "burst"
     assert routing["move_forward"]["continuous"] is True
     assert routing["camera_up"]["via"] == "mqtt_publish"
-    assert "specs" in twin.describe()["commands"]["mqtt"]
+    assert twin.describe()["driver"]["mqtt"]["command_specs"]
+
+
+def _arm_metadata() -> dict:
+    return {
+        "mqtt": {
+            "topics": {"cyberwave/twin/{twin_uuid}/command": {}},
+            "commands": {
+                "supported": ["ee_move", "ee_rotate_left"],
+                "specs": {
+                    "ee_move": {
+                        "args": [
+                            {"name": "forward", "default": 0.0, "unit": "m"},
+                            {"name": "up", "default": 0.0, "unit": "m"},
+                            {"name": "left", "default": 0.0, "unit": "m"},
+                            {"name": "frame", "default": "tool"},
+                        ]
+                    },
+                    "ee_rotate_left": {
+                        "args": [{"name": "angle", "default": 0.0, "unit": "rad"}]
+                    },
+                },
+            },
+        },
+    }
+
+
+def test_catalog_command_positional_primary_arg_and_defaults() -> None:
+    twin = _make_twin(LocomoteTwin, metadata=_arm_metadata(), capabilities={})
+    with patch.object(twin, "_prepare_outbound_command"):
+        twin.commands.ee_move(0.1)
+    data = twin._outbound_log[0].payload["data"]
+    assert data["forward"] == 0.1
+    assert data["up"] == 0.0
+    assert data["left"] == 0.0
+    assert data["frame"] == "tool"
+
+
+def test_catalog_command_kwargs_override_defaults_relaxed() -> None:
+    twin = _make_twin(LocomoteTwin, metadata=_arm_metadata(), capabilities={})
+    with patch.object(twin, "_prepare_outbound_command"):
+        twin.commands.ee_move(up=0.05, extra="ok")
+    data = twin._outbound_log[0].payload["data"]
+    assert data["up"] == 0.05
+    assert data["forward"] == 0.0
+    assert data["extra"] == "ok"  # relaxed: unknown kwargs pass through

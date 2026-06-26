@@ -20,6 +20,8 @@ import json
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.alert_metrics_section import AlertMetricsSection
+from cyberwave.rest.models.event_credits_day_bucket import EventCreditsDayBucket
+from cyberwave.rest.models.event_metrics_totals import EventMetricsTotals
 from cyberwave.rest.models.metrics_window_schema import MetricsWindowSchema
 from cyberwave.rest.models.telemetry_metrics_section import TelemetryMetricsSection
 from cyberwave.rest.models.workflow_metrics_section import WorkflowMetricsSection
@@ -38,7 +40,9 @@ class EventMetricsSchema(BaseModel):
     workflow_executions: WorkflowMetricsSection
     workflow_node_executions: WorkflowMetricsSection
     alerts: AlertMetricsSection
-    __properties: ClassVar[List[str]] = ["workspace_uuid", "organization_uuid", "window", "telemetry", "workflow_executions", "workflow_node_executions", "alerts"]
+    totals: EventMetricsTotals
+    credits_by_day: List[EventCreditsDayBucket]
+    __properties: ClassVar[List[str]] = ["workspace_uuid", "organization_uuid", "window", "telemetry", "workflow_executions", "workflow_node_executions", "alerts", "totals", "credits_by_day"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -94,6 +98,16 @@ class EventMetricsSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of alerts
         if self.alerts:
             _dict['alerts'] = self.alerts.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of totals
+        if self.totals:
+            _dict['totals'] = self.totals.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each item in credits_by_day (list)
+        _items = []
+        if self.credits_by_day:
+            for _item_credits_by_day in self.credits_by_day:
+                if _item_credits_by_day:
+                    _items.append(_item_credits_by_day.to_dict())
+            _dict['credits_by_day'] = _items
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -122,7 +136,9 @@ class EventMetricsSchema(BaseModel):
             "telemetry": TelemetryMetricsSection.from_dict(obj["telemetry"]) if obj.get("telemetry") is not None else None,
             "workflow_executions": WorkflowMetricsSection.from_dict(obj["workflow_executions"]) if obj.get("workflow_executions") is not None else None,
             "workflow_node_executions": WorkflowMetricsSection.from_dict(obj["workflow_node_executions"]) if obj.get("workflow_node_executions") is not None else None,
-            "alerts": AlertMetricsSection.from_dict(obj["alerts"]) if obj.get("alerts") is not None else None
+            "alerts": AlertMetricsSection.from_dict(obj["alerts"]) if obj.get("alerts") is not None else None,
+            "totals": EventMetricsTotals.from_dict(obj["totals"]) if obj.get("totals") is not None else None,
+            "credits_by_day": [EventCreditsDayBucket.from_dict(_item) for _item in obj["credits_by_day"]] if obj.get("credits_by_day") is not None else None
         })
         return _obj
 

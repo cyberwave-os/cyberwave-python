@@ -38,7 +38,8 @@ class AgentControlRouteResolveRequest(BaseModel):
     prompt_motion_mlmodel_uuid: Optional[StrictStr] = None
     requires_confirmation: Optional[StrictBool] = None
     current_joint_states: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["route_id", "inputs", "summary", "target_twin_uuid", "twin_uuid", "mode", "simulation_backend", "perception_evidence", "prompt_motion_mlmodel_uuid", "requires_confirmation", "current_joint_states"]
+    current_sensor_states: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["route_id", "inputs", "summary", "target_twin_uuid", "twin_uuid", "mode", "simulation_backend", "perception_evidence", "prompt_motion_mlmodel_uuid", "requires_confirmation", "current_joint_states", "current_sensor_states"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -124,6 +125,11 @@ class AgentControlRouteResolveRequest(BaseModel):
         if self.current_joint_states is None and "current_joint_states" in self.model_fields_set:
             _dict['current_joint_states'] = None
 
+        # set to None if current_sensor_states (nullable) is None
+        # and model_fields_set contains the field
+        if self.current_sensor_states is None and "current_sensor_states" in self.model_fields_set:
+            _dict['current_sensor_states'] = None
+
         return _dict
 
     @classmethod
@@ -146,7 +152,8 @@ class AgentControlRouteResolveRequest(BaseModel):
             "perception_evidence": obj.get("perception_evidence"),
             "prompt_motion_mlmodel_uuid": obj.get("prompt_motion_mlmodel_uuid"),
             "requires_confirmation": obj.get("requires_confirmation"),
-            "current_joint_states": obj.get("current_joint_states")
+            "current_joint_states": obj.get("current_joint_states"),
+            "current_sensor_states": obj.get("current_sensor_states")
         })
         return _obj
 

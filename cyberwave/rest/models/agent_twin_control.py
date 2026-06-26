@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.agent_controller_runtime_route_ref_schema import AgentControllerRuntimeRouteRefSchema
 from cyberwave.rest.models.agent_twin_control_joint_schema import AgentTwinControlJointSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -32,23 +33,26 @@ class AgentTwinControl(BaseModel):
     label: StrictStr
     available: StrictBool
     dispatchability: StrictStr
+    execution_channel: StrictStr
     transport: StrictStr
     requires_confirmation: Optional[StrictBool] = True
     reason: Optional[StrictStr] = None
     source_types: Optional[List[StrictStr]] = None
     commands: Optional[List[StrictStr]] = None
     controller_policy_uuids: Optional[List[StrictStr]] = None
+    controller_policy_defaults: Optional[Dict[str, Dict[str, AgentControllerRuntimeRouteRefSchema]]] = None
     asset_uuid: Optional[StrictStr] = None
     end_effector_frame: Optional[StrictStr] = None
     missing_capabilities: Optional[List[StrictStr]] = None
     sensor_ids: Optional[List[StrictStr]] = None
+    sensor_geometries: Optional[List[Optional[Dict[str, Any]]]] = None
     poses: Optional[List[Dict[str, StrictStr]]] = None
     movements: Optional[List[Dict[str, StrictStr]]] = None
     joints: Optional[List[AgentTwinControlJointSchema]] = None
     preview_available: Optional[StrictBool] = None
     execution_available: Optional[StrictBool] = None
     readiness: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["kind", "label", "available", "dispatchability", "transport", "requires_confirmation", "reason", "source_types", "commands", "controller_policy_uuids", "asset_uuid", "end_effector_frame", "missing_capabilities", "sensor_ids", "poses", "movements", "joints", "preview_available", "execution_available", "readiness"]
+    __properties: ClassVar[List[str]] = ["kind", "label", "available", "dispatchability", "execution_channel", "transport", "requires_confirmation", "reason", "source_types", "commands", "controller_policy_uuids", "controller_policy_defaults", "asset_uuid", "end_effector_frame", "missing_capabilities", "sensor_ids", "sensor_geometries", "poses", "movements", "joints", "preview_available", "execution_available", "readiness"]
 
     @field_validator('kind')
     def kind_validate_enum(cls, value):
@@ -106,6 +110,15 @@ class AgentTwinControl(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each value in controller_policy_defaults (dict of dict)
+        _field_dict_of_dict = {}
+        if self.controller_policy_defaults:
+            for _key_controller_policy_defaults, _value_controller_policy_defaults in self.controller_policy_defaults.items():
+                if _value_controller_policy_defaults is not None:
+                    _field_dict_of_dict[_key_controller_policy_defaults] = {
+                        _key: _value.to_dict() for _key, _value in _value_controller_policy_defaults.items()
+                    }
+            _dict['controller_policy_defaults'] = _field_dict_of_dict
         # override the default output from pydantic by calling `to_dict()` of each item in joints (list)
         _items = []
         if self.joints:
@@ -159,16 +172,30 @@ class AgentTwinControl(BaseModel):
             "label": obj.get("label"),
             "available": obj.get("available"),
             "dispatchability": obj.get("dispatchability"),
+            "execution_channel": obj.get("execution_channel"),
             "transport": obj.get("transport"),
             "requires_confirmation": obj.get("requires_confirmation") if obj.get("requires_confirmation") is not None else True,
             "reason": obj.get("reason"),
             "source_types": obj.get("source_types"),
             "commands": obj.get("commands"),
             "controller_policy_uuids": obj.get("controller_policy_uuids"),
+            "controller_policy_defaults": dict(
+                (_k, dict(
+                    (_ik, AgentControllerRuntimeRouteRefSchema.from_dict(_iv))
+                        for _ik, _iv in _v.items()
+                    )
+                    if _v is not None
+                    else None
+                )
+                for _k, _v in obj["controller_policy_defaults"].items()
+            )
+            if obj.get("controller_policy_defaults") is not None
+            else None,
             "asset_uuid": obj.get("asset_uuid"),
             "end_effector_frame": obj.get("end_effector_frame"),
             "missing_capabilities": obj.get("missing_capabilities"),
             "sensor_ids": obj.get("sensor_ids"),
+            "sensor_geometries": obj.get("sensor_geometries"),
             "poses": obj.get("poses"),
             "movements": obj.get("movements"),
             "joints": [AgentTwinControlJointSchema.from_dict(_item) for _item in obj["joints"]] if obj.get("joints") is not None else None,

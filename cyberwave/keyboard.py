@@ -139,7 +139,9 @@ class KeyboardTeleop:
     def _get_initial_positions(self) -> Dict[str, float]:
         positions: Dict[str, float] = {}
         try:
-            positions = self._twin.joints.get()
+            # joints.get() returns a live view; snapshot into a mutable dict since
+            # we mutate per-joint positions as keys are pressed.
+            positions = dict(self._twin.joints.get())
         except Exception:
             pass
         return positions

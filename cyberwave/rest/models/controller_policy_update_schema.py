@@ -33,7 +33,8 @@ class ControllerPolicyUpdateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     visibility: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "controller_type", "metadata", "visibility", "asset_uuids"]
+    device: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "description", "controller_type", "metadata", "visibility", "asset_uuids", "device"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -104,6 +105,11 @@ class ControllerPolicyUpdateSchema(BaseModel):
         if self.asset_uuids is None and "asset_uuids" in self.model_fields_set:
             _dict['asset_uuids'] = None
 
+        # set to None if device (nullable) is None
+        # and model_fields_set contains the field
+        if self.device is None and "device" in self.model_fields_set:
+            _dict['device'] = None
+
         return _dict
 
     @classmethod
@@ -121,7 +127,8 @@ class ControllerPolicyUpdateSchema(BaseModel):
             "controller_type": obj.get("controller_type"),
             "metadata": obj.get("metadata"),
             "visibility": obj.get("visibility"),
-            "asset_uuids": obj.get("asset_uuids")
+            "asset_uuids": obj.get("asset_uuids"),
+            "device": obj.get("device")
         })
         return _obj
 

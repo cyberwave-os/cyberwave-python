@@ -38,7 +38,7 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
     material: Optional[StrictStr] = None
     style: Optional[Style1] = None
     parameters: Optional[Dict[str, Any]] = None
-    json_patch: Optional[List[Optional[Dict[str, Any]]]] = None
+    json_patch: Optional[List[Dict[str, Any]]] = None
     pose: Optional[Dict[str, Any]] = None
     position: Optional[Position] = None
     rotation: Optional[Rotation] = None

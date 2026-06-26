@@ -32,8 +32,10 @@ class AgentCreateEnvironmentResponseSchema(BaseModel):
     environment: EnvironmentSchema
     answer: StrictStr
     tool_calls: Optional[List[StrictStr]] = None
+    creation_validation: Optional[Dict[str, Any]] = None
+    workflow_result: Optional[Dict[str, Any]] = None
     proposal: Optional[AgentProposalSchema] = None
-    __properties: ClassVar[List[str]] = ["environment", "answer", "tool_calls", "proposal"]
+    __properties: ClassVar[List[str]] = ["environment", "answer", "tool_calls", "creation_validation", "workflow_result", "proposal"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -80,6 +82,11 @@ class AgentCreateEnvironmentResponseSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of proposal
         if self.proposal:
             _dict['proposal'] = self.proposal.to_dict()
+        # set to None if workflow_result (nullable) is None
+        # and model_fields_set contains the field
+        if self.workflow_result is None and "workflow_result" in self.model_fields_set:
+            _dict['workflow_result'] = None
+
         # set to None if proposal (nullable) is None
         # and model_fields_set contains the field
         if self.proposal is None and "proposal" in self.model_fields_set:
@@ -100,6 +107,8 @@ class AgentCreateEnvironmentResponseSchema(BaseModel):
             "environment": EnvironmentSchema.from_dict(obj["environment"]) if obj.get("environment") is not None else None,
             "answer": obj.get("answer"),
             "tool_calls": obj.get("tool_calls"),
+            "creation_validation": obj.get("creation_validation"),
+            "workflow_result": obj.get("workflow_result"),
             "proposal": AgentProposalSchema.from_dict(obj["proposal"]) if obj.get("proposal") is not None else None
         })
         return _obj

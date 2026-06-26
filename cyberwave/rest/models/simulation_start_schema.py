@@ -19,6 +19,9 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.online_controller_spec_schema import OnlineControllerSpecSchema
+from cyberwave.rest.models.simulation_runtime_options_schema import SimulationRuntimeOptionsSchema
+from cyberwave.rest.models.simulation_timing_options_schema import SimulationTimingOptionsSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -30,7 +33,11 @@ class SimulationStartSchema(BaseModel):
     duration: Optional[Union[StrictFloat, StrictInt]] = None
     stream_data: Optional[StrictBool] = None
     backend: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["duration", "stream_data", "backend"]
+    runtime: Optional[SimulationRuntimeOptionsSchema] = None
+    timing: Optional[SimulationTimingOptionsSchema] = None
+    online_controllers: Optional[List[OnlineControllerSpecSchema]] = None
+    auto_run_controllers: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["duration", "stream_data", "backend", "runtime", "timing", "online_controllers", "auto_run_controllers"]
 
     @field_validator('backend')
     def backend_validate_enum(cls, value):
@@ -38,8 +45,8 @@ class SimulationStartSchema(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['mujoco', 'isaac']):
-            raise ValueError("must be one of enum values ('mujoco', 'isaac')")
+        if value not in set(['mujoco', 'isaac', 'mujoco_warp']):
+            raise ValueError("must be one of enum values ('mujoco', 'isaac', 'mujoco_warp')")
         return value
 
     model_config = ConfigDict(
@@ -81,6 +88,19 @@ class SimulationStartSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of runtime
+        if self.runtime:
+            _dict['runtime'] = self.runtime.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of timing
+        if self.timing:
+            _dict['timing'] = self.timing.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each item in online_controllers (list)
+        _items = []
+        if self.online_controllers:
+            for _item_online_controllers in self.online_controllers:
+                if _item_online_controllers:
+                    _items.append(_item_online_controllers.to_dict())
+            _dict['online_controllers'] = _items
         # set to None if duration (nullable) is None
         # and model_fields_set contains the field
         if self.duration is None and "duration" in self.model_fields_set:
@@ -96,6 +116,21 @@ class SimulationStartSchema(BaseModel):
         if self.backend is None and "backend" in self.model_fields_set:
             _dict['backend'] = None
 
+        # set to None if runtime (nullable) is None
+        # and model_fields_set contains the field
+        if self.runtime is None and "runtime" in self.model_fields_set:
+            _dict['runtime'] = None
+
+        # set to None if timing (nullable) is None
+        # and model_fields_set contains the field
+        if self.timing is None and "timing" in self.model_fields_set:
+            _dict['timing'] = None
+
+        # set to None if online_controllers (nullable) is None
+        # and model_fields_set contains the field
+        if self.online_controllers is None and "online_controllers" in self.model_fields_set:
+            _dict['online_controllers'] = None
+
         return _dict
 
     @classmethod
@@ -110,7 +145,11 @@ class SimulationStartSchema(BaseModel):
         _obj = cls.model_validate({
             "duration": obj.get("duration"),
             "stream_data": obj.get("stream_data"),
-            "backend": obj.get("backend")
+            "backend": obj.get("backend"),
+            "runtime": SimulationRuntimeOptionsSchema.from_dict(obj["runtime"]) if obj.get("runtime") is not None else None,
+            "timing": SimulationTimingOptionsSchema.from_dict(obj["timing"]) if obj.get("timing") is not None else None,
+            "online_controllers": [OnlineControllerSpecSchema.from_dict(_item) for _item in obj["online_controllers"]] if obj.get("online_controllers") is not None else None,
+            "auto_run_controllers": obj.get("auto_run_controllers") if obj.get("auto_run_controllers") is not None else False
         })
         return _obj
 

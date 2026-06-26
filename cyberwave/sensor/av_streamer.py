@@ -382,9 +382,15 @@ class MultimediaStreamer:
             except Exception as e:
                 logger.error("Error in multimedia on_answer: %s", e)
 
-        self.client.subscribe(answer_topic, on_answer)
+        # Key the handler by this stream's identity. The multimedia streamer
+        # claims answers by media (both m=video and m=audio) rather than by
+        # sensor, so the camera+mic pair identifies it. A reconnect re-subscribes
+        # under the same key (replace, no storm), while video-only / audio-only
+        # streamers on this shared, twin-scoped topic keep their own handlers.
+        subscriber_key = f"av:{self.camera_name}:{self.mic_name}"
+        self.client.subscribe(answer_topic, on_answer, subscriber_key=subscriber_key)
         candidate_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-candidate"
-        self.client.subscribe(candidate_topic, on_answer)
+        self.client.subscribe(candidate_topic, on_answer, subscriber_key=subscriber_key)
 
     def _handle_candidate(self, payload: dict[str, Any]) -> None:
         if not self.pc or not payload.get("candidate") or not self._event_loop:

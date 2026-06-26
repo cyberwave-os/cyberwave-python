@@ -31,7 +31,7 @@ import time
 
 # Import SDK components
 from cyberwave import Cyberwave
-from cyberwave.exceptions import CyberwaveAPIError
+from cyberwave.exceptions import CyberwaveAPIError, CyberwaveInsufficientCreditsError
 
 
 @pytest.fixture(scope="module")
@@ -60,6 +60,42 @@ def cyberwave_client():
     yield client
 
     # Cleanup
+    client.disconnect()
+
+
+@pytest.fixture(scope="module")
+def cyberwave_client_no_credits():
+    """
+    Create a Cyberwave client for a test account that has no available credits.
+
+    Used to verify that credit-exhausted responses surface as
+    ``CyberwaveInsufficientCreditsError`` rather than a generic crash.
+
+    Requires environment variable:
+    - CYBERWAVE_API_KEY_NO_CREDITS: API key for an account whose credits have
+      been drained or whose organization has been force-blocked by CI setup steps.
+    """
+    api_key = os.getenv("CYBERWAVE_API_KEY_NO_CREDITS")
+
+    if not api_key:
+        pytest.skip(
+            "CYBERWAVE_API_KEY_NO_CREDITS not set — skipping no-credits tests. "
+            "Set this to the API key of an account with zero or negative credits."
+        )
+
+    client = Cyberwave(api_key=api_key)
+
+    # Read-only sanity check — listing twins does not charge credits.
+    try:
+        client.twins.list()
+    except CyberwaveInsufficientCreditsError:
+        # Account is already blocked even for reads — that's fine for this fixture.
+        pass
+    except Exception as e:
+        pytest.skip(f"Cannot connect with no-credits API key: {e}")
+
+    yield client
+
     client.disconnect()
 
 
@@ -544,6 +580,52 @@ class TestIntegrationRegressions:
                 except Exception:
                     pass
 
+        print("=" * 70 + "\n")
+
+
+class TestIntegrationCredits:
+    """
+    Verify that the SDK surfaces credit-exhausted errors as the typed exception
+    ``CyberwaveInsufficientCreditsError`` rather than a generic crash.
+
+    These tests require a second API key (``CYBERWAVE_API_KEY_NO_CREDITS``) that
+    belongs to an account whose credits have been drained or force-blocked.
+    The CI workflow sets this up automatically before the test run.
+    """
+
+    def test_workflow_trigger_raises_insufficient_credits(
+        self, cyberwave_client, cyberwave_client_no_credits
+    ):
+        """
+        Triggering a workflow on a no-credits account must raise
+        ``CyberwaveInsufficientCreditsError``, not a generic exception.
+        """
+        print("\n" + "=" * 70)
+        print("Testing Credits: trigger raises CyberwaveInsufficientCreditsError")
+        print("=" * 70)
+
+        # Discover an active workflow UUID using the credited account.
+        workflows = cyberwave_client.workflows.list()
+        active = [wf for wf in workflows if wf.is_active]
+        if not active:
+            pytest.skip("No active workflows found — skipping credits test")
+
+        wf = active[0]
+        print(f"  Using workflow: {wf.name} ({wf.uuid})")
+
+        with pytest.raises(CyberwaveInsufficientCreditsError) as exc_info:
+            cyberwave_client_no_credits.workflows.trigger(wf.uuid, inputs={})
+
+        err = exc_info.value
+        assert err.status_code == 402, f"Expected 402, got {err.status_code}"
+        if not err.manual_block:
+            # Balance-exhausted path: balance must be at or below zero.
+            assert err.balance is not None, "balance should be parseable from response"
+            assert err.balance <= 0, f"Expected non-positive balance, got {err.balance}"
+        print(
+            f"✓ trigger raised CyberwaveInsufficientCreditsError "
+            f"(balance={err.balance}, manual_block={err.manual_block})"
+        )
         print("=" * 70 + "\n")
 
 

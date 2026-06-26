@@ -12,7 +12,7 @@ from cyberwave import Cyberwave
 cw = Cyberwave()
 cw.affect("simulation")  # use cw.affect("live") for actual flight
 
-drone = cw.twin("dji/DJI-Mini-4-Pro")
+drone = cw.twin("dji/mini-4-pro")
 
 # Take off
 print("Taking off…")

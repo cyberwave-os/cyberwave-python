@@ -17,8 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import fractions
-import os
-import tempfile
 import time
 from typing import Any
 from unittest.mock import MagicMock
@@ -97,8 +95,14 @@ def _make_fake_sd(streams: list | None = None) -> MagicMock:
     return fake_sd
 
 
-def _write_wav(path: str, *, duration_s: float = 0.25, freq: float = 440.0,
-               sample_rate: int = 48000, channels: int = 1) -> None:
+def _write_wav(
+    path: str,
+    *,
+    duration_s: float = 0.25,
+    freq: float = 440.0,
+    sample_rate: int = 48000,
+    channels: int = 1,
+) -> None:
     """Write a tiny sine cue to *path* using PyAV — real container, real codec."""
     container = av.open(path, mode="w", format="wav")
     layout = "mono" if channels == 1 else "stereo"
@@ -182,10 +186,20 @@ class TestListHostSoundDevices:
         fake_sd = MagicMock()
         fake_sd.default.device = (0, 1)  # (input_default, output_default)
         fake_sd.query_devices.return_value = [
-            {"name": "Built-in Mic", "max_input_channels": 2,
-             "max_output_channels": 0, "default_samplerate": 48000.0, "hostapi": 0},
-            {"name": "Built-in Output", "max_input_channels": 0,
-             "max_output_channels": 2, "default_samplerate": 44100.0, "hostapi": 0},
+            {
+                "name": "Built-in Mic",
+                "max_input_channels": 2,
+                "max_output_channels": 0,
+                "default_samplerate": 48000.0,
+                "hostapi": 0,
+            },
+            {
+                "name": "Built-in Output",
+                "max_input_channels": 0,
+                "max_output_channels": 2,
+                "default_samplerate": 44100.0,
+                "hostapi": 0,
+            },
         ]
         monkeypatch.setattr(speaker_module, "_get_sounddevice_module", lambda: fake_sd)
 
@@ -200,10 +214,20 @@ class TestListHostSoundDevices:
         fake_sd = MagicMock()
         fake_sd.default.device = (0, 1)
         fake_sd.query_devices.return_value = [
-            {"name": "Mic", "max_input_channels": 1, "max_output_channels": 0,
-             "default_samplerate": 16000, "hostapi": 0},
-            {"name": "Speaker", "max_input_channels": 0, "max_output_channels": 2,
-             "default_samplerate": 48000, "hostapi": 0},
+            {
+                "name": "Mic",
+                "max_input_channels": 1,
+                "max_output_channels": 0,
+                "default_samplerate": 16000,
+                "hostapi": 0,
+            },
+            {
+                "name": "Speaker",
+                "max_input_channels": 0,
+                "max_output_channels": 2,
+                "default_samplerate": 48000,
+                "hostapi": 0,
+            },
         ]
         monkeypatch.setattr(speaker_module, "_get_sounddevice_module", lambda: fake_sd)
 
@@ -215,8 +239,13 @@ class TestListHostSoundDevices:
         fake_sd = MagicMock()
         fake_sd.default.device = (-1, -1)
         fake_sd.query_devices.return_value = [
-            {"name": "Out", "max_input_channels": 0, "max_output_channels": 2,
-             "default_samplerate": 48000, "hostapi": 0},
+            {
+                "name": "Out",
+                "max_input_channels": 0,
+                "max_output_channels": 2,
+                "default_samplerate": 48000,
+                "hostapi": 0,
+            },
         ]
         monkeypatch.setattr(speaker_module, "_get_sounddevice_module", lambda: fake_sd)
 
@@ -225,16 +254,28 @@ class TestListHostSoundDevices:
         assert default_idx is None
         assert devices[0]["max_output_channels"] == 2
 
-    def test_default_falls_back_to_first_when_default_not_in_filtered_list(self, monkeypatch):
+    def test_default_falls_back_to_first_when_default_not_in_filtered_list(
+        self, monkeypatch
+    ):
         fake_sd = MagicMock()
         # PortAudio default points at index 1 (the mic), but caller asks for
         # outputs — fallback should snap to the first output device.
         fake_sd.default.device = (1, 1)
         fake_sd.query_devices.return_value = [
-            {"name": "Out", "max_input_channels": 0, "max_output_channels": 2,
-             "default_samplerate": 48000, "hostapi": 0},
-            {"name": "Mic", "max_input_channels": 2, "max_output_channels": 0,
-             "default_samplerate": 48000, "hostapi": 0},
+            {
+                "name": "Out",
+                "max_input_channels": 0,
+                "max_output_channels": 2,
+                "default_samplerate": 48000,
+                "hostapi": 0,
+            },
+            {
+                "name": "Mic",
+                "max_input_channels": 2,
+                "max_output_channels": 0,
+                "default_samplerate": 48000,
+                "hostapi": 0,
+            },
         ]
         monkeypatch.setattr(speaker_module, "_get_sounddevice_module", lambda: fake_sd)
 
@@ -245,12 +286,27 @@ class TestListHostSoundDevices:
         fake_sd = MagicMock()
         fake_sd.default.device = (0, 1)
         fake_sd.query_devices.return_value = [
-            {"name": "Mic", "max_input_channels": 1, "max_output_channels": 0,
-             "default_samplerate": 16000, "hostapi": 0},
-            {"name": "Speaker", "max_input_channels": 0, "max_output_channels": 2,
-             "default_samplerate": 48000, "hostapi": 0},
-            {"name": "Hybrid", "max_input_channels": 1, "max_output_channels": 1,
-             "default_samplerate": 48000, "hostapi": 0},
+            {
+                "name": "Mic",
+                "max_input_channels": 1,
+                "max_output_channels": 0,
+                "default_samplerate": 16000,
+                "hostapi": 0,
+            },
+            {
+                "name": "Speaker",
+                "max_input_channels": 0,
+                "max_output_channels": 2,
+                "default_samplerate": 48000,
+                "hostapi": 0,
+            },
+            {
+                "name": "Hybrid",
+                "max_input_channels": 1,
+                "max_output_channels": 1,
+                "default_samplerate": 48000,
+                "hostapi": 0,
+            },
         ]
         monkeypatch.setattr(speaker_module, "_get_sounddevice_module", lambda: fake_sd)
 
@@ -888,6 +944,22 @@ class TestHostSpeakerCaptureSources:
         assert isinstance(q, _QueueAudioSource)
         assert cap._get_active_source() is q
 
+    def test_stop_file_clears_matching_file_source(self, wav_file_mono):
+        cap = HostSpeakerCapture()
+        source = _FileAudioSource(
+            wav_file_mono,
+            target_sample_rate=48000,
+            target_channels=1,
+        )
+        cap.set_source(source)
+        assert cap.stop_file(wav_file_mono) is True
+        assert cap._get_active_source() is None
+
+    def test_stop_file_ignores_other_source(self, wav_file_mono):
+        cap = HostSpeakerCapture()
+        cap.set_queue_source()
+        assert cap.stop_file(wav_file_mono) is False
+
 
 class TestHostSpeakerCallback:
     def _new_cap(self, bit_depth: int = 16) -> HostSpeakerCapture:
@@ -997,7 +1069,9 @@ class TestHostSpeakerDsp:
     def test_get_physical_info_with_device(self, monkeypatch):
         fake_sd = MagicMock()
         fake_sd.query_devices.return_value = {
-            "name": "TestSpk", "hostapi": 0, "max_output_channels": 2,
+            "name": "TestSpk",
+            "hostapi": 0,
+            "max_output_channels": 2,
             "default_samplerate": 48000.0,
         }
         monkeypatch.setattr(speaker_module, "_get_sounddevice_module", lambda: fake_sd)
@@ -1027,7 +1101,9 @@ class TestHostSpeakerHelpers:
         cap.play_chunk(np.full((4, 1), 1, dtype=np.int16))
         assert cap._get_active_source() is q
 
-    def test_play_file_non_blocking_installs_file_source(self, monkeypatch, wav_file_mono):
+    def test_play_file_non_blocking_installs_file_source(
+        self, monkeypatch, wav_file_mono
+    ):
         monkeypatch.setattr(
             speaker_module, "_get_sounddevice_module", lambda: _make_fake_sd()
         )
@@ -1083,7 +1159,9 @@ class TestSpeakerAudioTrack:
             SpeakerAudioTrack(channels=3)
 
     def test_layout_derived_from_channels(self):
-        track = SpeakerAudioTrack(channels=2, layout="mono")  # layout intentionally wrong
+        track = SpeakerAudioTrack(
+            channels=2, layout="mono"
+        )  # layout intentionally wrong
         assert track.layout == "stereo"
 
     def test_bytes_per_frame_uses_channels(self):
@@ -1119,7 +1197,9 @@ class TestSpeakerAudioTrack:
         assert frame.samples == SAMPLES_PER_FRAME
         assert frame.sample_rate == DEFAULT_SAMPLE_RATE
         assert frame.time_base == fractions.Fraction(1, DEFAULT_SAMPLE_RATE)
-        assert bytes(frame.planes[0])[: track._bytes_per_frame] == bytes(track._bytes_per_frame)
+        assert bytes(frame.planes[0])[: track._bytes_per_frame] == bytes(
+            track._bytes_per_frame
+        )
 
     async def test_recv_pts_advances(self):
         track = SpeakerAudioTrack(channels=1)
@@ -1175,7 +1255,9 @@ class TestStreamerInit:
 
     def test_passing_matching_playback_quiet(self, caplog):
         pb = HostSpeakerCapture(
-            sample_rate=DEFAULT_SAMPLE_RATE, channels=1, bit_depth=DEFAULT_SPEAKER_BIT_DEPTH
+            sample_rate=DEFAULT_SAMPLE_RATE,
+            channels=1,
+            bit_depth=DEFAULT_SPEAKER_BIT_DEPTH,
         )
         _ = _make_streamer(playback=pb)
         assert not any("ignoring constructor args" in r.message for r in caplog.records)
@@ -1280,7 +1362,9 @@ class _FakeDataBus:
         self.subscriptions: list[_FakeSubscription] = []
         self._callbacks: dict[str, Any] = {}
 
-    def subscribe(self, channel, callback, *, policy="latest", twin_uuid=None, raw=False):
+    def subscribe(
+        self, channel, callback, *, policy="latest", twin_uuid=None, raw=False
+    ):
         sub = _FakeSubscription()
         self.subscribe_calls.append(
             {"channel": channel, "policy": policy, "twin_uuid": twin_uuid}
@@ -1366,8 +1450,6 @@ class TestStreamerZenohSource:
         # bus callback twice from different "inputs": each call routes to
         # the input that registered its closure.
         # Simpler: use the captured callback list per-call.
-        cb1 = bus.subscribe_calls[0]
-        cb2 = bus.subscribe_calls[1]
         # We need access to the actual callbacks; capture them via the
         # subscriptions list (assumes registration order matches).
         # _FakeDataBus stores them in self._callbacks but keyed by channel
@@ -1453,7 +1535,9 @@ class TestDrainRemoteTrack:
             async def recv(self):
                 await asyncio.sleep(10)
 
-        task = asyncio.create_task(s._drain_remote_track(_HangingTrack(), lambda _c: None))
+        task = asyncio.create_task(
+            s._drain_remote_track(_HangingTrack(), lambda _c: None)
+        )
         await asyncio.sleep(0.01)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):

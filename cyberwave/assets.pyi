@@ -455,10 +455,10 @@ class ComauedoTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class DjidjiTelloTwin(Twin):
+class DjitelloTwin(Twin):
     """
     Digital twin for DJI Tello
-    Registry ID: dji/dji-tello
+    Registry ID: dji/tello
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -873,22 +873,6 @@ class Logitechc920Twin(Twin):
     """
     pass
 
-class TheRobotStudioso101WithCameraTwin(Twin):
-    """
-    Digital twin for SO-101 with camera
-    Registry ID: the-robot-studio/so101-with-camera
-    """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
-    @property
-    def joints(self) -> JointsHandle:
-        """Controller for robot joints"""
-        ...
-
 class UniversalRobotsur7Twin(Twin):
     """
     Digital twin for UR7
@@ -1148,10 +1132,10 @@ class NeuraRoboticsmaira6mTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class DjidjiMini4ProTwin(Twin):
+class Djimini4ProTwin(Twin):
     """
     Digital twin for DJI Mini 4 Pro
-    Registry ID: dji/dji-mini-4-pro
+    Registry ID: dji/mini-4-pro
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1169,17 +1153,12 @@ class CyberwaveepalTwin(Twin):
     Digital twin for  EPAL Euro Pallet
     Registry ID: cyberwave/epal
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
+    pass
 
-class DjidjiMini3Twin(Twin):
+class Djimini3Twin(Twin):
     """
     Digital twin for DJI Mini 3
-    Registry ID: dji/dji-mini-3
+    Registry ID: dji/mini-3
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1290,6 +1269,16 @@ class Cyberwavego2BackpackTwin(Twin):
     """
     pass
 
+class ObsbotobsbotTiny3Twin(Twin):
+    """
+    Digital twin for Obsbot Tiny 3
+    Registry ID: obsbot/obsbot-tiny-3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1326,7 +1315,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "rethink-robotics/sawyer": RethinkRoboticssawyerTwin,
     "anybotics/anymal-c": AnyboticsanymalCTwin,
     "comau/edo": ComauedoTwin,
-    "dji/dji-tello": DjidjiTelloTwin,
+    "dji/tello": DjitelloTwin,
     "bitcraze/crazyflie-2": Bitcrazecrazyflie2Twin,
     "fourier/fftai-gr1t1": FourierfftaiGr1t1Twin,
     "fourier/fftai-gr1t2": FourierfftaiGr1t2Twin,
@@ -1365,7 +1354,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "hoverspect/avientory-platform": HoverspectavientoryPlatformTwin,
     "apeiroon/bx100": Apeiroonbx100Twin,
     "logitech/c920": Logitechc920Twin,
-    "the-robot-studio/so101-with-camera": TheRobotStudioso101WithCameraTwin,
     "universal_robots/ur7": UniversalRobotsur7Twin,
     "waveshare/ugv-beast": WaveshareugvBeastTwin,
     "alto-robotics/node": AltoRoboticsnodeTwin,
@@ -1395,9 +1383,9 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "sam-wilcocks-workspace/d500-lidar-2": SamWilcocksWorkspaced500Lidar2Twin,
     "neura-robotics/maira7s": NeuraRoboticsmaira7sTwin,
     "neura-robotics/maira6m": NeuraRoboticsmaira6mTwin,
-    "dji/dji-mini-4-pro": DjidjiMini4ProTwin,
+    "dji/mini-4-pro": Djimini4ProTwin,
     "cyberwave/epal": CyberwaveepalTwin,
-    "dji/dji-mini-3": DjidjiMini3Twin,
+    "dji/mini-3": Djimini3Twin,
     "mls-team/math-scavator-9000": MlsTeammathScavator9000Twin,
     "cyberwave/generic-microphone": CyberwavegenericMicrophoneTwin,
     "cyberwave/generic-speaker": CyberwavegenericSpeakerTwin,
@@ -1409,4 +1397,5 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave/electric-substation": CyberwaveelectricSubstationTwin,
     "mls-team/obsbot-tiny-3": MlsTeamobsbotTiny3Twin,
     "cyberwave/go2-backpack": Cyberwavego2BackpackTwin,
+    "obsbot/obsbot-tiny-3": ObsbotobsbotTiny3Twin,
 }

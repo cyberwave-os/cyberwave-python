@@ -121,7 +121,7 @@ def twin(asset_key: str, environment: Optional[str] = None, **kwargs) -> Twin:
         >>> import cyberwave as cw
         >>> robot = cw.twin("the-robot-studio/so101")
         >>> robot.edit_position(x=1, y=0, z=0.5)
-        >>> robot.joints.arm_joint = 45
+        >>> robot.joints.set("joint_1", 45, degrees=True)
     """
     client = _get_client()
     return client.twin(asset_key, environment_id=environment, **kwargs)

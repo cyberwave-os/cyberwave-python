@@ -124,7 +124,7 @@ def test_joints_listener_applies_single_joint_payload() -> None:
     mqtt.connected = True
     mqtt._subs = {}
 
-    def _subscribe(topic: str, callback: object) -> None:
+    def _subscribe(topic: str, callback: object, **kwargs: object) -> None:
         mqtt._subs[topic] = callback
 
     mqtt.subscribe = MagicMock(side_effect=_subscribe)

@@ -26,7 +26,7 @@ from cyberwave.twin.classes import JointTwin
 def _fake_mqtt() -> MagicMock:
     subs: dict[str, object] = {}
 
-    def _subscribe(topic: str, callback: object) -> None:
+    def _subscribe(topic: str, callback: object, **kwargs: object) -> None:
         subs[topic] = callback
 
     mqtt = MagicMock()
@@ -344,6 +344,183 @@ def test_joints_get_reflects_continuous_mqtt_updates(_mock_names: MagicMock) -> 
     )
     got = twin.joints.get(timeout=0.0)
     assert got["j1"] == 0.9
+
+
+@patch.object(
+    _joints, "controllable_joint_names",
+    return_value=["shoulder_pan"],
+)
+def test_joints_inbound_drops_names_outside_local_schema(_mock_names: MagicMock) -> None:
+    """Joint names not in joints.list() must be silently dropped, even on a
+    total mismatch between the payload and the schema."""
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    topic = JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid="arm-1")
+    _ = twin.joints  # attach listener before updates arrive
+
+    # Robot sends motor indices that don't match the schema → must be dropped.
+    _inject(twin.client.mqtt, topic, {"positions": {"1": 0.1}, "source_type": "edge"})
+    got = twin.joints.get(timeout=0.0)
+    assert "1" not in dict(got)
+    # Schema joint is still present (seeded at 0).
+    assert "shoulder_pan" in dict(got)
+
+
+@patch.object(_joints, "controllable_joint_names", return_value=["j1"])
+def test_joints_get_view_is_real_dict(_n: MagicMock) -> None:
+    """JointStateView is a dict subclass: json.dumps, .copy(), isinstance all work."""
+    import json
+
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    topic = JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid="arm-1")
+    _ = twin.joints  # attach listener
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.5}, "source_type": "edge"})
+    view = twin.joints.get(timeout=0.0)
+
+    assert isinstance(view, dict)
+    assert json.dumps(view) == '{"j1": 0.5}'
+    snapshot = view.copy()
+    assert isinstance(snapshot, dict)
+    assert snapshot == {"j1": 0.5}
+
+
+@patch.object(_joints, "controllable_joint_names", return_value=["j1"])
+def test_joints_get_returns_live_view(_n: MagicMock) -> None:
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    topic = JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid="arm-1")
+    _ = twin.joints
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.1}, "source_type": "edge"})
+    view = twin.joints.get(timeout=0.0)
+    assert view["j1"] == 0.1
+    # Same object reflects later updates without re-calling get().
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.8}, "source_type": "edge"})
+    assert view["j1"] == 0.8
+    assert dict(view) == {"j1": 0.8}
+
+
+@patch.object(_joints, "controllable_joint_names", return_value=["j1"])
+def test_joints_get_after_update_callback_and_view_stop(_n: MagicMock) -> None:
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    topic = JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid="arm-1")
+    seen: list[dict] = []
+    view = twin.joints.get(timeout=0.0, after_update_callback=lambda s: seen.append(s))
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.4}, "source_type": "edge"})
+    assert seen[-1]["j1"] == 0.4
+    view.stop()
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.6}, "source_type": "edge"})
+    assert len(seen) == 1
+    # stop() cancels all subscriptions and freezes the dict at its last value.
+    assert view["j1"] == 0.4
+
+
+@patch.object(_joints, "controllable_joint_names", return_value=["j1"])
+def test_joints_on_update_fires_snapshot_and_cancels(_n: MagicMock) -> None:
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    topic = JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid="arm-1")
+    seen: list[dict] = []
+    sub = twin.joints.on_update(lambda s: seen.append(s))
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.2}, "source_type": "edge"})
+    assert seen and seen[-1]["j1"] == 0.2
+    sub.cancel()
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.7}, "source_type": "edge"})
+    assert len(seen) == 1  # no delivery after cancel
+
+
+@patch.object(_joints, "controllable_joint_names", return_value=["j1"])
+def test_joints_on_update_callback_exception_does_not_kill_listener(_n: MagicMock) -> None:
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    topic = JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid="arm-1")
+
+    def boom(_s):
+        raise RuntimeError("bad callback")
+
+    twin.joints.on_update(boom)
+    _inject(twin.client.mqtt, topic, {"positions": {"j1": 0.5}, "source_type": "edge"})
+    # Listener survived: cache still updated and readable.
+    assert twin.joints.get(timeout=0.0)["j1"] == 0.5
+
+
+@patch.object(_joints, "controllable_joint_names", return_value=["j1", "j2"])
+def test_joints_inbound_filters_unknown_when_names_intersect(_n: MagicMock) -> None:
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    topic = JOINT_UPDATE_TOPIC_SLUG.format(twin_uuid="arm-1")
+    _ = twin.joints
+    # Payload shares j1 with schema -> "bogus" must be dropped, j1 kept.
+    _inject(
+        twin.client.mqtt,
+        topic,
+        {"positions": {"j1": 0.3, "bogus": 9.9}, "source_type": "edge"},
+    )
+    got = twin.joints.get(timeout=0.0)
+    assert got["j1"] == 0.3
+    assert "bogus" not in dict(got)
+
+
+def test_joints_list_is_cached_after_first_resolution() -> None:
+    twin = _make_joint_twin(
+        metadata={
+            "mqtt": {
+                "topics": {JOINT_UPDATE_TOPIC_SLUG: {}},
+                "commands": {"supported": []},
+            }
+        }
+    )
+    with patch.object(
+        _joints, "controllable_joint_names", return_value=["j1", "j2"]
+    ) as spy:
+        handle = twin.joints
+        handle.list()
+        handle.list()
+        handle.list()
+    assert spy.call_count == 1
 
 
 @patch.object(

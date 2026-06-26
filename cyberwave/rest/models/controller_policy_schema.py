@@ -41,7 +41,8 @@ class ControllerPolicySchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
     can_write: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write"]
+    device: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "device"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -97,6 +98,11 @@ class ControllerPolicySchema(BaseModel):
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
 
+        # set to None if device (nullable) is None
+        # and model_fields_set contains the field
+        if self.device is None and "device" in self.model_fields_set:
+            _dict['device'] = None
+
         return _dict
 
     @classmethod
@@ -121,7 +127,8 @@ class ControllerPolicySchema(BaseModel):
             "created_by": obj.get("created_by"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "asset_uuids": obj.get("asset_uuids"),
-            "can_write": obj.get("can_write") if obj.get("can_write") is not None else False
+            "can_write": obj.get("can_write") if obj.get("can_write") is not None else False,
+            "device": obj.get("device")
         })
         return _obj
 

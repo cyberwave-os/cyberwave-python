@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,7 +30,8 @@ class JointStateUpdateSchema(BaseModel):
     position: Optional[Union[StrictFloat, StrictInt]] = None
     velocity: Optional[Union[StrictFloat, StrictInt]] = None
     effort: Optional[Union[StrictFloat, StrictInt]] = None
-    __properties: ClassVar[List[str]] = ["position", "velocity", "effort"]
+    as_home_position: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["position", "velocity", "effort", "as_home_position"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -100,7 +101,8 @@ class JointStateUpdateSchema(BaseModel):
         _obj = cls.model_validate({
             "position": obj.get("position"),
             "velocity": obj.get("velocity"),
-            "effort": obj.get("effort")
+            "effort": obj.get("effort"),
+            "as_home_position": obj.get("as_home_position") if obj.get("as_home_position") is not None else False
         })
         return _obj
 

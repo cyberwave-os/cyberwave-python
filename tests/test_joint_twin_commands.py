@@ -8,7 +8,7 @@ from cyberwave.twin.capabilities import joints as _joints
 import pytest
 
 from cyberwave.twin import Twin
-from cyberwave.twin.classes import JointTwin, LocomoteTwin
+from cyberwave.twin.classes import JointTwin, LocomoteJointTwin
 from cyberwave.twin.factory import create_twin, _is_joint_manipulator
 
 
@@ -23,15 +23,19 @@ def test_joint_controller_import_removed() -> None:
     assert "JointController" not in twin_pkg.__all__
 
 
-def test_go2_twin_is_not_joint_twin() -> None:
+def test_go2_twin_is_not_joint_manipulator_but_inherits_joint_twin() -> None:
+    """A legged robot with joints is not a manipulator (no gripper), but its
+    twin must still expose ``.joints``. We achieve this with a dedicated
+    ``LocomoteJointTwin`` subtree that mixes ``LocomoteTwin`` and ``JointTwin``
+    so wheeled AMRs (no joints) keep the lean ``LocomoteTwin`` interface."""
     caps = {"has_joints": True, "can_locomote": True, "can_fly": False, "can_grip": False}
     assert not _is_joint_manipulator(caps)
     assert create_twin.__module__
     from cyberwave.twin.factory import _select_twin_class
 
     cls = _select_twin_class(caps)
-    assert cls is LocomoteTwin
-    assert not issubclass(cls, JointTwin) or cls is LocomoteTwin
+    assert cls is LocomoteJointTwin
+    assert issubclass(cls, JointTwin)
 
 
 def test_joint_twin_set_publishes_joint_update() -> None:

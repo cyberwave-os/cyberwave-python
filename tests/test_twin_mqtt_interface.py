@@ -9,7 +9,10 @@ from cyberwave.twin.capabilities import joints as _joints
 
 import pytest
 
-from cyberwave.manifest.driver_config import JOINT_UPDATE_TOPIC_SLUG, TWIN_COMMAND_TOPIC_SLUG
+from cyberwave.manifest.driver_config import (
+    JOINT_UPDATE_TOPIC_SLUG,
+    TWIN_COMMAND_TOPIC_SLUG,
+)
 from cyberwave.twin import FlyingTwin, LocomoteTwin
 from cyberwave.twin.classes import JointTwin
 
@@ -56,14 +59,14 @@ def _make_locomote_twin(
     return LocomoteTwin(client, twin_data)
 
 
-def test_get_schema_returns_twin_mqtt_bundle() -> None:
+def test_get_mqtt_schema_returns_twin_mqtt_bundle() -> None:
     twin = _make_locomote_twin()
-    schema = twin.commands.get_schema()
+    schema = twin.driver.get_mqtt_schema()
     assert "move_forward" in schema["commands"]["supported"]
     assert TWIN_COMMAND_TOPIC_SLUG in schema["topics"]
 
 
-def test_set_schema_persists_metadata_and_rebinds_commands() -> None:
+def test_driver_set_schema_persists_metadata_and_rebinds_commands() -> None:
     twin = _make_locomote_twin()
     updated_metadata = {
         "mqtt": {
@@ -75,13 +78,13 @@ def test_set_schema_persists_metadata_and_rebinds_commands() -> None:
         }
     }
     twin.client.twins = MagicMock()
-    twin.client.twins.update.return_value = SimpleNamespace(
+    twin.client.twins.set_driver_schema.return_value = SimpleNamespace(
         uuid="twin-uuid",
         metadata=updated_metadata,
     )
 
     driver_yml = {
-        "registry_ids": ["acme/go2"],
+        "registry_id": "acme/go2",
         "mqtt": {
             "schema_version": 1,
             "driver_family": "python",
@@ -95,29 +98,29 @@ def test_set_schema_persists_metadata_and_rebinds_commands() -> None:
             "commands": {"supported": ["custom_ping", "stop"]},
         },
     }
-    schema = twin.commands.set_schema(driver_yml, merge=False)
+    schemas = twin.driver.set_schema(driver_yml, merge=False)
 
-    twin.client.twins.update.assert_called_once()
-    call_metadata = twin.client.twins.update.call_args.kwargs["metadata"]
+    twin.client.twins.set_driver_schema.assert_called_once()
+    call_metadata = updated_metadata
     assert "custom_ping" in call_metadata["mqtt"]["commands"]["supported"]
-    assert "custom_ping" in schema["commands"]["supported"]
+    assert "custom_ping" in schemas["mqtt"]["commands"]["supported"]
     assert hasattr(twin.commands, "custom_ping")
     assert "custom_ping" in twin.commands._bound_catalog_commands
 
 
-def test_get_schema_cache_and_force_refresh() -> None:
+def test_get_mqtt_schema_cache_and_force_refresh() -> None:
     twin = _make_locomote_twin()
-    first = twin.commands.get_schema()
+    first = twin.driver.get_mqtt_schema()
     twin._data.metadata = {
         "mqtt": {
             "topics": {TWIN_COMMAND_TOPIC_SLUG: {}},
             "commands": {"supported": ["stop"]},
         }
     }
-    second = twin.commands.get_schema()
+    second = twin.driver.get_mqtt_schema()
     assert second["commands"]["supported"] == first["commands"]["supported"]
 
-    refreshed = twin.commands.get_schema(force_refresh=True)
+    refreshed = twin.driver.get_mqtt_schema(force_refresh=True)
     assert refreshed["commands"]["supported"] == ["stop"]
 
 
@@ -130,7 +133,9 @@ def test_invalid_command_raises_with_allowed_list() -> None:
 
 def test_resolve_topic_prefix_in_full_topic() -> None:
     twin = _make_locomote_twin(topic_prefix="dev/")
-    resolved = twin._resolve_topic_and_payload(command="move_forward", data={"linear_x": 1.0})
+    resolved = twin._resolve_topic_and_payload(
+        command="move_forward", data={"linear_x": 1.0}
+    )
     assert resolved.topic == "dev/cyberwave/twin/twin-uuid/command"
 
 
@@ -162,7 +167,9 @@ def test_joint_update_uses_joint_topic_slug() -> None:
     client = SimpleNamespace(
         mqtt=mqtt,
         assets=MagicMock(),
-        config=SimpleNamespace(runtime_mode="live", topic_prefix="", source_type="tele"),
+        config=SimpleNamespace(
+            runtime_mode="live", topic_prefix="", source_type="tele"
+        ),
         twins=SimpleNamespace(api=None),
     )
     twin = JointTwin(
@@ -182,10 +189,16 @@ def test_joint_update_uses_joint_topic_slug() -> None:
             },
         ),
     )
-    with patch.object(_joints, "controllable_joint_names", return_value=["j1"]):
+    with patch(
+        "cyberwave.twin.capabilities.joints.controllable_joint_names",
+        return_value=["j1"],
+    ):
         with patch.object(twin, "_prepare_outbound_command"):
             twin.joints.set({"j1": 90.0}, degrees=True)
-    assert JOINT_UPDATE_TOPIC_SLUG.replace("{twin_uuid}", "arm-1") in twin._outbound_log[0].topic
+    assert (
+        JOINT_UPDATE_TOPIC_SLUG.replace("{twin_uuid}", "arm-1")
+        in twin._outbound_log[0].topic
+    )
     payload = twin._outbound_log[0].payload
     assert "command" not in payload
     assert payload["source_type"] == "tele"
@@ -199,10 +212,14 @@ def test_takeoff_publishes_when_in_catalog() -> None:
     client = SimpleNamespace(
         mqtt=mqtt,
         assets=MagicMock(),
-        config=SimpleNamespace(runtime_mode="live", topic_prefix="", source_type="tele"),
+        config=SimpleNamespace(
+            runtime_mode="live", topic_prefix="", source_type="tele"
+        ),
         twins=SimpleNamespace(
             api=None,
-            update=MagicMock(return_value=SimpleNamespace(uuid="drone-uuid", metadata={})),
+            update=MagicMock(
+                return_value=SimpleNamespace(uuid="drone-uuid", metadata={})
+            ),
         ),
     )
     twin = FlyingTwin(

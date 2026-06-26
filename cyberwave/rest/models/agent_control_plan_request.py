@@ -42,7 +42,8 @@ class AgentControlPlanRequest(BaseModel):
     image_name: Optional[StrictStr] = None
     perception_evidence: Optional[Dict[str, Any]] = None
     current_joint_states: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["prompt", "mlmodel_uuid", "llm_model_uuid", "llm_model_name", "prompt_motion_mlmodel_uuid", "allowed_action_kinds", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "image_base64", "image_mime_type", "image_name", "perception_evidence", "current_joint_states"]
+    current_sensor_states: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["prompt", "mlmodel_uuid", "llm_model_uuid", "llm_model_name", "prompt_motion_mlmodel_uuid", "allowed_action_kinds", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "image_base64", "image_mime_type", "image_name", "perception_evidence", "current_joint_states", "current_sensor_states"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -158,6 +159,11 @@ class AgentControlPlanRequest(BaseModel):
         if self.current_joint_states is None and "current_joint_states" in self.model_fields_set:
             _dict['current_joint_states'] = None
 
+        # set to None if current_sensor_states (nullable) is None
+        # and model_fields_set contains the field
+        if self.current_sensor_states is None and "current_sensor_states" in self.model_fields_set:
+            _dict['current_sensor_states'] = None
+
         return _dict
 
     @classmethod
@@ -184,7 +190,8 @@ class AgentControlPlanRequest(BaseModel):
             "image_mime_type": obj.get("image_mime_type"),
             "image_name": obj.get("image_name"),
             "perception_evidence": obj.get("perception_evidence"),
-            "current_joint_states": obj.get("current_joint_states")
+            "current_joint_states": obj.get("current_joint_states"),
+            "current_sensor_states": obj.get("current_sensor_states")
         })
         return _obj
 

@@ -256,6 +256,7 @@ class VirtualCameraStreamer(BaseVideoStreamer):
         stream_source: Optional[str] = None,
         stream_instance_id: Optional[str] = None,
         frontend_type: Optional[str] = None,
+        turn_servers: Optional[list] = None,
     ) -> None:
         """Initialize virtual camera streamer.
 
@@ -275,6 +276,8 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             enable_health_check: Whether to enable automatic health check reporting
             frontend_type: Track type sent in the WebRTC offer (e.g. "rgb", "depth").
                 Must match the consumer's expected track type so the SFU can pair them.
+            turn_servers: Optional list of TURN server configurations. Pass an empty
+                list to disable TURN (local/ICE-only mode); None uses platform defaults.
         """
         super().__init__(
             client=client,
@@ -286,6 +289,7 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             stream_source=stream_source,
             stream_instance_id=stream_instance_id,
             frontend_type=frontend_type,
+            turn_servers=turn_servers,
         )
 
         # Store virtual camera-specific parameters

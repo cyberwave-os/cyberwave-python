@@ -153,6 +153,9 @@ class ApiException(OpenApiException):
             raise NotFoundException(http_resp=http_resp, body=body, data=data)
 
         # Added new conditions for 409 and 422
+        if http_resp.status == 402:
+            raise PaymentRequiredException(http_resp=http_resp, body=body, data=data)
+
         if http_resp.status == 409:
             raise ConflictException(http_resp=http_resp, body=body, data=data)
 
@@ -206,6 +209,11 @@ class ConflictException(ApiException):
 
 class UnprocessableEntityException(ApiException):
     """Exception for HTTP 422 Unprocessable Entity."""
+    pass
+
+
+class PaymentRequiredException(ApiException):
+    """Exception for HTTP 402 Payment Required (credits exhausted or manually blocked)."""
     pass
 
 
@@ -293,6 +301,36 @@ class CyberwaveValidationError(CyberwaveError):
     This is raised for client-side validation errors before making API requests.
     """
     pass
+
+
+class CyberwaveInsufficientCreditsError(CyberwaveAPIError):
+    """Raised when the account has insufficient credits (HTTP 402).
+
+    This is raised for both balance-exhausted accounts and accounts that have
+    been manually blocked by staff.
+
+    Attributes:
+        balance: Current credit balance (may be negative or None if unparseable).
+        manual_block: True when the block was set by staff, not balance exhaustion.
+        manual_block_reason: Human-readable reason for a manual block.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 402,
+        response_data: Optional[Any] = None,
+        request_headers: Optional[dict] = None,
+        balance: Optional[float] = None,
+        manual_block: bool = False,
+        manual_block_reason: str = "",
+        *args,
+        **kwargs,
+    ):
+        super().__init__(message, status_code, response_data, request_headers, *args, **kwargs)
+        self.balance = balance
+        self.manual_block = manual_block
+        self.manual_block_reason = manual_block_reason
 
 
 class CyberwaveModelIntegrityError(CyberwaveError):

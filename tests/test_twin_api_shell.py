@@ -4,9 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from cyberwave.twin import transport as _transport
 
-import pytest
 
-from cyberwave.twin import LocomoteTwin, Twin, create_twin
+from cyberwave.twin import LocomoteTwin
 from cyberwave.twin.transport import ResolvedOutbound
 
 
@@ -62,9 +61,7 @@ def test_move_forward_delegates_to_locomotion_handle() -> None:
     twin = _make_locomote_twin()
     with patch.object(twin.locomotion, "move_forward") as mock_move:
         twin.move_forward(1.0)
-    mock_move.assert_called_once_with(
-        1.0, duration=1.0, rate_hz=20.0, source_type=None
-    )
+    mock_move.assert_called_once_with(1.0, duration=1.0, rate_hz=20.0, source_type=None)
 
 
 def test_locomotion_move_forward_calls_resolve_topic_and_payload() -> None:
@@ -93,16 +90,17 @@ def test_describe_lists_grouped_and_flat_methods() -> None:
     assert "handles" in info
     assert "commands" in info
     assert "locomotion" in info["handles"]
-    assert "move_forward" in info["commands"]["mqtt"]["supported"]
+    assert "move_forward" in info["driver"]["mqtt"]["supported_commands"]
+    assert "move_forward" in info["commands"]["supported_commands"]
     assert "move_forward" in info["commands"]["catalog_methods"]
     flat = info.get("flat_methods", [])
     assert "move_forward" in flat
     assert "commands" in flat
 
 
-def test_commands_get_schema_reads_twin_metadata() -> None:
+def test_driver_get_mqtt_schema_reads_twin_metadata() -> None:
     twin = _make_locomote_twin()
-    schema = twin.commands.get_schema()
+    schema = twin.driver.get_mqtt_schema()
     assert "move_forward" in schema["commands"]["supported"]
 
 

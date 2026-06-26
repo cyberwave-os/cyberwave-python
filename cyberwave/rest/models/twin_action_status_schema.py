@@ -19,7 +19,6 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
-from cyberwave.rest.models.motion_plan_schema import MotionPlanSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,7 +30,7 @@ class TwinActionStatusSchema(BaseModel):
     action_id: StrictStr
     status: StrictStr
     message: Optional[StrictStr] = None
-    plan: Optional[MotionPlanSchema] = None
+    plan: Optional[Dict[str, Any]] = None
     resolved_scope: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     updated_at: Optional[Union[StrictFloat, StrictInt]] = None
@@ -76,9 +75,6 @@ class TwinActionStatusSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of plan
-        if self.plan:
-            _dict['plan'] = self.plan.to_dict()
         # set to None if message (nullable) is None
         # and model_fields_set contains the field
         if self.message is None and "message" in self.model_fields_set:
@@ -119,7 +115,7 @@ class TwinActionStatusSchema(BaseModel):
             "action_id": obj.get("action_id"),
             "status": obj.get("status"),
             "message": obj.get("message"),
-            "plan": MotionPlanSchema.from_dict(obj["plan"]) if obj.get("plan") is not None else None,
+            "plan": obj.get("plan"),
             "resolved_scope": obj.get("resolved_scope"),
             "metadata": obj.get("metadata"),
             "updated_at": obj.get("updated_at")

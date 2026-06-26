@@ -1,4 +1,4 @@
-"""cw-driver.yml compile helpers."""
+"""cw-driver.yml SDK helpers (compile happens on backend)."""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from cyberwave.manifest.cw_driver import (
-    compile_cw_driver_file,
+from cyberwave.driver.interface.cw_driver import (
     load_cw_driver_yml,
-    resolve_mqtt_bundle_from_driver_config,
+    resolve_driver_config_dict,
 )
-from cyberwave.manifest.driver_config import TWIN_COMMAND_TOPIC_SLUG
 
 _REPO_SO101 = (
     Path(__file__).resolve().parents[3]
@@ -21,41 +19,79 @@ _REPO_SO101 = (
 )
 
 
-def test_compile_minimal_cw_driver_yml(tmp_path: Path) -> None:
-    yml = tmp_path / "cw-driver.yml"
-    yml.write_text(
-        """
-registry_ids:
-  - acme/test-arm
-mqtt:
-  schema_version: 1
-  driver_family: python
-  twin:
-    command:
-      direction: both
-      payload_schema_ref: TwinCommandPayload
-      description: Command ingress.
-  commands:
-    supported:
-      - stop
-      - name: nudge
-        continuous: true
-        rate_hz: 10
-""",
-        encoding="utf-8",
-    )
-    bundle = compile_cw_driver_file(yml)
-    assert bundle["driver_family"] == "python"
-    assert TWIN_COMMAND_TOPIC_SLUG in bundle["topics"]
-    assert bundle["commands"]["supported"] == ["stop", "nudge"]
-    assert bundle["commands"]["specs"]["nudge"]["continuous"] is True
-    assert bundle["asset_registry_id"] == "acme/test-arm"
+def test_resolve_driver_config_dict_from_mapping() -> None:
+    root = {
+        "registry_id": "acme/test-arm",
+        "mqtt": {
+            "schema_version": 1,
+            "twin": {
+                "command": {
+                    "direction": "both",
+                    "payload_schema_ref": "TwinCommandPayload",
+                }
+            },
+        },
+    }
+    resolved = resolve_driver_config_dict(root)
+    assert resolved["registry_id"] == "acme/test-arm"
+    assert "twin" in resolved["mqtt"]
+
+
+def test_resolve_driver_config_dict_rejects_compiled_bundle() -> None:
+    with pytest.raises(ValueError, match="compiled"):
+        resolve_driver_config_dict(
+            {
+                "topics": {"cyberwave/twin/{twin_uuid}/command": {}},
+                "commands": {"supported": ["stop"]},
+            }
+        )
+
+
+def test_resolve_driver_config_dict_rejects_compiled_zenoh_bundle() -> None:
+    with pytest.raises(ValueError, match="compiled"):
+        resolve_driver_config_dict(
+            {
+                "schema_version": 1,
+                "channels": {"imu": {"payload_schema_ref": "ImuPayload"}},
+            }
+        )
+
+
+def test_resolve_driver_config_dict_accepts_zenoh_authoring_shape() -> None:
+    root = {
+        "registry_id": "intel/realsensed455",
+        "mqtt": {
+            "schema_version": 1,
+            "twin": {
+                "imu": {
+                    "direction": "publish",
+                    "payload_schema_ref": "ImuPayload",
+                }
+            },
+        },
+        "zenoh": {
+            "schema_version": 1,
+            "channels": {
+                "imu": {"payload_schema_ref": "ImuPayload"},
+            },
+        },
+    }
+    resolved = resolve_driver_config_dict(root)
+    assert resolved["zenoh"]["channels"]["imu"]["payload_schema_ref"] == "ImuPayload"
+
+
+def test_resolve_driver_config_dict_from_fake_imu_driver_class() -> None:
+    from examples.fake_imu_driver import FakeImu6dDriver
+
+    resolved = resolve_driver_config_dict(FakeImu6dDriver.get_manifest())
+    assert "rotate" in resolved["mqtt"]["commands"]["supported"]
+    assert "imu" in resolved["mqtt"]["twin"]
+    assert "imu" in resolved["zenoh"]["channels"]
 
 
 @pytest.mark.skipif(not _REPO_SO101.is_file(), reason="monorepo edge-nodes not present")
-def test_compile_so101_reference_manifest() -> None:
+def test_load_so101_reference_manifest() -> None:
     raw = load_cw_driver_yml(_REPO_SO101)
-    bundle = resolve_mqtt_bundle_from_driver_config(raw)
-    assert "remoteoperate" in bundle["commands"]["supported"]
-    assert "cyberwave/joint/{twin_uuid}/update" in bundle["topics"]
-    assert "cyberwave/twin/{twin_uuid}/webrtc-offer" not in bundle["topics"]
+    resolved = resolve_driver_config_dict(raw)
+    assert "joint" in resolved["mqtt"]
+    assert "twin" in resolved["mqtt"]

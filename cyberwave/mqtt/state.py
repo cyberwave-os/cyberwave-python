@@ -47,7 +47,8 @@ def attach_topic_listener(
         if isinstance(payload, dict):
             on_payload(payload)
 
-    mqtt_client_for(twin).subscribe(topic, _callback)
+    no_local = "/joint/" in topic and topic.endswith("/update")
+    mqtt_client_for(twin).subscribe(topic, _callback, no_local=no_local)
     attached_topics.add(topic)
 
 

@@ -14,17 +14,24 @@ from .classes import (
     FlyingTwin,
     GripperCameraTwin,
     GripperDepthCameraTwin,
+    GripperJointCameraTwin,
+    GripperJointDepthCameraTwin,
+    GripperJointTwin,
     GripperTwin,
+    JointTwin,
     LocomoteCameraTwin,
     LocomoteDepthCameraTwin,
     LocomoteGripperCameraTwin,
     LocomoteGripperDepthCameraTwin,
     LocomoteGripperTwin,
+    LocomoteJointCameraTwin,
+    LocomoteJointDepthCameraTwin,
+    LocomoteJointTwin,
     LocomoteTwin,
 )
 from .factory import create_twin
 from .handles import TwinCameraHandle
-from .classes import JointTwin
+
 
 __all__ = [
     "math",
@@ -49,6 +56,10 @@ __all__ = [
     "LocomoteDepthCameraTwin",
     "LocomoteGripperCameraTwin",
     "LocomoteCameraTwin",
-    "LocomoteGripperDepthCameraTwin",
+    "LocomoteJointTwin",
+    "LocomoteJointCameraTwin",
+    "LocomoteJointDepthCameraTwin",
     "GripperDepthCameraTwin",
+    "GripperJointCameraTwin",
+    "GripperJointDepthCameraTwin",
 ]

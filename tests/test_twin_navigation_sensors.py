@@ -50,10 +50,6 @@ def test_has_sensor_for_navigation_families() -> None:
 
 
 def test_read_methods_raise_not_implemented() -> None:
-    twin = _twin(sensors=[{"id": "imu_main", "type": "imu"}])
-    with pytest.raises(NotImplementedError, match="on_imu"):
-        twin.imu.get_sample()
-
     twin = _twin(sensors=[{"id": "gps_main", "type": "gps"}])
     with pytest.raises(NotImplementedError, match="on_gps"):
         twin.gps.get_fix()

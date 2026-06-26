@@ -53,7 +53,7 @@ def test_resubscribe_same_topic_replaces_handler_not_appends():
     client.subscribe("cyberwave/twin/UUID/webrtc-answer", h1)
     client.subscribe("cyberwave/twin/UUID/webrtc-answer", h2)
 
-    handlers = client._handlers["cyberwave/twin/UUID/webrtc-answer"]
+    handlers = list(client._handlers["cyberwave/twin/UUID/webrtc-answer"].values())
     assert len(handlers) == 1, (
         f"Expected idempotent re-subscribe (single handler), "
         f"found {len(handlers)} handlers — handler accumulation bug regressed."
@@ -127,9 +127,13 @@ def test_distinct_topics_keep_independent_handlers():
     client.subscribe("cyberwave/twin/UUID/joint_states", h_joints)
     client.subscribe("cyberwave/twin/UUID/+", h_wildcard)
 
-    assert client._handlers["cyberwave/twin/UUID/position"] == [h_position]
-    assert client._handlers["cyberwave/twin/UUID/joint_states"] == [h_joints]
-    assert client._handlers["cyberwave/twin/UUID/+"] == [h_wildcard]
+    assert list(client._handlers["cyberwave/twin/UUID/position"].values()) == [
+        h_position
+    ]
+    assert list(client._handlers["cyberwave/twin/UUID/joint_states"].values()) == [
+        h_joints
+    ]
+    assert list(client._handlers["cyberwave/twin/UUID/+"].values()) == [h_wildcard]
 
 
 def test_unsubscribe_then_subscribe_treats_topic_as_new():
@@ -155,4 +159,80 @@ def test_unsubscribe_then_subscribe_treats_topic_as_new():
     assert paho_subscribe.call_count == 1, (
         "After unsubscribe(), the next subscribe() must hit the broker again."
     )
-    assert client._handlers[topic] == [h2]
+    assert list(client._handlers[topic].values()) == [h2]
+
+
+def test_distinct_subscriber_keys_coexist_on_one_topic():
+    """Independent subscribers on a shared topic must each keep a handler.
+
+    The ``webrtc-answer`` topic is keyed only by twin, so a twin running
+    several streamers at once (multimedia + video-only + microphone)
+    shares it. Each registers under its own ``subscriber_key`` and
+    content-filters answers it doesn't own — replace-by-topic would let
+    the last subscriber silently evict the others.
+    """
+    client = _make_client()
+    topic = "cyberwave/twin/UUID/webrtc-answer"
+
+    h_video = MagicMock(name="video-streamer")
+    h_audio = MagicMock(name="audio-streamer")
+
+    client.subscribe(topic, h_video, subscriber_key="video:1")
+    client.subscribe(topic, h_audio, subscriber_key="audio:1")
+
+    assert len(client._handlers[topic]) == 2, (
+        "Distinct subscriber keys must coexist on a shared topic."
+    )
+
+    client._trigger_handlers(topic, {"type": "answer", "target": "edge"})
+    h_video.assert_called_once()
+    h_audio.assert_called_once()
+
+
+def test_same_subscriber_key_replaces_across_reconnect_closures():
+    """A streamer re-subscribing with fresh closures under one stable key
+    must leave a single handler — the storm fix that identity dedup can't
+    provide (each reconnect closure is a distinct object).
+    """
+    client = _make_client()
+    topic = "cyberwave/twin/UUID/webrtc-answer"
+
+    last = None
+    for _ in range(5):
+        last = MagicMock(name="on_answer-closure")
+        client.subscribe(topic, last, subscriber_key="streamer:A")
+
+    handlers = list(client._handlers[topic].values())
+    assert handlers == [last], (
+        "Re-subscribe under a stable key must replace, not accumulate."
+    )
+
+    client._trigger_handlers(topic, {"type": "answer", "target": "edge"})
+    last.assert_called_once()
+
+
+def test_unsubscribe_one_key_keeps_topic_alive_for_others():
+    """Unsubscribing one subscriber must not tear down a topic that other
+    subscribers still share, nor drop their handlers.
+    """
+    client = _make_client()
+    topic = "cyberwave/twin/UUID/webrtc-answer"
+
+    h_video = MagicMock()
+    h_audio = MagicMock()
+    client.subscribe(topic, h_video, subscriber_key="video:1")
+    client.subscribe(topic, h_audio, subscriber_key="audio:1")
+
+    paho_unsubscribe = client.client.unsubscribe
+    paho_unsubscribe.reset_mock()
+
+    client.unsubscribe(topic, subscriber_key="video:1")
+
+    assert paho_unsubscribe.call_count == 0, (
+        "Broker unsubscribe must wait until the last subscriber leaves."
+    )
+    assert list(client._handlers[topic].values()) == [h_audio]
+
+    client.unsubscribe(topic, subscriber_key="audio:1")
+    assert topic not in client._handlers
+    assert paho_unsubscribe.call_count == 1

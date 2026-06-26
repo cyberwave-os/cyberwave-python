@@ -238,8 +238,12 @@ class PlaygroundHandle:
         camera_intrinsics: dict[str, Any] | None = None,
         camera_pose: dict[str, Any] | None = None,
         history: list[dict[str, Any]] | None = None,
+        product: bool = False,
     ) -> MLModelRunResultSchema | MLModelRunQueuedSchema:
-        """Execute a playground run against the bound model.
+        """Execute a run against the bound model.
+
+        By default hits ``POST /mlmodels/{uuid}/playground/run``. Set
+        ``product=True`` for ``POST /mlmodels/{uuid}/run`` (SDK automation).
 
         Args:
             prompt: User-facing prompt.
@@ -324,11 +328,12 @@ class PlaygroundHandle:
         if history is not None:
             schema.history = history  # type: ignore[assignment]
 
-        response = self._api.src_app_api_mlmodels_run_mlmodel_with_http_info(
+        self._last_result = invoke_mlmodel_run(
+            self._api,
             uuid=entry.uuid,
-            ml_model_run_schema=schema,
+            schema=schema,
+            playground=not product,
         )
-        self._last_result = response.data
         return self._last_result
 
     # ------------------------------------------------------------------
@@ -486,6 +491,45 @@ class PlaygroundClient:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_AUTH = ["CustomTokenAuthentication"]
+
+
+def invoke_mlmodel_run(
+    api: DefaultApi,
+    *,
+    uuid: str,
+    schema: Any,
+    playground: bool,
+) -> MLModelRunResultSchema | MLModelRunQueuedSchema:
+    """POST to the playground or product ML model run endpoint."""
+    resource_path = (
+        "/api/v1/mlmodels/{uuid}/playground/run"
+        if playground
+        else "/api/v1/mlmodels/{uuid}/run"
+    )
+    if hasattr(schema, "to_dict"):
+        body: dict[str, Any] = schema.to_dict()
+    elif hasattr(schema, "model_dump"):
+        body = schema.model_dump(exclude_none=True)
+    else:
+        body = dict(schema)
+    _param = api.param_serialize(
+        method="POST",
+        resource_path=resource_path,
+        path_params={"uuid": uuid},
+        body=body,
+        auth_settings=_AUTH,
+    )
+    response = api.call_api(*_param)
+    response.read()
+    return api.response_deserialize(
+        response_data=response,
+        response_types_map={
+            "200": "MLModelRunResultSchema",
+            "202": "MLModelRunQueuedSchema",
+        },
+    ).data
 
 
 def _looks_like_uuid(value: str) -> bool:

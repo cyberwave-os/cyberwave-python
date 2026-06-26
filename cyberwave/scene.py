@@ -12,9 +12,10 @@ Architecture:
 """
 
 import logging
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Sequence
 
 from cyberwave.client import Cyberwave
+from .placement import Bounds, CenteredPlacement, compute_centered_placement
 from .schema import CommonSchema, Pose
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ class Scene:
 
             try:
                 twins_data = json.loads(response.read().decode("utf-8"))
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError:
                 logger.error(f"Failed to decode twins data: {response.data}")
                 raise
 
@@ -158,6 +159,100 @@ class Scene:
         )
 
         # Reload twins list
+        self._load_twins()
+
+        return twin
+
+    def add_twin_centered(
+        self,
+        asset_key: str,
+        *,
+        center: Sequence[float],
+        asset_bounds: Bounds,
+        dimensions: Optional[Sequence[float]] = None,
+        scale: Optional[Sequence[float]] = None,
+        rotation: Optional[Sequence[float]] = None,
+        name: Optional[str] = None,
+        fixed_base: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Add an Asset to the scene authored in MuJoCo-style centered notation.
+
+        Unlike :meth:`add_twin`, which expects ``position`` to mean the
+        asset's *link origin* in world coordinates (URDF/Cyberwave
+        convention), this helper places the asset's *geometric center*
+        at ``center`` and (optionally) rescales the asset so its
+        world-space AABB matches ``dimensions``. Internally it computes
+        the equivalent ``position_*`` / ``scale_*`` / ``rotation_*``
+        fields and writes them through the same ``client.twin(...)``
+        creation path — backend semantics are unchanged.
+
+        Args:
+            asset_key: Registry ID or unified slug of the asset to
+                instantiate (e.g. ``"cyberwave/generic_cube"``).
+            center: World-space position ``(x, y, z)`` of the asset's
+                geometric center.
+            asset_bounds: Asset-local AABB
+                ``((min_x, min_y, min_z), (max_x, max_y, max_z))``. For
+                ``cyberwave/generic_cube`` use
+                :data:`cyberwave.placement.GENERIC_CUBE_BOUNDS`. Other
+                assets require explicit bounds; see the SDK README's
+                "Centered placement" section for guidance.
+            dimensions: Optional world dimensions ``(sx, sy, sz)`` of
+                the asset's AABB. Mutually exclusive with ``scale``.
+            scale: Explicit per-axis scale. Mutually exclusive with
+                ``dimensions``. Use this when you want to set the
+                center without changing scale.
+            rotation: Optional unit quaternion ``(x, y, z, w)``
+                orienting the asset's local frame in world. Defaults to
+                identity.
+            name: Optional twin name. If ``None``, the backend
+                generates one from the asset.
+            fixed_base: Whether the twin base is fixed to the world.
+            **kwargs: Additional twin creation kwargs forwarded to
+                :meth:`Cyberwave.twin` (e.g. ``metadata=``).
+
+        Returns:
+            The created Twin object from the API (same return type as
+            :meth:`add_twin`).
+
+        Example:
+            >>> from cyberwave.placement import GENERIC_CUBE_BOUNDS
+            >>> support = scene.add_twin_centered(
+            ...     "cyberwave/generic_cube",
+            ...     name="support_box",
+            ...     center=(0.525, 0.0, 0.36),
+            ...     dimensions=(0.70, 0.80, 0.72),
+            ...     asset_bounds=GENERIC_CUBE_BOUNDS,
+            ...     fixed_base=True,
+            ... )
+        """
+        placement: CenteredPlacement = compute_centered_placement(
+            center=center,
+            asset_bounds=asset_bounds,
+            dimensions=dimensions,
+            scale=scale,
+            rotation=rotation,
+        )
+
+        twin = self.client.twin(
+            asset_key=asset_key,
+            environment_id=self.environment_id,
+            name=name,
+            position_x=float(placement.position[0]),
+            position_y=float(placement.position[1]),
+            position_z=float(placement.position[2]),
+            rotation_x=float(placement.rotation[0]),
+            rotation_y=float(placement.rotation[1]),
+            rotation_z=float(placement.rotation[2]),
+            rotation_w=float(placement.rotation[3]),
+            scale_x=float(placement.scale[0]),
+            scale_y=float(placement.scale[1]),
+            scale_z=float(placement.scale[2]),
+            fixed_base=fixed_base,
+            **kwargs,
+        )
+
         self._load_twins()
 
         return twin

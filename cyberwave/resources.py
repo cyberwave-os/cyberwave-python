@@ -30,7 +30,9 @@ import tempfile
 import time
 import uuid as uuid_lib
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, NoReturn, Optional
+from typing import Any, Callable, Dict, List, Literal, NoReturn, Optional
+
+from typing_extensions import NotRequired, Required, TypedDict
 
 import urllib3
 
@@ -65,7 +67,9 @@ from cyberwave.rest import (
     EdgeSchema,
     MLModelSchema,
 )
-from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
+from cyberwave.rest.models.twin_joint_calibration_schema import (
+    TwinJointCalibrationSchema,
+)
 
 from .exceptions import CyberwaveAPIError
 
@@ -78,6 +82,112 @@ EDGE_CONFIG_INTERNAL_KEYS = {
     "edge_fingerprint",
 }
 EDGE_DEVICE_UUID_NAMESPACE = uuid_lib.UUID("7f09e16f-ef6f-410d-9d5d-c071d8fbd1ad")
+
+
+class PolicyRefPayload(TypedDict):
+    """Typed controller policy reference resolved by the backend."""
+
+    kind: Required[Literal["uuid", "catalog_seed_id", "slug"]]
+    value: Required[str]
+
+
+class ControlRuntimeTargetPayload(TypedDict, total=False):
+    """Backend-resolved runtime target for a controller policy."""
+
+    enabled: Required[bool]
+    runtime_kind: Required[Literal["physical", "simulation"]]
+    backend: Required[str]
+    adapter: NotRequired[str | None]
+    source_type: NotRequired[str | None]
+    safety_level: NotRequired[str | None]
+    input_contract: NotRequired[str | None]
+    output_contract: NotRequired[str | None]
+    metadata: NotRequired[Dict[str, Any]]
+
+
+class AssetControllerConfigPayload(TypedDict, total=False):
+    """Controller binding entry from the backend-resolved setup view."""
+
+    id: Required[str]
+    controller_key: Required[str]
+    label: Required[str]
+    is_default: Required[bool]
+    mode: NotRequired[str]
+    settings: NotRequired[Dict[str, Any] | None]
+
+
+class AssetControllerSetupRuntimePolicy(TypedDict, total=False):
+    """Resolved runtime policy row returned by ``get_controller_setup``."""
+
+    key: Required[str]
+    runtime_kind: Required[Literal["physical", "simulation"]]
+    backend: Required[str]
+    controller_key: NotRequired[str | None]
+    catalog_key: NotRequired[str | None]
+    policy_ref: NotRequired[PolicyRefPayload | None]
+    controller_policy_uuid: NotRequired[str | None]
+    available: Required[bool]
+    runtime_enabled: Required[bool]
+    adapter: NotRequired[str | None]
+    source_type: NotRequired[str | None]
+    input_contract: NotRequired[str | None]
+    output_contract: NotRequired[str | None]
+    runtime_target: NotRequired[ControlRuntimeTargetPayload | None]
+    artifact_readiness: Required[str]
+    artifact_status: NotRequired[str | None]
+    artifact_manifest: NotRequired[Dict[str, Any] | None]
+    policy_config: NotRequired[Dict[str, Any] | None]
+    default_velocity_command: NotRequired[Dict[str, Any] | None]
+    warnings: NotRequired[List[str]]
+
+
+class AssetControllerSetupRuntimeOption(TypedDict, total=False):
+    """Selectable controller option for one runtime/backend pair."""
+
+    runtime_kind: Required[Literal["physical", "simulation"]]
+    backend: Required[str]
+    controller_key: NotRequired[str | None]
+    controller_policy_uuid: Required[str]
+    controller_name: Required[str]
+    controller_slug: NotRequired[str | None]
+    catalog_key: NotRequired[str | None]
+    policy_ref: NotRequired[PolicyRefPayload | None]
+    supports_runtime: Required[bool]
+    runtime_enabled: Required[bool]
+    adapter: NotRequired[str | None]
+    source_type: NotRequired[str | None]
+    input_contract: NotRequired[str | None]
+    output_contract: NotRequired[str | None]
+    runtime_target: NotRequired[ControlRuntimeTargetPayload | None]
+
+
+class AssetControllerSetupRecommendation(TypedDict, total=False):
+    """Backend-recommended controller setup for catalog editing."""
+
+    primary_controller_key: NotRequired[str | None]
+    primary_policy_ref: NotRequired[PolicyRefPayload | None]
+    primary_controller_uuid: NotRequired[str | None]
+    primary_controller_name: NotRequired[str | None]
+    mujoco_controller_key: NotRequired[str | None]
+    mujoco_policy_ref: NotRequired[PolicyRefPayload | None]
+    mujoco_controller_uuid: NotRequired[str | None]
+    mujoco_controller_name: NotRequired[str | None]
+    edge_controller_key: NotRequired[str | None]
+    edge_policy_ref: NotRequired[PolicyRefPayload | None]
+    edge_controller_uuid: NotRequired[str | None]
+    edge_controller_name: NotRequired[str | None]
+    default_policy_refs: NotRequired[Dict[str, Dict[str, PolicyRefPayload]]]
+
+
+class AssetControllerSetupView(TypedDict):
+    """Backend-owned controller setup view consumed by SDKs and frontend."""
+
+    asset_uuid: Required[str]
+    controller_configs: Required[List[AssetControllerConfigPayload]]
+    primary_controller_key: Required[str | None]
+    runtime_policies: Required[List[AssetControllerSetupRuntimePolicy]]
+    runtime_options: Required[List[AssetControllerSetupRuntimeOption]]
+    recommended_setup: Required[AssetControllerSetupRecommendation]
 
 
 def _is_uuid(value: str) -> bool:
@@ -379,7 +489,9 @@ class EnvironmentManager(BaseResourceManager):
             env = self.get(environment_id)
             return env.universal_schema
         except Exception as e:
-            self._handle_error(e, f"get universal schema for environment {environment_id}")
+            self._handle_error(
+                e, f"get universal schema for environment {environment_id}"
+            )
             raise
 
     def set_universal_schema(
@@ -423,7 +535,9 @@ class EnvironmentManager(BaseResourceManager):
                 environment_id, update_schema
             )
         except Exception as e:
-            self._handle_error(e, f"set universal schema for environment {environment_id}")
+            self._handle_error(
+                e, f"set universal schema for environment {environment_id}"
+            )
             raise
 
     def patch_universal_schema(
@@ -469,7 +583,10 @@ class EnvironmentManager(BaseResourceManager):
                 resource_path="/api/v1/environments/{uuid}/universal-schema",
                 path_params={"uuid": environment_id},
                 body={"op": op, "path": path, "value": value},
-                header_params={"Content-Type": "application/json", "Accept": "application/json"},
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
                 auth_settings=["CustomTokenAuthentication"],
             )
             response_data = self.api.api_client.call_api(*_param)
@@ -636,20 +753,21 @@ class EnvironmentManager(BaseResourceManager):
 
     def get_universal_schema_json(self, environment_id: str) -> Dict[str, Any]:
         """Get the composed universal schema JSON for an environment (direct download).
-        
+
         Composes schema from all twins' universal_schemas in the environment.
-        
+
         Args:
             environment_id: UUID of the environment
-            
+
         Returns:
             Dict containing the composed CommonSchema as JSON.
-            
+
         Example:
             schema = cw.environments.get_universal_schema_json(env_id)
             print(schema['links'])  # Access links in the schema
         """
         import json
+
         try:
             response = self.api.src_app_api_environments_get_environment_universal_schema_json_with_http_info(
                 environment_id
@@ -659,28 +777,32 @@ class EnvironmentManager(BaseResourceManager):
                 return json.loads(raw.decode("utf-8"))
             return raw
         except Exception as e:
-            self._handle_error(e, f"Get universal schema for environment {environment_id}")
+            self._handle_error(
+                e, f"Get universal schema for environment {environment_id}"
+            )
             raise
 
-    def export_urdf_scene(self, environment_id: str, output_path: Optional[str] = None) -> bytes:
+    def export_urdf_scene(
+        self, environment_id: str, output_path: Optional[str] = None
+    ) -> bytes:
         """
         Export environment as URDF project ZIP file.
-        
+
         Downloads a ZIP containing:
         - scene.urdf: The complete URDF scene
         - meshes/: Directory with all required mesh files
-        
+
         Args:
             environment_id: UUID of the environment
             output_path: Optional path to save the ZIP file. If None, returns bytes.
-            
+
         Returns:
             ZIP file contents as bytes (if output_path is None)
-            
+
         Example:
             # Save to file
             cw.environments.export_urdf_scene(env_id, "urdf_project.zip")
-            
+
             # Get bytes
             zip_data = cw.environments.export_urdf_scene(env_id)
         """
@@ -689,12 +811,12 @@ class EnvironmentManager(BaseResourceManager):
             response = self.api.src_app_api_environments_get_environment_urdf_scene_zip_direct_with_http_info(
                 environment_id
             )
-            
+
             # Extract bytes from response - use raw_data for binary content
             zip_bytes = response.raw_data
-            
+
             if output_path:
-                with open(output_path, 'wb') as f:
+                with open(output_path, "wb") as f:
                     f.write(zip_bytes)
                 return zip_bytes
             return zip_bytes
@@ -702,25 +824,27 @@ class EnvironmentManager(BaseResourceManager):
             self._handle_error(e, f"export URDF scene for environment {environment_id}")
             raise
 
-    def export_mujoco_scene(self, environment_id: str, output_path: Optional[str] = None) -> bytes:
+    def export_mujoco_scene(
+        self, environment_id: str, output_path: Optional[str] = None
+    ) -> bytes:
         """
         Export environment as MuJoCo scene ZIP file.
-        
+
         Downloads a ZIP containing:
         - scene.xml: The complete MuJoCo scene
         - meshes/: Directory with all required mesh files
-        
+
         Args:
             environment_id: UUID of the environment
             output_path: Optional path to save the ZIP file. If None, returns bytes.
-            
+
         Returns:
             ZIP file contents as bytes (if output_path is None)
-            
+
         Example:
             # Save to file
             cw.environments.export_mujoco_scene(env_id, "mujoco_scene.zip")
-            
+
             # Get bytes
             zip_data = cw.environments.export_mujoco_scene(env_id)
         """
@@ -731,11 +855,13 @@ class EnvironmentManager(BaseResourceManager):
             zip_bytes = response.raw_data
 
             if output_path:
-                with open(output_path, 'wb') as f:
+                with open(output_path, "wb") as f:
                     f.write(zip_bytes)
             return zip_bytes
         except Exception as e:
-            self._handle_error(e, f"export MuJoCo scene for environment {environment_id}")
+            self._handle_error(
+                e, f"export MuJoCo scene for environment {environment_id}"
+            )
             raise
 
 
@@ -780,7 +906,9 @@ class AttachmentManager(BaseResourceManager):
         filename: Optional[str] = None,
     ) -> AttachmentSchema:
         """Upload replacement file contents for an attachment."""
-        file_payload = (filename, file) if filename and isinstance(file, bytes) else file
+        file_payload = (
+            (filename, file) if filename and isinstance(file, bytes) else file
+        )
         try:
             return self.api.src_app_api_attachments_upload_attachment(
                 str(attachment_id), file_payload
@@ -884,6 +1012,34 @@ class AssetManager(BaseResourceManager):
             self._handle_error(e, f"get asset {asset_id}")
             raise  # For type checker
 
+    def get_controller_setup(self, asset_uuid: str) -> AssetControllerSetupView:
+        """Get the backend-resolved controller runtime setup view for an asset.
+
+        This is the SDK-facing companion to ``GET
+        /api/v1/assets/{uuid}/controller-setup``. The response contains
+        configured controller bindings, primary controller selection, runtime
+        policies, runtime options, typed ``policy_ref`` entries, and
+        recommended setup defaults already resolved by the backend.
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/assets/{uuid}/controller-setup",
+                path_params={"uuid": asset_uuid},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            setup = self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+            return setup
+        except Exception as e:
+            self._handle_error(e, f"get controller setup for asset {asset_uuid}")
+            raise  # For type checker
+
     def create(self, name: str, description: str = "", **kwargs) -> AssetSchema:
         """Create a new asset"""
         try:
@@ -924,11 +1080,7 @@ class AssetManager(BaseResourceManager):
         if status == 413:
             return True
 
-        details = (
-            str(getattr(error, "body", "") or "")
-            + " "
-            + str(error)
-        ).lower()
+        details = (str(getattr(error, "body", "") or "") + " " + str(error)).lower()
         return bool(
             status == 400
             and (
@@ -1047,13 +1199,13 @@ class AssetManager(BaseResourceManager):
     def get_universal_schema(self, asset_id: str) -> Dict[str, Any]:
         """
         Get the asset's universal schema as JSON.
-        
+
         Args:
             asset_id: UUID of the asset
-            
+
         Returns:
             Dict containing the CommonSchema as JSON
-            
+
         Example:
             schema = cw.assets.get_universal_schema(asset_id)
             print(schema['links'])  # Access links in the schema
@@ -1066,30 +1218,26 @@ class AssetManager(BaseResourceManager):
             raise
 
     def patch_universal_schema(
-        self, 
-        asset_id: str, 
-        path: str, 
-        value: Any, 
-        op: str = "replace"
+        self, asset_id: str, path: str, value: Any, op: str = "replace"
     ) -> Dict[str, Any]:
         """
         Update the asset's universal schema using JSON Pointer operations.
-        
+
         This updates the authoritative schema and increments the schema hash.
         All twins created from this asset after the update will use the new schema.
-        
+
         Args:
             asset_id: UUID of the asset
             path: JSON Pointer path to update (e.g., "/links/0/name")
             value: Value to set at the path
             op: Operation type - "add" or "replace" (default: "replace")
-            
+
         Returns:
             Dict with keys:
                 - schema: The updated full schema
                 - hash: The new schema hash
                 - updated: Dict with op and path that were applied
-                
+
         Example:
             # Update a link name
             result = cw.assets.patch_universal_schema(
@@ -1098,7 +1246,7 @@ class AssetManager(BaseResourceManager):
                 value="base_link_v2",
                 op="replace"
             )
-            
+
             # Add a new capability
             result = cw.assets.patch_universal_schema(
                 asset_id,
@@ -1106,19 +1254,15 @@ class AssetManager(BaseResourceManager):
                 value=True,
                 op="add"
             )
-            
+
             print(f"New schema hash: {result['hash']}")
         """
         from cyberwave.rest.models.universal_schema_patch_schema import (
-            UniversalSchemaPatchSchema
+            UniversalSchemaPatchSchema,
         )
-        
+
         try:
-            payload = UniversalSchemaPatchSchema(
-                op=op,
-                path=path,
-                value=value
-            )
+            payload = UniversalSchemaPatchSchema(op=op, path=path, value=value)
             return self.api.src_app_api_assets_patch_asset_universal_schema(
                 asset_id, payload
             )
@@ -1126,7 +1270,9 @@ class AssetManager(BaseResourceManager):
             self._handle_error(e, f"patch universal schema for asset {asset_id}")
             raise
 
-    def get_universal_schema_at_path(self, asset_id: str, path: str = "") -> Dict[str, Any]:
+    def get_universal_schema_at_path(
+        self, asset_id: str, path: str = ""
+    ) -> Dict[str, Any]:
         """
         Get value at a specific JSON Pointer path in the asset's universal schema.
 
@@ -1244,7 +1390,9 @@ class AssetManager(BaseResourceManager):
             updated["solver"] = {**current.get("solver", {}), **solver}
         if contact is not None:
             updated["contact"] = {**current.get("contact", {}), **contact}
-        return self.patch_universal_schema(asset_id, path="/physics", value=updated, op="add")
+        return self.patch_universal_schema(
+            asset_id, path="/physics", value=updated, op="add"
+        )
 
     def set_gravity(
         self,
@@ -1526,16 +1674,20 @@ class AssetManager(BaseResourceManager):
         try:
             search_results = self.search(normalized_identifier)
             for asset in search_results:
-                if getattr(asset, "registry_id", None) == normalized_identifier or getattr(
-                    asset, "registry_id_alias", None
-                ) == normalized_identifier:
+                if (
+                    getattr(asset, "registry_id", None) == normalized_identifier
+                    or getattr(asset, "registry_id_alias", None)
+                    == normalized_identifier
+                ):
                     return asset
 
             assets = self.list()
             for asset in assets:
-                if getattr(asset, "registry_id", None) == normalized_identifier or getattr(
-                    asset, "registry_id_alias", None
-                ) == normalized_identifier:
+                if (
+                    getattr(asset, "registry_id", None) == normalized_identifier
+                    or getattr(asset, "registry_id_alias", None)
+                    == normalized_identifier
+                ):
                     return asset
             return None
         except Exception:
@@ -1832,6 +1984,7 @@ class TwinManager(BaseResourceManager):
         sensor_id: Optional[str] = None,
         mock: bool = False,
         source_type: Optional[str] = None,
+        frame_bucket: Optional[str] = None,
     ) -> bytes:
         """Get the latest JPEG frame for a twin.
 
@@ -1841,9 +1994,12 @@ class TwinManager(BaseResourceManager):
             mock: If true, request deterministic mock JPEG bytes from the backend.
             source_type: Optional source selector (``"sim"`` or ``"tele"``).
                 Use ``"sim"`` to request a virtual camera frame from simulation.
+            frame_bucket: ``"policy_depth"`` to fetch the policy-resolution
+                depth frame rendered at the trained observation size. Falls back
+                to the regular frame when unavailable.
 
         Returns:
-            JPEG bytes.
+            Image bytes (JPEG or PNG depending on bucket).
         """
         try:
             query_params = []
@@ -1862,6 +2018,8 @@ class TwinManager(BaseResourceManager):
                     "teleoperation",
                 }:
                     query_params.append(("source_type", "tele"))
+            if frame_bucket:
+                query_params.append(("frame_bucket", frame_bucket))
 
             _param = self.api.api_client.param_serialize(
                 method="GET",
@@ -1932,6 +2090,32 @@ class TwinManager(BaseResourceManager):
             self._handle_error(e, f"update twin {twin_id}")
             raise  # For type checker
 
+    def set_driver_schema(
+        self,
+        twin_id: str,
+        *,
+        driver_config: Dict[str, Any],
+        merge: bool = True,
+    ) -> TwinSchema:
+        """Compile cw-driver.yml root dict on the backend and persist twin metadata catalogs."""
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/twins/{uuid}/driver-schema",
+                path_params={"uuid": twin_id},
+                body={"driver_config": driver_config, "merge": merge},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "TwinSchema"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"set driver schema for twin {twin_id}")
+            raise
+
     def delete(self, twin_id: str) -> None:
         """Delete a twin"""
         try:
@@ -1971,32 +2155,34 @@ class TwinManager(BaseResourceManager):
     # Universal Schema APIs
     # =========================================================================
 
-    def get_universal_schema_at_path(self, twin_id: str, path: str = "") -> Dict[str, Any]:
+    def get_universal_schema_at_path(
+        self, twin_id: str, path: str = ""
+    ) -> Dict[str, Any]:
         """
         Get value at a specific JSON Pointer path in the twin's universal schema.
-        
+
         Args:
             twin_id: UUID of the twin
             path: JSON Pointer path (e.g., "/sensors/0", "/extensions/cyberwave/capabilities")
                  Empty string returns the entire schema
-            
+
         Returns:
             Dict with keys:
                 - path: The JSON Pointer path
                 - value: The value at that path (can be any JSON type)
-                
+
         Example:
             # Get entire schema
             result = cw.twins.get_universal_schema_at_path(twin_id)
             schema = result['value']
-            
+
             # Get specific path
             result = cw.twins.get_universal_schema_at_path(twin_id, "/sensors/0")
             sensor = result['value']
-            
+
             # Get capabilities
             result = cw.twins.get_universal_schema_at_path(
-                twin_id, 
+                twin_id,
                 "/extensions/cyberwave/capabilities"
             )
             capabilities = result['value']
@@ -2010,30 +2196,26 @@ class TwinManager(BaseResourceManager):
             raise
 
     def patch_universal_schema(
-        self, 
-        twin_id: str, 
-        path: str, 
-        value: Any, 
-        op: str = "replace"
+        self, twin_id: str, path: str, value: Any, op: str = "replace"
     ) -> Dict[str, Any]:
         """
         Update the twin's universal schema using JSON Pointer operations.
-        
+
         This allows editing twin-specific schema overrides, such as:
         - /sensors (array of sensor objects)
         - /extensions/cyberwave/capabilities
-        
+
         Args:
             twin_id: UUID of the twin
             path: JSON Pointer path to update (e.g., "/sensors/0/parameters/id")
             value: Value to set at the path
             op: Operation type - "add" or "replace" (default: "replace")
-            
+
         Returns:
             Dict with keys:
                 - schema: The updated full schema
                 - updated: Dict with op and path that were applied
-                
+
         Example:
             # Update a sensor ID
             result = cw.twins.patch_universal_schema(
@@ -2042,7 +2224,7 @@ class TwinManager(BaseResourceManager):
                 value="my_camera",
                 op="replace"
             )
-            
+
             # Add a new capability
             result = cw.twins.patch_universal_schema(
                 twin_id,
@@ -2052,15 +2234,11 @@ class TwinManager(BaseResourceManager):
             )
         """
         from cyberwave.rest.models.twin_universal_schema_patch_schema import (
-            TwinUniversalSchemaPatchSchema
+            TwinUniversalSchemaPatchSchema,
         )
-        
+
         try:
-            payload = TwinUniversalSchemaPatchSchema(
-                op=op,
-                path=path,
-                value=value
-            )
+            payload = TwinUniversalSchemaPatchSchema(op=op, path=path, value=value)
             return self.api.src_app_api_twins_patch_twin_universal_schema(
                 twin_id, payload
             )
@@ -2232,7 +2410,9 @@ class TwinManager(BaseResourceManager):
                 if not isinstance(candidate_metadata, dict):
                     continue
                 candidate_edge_configs = candidate_metadata.get(EDGE_CONFIGS_KEY, {})
-                if self._resolve_binding_for_fingerprint(candidate_edge_configs, fingerprint):
+                if self._resolve_binding_for_fingerprint(
+                    candidate_edge_configs, fingerprint
+                ):
                     raise CyberwaveAPIError(
                         (
                             f"Device already paired to twin '{candidate_uuid}'. "
@@ -2243,7 +2423,9 @@ class TwinManager(BaseResourceManager):
 
             _, metadata, edge_configs = self._get_twin_edge_configs(twin_id)
 
-            existing = self._resolve_binding_for_fingerprint(edge_configs, fingerprint) or {}
+            existing = (
+                self._resolve_binding_for_fingerprint(edge_configs, fingerprint) or {}
+            )
             if not isinstance(existing, dict):
                 existing = {}
 
@@ -2325,9 +2507,8 @@ class TwinManager(BaseResourceManager):
             if self._is_legacy_edge_configs_map(edge_configs):
                 fingerprint_to_remove = None
                 for fingerprint, _binding in self._iter_edge_bindings(edge_configs):
-                    if (
-                        self._device_uuid_for_fingerprint(twin_id, fingerprint)
-                        == str(device_uuid)
+                    if self._device_uuid_for_fingerprint(twin_id, fingerprint) == str(
+                        device_uuid
                     ):
                         fingerprint_to_remove = fingerprint
                         break
@@ -2347,10 +2528,10 @@ class TwinManager(BaseResourceManager):
                 }
 
             binding_fingerprint = edge_configs.get("edge_fingerprint")
-            if (
-                not isinstance(binding_fingerprint, str)
-                or self._device_uuid_for_fingerprint(twin_id, binding_fingerprint)
-                != str(device_uuid)
+            if not isinstance(
+                binding_fingerprint, str
+            ) or self._device_uuid_for_fingerprint(twin_id, binding_fingerprint) != str(
+                device_uuid
             ):
                 raise CyberwaveAPIError("Device not found", status_code=404)
 
@@ -2499,7 +2680,9 @@ class TwinManager(BaseResourceManager):
             >>> manager.update_calibration(twin_id, calibration, "leader")
         """
         if robot_type not in ["leader", "follower"]:
-            raise ValueError(f"robot_type must be 'leader' or 'follower', got '{robot_type}'")
+            raise ValueError(
+                f"robot_type must be 'leader' or 'follower', got '{robot_type}'"
+            )
 
         try:
             # Build calibration dicts (not model objects) for robustness across SDK versions
@@ -2523,10 +2706,12 @@ class TwinManager(BaseResourceManager):
                             pass
                 joint_calibration_dicts[joint_name] = base
 
-            schema = TwinJointCalibrationSchema.model_validate({
-                "joint_calibration": joint_calibration_dicts,
-                "robot_type": robot_type,
-            })
+            schema = TwinJointCalibrationSchema.model_validate(
+                {
+                    "joint_calibration": joint_calibration_dicts,
+                    "robot_type": robot_type,
+                }
+            )
 
             return self.api.src_app_api_twins_update_twin_calibration(
                 uuid=twin_id,
@@ -2933,7 +3118,10 @@ class DatasetManager(BaseResourceManager):
                     continue
                 if import_info.get("hf_repo_id") != repo_id:
                     continue
-                if hf_revision is not None and import_info.get("hf_revision") != hf_revision:
+                if (
+                    hf_revision is not None
+                    and import_info.get("hf_revision") != hf_revision
+                ):
                     continue
                 if hf_subset is not None and import_info.get("hf_subset") != hf_subset:
                     continue
@@ -3187,7 +3375,8 @@ class DatasetManager(BaseResourceManager):
                 )
             except Exception as e:
                 self._handle_error(
-                    e, f"request conversion of dataset {dataset_uuid} to '{format_lower}'"
+                    e,
+                    f"request conversion of dataset {dataset_uuid} to '{format_lower}'",
                 )
                 raise  # For type checker
 

@@ -33,12 +33,14 @@ import platform
 import queue
 import threading
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
 
 import numpy as np
 from aiortc.mediastreams import MediaStreamError
 from av import AudioFrame
 
+from .audio_resample import InboundAudioAdapter, infer_webrtc_frame_channels
 from .microphone import (
     AUDIO_PTIME,
     DEFAULT_AUDIO_RECORDING,
@@ -336,6 +338,10 @@ class _FileAudioSource(_AudioSource):
             daemon=True,
         )
         self._producer.start()
+
+    @property
+    def file_path(self) -> str:
+        return self._path
 
     def _open(self) -> None:
         from av.audio.resampler import AudioResampler as PyAVAudioResampler
@@ -651,8 +657,16 @@ class HostSpeakerCapture:
     def start(self) -> None:
         """Start host speaker capture. Idempotent."""
         with self._lock:
-            if self._stream is not None:
-                return
+            stream = self._stream
+            if stream is not None:
+                if bool(getattr(stream, "active", True)):
+                    return
+                # PortAudio can leave a stale handle after underrun/stop while
+                # ``_stream`` is still set — recreate instead of no-op'ing.
+                self._stream = None
+                with contextlib.suppress(Exception):
+                    stream.stop()
+                    stream.close()
             sd = _get_sounddevice_module()
             if sd is None:
                 raise RuntimeError(
@@ -767,6 +781,25 @@ class HostSpeakerCapture:
         time.sleep(max(drain_s, 0.02))
         if self._get_active_source() is source:
             self.clear_source()
+
+    def stop_file(self, path: str) -> bool:
+        """Stop playback of *path* when it is the active file source.
+
+        Returns ``True`` when the active file source matched *path* and was
+        cleared. Returns ``False`` when another source is active or nothing is
+        playing.
+        """
+        src = self._get_active_source()
+        if not isinstance(src, _FileAudioSource):
+            return False
+        try:
+            matches = Path(src.file_path).resolve() == Path(path).resolve()
+        except OSError:
+            matches = src.file_path == path
+        if not matches:
+            return False
+        self.clear_source()
+        return True
 
     def play_chunk(self, chunk: np.ndarray) -> None:
         """Enqueue a one-off PCM chunk. Switches to a queue source if needed."""
@@ -1009,7 +1042,9 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
             self._channels = playback.channels
             self._bit_depth = playback.bit_depth
             self.playback = playback
+            self._owns_playback = False
         else:
+            self._owns_playback = True
             self._sample_rate = sample_rate
             self._channels = channels
             self._bit_depth = bit_depth
@@ -1024,10 +1059,36 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
         self._zenoh_subscriptions: list[Any] = []
         self._zenoh_push_callbacks: list[Callable[[np.ndarray], None]] = []
         self._zenoh_mix_keys: list[Any] = []
+        self._zenoh_routes: dict[str, dict[str, Any]] = {}
         self._webrtc_consumer_tasks: list[asyncio.Task[None]] = []
         # Mixer is created lazily so single-source callers don't pay for it.
         self._mix_source: _MixingAudioSource | None = None
         self._webrtc_mix_key: object = object()
+        self._webrtc_adapter: InboundAudioAdapter | None = None
+
+    @property
+    def webrtc_active(self) -> bool:
+        """True when a WebRTC consumer background task or peer connection is up."""
+        return self._run_task is not None or self.pc is not None
+
+    def has_zenoh_source(self, source_twin_uuid: str) -> bool:
+        return source_twin_uuid in self._zenoh_routes
+
+    def _playback_output_format(self) -> tuple[int, int]:
+        return int(self.playback.sample_rate), int(self.playback.channels)
+
+    def _get_webrtc_adapter(self) -> InboundAudioAdapter:
+        out_rate, out_channels = self._playback_output_format()
+        if (
+            self._webrtc_adapter is None
+            or self._webrtc_adapter._output_sample_rate != out_rate
+            or self._webrtc_adapter._output_channels != out_channels
+        ):
+            self._webrtc_adapter = InboundAudioAdapter(
+                output_sample_rate=out_rate,
+                output_channels=out_channels,
+            )
+        return self._webrtc_adapter
 
     def _send_offer(self, sdp: str) -> None:
         """Build the MQTT offer payload with ``sensor_type="speaker"`` /
@@ -1111,13 +1172,23 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
                 if frame is None:
                     return
                 try:
+                    in_channels = infer_webrtc_frame_channels(frame)
                     arr = np.asarray(frame.to_ndarray(), dtype=np.int16)
+                    if arr.ndim == 1:
+                        arr = arr.reshape(-1, in_channels)
+                    elif arr.shape[0] == in_channels and arr.shape[0] != arr.shape[1]:
+                        arr = np.ascontiguousarray(arr.T, dtype=np.int16)
+                    in_rate = int(getattr(frame, "sample_rate", None) or self._sample_rate)
+                    adapted = self._get_webrtc_adapter().convert(
+                        arr,
+                        input_sample_rate=in_rate,
+                        input_channels=in_channels,
+                    )
                 except Exception:
-                    logger.debug("Could not convert WebRTC audio frame to ndarray", exc_info=True)
+                    logger.debug("Could not adapt WebRTC audio frame", exc_info=True)
                     continue
-                if arr.ndim == 1:
-                    arr = arr.reshape(-1, self._channels)
-                push(arr)
+                if adapted.size:
+                    push(adapted)
         except MediaStreamError:
             logger.info("Remote speaker track ended")
         except asyncio.CancelledError:
@@ -1131,15 +1202,17 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
     def _ensure_mixer(self) -> _MixingAudioSource:
         """Install the shared mixer as the playback source if not already there."""
         if self._mix_source is None:
+            out_rate, out_channels = self._playback_output_format()
             self._mix_source = _MixingAudioSource(
-                target_channels=self._channels,
-                frames_per_chunk=int(AUDIO_PTIME * self._sample_rate),
+                target_channels=out_channels,
+                frames_per_chunk=int(AUDIO_PTIME * out_rate),
             )
         if self.playback._get_active_source() is not self._mix_source:
             self.playback.set_source(self._mix_source)
         return self._mix_source
 
-    async def stop(self) -> None:  # type: ignore[override]
+    async def stop_webrtc_consumer(self) -> None:
+        """Tear down the WebRTC consumer without closing Zenoh routes or playback."""
         for task in self._webrtc_consumer_tasks:
             task.cancel()
         for task in self._webrtc_consumer_tasks:
@@ -1148,25 +1221,54 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.exception("WebRTC consumer task raised during stop()")
+                logger.exception("WebRTC consumer task raised during stop_webrtc_consumer()")
         self._webrtc_consumer_tasks.clear()
-        for sub in self._zenoh_subscriptions:
-            try:
-                sub.close()
-            except Exception:
-                logger.warning("Failed to close zenoh subscription", exc_info=True)
-        self._zenoh_subscriptions.clear()
         if self._mix_source is not None:
-            for key in self._zenoh_mix_keys:
-                self._mix_source.remove_input(key)
-        self._zenoh_mix_keys.clear()
-        self._zenoh_push_callbacks.clear()
-        self._mix_source = None
-        try:
-            self.playback.stop()
-        except Exception:
-            logger.exception("Error stopping host speaker")
+            self._mix_source.remove_input(self._webrtc_mix_key)
         await super().stop()
+
+    def stop_zenoh_source(self, source_twin_uuid: str) -> bool:
+        """Close the Zenoh subscription for *source_twin_uuid*. Returns whether it was active."""
+        route = self._zenoh_routes.pop(source_twin_uuid, None)
+        if route is None:
+            return False
+
+        subscription = route["subscription"]
+        mix_key = route["mix_key"]
+        with contextlib.suppress(Exception):
+            subscription.close()
+        with contextlib.suppress(ValueError):
+            self._zenoh_subscriptions.remove(subscription)
+        with contextlib.suppress(ValueError):
+            self._zenoh_mix_keys.remove(mix_key)
+        push = route.get("push")
+        if push is not None:
+            with contextlib.suppress(ValueError):
+                self._zenoh_push_callbacks.remove(push)
+        if self._mix_source is not None:
+            self._mix_source.remove_input(mix_key)
+        return True
+
+    def _detach_mixer_from_playback(self) -> None:
+        """Drop the mixer source without closing a caller-owned playback device."""
+        if self._mix_source is None:
+            return
+        if self.playback._get_active_source() is self._mix_source:
+            self.playback.clear_source()
+        self._mix_source = None
+
+    async def stop(self) -> None:  # type: ignore[override]
+        await self.stop_webrtc_consumer()
+        for twin_uuid in list(self._zenoh_routes):
+            self.stop_zenoh_source(twin_uuid)
+        if self._owns_playback:
+            self._mix_source = None
+            try:
+                self.playback.stop()
+            except Exception:
+                logger.exception("Error stopping host speaker")
+        else:
+            self._detach_mixer_from_playback()
 
     async def start_zenoh_only(self) -> None:
         """Start the host speaker without bringing up a WebRTC peer connection."""
@@ -1191,6 +1293,8 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
         data_bus: "DataBus",
         channel: str,
         source_twin_uuid: str | None = None,
+        input_sample_rate: int | None = None,
+        input_channels: int | None = None,
     ) -> Any:
         """Subscribe to *channel* on *source_twin_uuid* (or the bus's twin) and
         pipe PCM into the host speaker.
@@ -1199,6 +1303,19 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
         replaced. Returns the underlying ``Subscription``; the streamer also
         tracks it for cleanup on :meth:`stop`.
         """
+        target_twin = source_twin_uuid or data_bus.twin_uuid
+        existing = self._zenoh_routes.get(target_twin)
+        if existing is not None:
+            return existing["subscription"]
+
+        out_rate, out_channels = self._playback_output_format()
+        zenoh_in_rate = int(input_sample_rate or self._sample_rate)
+        zenoh_in_channels = int(input_channels or self._channels)
+        adapter = InboundAudioAdapter(
+            output_sample_rate=out_rate,
+            output_channels=out_channels,
+        )
+
         if not self.playback.is_running:
             self.playback.start()
         mixer = self._ensure_mixer()
@@ -1206,7 +1323,6 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
         push = mixer.add_input(mix_key)
         self._zenoh_mix_keys.append(mix_key)
         self._zenoh_push_callbacks.append(push)
-        target_channels = self._channels
 
         def _on_pcm(payload: Any) -> None:
             arr: np.ndarray
@@ -1217,10 +1333,19 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
             else:
                 return
             if arr.ndim == 1:
-                arr = arr.reshape(-1, target_channels)
-            push(arr)
+                arr = arr.reshape(-1, zenoh_in_channels)
+            try:
+                adapted = adapter.convert(
+                    arr,
+                    input_sample_rate=zenoh_in_rate,
+                    input_channels=zenoh_in_channels,
+                )
+            except Exception:
+                logger.debug("Could not adapt Zenoh PCM chunk", exc_info=True)
+                return
+            if adapted.size:
+                push(adapted)
 
-        target_twin = source_twin_uuid or data_bus.twin_uuid
         subscription = data_bus.subscribe(
             channel,
             _on_pcm,
@@ -1228,6 +1353,14 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
             twin_uuid=target_twin if target_twin != data_bus.twin_uuid else None,
         )
         self._zenoh_subscriptions.append(subscription)
+        self._zenoh_routes[target_twin] = {
+            "subscription": subscription,
+            "mix_key": mix_key,
+            "push": push,
+            "channel": channel,
+            "input_sample_rate": zenoh_in_rate,
+            "input_channels": zenoh_in_channels,
+        }
         return subscription
 
     def subscribe_zenoh_sources(

@@ -4,7 +4,7 @@ import logging
 import math
 import warnings
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from ..exceptions import CyberwaveError
 
@@ -19,12 +19,15 @@ from ._helpers import (
     _sdk_auto_attach_controller_enabled,
 )
 from .commands import TwinCommandsHandle
+from .driver import TwinDriverHandle
+from .telemetry import TwinTelemetry
 from .editor import TwinEditorMixin
 from .transport import TwinTransportMixin
 
 if TYPE_CHECKING:
     from ..client import Cyberwave
     from ..alerts import TwinAlertManager
+    from ..motion import TwinMotionHandle
     from .capability_resolve import HandlerResolution
     from cyberwave.rest.models.twin_joint_calibration_schema import (
         TwinJointCalibrationSchema,
@@ -75,7 +78,7 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         >>> twin = client.twin("the-robot-studio/so101")
         >>> twin.edit_position(x=1, y=0, z=0.5)
         >>> twin.rotate(yaw=90)
-        >>> twin.joints.arm_joint = 45
+        >>> twin.joints.set("joint_1", 45, degrees=True)
     """
 
     def __init__(self, client: "Cyberwave", twin_data: Any):
@@ -91,6 +94,7 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         self._controller_ensured: bool = False
         self._init_transport_state()
         self._mqtt_catalog_cache: Optional[Dict[str, Any]] = None
+        self._driver_catalog_cache: Optional[Dict[str, Any]] = None
 
         # Cache for current state
         self._position: Optional[Dict[str, float]] = None
@@ -99,6 +103,8 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         # Lazy-initialized handles (capability-specific handles live on mixins)
         self._alerts: Optional["TwinAlertManager"] = None
         self._commands_handle: Optional[TwinCommandsHandle] = None
+        self._driver_handle: Optional[TwinDriverHandle] = None
+        self._telemetry_handle: Optional[TwinTelemetry] = None
         self._motion: Optional["TwinMotionHandle"] = None
         self._camera_handle: Optional[Any] = None
         self._pose: Optional[Any] = None
@@ -293,10 +299,24 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
 
     @property
     def commands(self) -> TwinCommandsHandle:
-        """MQTT command catalog for this twin's asset."""
+        """MQTT catalog command invocation (``twin.commands.<name>(...)``)."""
         if self._commands_handle is None:
             self._commands_handle = TwinCommandsHandle(self)
         return self._commands_handle
+
+    @property
+    def driver(self) -> TwinDriverHandle:
+        """Driver interface catalogs (MQTT + Zenoh): getters and ``set_schema``."""
+        if self._driver_handle is None:
+            self._driver_handle = TwinDriverHandle(self)
+        return self._driver_handle
+
+    @property
+    def telemetry(self) -> TwinTelemetry:
+        """MQTT telemetry publisher for this twin."""
+        if self._telemetry_handle is None:
+            self._telemetry_handle = TwinTelemetry(self)
+        return self._telemetry_handle
 
     @property
     def pose(self) -> Any:
@@ -374,6 +394,7 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         sensor_id: Optional[str] = None,
         mock: bool = False,
         source_type: Optional[str] = None,
+        frame_bucket: Optional[str] = None,
     ) -> bytes | None:
         """Fetch the latest cloud JPEG (deprecated — prefer :meth:`get_frame`)."""
         from ._helpers import _decode_frame
@@ -385,6 +406,12 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         )
         try:
             resolved_source_type = source_type
+            if isinstance(resolved_source_type, str):
+                _norm = resolved_source_type.strip().lower()
+                if _norm in {"simulation", "sim"}:
+                    resolved_source_type = "sim"
+                elif _norm in {"tele", "real-world", "real", "teleoperation", "edge"}:
+                    resolved_source_type = "tele"
             if resolved_source_type is None:
                 client_config = getattr(self.client, "config", None)
                 configured_source_type = getattr(client_config, "source_type", None)
@@ -407,6 +434,8 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             }
             if resolved_source_type in {"sim", "tele"}:
                 manager_kwargs["source_type"] = resolved_source_type
+            if frame_bucket:
+                manager_kwargs["frame_bucket"] = frame_bucket
 
             jpeg = self.client.twins.get_latest_frame(self.uuid, **manager_kwargs)
             if jpeg is None:
@@ -549,7 +578,13 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
     def _try_getattr_sensor_family(self, name: str) -> Any:
         from . import namespaces
 
-        for handler, plural, cache_attr, ns_cls_name, handle_for_name in _SENSOR_FAMILIES:
+        for (
+            handler,
+            plural,
+            cache_attr,
+            ns_cls_name,
+            handle_for_name,
+        ) in _SENSOR_FAMILIES:
             if name == handler:
                 resolution = self._resolve_handler(handler)
                 if not resolution.available:
@@ -647,15 +682,25 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         return sorted(set(names))
 
     def describe(self) -> Dict[str, Any]:
-        """Agent contract: handles and callable methods on this twin instance."""
+        """Agent contract: handles and callable methods on this twin instance.
+
+        Driver catalogs (MQTT + optional Zenoh) are under ``driver`` — introspection
+        getters and ``set_schema``. Bound MQTT commands are under ``commands`` —
+        ``twin.commands.<name>(...)`` plus ``command_routing`` when present.
+        """
+        driver_handle = self._driver_handle
+        if driver_handle is None:
+            driver_handle = self.driver
+        driver_info = driver_handle.describe_section()
         commands_handle = self._commands_handle
         if commands_handle is None:
             commands_handle = self.commands
         commands_info = commands_handle.describe_section()
         handles: Dict[str, Any] = {
+            "driver": driver_info,
             "commands": commands_info,
         }
-        flat_methods: List[str] = ["commands"]
+        flat_methods: List[str] = ["driver", "commands"]
         if hasattr(type(self), "policy"):
             handles["policy"] = {
                 "methods": ["get", "assign", "attached", "ensure_attached", "keyboard"]
@@ -686,9 +731,7 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             handles["gripper"] = {"methods": ["grip", "release"]}
         if hasattr(type(self), "joints"):
             handles["joints"] = {"methods": ["set", "get", "list"]}
-            flat_methods.extend(
-                ["get_joints", "set_joints", "get_pose", "set_pose"]
-            )
+            flat_methods.extend(["get_joints", "set_joints", "get_pose", "set_pose"])
         elif hasattr(type(self), "get_pose") and not hasattr(type(self), "joints"):
             flat_methods.extend(["get_pose", "set_pose"])
         flat_methods.append("get_latest_frame")
@@ -735,6 +778,21 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             handles["navigation"] = {"methods": ["goto", "stop", "follow_path"]}
         return {
             "uuid": self.uuid,
+            "interfaces": {
+                "driver": {
+                    "access": "twin.driver",
+                    "role": driver_info.get("role"),
+                    "transports": driver_info.get("transports", []),
+                },
+                "commands": {
+                    "access": "twin.commands",
+                    "role": commands_info.get("role"),
+                    "catalog_introspection": commands_info.get(
+                        "catalog_introspection", "twin.driver"
+                    ),
+                },
+            },
+            "driver": driver_info,
             "commands": commands_info,
             "handles": handles,
             "flat_methods": sorted(set(flat_methods)),
@@ -861,6 +919,7 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             self._rotation = None
             self._scale = None
             self._mqtt_catalog_cache = None
+            self._driver_catalog_cache = None
         except Exception as e:
             raise CyberwaveError(f"Failed to refresh twin: {e}")
 
@@ -1133,10 +1192,8 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         Legacy positional ``on_update`` registers a handler on the twin wildcard topic.
         """
         from ..mqtt.listen import (
-            TopicListenSpec,
             TwinListenSession,
             build_listen_specs,
-            noop_handler,
         )
 
         if on_update is not None:

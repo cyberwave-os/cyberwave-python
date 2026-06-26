@@ -36,7 +36,8 @@ class AgentControlTargetCorrectionRequest(BaseModel):
     target_twin_uuid: Optional[StrictStr] = None
     simulation_backend: Optional[StrictStr] = None
     current_joint_states: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["action", "corrected_position", "plan", "mode", "source", "source_type", "target_twin_uuid", "simulation_backend", "current_joint_states"]
+    current_sensor_states: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["action", "corrected_position", "plan", "mode", "source", "source_type", "target_twin_uuid", "simulation_backend", "current_joint_states", "current_sensor_states"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -117,6 +118,11 @@ class AgentControlTargetCorrectionRequest(BaseModel):
         if self.current_joint_states is None and "current_joint_states" in self.model_fields_set:
             _dict['current_joint_states'] = None
 
+        # set to None if current_sensor_states (nullable) is None
+        # and model_fields_set contains the field
+        if self.current_sensor_states is None and "current_sensor_states" in self.model_fields_set:
+            _dict['current_sensor_states'] = None
+
         return _dict
 
     @classmethod
@@ -137,7 +143,8 @@ class AgentControlTargetCorrectionRequest(BaseModel):
             "source_type": obj.get("source_type"),
             "target_twin_uuid": obj.get("target_twin_uuid"),
             "simulation_backend": obj.get("simulation_backend"),
-            "current_joint_states": obj.get("current_joint_states")
+            "current_joint_states": obj.get("current_joint_states"),
+            "current_sensor_states": obj.get("current_sensor_states")
         })
         return _obj
 

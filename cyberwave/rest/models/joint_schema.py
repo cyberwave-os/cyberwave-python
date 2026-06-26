@@ -34,7 +34,8 @@ class JointSchema(BaseModel):
     axis: Optional[List[Union[StrictFloat, StrictInt]]]
     limits: Optional[Dict[str, Union[StrictFloat, StrictInt]]]
     origin: Optional[Dict[str, List[Union[StrictFloat, StrictInt]]]]
-    __properties: ClassVar[List[str]] = ["name", "type", "parent_link", "child_link", "axis", "limits", "origin"]
+    mimic: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["name", "type", "parent_link", "child_link", "axis", "limits", "origin", "mimic"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -90,6 +91,11 @@ class JointSchema(BaseModel):
         if self.origin is None and "origin" in self.model_fields_set:
             _dict['origin'] = None
 
+        # set to None if mimic (nullable) is None
+        # and model_fields_set contains the field
+        if self.mimic is None and "mimic" in self.model_fields_set:
+            _dict['mimic'] = None
+
         return _dict
 
     @classmethod
@@ -108,7 +114,8 @@ class JointSchema(BaseModel):
             "child_link": obj.get("child_link"),
             "axis": obj.get("axis"),
             "limits": obj.get("limits"),
-            "origin": obj.get("origin")
+            "origin": obj.get("origin"),
+            "mimic": obj.get("mimic")
         })
         return _obj
 

@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.agent_control_action import AgentControlAction
+from cyberwave.rest.models.agent_control_visualization_layer import AgentControlVisualizationLayer
 from cyberwave.rest.models.agent_twin_control_surface import AgentTwinControlSurface
 from typing import Optional, Set
 from typing_extensions import Self
@@ -27,7 +28,7 @@ from pydantic_core import to_jsonable_python
 
 class AgentControlPlanResponse(BaseModel):
     """
-    Validated read-only control plan.  The three action lists describe the *same* underlying plan from three angles; clients pick the one they need rather than re-deriving it:  * ``actions`` — full plan as proposed (advisory + dispatchable, in order). * ``dispatchable_actions`` — at most one ready-to-execute action; this is   what the dispatch UI should bind to. Backend collapses the plan to a   single dispatchable action when ``readiness == \"ready\"``. * ``advisory_actions`` — actions surfaced for context only (e.g. observe   frames, setup guidance) and never directly dispatchable.
+    Validated read-only control plan.  The three action lists describe the *same* underlying plan from three angles; clients pick the one they need rather than re-deriving it:  * ``actions`` — full plan as proposed (advisory + dispatchable, in order). * ``dispatchable_actions`` — ready-to-execute actions. Live plans and   same-twin sequences stay single-action; simulation plans may expose   independent actions for different twins. * ``advisory_actions`` — actions surfaced for context only (e.g. observe   frames, setup guidance) and never directly dispatchable.
     """ # noqa: E501
     summary: StrictStr
     mode: StrictStr
@@ -42,7 +43,10 @@ class AgentControlPlanResponse(BaseModel):
     missing_requirements: Optional[List[Dict[str, Any]]] = None
     embodiment_context: Optional[Dict[str, Any]] = None
     control_surfaces: Optional[List[AgentTwinControlSurface]] = None
-    __properties: ClassVar[List[str]] = ["summary", "mode", "source_type", "target_twin_uuid", "actions", "dispatchable_actions", "advisory_actions", "requires_confirmation", "readiness", "warnings", "missing_requirements", "embodiment_context", "control_surfaces"]
+    planning_scene: Optional[Dict[str, Any]] = None
+    visualization_layers: Optional[List[AgentControlVisualizationLayer]] = None
+    dispatch_bundle: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["summary", "mode", "source_type", "target_twin_uuid", "actions", "dispatchable_actions", "advisory_actions", "requires_confirmation", "readiness", "warnings", "missing_requirements", "embodiment_context", "control_surfaces", "planning_scene", "visualization_layers", "dispatch_bundle"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -125,10 +129,27 @@ class AgentControlPlanResponse(BaseModel):
                 if _item_control_surfaces:
                     _items.append(_item_control_surfaces.to_dict())
             _dict['control_surfaces'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in visualization_layers (list)
+        _items = []
+        if self.visualization_layers:
+            for _item_visualization_layers in self.visualization_layers:
+                if _item_visualization_layers:
+                    _items.append(_item_visualization_layers.to_dict())
+            _dict['visualization_layers'] = _items
         # set to None if target_twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.target_twin_uuid is None and "target_twin_uuid" in self.model_fields_set:
             _dict['target_twin_uuid'] = None
+
+        # set to None if planning_scene (nullable) is None
+        # and model_fields_set contains the field
+        if self.planning_scene is None and "planning_scene" in self.model_fields_set:
+            _dict['planning_scene'] = None
+
+        # set to None if dispatch_bundle (nullable) is None
+        # and model_fields_set contains the field
+        if self.dispatch_bundle is None and "dispatch_bundle" in self.model_fields_set:
+            _dict['dispatch_bundle'] = None
 
         return _dict
 
@@ -154,7 +175,10 @@ class AgentControlPlanResponse(BaseModel):
             "warnings": obj.get("warnings"),
             "missing_requirements": obj.get("missing_requirements"),
             "embodiment_context": obj.get("embodiment_context"),
-            "control_surfaces": [AgentTwinControlSurface.from_dict(_item) for _item in obj["control_surfaces"]] if obj.get("control_surfaces") is not None else None
+            "control_surfaces": [AgentTwinControlSurface.from_dict(_item) for _item in obj["control_surfaces"]] if obj.get("control_surfaces") is not None else None,
+            "planning_scene": obj.get("planning_scene"),
+            "visualization_layers": [AgentControlVisualizationLayer.from_dict(_item) for _item in obj["visualization_layers"]] if obj.get("visualization_layers") is not None else None,
+            "dispatch_bundle": obj.get("dispatch_bundle")
         })
         return _obj
 

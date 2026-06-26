@@ -10,9 +10,10 @@ Coverage:
 
 from __future__ import annotations
 
+import asyncio
 import fractions
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
@@ -491,3 +492,55 @@ class TestAudioSensorClassification:
 
     def test_microphone_and_speaker_types_are_disjoint(self):
         assert MICROPHONE_SENSOR_TYPES.isdisjoint(SPEAKER_SENSOR_TYPES)
+
+
+# ===========================================================================
+# WebRTC reconnect — single negotiation owner
+# ===========================================================================
+
+
+class TestWebRtcReconnectDedup:
+    def _make_streamer(self) -> MicrophoneAudioStreamer:
+        client = _make_mqtt_client()
+        return MicrophoneAudioStreamer(
+            client,
+            get_audio=_silent_get_audio,
+            twin_uuid="twin-123",
+            mic_name="audio",
+            auto_reconnect=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_attempt_reconnect_skips_when_negotiation_lock_held(self):
+        s = self._make_streamer()
+        s._webrtc_negotiation_lock = asyncio.Lock()
+        await s._webrtc_negotiation_lock.acquire()
+        try:
+            result = await s._attempt_reconnect(asyncio.Event(), 0, 0.0, 3)
+        finally:
+            s._webrtc_negotiation_lock.release()
+        assert result == 0
+        assert s.is_reconnecting is False
+
+    @pytest.mark.asyncio
+    async def test_run_loop_does_not_retry_after_initial_connect_succeeds(self):
+        s = self._make_streamer()
+        stop = asyncio.Event()
+        negotiate = AsyncMock()
+        with patch.object(s, "_negotiate_webrtc", negotiate):
+            with patch.object(s, "_subscribe_to_commands"):
+                with patch.object(s, "_subscribe_to_answer"):
+                    with patch.object(
+                        s, "_monitor_connection", new=AsyncMock()
+                    ):
+                        negotiate.side_effect = [None, AssertionError("duplicate offer")]
+                        s.pc = None
+                        task = asyncio.create_task(
+                            s.run_with_auto_reconnect(stop_event=stop)
+                        )
+                        await asyncio.sleep(0.2)
+                        s.pc = None
+                        await asyncio.sleep(0.7)
+                        stop.set()
+                        await task
+        assert negotiate.await_count == 1

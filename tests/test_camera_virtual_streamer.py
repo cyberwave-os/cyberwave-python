@@ -22,6 +22,7 @@ sys.modules.setdefault(
     ),
 )
 
+from cyberwave.sensor.base_video import DEFAULT_TURN_SERVERS
 from cyberwave.sensor.camera_virtual import VirtualCameraStreamer, VirtualVideoTrack
 
 
@@ -130,6 +131,38 @@ def test_virtual_video_track_allows_configurable_output_format():
     frame = asyncio.run(track.recv())
 
     assert frame.format.name == "rgb24"
+
+
+class TestVirtualCameraStreamerTurnServers:
+    def test_none_uses_platform_default_turn_servers(self):
+        streamer = VirtualCameraStreamer(
+            client=_make_mqtt_client(),
+            get_frame=lambda: None,
+            twin_uuid="twin-123",
+        )
+
+        assert streamer.turn_servers == DEFAULT_TURN_SERVERS
+
+    def test_empty_list_disables_turn_for_local_ice_only(self):
+        streamer = VirtualCameraStreamer(
+            client=_make_mqtt_client(),
+            get_frame=lambda: None,
+            twin_uuid="twin-123",
+            turn_servers=[],
+        )
+
+        assert streamer.turn_servers == []
+
+    def test_explicit_turn_servers_are_forwarded(self):
+        custom_servers = [{"urls": "stun:turn.cyberwave.com:3478"}]
+        streamer = VirtualCameraStreamer(
+            client=_make_mqtt_client(),
+            get_frame=lambda: None,
+            twin_uuid="twin-123",
+            turn_servers=custom_servers,
+        )
+
+        assert streamer.turn_servers == custom_servers
 
 
 def test_virtual_camera_streamer_passes_output_format_to_track():

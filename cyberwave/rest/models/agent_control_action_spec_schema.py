@@ -30,6 +30,7 @@ class AgentControlActionSpecSchema(BaseModel):
     kind: StrictStr
     label: StrictStr
     dispatchability: StrictStr
+    execution_channel: StrictStr
     transport: StrictStr
     api: Optional[StrictStr] = None
     method: Optional[StrictStr] = None
@@ -45,10 +46,12 @@ class AgentControlActionSpecSchema(BaseModel):
     operator_label: Optional[StrictStr] = None
     operator_description: Optional[StrictStr] = None
     developer_label: Optional[StrictStr] = None
+    configuration_hint: Optional[StrictStr] = None
+    configuration_target: Optional[StrictStr] = None
     setup_hint: Optional[StrictStr] = None
     setup_target: Optional[StrictStr] = None
     display_metadata: Optional[Dict[str, StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["kind", "label", "dispatchability", "transport", "api", "method", "path", "requires_confirmation", "allowed_commands", "allowed_source_types", "route_id", "route_label", "route_kind", "input_kinds", "output_action_kind", "operator_label", "operator_description", "developer_label", "setup_hint", "setup_target", "display_metadata"]
+    __properties: ClassVar[List[str]] = ["kind", "label", "dispatchability", "execution_channel", "transport", "api", "method", "path", "requires_confirmation", "allowed_commands", "allowed_source_types", "route_id", "route_label", "route_kind", "input_kinds", "output_action_kind", "operator_label", "operator_description", "developer_label", "configuration_hint", "configuration_target", "setup_hint", "setup_target", "display_metadata"]
 
     @field_validator('kind')
     def kind_validate_enum(cls, value):
@@ -156,6 +159,16 @@ class AgentControlActionSpecSchema(BaseModel):
         if self.developer_label is None and "developer_label" in self.model_fields_set:
             _dict['developer_label'] = None
 
+        # set to None if configuration_hint (nullable) is None
+        # and model_fields_set contains the field
+        if self.configuration_hint is None and "configuration_hint" in self.model_fields_set:
+            _dict['configuration_hint'] = None
+
+        # set to None if configuration_target (nullable) is None
+        # and model_fields_set contains the field
+        if self.configuration_target is None and "configuration_target" in self.model_fields_set:
+            _dict['configuration_target'] = None
+
         # set to None if setup_hint (nullable) is None
         # and model_fields_set contains the field
         if self.setup_hint is None and "setup_hint" in self.model_fields_set:
@@ -181,6 +194,7 @@ class AgentControlActionSpecSchema(BaseModel):
             "kind": obj.get("kind"),
             "label": obj.get("label"),
             "dispatchability": obj.get("dispatchability"),
+            "execution_channel": obj.get("execution_channel"),
             "transport": obj.get("transport"),
             "api": obj.get("api"),
             "method": obj.get("method"),
@@ -196,6 +210,8 @@ class AgentControlActionSpecSchema(BaseModel):
             "operator_label": obj.get("operator_label"),
             "operator_description": obj.get("operator_description"),
             "developer_label": obj.get("developer_label"),
+            "configuration_hint": obj.get("configuration_hint"),
+            "configuration_target": obj.get("configuration_target"),
             "setup_hint": obj.get("setup_hint"),
             "setup_target": obj.get("setup_target"),
             "display_metadata": obj.get("display_metadata")

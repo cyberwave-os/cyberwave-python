@@ -326,7 +326,7 @@ class TwinCameraHandle:
     def _get_frame_remote_edge(self, format: str, *, timeout_s: float) -> Any:
         """MQTT take_photo via ``twin.commands`` + ``twin.listen`` on photo topic."""
         twin = self._twin
-        schema = twin.commands.get_schema()
+        schema = twin.driver.get_mqtt_schema()
         if "take_photo" not in supported_mqtt_commands(schema):
             raise CyberwaveError("twin cannot support take photo command")
 

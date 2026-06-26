@@ -72,6 +72,7 @@ _NON_MOTION_TWIN_COMMANDS = frozenset(
         "lights_on",
         "lights_off",
         "get_status",
+        "rotate",  # driver/sensor commands (e.g. fake IMU), not locomotion policy
     }
 )
 

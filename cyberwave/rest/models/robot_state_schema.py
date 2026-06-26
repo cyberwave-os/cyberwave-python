@@ -32,9 +32,10 @@ class RobotStateSchema(BaseModel):
     joint_positions: Optional[List[Union[StrictFloat, StrictInt]]] = None
     joint_velocities: Optional[List[Union[StrictFloat, StrictInt]]] = None
     ee_pose: Optional[CameraPoseSchema] = None
+    eef_pose: Optional[List[Union[StrictFloat, StrictInt]]] = None
     gripper_position: Optional[Union[StrictFloat, StrictInt]] = None
     timestamp_ms: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["joint_names", "joint_positions", "joint_velocities", "ee_pose", "gripper_position", "timestamp_ms"]
+    __properties: ClassVar[List[str]] = ["joint_names", "joint_positions", "joint_velocities", "ee_pose", "eef_pose", "gripper_position", "timestamp_ms"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -98,6 +99,11 @@ class RobotStateSchema(BaseModel):
         if self.ee_pose is None and "ee_pose" in self.model_fields_set:
             _dict['ee_pose'] = None
 
+        # set to None if eef_pose (nullable) is None
+        # and model_fields_set contains the field
+        if self.eef_pose is None and "eef_pose" in self.model_fields_set:
+            _dict['eef_pose'] = None
+
         # set to None if gripper_position (nullable) is None
         # and model_fields_set contains the field
         if self.gripper_position is None and "gripper_position" in self.model_fields_set:
@@ -124,6 +130,7 @@ class RobotStateSchema(BaseModel):
             "joint_positions": obj.get("joint_positions"),
             "joint_velocities": obj.get("joint_velocities"),
             "ee_pose": CameraPoseSchema.from_dict(obj["ee_pose"]) if obj.get("ee_pose") is not None else None,
+            "eef_pose": obj.get("eef_pose"),
             "gripper_position": obj.get("gripper_position"),
             "timestamp_ms": obj.get("timestamp_ms")
         })

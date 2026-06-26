@@ -1,4 +1,10 @@
-"""cyberwave.yml manifest schema, loader, and validator."""
+"""cyberwave.yml project manifest: schema, loader, and validator.
+
+(The ``cw-driver.yml`` driver-interface catalog I/O moved to
+:mod:`cyberwave.driver.interface.cw_driver` — it is driver-export logic, not part
+of the project manifest. Reading compiled catalogs from twin/asset metadata stays
+in :mod:`cyberwave.manifest.driver_config`.)
+"""
 
 from .loader import from_dict, from_file
 from .schema import (
@@ -7,12 +13,6 @@ from .schema import (
     ManifestSchema,
     ResourcesSchema,
     detect_dispatch_mode,
-)
-from .cw_driver import (
-    compile_cw_driver_file,
-    compile_driver_mqtt_bundle,
-    load_cw_driver_yml,
-    resolve_mqtt_bundle_from_driver_config,
 )
 from .validator import ManifestFieldError, ManifestValidationResult, validate_manifest
 
@@ -27,8 +27,4 @@ __all__ = [
     "validate_manifest",
     "ManifestValidationResult",
     "ManifestFieldError",
-    "compile_cw_driver_file",
-    "compile_driver_mqtt_bundle",
-    "load_cw_driver_yml",
-    "resolve_mqtt_bundle_from_driver_config",
 ]

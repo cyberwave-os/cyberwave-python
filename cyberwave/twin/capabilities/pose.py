@@ -75,7 +75,7 @@ class PoseHandle:
             return
         topics = resolve_inbound_topics(
             "pose",
-            self._twin.commands.get_schema(),
+            self._twin.driver.get_mqtt_schema(),
             twin_uuid=self._twin.uuid,
             topic_prefix=self._topic_prefix(),
         )

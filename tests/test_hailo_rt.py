@@ -780,7 +780,8 @@ class TestPostprocessSeg:
         assert result.detections == []
 
     def test_all_zero_proto_produces_no_detections_above_threshold(self) -> None:
-        # Zero proto → all mask logits = 0 → sigmoid = 0.5; zero class logits → low scores
+        # Zero class logits → sigmoid(0)=0.5. Use conf strictly above 0.5 so no grid
+        # cell survives; conf=0.5 would keep every cell (~8k) and OOM in mask decode.
         outputs = {
             "proto": np.zeros((1, 160, 160, 32), dtype=np.float32),
             "det_s8": np.zeros((1, 80, 80, 116), dtype=np.float32),
@@ -790,11 +791,10 @@ class TestPostprocessSeg:
         lb = _Letterbox(scale=1.0, pad_left=0, pad_top=0, target_w=640, target_h=640)
         result = _postprocess_seg(
             outputs, class_names={i: str(i) for i in range(80)},
-            confidence=0.5, classes=None, letterbox=lb, orig_w=640, orig_h=640,
+            confidence=0.51, classes=None, letterbox=lb, orig_w=640, orig_h=640,
         )
         assert isinstance(result, InstanceSegmentationResult)
-        # Zero logits → sigmoid(0)=0.5, so with conf=0.5 we may get borderline hits;
-        # the test just verifies it runs and returns the right type.
+        assert result.detections == []
 
     def test_split_hailo_format_produces_detections(self) -> None:
         """Proves the full decode pipeline works end-to-end for the split layout.

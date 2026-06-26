@@ -41,6 +41,7 @@ from .exceptions import (
     CyberwaveError,
     CyberwaveAPIError,
     CyberwaveConnectionError,
+    CyberwaveInsufficientCreditsError,
     CyberwaveTimeoutError,
     CyberwaveValidationError,
 )
@@ -98,6 +99,55 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ScopedMotionHandle": (".motion", "ScopedMotionHandle"),
     "TwinNavigationHandle": (".motion", "TwinNavigationHandle"),
     "NavigationPlan": (".navigation", "NavigationPlan"),
+    "LOCOMOTION_VELOCITY_COMMAND_CONTRACT": (
+        ".locomotion_contracts",
+        "LOCOMOTION_VELOCITY_COMMAND_CONTRACT",
+    ),
+    "AERIAL_VELOCITY_COMMAND_CONTRACT": (
+        ".locomotion_contracts",
+        "AERIAL_VELOCITY_COMMAND_CONTRACT",
+    ),
+    "LOCOMOTION_VELOCITY_COMMAND_REQUIRED_FIELDS": (
+        ".locomotion_contracts",
+        "LOCOMOTION_VELOCITY_COMMAND_REQUIRED_FIELDS",
+    ),
+    "AERIAL_VELOCITY_COMMAND_REQUIRED_FIELDS": (
+        ".locomotion_contracts",
+        "AERIAL_VELOCITY_COMMAND_REQUIRED_FIELDS",
+    ),
+    "LocomotionVelocityCommand": (
+        ".locomotion_contracts",
+        "LocomotionVelocityCommand",
+    ),
+    "BodyVelocityCommand": (".locomotion_contracts", "BodyVelocityCommand"),
+    "LocomotionVelocityCommandError": (
+        ".locomotion_contracts",
+        "LocomotionVelocityCommandError",
+    ),
+    "build_locomotion_velocity_command": (
+        ".locomotion_contracts",
+        "build_locomotion_velocity_command",
+    ),
+    "normalize_locomotion_velocity_command": (
+        ".locomotion_contracts",
+        "normalize_locomotion_velocity_command",
+    ),
+    "normalize_body_velocity_command": (
+        ".locomotion_contracts",
+        "normalize_body_velocity_command",
+    ),
+    "stop_locomotion_velocity_command": (
+        ".locomotion_contracts",
+        "stop_locomotion_velocity_command",
+    ),
+    "stop_aerial_velocity_command": (
+        ".locomotion_contracts",
+        "stop_aerial_velocity_command",
+    ),
+    "hold_seconds_for_velocity_command": (
+        ".locomotion_contracts",
+        "hold_seconds_for_velocity_command",
+    ),
     # Keyboard teleop
     "KeyboardBindings": (".keyboard", "KeyboardBindings"),
     "KeyboardTeleop": (".keyboard", "KeyboardTeleop"),
@@ -108,6 +158,21 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ProjectManager": (".resources", "ProjectManager"),
     "EnvironmentManager": (".resources", "EnvironmentManager"),
     "AssetManager": (".resources", "AssetManager"),
+    "AssetControllerSetupRecommendation": (
+        ".resources",
+        "AssetControllerSetupRecommendation",
+    ),
+    "AssetControllerSetupRuntimeOption": (
+        ".resources",
+        "AssetControllerSetupRuntimeOption",
+    ),
+    "AssetControllerSetupRuntimePolicy": (
+        ".resources",
+        "AssetControllerSetupRuntimePolicy",
+    ),
+    "AssetControllerSetupView": (".resources", "AssetControllerSetupView"),
+    "ControlRuntimeTargetPayload": (".resources", "ControlRuntimeTargetPayload"),
+    "PolicyRefPayload": (".resources", "PolicyRefPayload"),
     "EdgeManager": (".resources", "EdgeManager"),
     "TwinManager": (".resources", "TwinManager"),
     # Workflow management (also pulls in REST layer)
@@ -152,6 +217,14 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "format_device_info_table": (".fingerprint", "format_device_info_table"),
     # Scene
     "Scene": (".scene", "Scene"),
+    # Centered placement helpers
+    "CenteredPlacement": (".placement", "CenteredPlacement"),
+    "GENERIC_CUBE_BOUNDS": (".placement", "GENERIC_CUBE_BOUNDS"),
+    "compute_centered_placement": (".placement", "compute_centered_placement"),
+    "compute_center_from_origin": (".placement", "compute_center_from_origin"),
+    # RL task scene-entity + task-spec helpers
+    "RLTaskClient": (".rl_tasks", "RLTaskClient"),
+    "TaskSpecExport": (".rl_tasks", "TaskSpecExport"),
 }
 
 # Optional camera streaming symbols — only available with extra deps.
@@ -211,6 +284,14 @@ __all__ = [
     "Cyberwave",
     # Scene
     "Scene",
+    # Centered placement helpers
+    "CenteredPlacement",
+    "GENERIC_CUBE_BOUNDS",
+    "compute_centered_placement",
+    "compute_center_from_origin",
+    # RL task helpers
+    "RLTaskClient",
+    "TaskSpecExport",
     # Configuration
     "CyberwaveConfig",
     "get_config",
@@ -241,6 +322,19 @@ __all__ = [
     "ScopedMotionHandle",
     "TwinNavigationHandle",
     "NavigationPlan",
+    "LOCOMOTION_VELOCITY_COMMAND_CONTRACT",
+    "AERIAL_VELOCITY_COMMAND_CONTRACT",
+    "LOCOMOTION_VELOCITY_COMMAND_REQUIRED_FIELDS",
+    "AERIAL_VELOCITY_COMMAND_REQUIRED_FIELDS",
+    "LocomotionVelocityCommand",
+    "BodyVelocityCommand",
+    "LocomotionVelocityCommandError",
+    "build_locomotion_velocity_command",
+    "normalize_locomotion_velocity_command",
+    "normalize_body_velocity_command",
+    "stop_locomotion_velocity_command",
+    "stop_aerial_velocity_command",
+    "hold_seconds_for_velocity_command",
     # Keyboard teleop
     "KeyboardBindings",
     "KeyboardTeleop",
@@ -248,6 +342,7 @@ __all__ = [
     "CyberwaveError",
     "CyberwaveAPIError",
     "CyberwaveConnectionError",
+    "CyberwaveInsufficientCreditsError",
     "CyberwaveTimeoutError",
     "CyberwaveValidationError",
     # Compact API
@@ -259,6 +354,12 @@ __all__ = [
     "ProjectManager",
     "EnvironmentManager",
     "AssetManager",
+    "AssetControllerSetupRecommendation",
+    "AssetControllerSetupRuntimeOption",
+    "AssetControllerSetupRuntimePolicy",
+    "AssetControllerSetupView",
+    "ControlRuntimeTargetPayload",
+    "PolicyRefPayload",
     "EdgeManager",
     "TwinManager",
     # Workflow management

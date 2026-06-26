@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from cyberwave.models.runtimes import _RUNTIME_REGISTRY
 from cyberwave.models.runtimes.faster_whisper_rt import FasterWhisperRuntime
 from cyberwave.models.types import TextResult
@@ -50,7 +52,9 @@ class TestFasterWhisperRuntime:
         # model_path does NOT exist as a directory — triggers the HF download path
         model_path = str(tmp_path / "nonexistent" / "tiny.en")
         download_root = str(tmp_path / "cache")
-        resolved_snapshot = str(tmp_path / "cache" / "models--Systran--faster-whisper-tiny.en")
+        resolved_snapshot = str(
+            tmp_path / "cache" / "models--Systran--faster-whisper-tiny.en"
+        )
 
         model_cls = MagicMock()
         fake_pkg, fake_utils = _patched_faster_whisper(model_cls, resolved_snapshot)
@@ -83,11 +87,11 @@ class TestFasterWhisperRuntime:
         assert call_kwargs["local_files_only"] is False
 
     def test_load_uses_local_dir_without_downloading(self, tmp_path):
-        """When model_path points to an existing directory the runtime uses it
-        directly — ``download_model`` must never be called (edge devices may
-        have no internet access)."""
+        """When model_path points to a complete local snapshot the runtime
+        uses it directly — ``download_model`` must never be called."""
         model_dir = tmp_path / "models" / "tiny.en"
         model_dir.mkdir(parents=True)
+        (model_dir / "model.bin").write_bytes(b"ct2")
 
         model_cls = MagicMock()
         fake_pkg, fake_utils = _patched_faster_whisper(model_cls, "unused")
@@ -107,6 +111,39 @@ class TestFasterWhisperRuntime:
         fake_utils.download_model.assert_not_called()
         assert model_cls.call_args.args == (str(model_dir),)
 
+    @pytest.mark.parametrize(
+        "model_id",
+        ["tiny.en", "base.en", "small.en", "medium.en"],
+    )
+    def test_load_empty_local_dir_triggers_download(self, tmp_path, model_id):
+        """An empty staging directory must not skip HuggingFace download."""
+        model_dir = tmp_path / "models" / model_id
+        model_dir.mkdir(parents=True)
+        resolved_snapshot = str(
+            tmp_path / "models" / f"models--Systran--faster-whisper-{model_id}"
+        )
+
+        model_cls = MagicMock()
+        fake_pkg, fake_utils = _patched_faster_whisper(model_cls, resolved_snapshot)
+
+        with patch.dict(
+            "sys.modules",
+            {"faster_whisper": fake_pkg, "faster_whisper.utils": fake_utils},
+        ):
+            FasterWhisperRuntime().load(
+                str(model_dir),
+                faster_whisper_model_id=model_id,
+                device="cpu",
+                compute_type="int8",
+            )
+
+        fake_utils.download_model.assert_called_once_with(
+            model_id,
+            output_dir=str(model_dir.parent),
+            local_files_only=False,
+        )
+        assert model_cls.call_args.args == (resolved_snapshot,)
+
     def test_load_ignores_stale_cwd_collision(self, tmp_path, monkeypatch):
         """A stale ``./base.en/`` in CWD must not affect loading — when
         model_path is an absolute directory it is used directly, so CWD
@@ -118,6 +155,7 @@ class TestFasterWhisperRuntime:
 
         cache_dir = tmp_path / "cache" / "base.en"
         cache_dir.mkdir(parents=True)
+        (cache_dir / "model.bin").write_bytes(b"ct2")
 
         model_cls = MagicMock()
         fake_pkg, fake_utils = _patched_faster_whisper(model_cls, "unused")
@@ -143,6 +181,7 @@ class TestFasterWhisperRuntime:
         model_path is a pre-staged local directory."""
         cache_dir = tmp_path / "cache" / "tiny.en"
         cache_dir.mkdir(parents=True)
+        (cache_dir / "model.bin").write_bytes(b"ct2")
 
         model_cls = MagicMock()
         fake_pkg, fake_utils = _patched_faster_whisper(model_cls, "unused")

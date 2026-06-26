@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence
 
 from ..exceptions import CyberwaveError
 
@@ -95,18 +95,22 @@ class JointsCapableMixin:
         what_joints: Optional[Sequence[str]] = None,
         what_data: Sequence[str] = ("position",),
         timeout: float = FIRST_READ_TIMEOUT_S,
-    ) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
+        after_update_callback: Optional[Any] = None,
+    ) -> Any:
         """Shortcut for :meth:`joints.get` (stable twin-level API).
 
-        Default returns a ``{joint_name: position}`` map in radians. Pass
+        Returns a live :class:`~cyberwave.twin.capabilities.joints.JointStateView`
+        that auto-updates (default ``{joint_name: position}`` in radians). Pass
         ``what_data`` to read additional fields — ``position``, ``velocity``,
         ``acceleration``, and ``effort`` (effort/torque) — either one kind or
-        several (nested dict keyed by kind).
+        several (nested dict keyed by kind). Pass *after_update_callback* to run a
+        function on every update (cancel via the view's ``stop()``).
         """
         return self.joints.get(
             what_joints=what_joints,
             what_data=what_data,
             timeout=timeout,
+            after_update_callback=after_update_callback,
         )
 
     def get_pose(
@@ -115,12 +119,14 @@ class JointsCapableMixin:
         what_joints: Optional[Sequence[str]] = None,
         what_data: Sequence[str] = ("position",),
         timeout: float = FIRST_READ_TIMEOUT_S,
-    ) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
+        after_update_callback: Optional[Any] = None,
+    ) -> Any:
         """Joint-space pose alias for :meth:`get_joints` on manipulator twins."""
         return self.get_joints(
             what_joints=what_joints,
             what_data=what_data,
             timeout=timeout,
+            after_update_callback=after_update_callback,
         )
 
     def set_joints(

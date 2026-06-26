@@ -8,9 +8,12 @@ This file is loaded by pytest before any test module is collected, so the
 stubs are in place before the import chain is triggered.
 """
 
+import gc
 import sys
 import types
 from typing import Any
+
+import pytest
 
 
 def _rest_module_is_real() -> bool:
@@ -170,3 +173,10 @@ def _inject_rest_stubs() -> None:
 
 
 _inject_rest_stubs()
+
+
+@pytest.fixture(autouse=True)
+def _force_gc_after_test():
+    """Force garbage collection after each test to prevent memory accumulation."""
+    yield
+    gc.collect()

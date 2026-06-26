@@ -360,7 +360,11 @@ class BaseVideoStreamer(abc.ABC):
             time_base_num = self.streamer.sync_frame_time_base_num
             time_base_den = self.streamer.sync_frame_time_base_den
 
-            if timestamp is not None and time_base_num is not None and time_base_den is not None:
+            if (
+                timestamp is not None
+                and time_base_num is not None
+                and time_base_den is not None
+            ):
                 self._publish_camera_sync_frame(
                     frame_index,
                     pts,
@@ -450,6 +454,7 @@ class BaseVideoStreamer(abc.ABC):
         self,
         stop_event: Optional[asyncio.Event] = None,
         command_callback: Optional[Callable] = None,
+        subscribe_to_commands: bool = True,
     ):
         """Run camera streaming with automatic reconnection and MQTT command handling.
 
@@ -467,7 +472,8 @@ class BaseVideoStreamer(abc.ABC):
         self._event_loop = asyncio.get_running_loop()
         stop = stop_event or asyncio.Event()
 
-        self._subscribe_to_commands(command_callback)
+        if subscribe_to_commands:
+            self._subscribe_to_commands(command_callback)
 
         if self.pc is None:
             try:
@@ -497,7 +503,11 @@ class BaseVideoStreamer(abc.ABC):
 
         try:
             while not stop.is_set() and self._is_running:
-                if self.pc is None and self.auto_reconnect and not _initial_stream_connected:
+                if (
+                    self.pc is None
+                    and self.auto_reconnect
+                    and not _initial_stream_connected
+                ):
                     if time.monotonic() >= _next_retry_at:
                         try:
                             logger.info(
@@ -509,8 +519,7 @@ class BaseVideoStreamer(abc.ABC):
                             _initial_stream_connected = True
                         except Exception as retry_exc:
                             logger.info(
-                                "Camera stream retry failed (%s). "
-                                "Will retry in %.0fs.",
+                                "Camera stream retry failed (%s). Will retry in %.0fs.",
                                 retry_exc,
                                 _retry_backoff,
                             )
@@ -529,6 +538,7 @@ class BaseVideoStreamer(abc.ABC):
         # Install sync extension hooks if available
         try:
             import cyberwave_video_sync
+
             cyberwave_video_sync.install()
             self.streamer = self.initialize_track()
             self.streamer._sync_enabled = True
@@ -658,6 +668,72 @@ class BaseVideoStreamer(abc.ABC):
     # MQTT Communication
     # -------------------------------------------------------------------------
 
+    def _on_answer_message(self, data):
+        """Handle a WebRTC answer/candidate MQTT message.
+
+        Bound method so the MQTT client can deduplicate it correctly:
+        multiple streamers sharing the same twin topic each register
+        their own ``_on_answer_message`` (distinct bound-method objects),
+        while a single streamer re-subscribing on reconnect reuses the
+        same bound-method identity.
+        """
+        try:
+            payload = data if isinstance(data, dict) else json.loads(data)
+            logger.debug(f"Received message: type={payload.get('type')}")
+            logger.debug(f"Full payload: {payload}")
+
+            if payload.get("type") == "offer":
+                logger.debug("Skipping offer message")
+                return
+            elif payload.get("type") == "answer":
+                if payload.get("target") == "edge":
+                    if "m=video" not in payload.get("sdp", ""):
+                        logger.debug(
+                            "Ignoring answer with no m=video (likely audio stream)"
+                        )
+                        return
+                    answer_sensor = payload.get("sensor") or payload.get("camera")
+                    expected = self.camera_name
+                    answer_stream_source = payload.get("stream_source") or "live"
+                    expected_stream_source = self.stream_source or "live"
+                    answer_stream_instance_id = (
+                        payload.get("stream_instance_id") or "default"
+                    )
+                    expected_stream_instance_id = self.stream_instance_id or "default"
+                    if (
+                        (answer_sensor is None or answer_sensor == expected)
+                        and answer_stream_source == expected_stream_source
+                        and answer_stream_instance_id == expected_stream_instance_id
+                    ):
+                        logger.info(
+                            "Processing answer targeted at edge"
+                            + (
+                                f" (sensor={expected}, answer_sensor={answer_sensor})"
+                                if expected != "default"
+                                else ""
+                            )
+                        )
+                        self._answer_data = payload
+                        self._answer_received = True
+                    else:
+                        logger.debug(
+                            "Ignoring answer with mismatched stream identity: "
+                            f"expected_sensor={expected}, got_sensor={answer_sensor}, "
+                            f"expected_stream_source={expected_stream_source}, "
+                            f"got_stream_source={answer_stream_source}, "
+                            f"expected_stream_instance_id={expected_stream_instance_id}, "
+                            f"got_stream_instance_id={answer_stream_instance_id}"
+                        )
+                else:
+                    logger.debug("Skipping answer message not targeted at edge")
+            elif payload.get("type") == "candidate":
+                if payload.get("target") == "edge":
+                    self._handle_candidate(payload)
+            else:
+                logger.debug(f"Ignoring message type: {payload.get('type')}")
+        except Exception as e:
+            logger.error(f"Error in on_answer: {e}")
+
     def _subscribe_to_answer(self):
         """Subscribe to WebRTC answer topic."""
         if not self.twin_uuid:
@@ -667,67 +743,21 @@ class BaseVideoStreamer(abc.ABC):
         answer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-answer"
         logger.info(f"Subscribing to WebRTC answer topic: {answer_topic}")
 
-        def on_answer(data):
-            try:
-                payload = data if isinstance(data, dict) else json.loads(data)
-                logger.debug(f"Received message: type={payload.get('type')}")
-                logger.debug(f"Full payload: {payload}")
-
-                if payload.get("type") == "offer":
-                    logger.debug("Skipping offer message")
-                    return
-                elif payload.get("type") == "answer":
-                    if payload.get("target") == "edge":
-                        if "m=video" not in payload.get("sdp", ""):
-                            logger.debug("Ignoring answer with no m=video (likely audio stream)")
-                            return
-                        answer_sensor = payload.get("sensor") or payload.get("camera")
-                        expected = self.camera_name
-                        answer_stream_source = payload.get("stream_source") or "live"
-                        expected_stream_source = self.stream_source or "live"
-                        answer_stream_instance_id = (
-                            payload.get("stream_instance_id") or "default"
-                        )
-                        expected_stream_instance_id = (
-                            self.stream_instance_id or "default"
-                        )
-                        if (
-                            (answer_sensor is None or answer_sensor == expected)
-                            and answer_stream_source == expected_stream_source
-                            and answer_stream_instance_id == expected_stream_instance_id
-                        ):
-                            logger.info(
-                                "Processing answer targeted at edge"
-                                + (
-                                    f" (sensor={expected}, answer_sensor={answer_sensor})"
-                                    if expected != "default"
-                                    else ""
-                                )
-                            )
-                            self._answer_data = payload
-                            self._answer_received = True
-                        else:
-                            logger.debug(
-                                "Ignoring answer with mismatched stream identity: "
-                                f"expected_sensor={expected}, got_sensor={answer_sensor}, "
-                                f"expected_stream_source={expected_stream_source}, "
-                                f"got_stream_source={answer_stream_source}, "
-                                f"expected_stream_instance_id={expected_stream_instance_id}, "
-                                f"got_stream_instance_id={answer_stream_instance_id}"
-                            )
-                    else:
-                        logger.debug("Skipping answer message not targeted at edge")
-                elif payload.get("type") == "candidate":
-                    if payload.get("target") == "edge":
-                        self._handle_candidate(payload)
-                else:
-                    logger.debug(f"Ignoring message type: {payload.get('type')}")
-            except Exception as e:
-                logger.error(f"Error in on_answer: {e}")
-
-        self.client.subscribe(answer_topic, on_answer)
+        # Key the handler by this stream's identity (media + sensor + source +
+        # instance) — the same tuple on_answer uses to claim an answer. A
+        # reconnect or a fresh instance for the same sensor re-subscribes under
+        # the same key (replace, no storm), while a different sensor/stream on
+        # this shared, twin-scoped topic keeps its own handler.
+        subscriber_key = (
+            f"video:{self.camera_name}:{self.stream_source}:{self.stream_instance_id}"
+        )
+        self.client.subscribe(
+            answer_topic, self._on_answer_message, subscriber_key=subscriber_key
+        )
         candidate_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-candidate"
-        self.client.subscribe(candidate_topic, on_answer)
+        self.client.subscribe(
+            candidate_topic, self._on_answer_message, subscriber_key=subscriber_key
+        )
 
     def _handle_candidate(self, payload: Dict[str, Any]):
         """Handle incoming ICE candidate."""

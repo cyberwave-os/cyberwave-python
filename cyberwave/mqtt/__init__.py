@@ -23,6 +23,10 @@ from ..constants import SOURCE_TYPE_EDGE, SOURCE_TYPES
 logger = logging.getLogger(__name__)
 SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
 
+# Sentinel distinguishing "remove every handler for the topic" (default) from
+# an explicit ``subscriber_key=None`` (remove only the default slot).
+_UNSET = object()
+
 
 class CyberwaveMQTTClient:
     """
@@ -106,8 +110,11 @@ class CyberwaveMQTTClient:
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
 
-        # Event handlers
-        self._handlers: Dict[str, List[Callable]] = {}
+        # Event handlers, keyed per topic by an opaque ``subscriber_key``.
+        # ``None`` is the default single-subscriber slot (replace semantics);
+        # distinct non-None keys let independent subscribers coexist on one
+        # topic. See :meth:`_add_handler` for the rationale.
+        self._handlers: Dict[str, Dict[Any, Callable]] = {}
 
         # Position tracking to avoid duplicate updates
         self._last_positions: Dict[str, Dict[str, float]] = {}
@@ -131,6 +138,7 @@ class CyberwaveMQTTClient:
         self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
         self._subscription_lock = threading.Lock()
         self._pending_subscriptions: Dict[int, str] = {}
+        self._subscribe_options: Dict[str, Any] = {}
         self.source_type = source_type
 
         # Auto-connect if requested (must happen after all state is initialized)
@@ -146,6 +154,24 @@ class CyberwaveMQTTClient:
                 f"{SOURCE_TYPES_DISPLAY}"
             )
         return effective_source_type
+
+    @property
+    def is_mqtt_v5(self) -> bool:
+        """True when the client negotiates MQTT v5 with the broker."""
+        return self._protocol == mqtt.MQTTv5
+
+    def _build_subscribe_options(self, *, qos: int, no_local: bool) -> Any | None:
+        if not no_local:
+            return None
+        if not self.is_mqtt_v5:
+            logger.debug(
+                "no_local subscribe requested but client uses MQTT v3.1.1; "
+                "set CYBERWAVE_MQTT_PROTOCOL=5 for broker-side echo filtering"
+            )
+            return None
+        from paho.mqtt.subscribeoptions import SubscribeOptions
+
+        return SubscribeOptions(qos=qos, noLocal=True)
 
     def _positions_equal(
         self, pos1: Dict[str, float], pos2: Dict[str, float], tolerance: float = 1e-6
@@ -171,41 +197,72 @@ class CyberwaveMQTTClient:
         self._last_update_times[key] = now
         return False
 
-    def _add_handler(self, topic: str, handler: Callable) -> bool:
-        """Register a handler for ``topic``.
+    def _add_handler(
+        self, topic: str, handler: Callable, subscriber_key: Any = None
+    ) -> bool:
+        """Register ``handler`` for ``topic`` under ``subscriber_key``.
 
-        Single-handler-per-topic semantics: if a handler is already
-        registered for ``topic``, it is **replaced** (not appended). This
-        prevents handler accumulation when callers re-subscribe the same
-        topic — most notably the WebRTC streaming flow, which calls
-        ``BaseVideoStreamer._subscribe_to_answer()`` on every
-        auto-reconnect cycle. Under the old append semantics a single
-        SFU answer would fan out into N stale closures (one per
-        reconnect), and the matching ``webrtc-candidate`` subscription
-        would inject the same ICE candidate into the peer connection N
-        times — which destabilises aioice's checklist and produces a
-        "connected but no media" zombie state.
+        Handlers are keyed per topic by ``subscriber_key`` so that:
+
+        * **Re-subscribing under the same key replaces** the prior handler
+          in place — no accumulation. This is what kills the WebRTC answer
+          storm: ``_subscribe_to_answer()`` runs on every auto-reconnect
+          cycle and builds a *fresh* ``on_answer`` closure (a distinct
+          object), so identity-based dedup can't catch it. As long as the
+          streamer passes a stable key, only one live handler survives.
+          Under the old append semantics a single SFU answer fanned out
+          into N stale closures (one per reconnect) and the matching
+          ``webrtc-candidate`` subscription injected the same ICE candidate
+          N times — destabilising aioice's checklist into a "connected but
+          no media" zombie state.
+        * **Distinct keys coexist** on the same topic. The ``webrtc-answer``
+          topic is keyed only by ``twin_uuid``, so a twin running several
+          streamers at once (multimedia + video-only + microphone) shares
+          it; each registers under its own key and content-filters answers
+          it doesn't own. Replace-by-topic would let the last subscriber
+          silently evict the others.
+
+        ``subscriber_key=None`` is the default single slot: callers that
+        don't opt into coexistence get plain replace semantics.
 
         Returns ``True`` when this is the first handler for the topic
-        (caller should issue a broker-level SUBSCRIBE), ``False`` when
-        an existing handler was replaced (broker subscription is still
-        live, no SUBSCRIBE round-trip is needed).
+        (caller should issue a broker-level SUBSCRIBE), ``False`` when the
+        topic already had at least one handler (broker subscription is
+        still live, no SUBSCRIBE round-trip is needed).
         """
         is_new = topic not in self._handlers
-        if not is_new:
+        bucket = self._handlers.setdefault(topic, {})
+        if subscriber_key in bucket:
             logger.debug(
-                "Replacing existing handler for topic %s (idempotent re-subscribe)",
+                "Replacing handler for topic %s (key=%r, idempotent re-subscribe)",
                 topic,
+                subscriber_key,
             )
-        self._handlers[topic] = [handler]
+        bucket[subscriber_key] = handler
         return is_new
 
-    def unsubscribe(self, topic: str) -> None:
-        """Unsubscribe from an MQTT topic and remove all its handlers.
+    def unsubscribe(self, topic: str, subscriber_key: Any = _UNSET) -> None:
+        """Unsubscribe from an MQTT topic.
 
         Idempotent — safe to call even if the topic was never subscribed.
+
+        With no ``subscriber_key`` (default), removes *all* handlers for the
+        topic and tears down the broker subscription. When a specific
+        ``subscriber_key`` is given, only that subscriber's handler is
+        removed; the broker subscription is kept alive as long as other
+        subscribers remain on the topic (so unsubscribing one streamer
+        doesn't break the others sharing the same ``webrtc-answer`` topic).
         """
-        self._handlers.pop(topic, None)
+        if subscriber_key is not _UNSET:
+            bucket = self._handlers.get(topic)
+            if bucket is not None:
+                bucket.pop(subscriber_key, None)
+                if bucket:
+                    # Other subscribers still live — keep the broker sub.
+                    return
+                self._handlers.pop(topic, None)
+        else:
+            self._handlers.pop(topic, None)
         if self.connected:
             self.client.unsubscribe(topic)
 
@@ -233,7 +290,7 @@ class CyberwaveMQTTClient:
         """Trigger all handlers for a specific topic."""
         # First, try exact match
         if topic in self._handlers:
-            for handler in self._handlers[topic]:
+            for handler in list(self._handlers[topic].values()):
                 try:
                     handler(data)
                 except Exception as e:
@@ -243,7 +300,7 @@ class CyberwaveMQTTClient:
         for pattern, handlers in self._handlers.items():
             if pattern != topic and ("+" in pattern or "#" in pattern):
                 if self._match_mqtt_pattern(pattern, topic):
-                    for handler in handlers:
+                    for handler in list(handlers.values()):
                         try:
                             # Pass both topic and data to handler if it accepts 2 args
                             import inspect
@@ -267,7 +324,11 @@ class CyberwaveMQTTClient:
 
             # Resubscribe to all topics
             for topic in self._handlers.keys():
-                result = client.subscribe(topic)
+                options = self._subscribe_options.get(topic)
+                if options is not None:
+                    result = client.subscribe(topic, options=options)
+                else:
+                    result = client.subscribe(topic)
                 if result[0] == mqtt.MQTT_ERR_SUCCESS:
                     with self._subscription_lock:
                         self._pending_subscriptions[result[1]] = topic
@@ -489,28 +550,55 @@ class CyberwaveMQTTClient:
         except Exception as e:
             logger.error(f"Error publishing to {topic}: {e}")
 
-    def subscribe(self, topic: str, handler: Optional[Callable] = None, qos: int = 0):
+    def subscribe(
+        self,
+        topic: str,
+        handler: Optional[Callable] = None,
+        qos: int = 0,
+        *,
+        no_local: bool = False,
+        subscriber_key: Any = None,
+    ):
         """Subscribe to MQTT topic.
 
-        Idempotent w.r.t. ``handler``: re-registering a handler for a
-        topic the client is already subscribed to replaces the prior
-        handler in-place and skips the broker-level SUBSCRIBE round-trip
-        (no extra ``mid`` / SUBACK pair). See :meth:`_add_handler` for
-        the rationale — without this, every camera auto-reconnect cycle
-        added another stale closure to the ``webrtc-answer`` /
-        ``webrtc-candidate`` topics, and a single SFU answer fanned out
-        into N "Processing answer" log lines plus N duplicate
-        ``addIceCandidate`` calls.
+        Idempotent w.r.t. ``(topic, subscriber_key)``: re-registering for a
+        topic the client is already subscribed to replaces that
+        subscriber's prior handler in-place and skips the broker-level
+        SUBSCRIBE round-trip (no extra ``mid`` / SUBACK pair). See
+        :meth:`_add_handler` for the rationale — without this, every camera
+        auto-reconnect cycle added another stale closure to the
+        ``webrtc-answer`` / ``webrtc-candidate`` topics, and a single SFU
+        answer fanned out into N "Processing answer" log lines plus N
+        duplicate ``addIceCandidate`` calls.
+
+        Pass a stable ``subscriber_key`` (e.g. per streamer instance) when
+        several independent subscribers must coexist on one topic — they
+        share the broker subscription but keep distinct handlers. With the
+        default ``subscriber_key=None`` the topic holds a single handler
+        that later subscribes replace.
+
+        When ``no_local=True`` and the client uses MQTT v5, the broker
+        will not deliver this client's own publications on *topic* (useful
+        when publishing and subscribing to ``cyberwave/joint/.../update``).
         """
         is_new_topic = True
         if handler:
-            is_new_topic = self._add_handler(topic, handler)
+            is_new_topic = self._add_handler(topic, handler, subscriber_key)
 
         if not is_new_topic:
             return
 
+        options = self._build_subscribe_options(qos=qos, no_local=no_local)
+        if options is not None:
+            self._subscribe_options[topic] = options
+        else:
+            self._subscribe_options.pop(topic, None)
+
         if self.connected:
-            result = self.client.subscribe(topic, qos=qos)
+            if options is not None:
+                result = self.client.subscribe(topic, qos=qos, options=options)
+            else:
+                result = self.client.subscribe(topic, qos=qos)
             if result[0] == mqtt.MQTT_ERR_SUCCESS:
                 with self._subscription_lock:
                     self._pending_subscriptions[result[1]] = topic
@@ -883,9 +971,17 @@ class CyberwaveMQTTClient:
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
         camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
+        as_targets: bool = False,
     ):
         """
         Update multiple joints at once via MQTT.
+
+        When ``as_targets`` is True the payload is published as a *command*
+        using the ``target_positions`` / ``target_velocities`` /
+        ``target_efforts`` fields (always aggregated). These describe a desired
+        setpoint a plant should track and must never be rendered as measured
+        robot state. When False (default) the payload describes measured state
+        and uses ``positions`` / ``velocities`` / ``efforts``.
 
         Supports two formats based on provided parameters:
 
@@ -939,9 +1035,12 @@ class CyberwaveMQTTClient:
 
         topic = f"{self.topic_prefix}cyberwave/joint/{twin_uuid}/update"
 
+        # Command payloads (targets) are always aggregated so they carry the
+        # explicit target_* field names and never collide with measured state.
         # Determine format: use aggregated if any extended parameters are provided
         use_aggregated = (
-            velocities is not None
+            as_targets
+            or velocities is not None
             or efforts is not None
             or timestamp is not None
             or source_subtype is not None
@@ -951,15 +1050,18 @@ class CyberwaveMQTTClient:
         )
 
         if use_aggregated:
+            positions_key = "target_positions" if as_targets else "positions"
+            velocities_key = "target_velocities" if as_targets else "velocities"
+            efforts_key = "target_efforts" if as_targets else "efforts"
             message: Dict[str, Any] = {
                 "source_type": effective_source_type,
-                "positions": joint_positions,
+                positions_key: joint_positions,
                 "timestamp": timestamp if timestamp is not None else time.time(),
             }
             if velocities:
-                message["velocities"] = velocities
+                message[velocities_key] = velocities
             if efforts:
-                message["efforts"] = efforts
+                message[efforts_key] = efforts
             if source_subtype:
                 message["source_subtype"] = source_subtype
             if workload_uuid:

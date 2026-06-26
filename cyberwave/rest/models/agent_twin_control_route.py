@@ -40,10 +40,12 @@ class AgentTwinControlRoute(BaseModel):
     operator_label: Optional[StrictStr] = None
     operator_description: Optional[StrictStr] = None
     developer_label: Optional[StrictStr] = None
+    configuration_hint: Optional[StrictStr] = None
+    configuration_target: Optional[StrictStr] = None
     setup_hint: Optional[StrictStr] = None
     setup_target: Optional[StrictStr] = None
     resolver_metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "label", "route_kind", "input_kinds", "output_action_kind", "readiness", "reason", "missing_capabilities", "requires_confirmation", "priority", "operator_label", "operator_description", "developer_label", "setup_hint", "setup_target", "resolver_metadata"]
+    __properties: ClassVar[List[str]] = ["id", "label", "route_kind", "input_kinds", "output_action_kind", "readiness", "reason", "missing_capabilities", "requires_confirmation", "priority", "operator_label", "operator_description", "developer_label", "configuration_hint", "configuration_target", "setup_hint", "setup_target", "resolver_metadata"]
 
     @field_validator('output_action_kind')
     def output_action_kind_validate_enum(cls, value):
@@ -118,6 +120,16 @@ class AgentTwinControlRoute(BaseModel):
         if self.developer_label is None and "developer_label" in self.model_fields_set:
             _dict['developer_label'] = None
 
+        # set to None if configuration_hint (nullable) is None
+        # and model_fields_set contains the field
+        if self.configuration_hint is None and "configuration_hint" in self.model_fields_set:
+            _dict['configuration_hint'] = None
+
+        # set to None if configuration_target (nullable) is None
+        # and model_fields_set contains the field
+        if self.configuration_target is None and "configuration_target" in self.model_fields_set:
+            _dict['configuration_target'] = None
+
         # set to None if setup_hint (nullable) is None
         # and model_fields_set contains the field
         if self.setup_hint is None and "setup_hint" in self.model_fields_set:
@@ -153,6 +165,8 @@ class AgentTwinControlRoute(BaseModel):
             "operator_label": obj.get("operator_label"),
             "operator_description": obj.get("operator_description"),
             "developer_label": obj.get("developer_label"),
+            "configuration_hint": obj.get("configuration_hint"),
+            "configuration_target": obj.get("configuration_target"),
             "setup_hint": obj.get("setup_hint"),
             "setup_target": obj.get("setup_target"),
             "resolver_metadata": obj.get("resolver_metadata")

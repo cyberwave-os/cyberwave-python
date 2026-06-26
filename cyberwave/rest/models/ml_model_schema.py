@@ -57,6 +57,9 @@ class MLModelSchema(BaseModel):
     is_edge_compatible: StrictBool
     is_cloud_compatible: StrictBool
     playground_kind: Optional[StrictStr] = None
+    playground_base_catalog_key: Optional[StrictStr] = None
+    playground_base_model_slug: Optional[StrictStr] = None
+    playground_base_model_name: Optional[StrictStr] = None
     output_family: Optional[StrictStr] = None
     allowed_structured_tasks: Optional[List[StrictStr]] = None
     execution_surfaces: Optional[List[StrictStr]] = None
@@ -64,7 +67,9 @@ class MLModelSchema(BaseModel):
     edge_catalog_id: Optional[StrictStr] = None
     edge_runtime: Optional[StrictStr] = None
     supports_builtin_vad_filter: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter"]
+    weights_url: Optional[StrictStr] = None
+    required_inputs: Optional[List[Any]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -145,6 +150,21 @@ class MLModelSchema(BaseModel):
         if self.playground_kind is None and "playground_kind" in self.model_fields_set:
             _dict['playground_kind'] = None
 
+        # set to None if playground_base_catalog_key (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_base_catalog_key is None and "playground_base_catalog_key" in self.model_fields_set:
+            _dict['playground_base_catalog_key'] = None
+
+        # set to None if playground_base_model_slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_base_model_slug is None and "playground_base_model_slug" in self.model_fields_set:
+            _dict['playground_base_model_slug'] = None
+
+        # set to None if playground_base_model_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_base_model_name is None and "playground_base_model_name" in self.model_fields_set:
+            _dict['playground_base_model_name'] = None
+
         # set to None if output_family (nullable) is None
         # and model_fields_set contains the field
         if self.output_family is None and "output_family" in self.model_fields_set:
@@ -164,6 +184,11 @@ class MLModelSchema(BaseModel):
         # and model_fields_set contains the field
         if self.edge_runtime is None and "edge_runtime" in self.model_fields_set:
             _dict['edge_runtime'] = None
+
+        # set to None if weights_url (nullable) is None
+        # and model_fields_set contains the field
+        if self.weights_url is None and "weights_url" in self.model_fields_set:
+            _dict['weights_url'] = None
 
         return _dict
 
@@ -206,13 +231,18 @@ class MLModelSchema(BaseModel):
             "is_edge_compatible": obj.get("is_edge_compatible"),
             "is_cloud_compatible": obj.get("is_cloud_compatible"),
             "playground_kind": obj.get("playground_kind"),
+            "playground_base_catalog_key": obj.get("playground_base_catalog_key"),
+            "playground_base_model_slug": obj.get("playground_base_model_slug"),
+            "playground_base_model_name": obj.get("playground_base_model_name"),
             "output_family": obj.get("output_family"),
             "allowed_structured_tasks": obj.get("allowed_structured_tasks"),
             "execution_surfaces": obj.get("execution_surfaces"),
             "sdk_load_id": obj.get("sdk_load_id"),
             "edge_catalog_id": obj.get("edge_catalog_id"),
             "edge_runtime": obj.get("edge_runtime"),
-            "supports_builtin_vad_filter": obj.get("supports_builtin_vad_filter") if obj.get("supports_builtin_vad_filter") is not None else False
+            "supports_builtin_vad_filter": obj.get("supports_builtin_vad_filter") if obj.get("supports_builtin_vad_filter") is not None else False,
+            "weights_url": obj.get("weights_url"),
+            "required_inputs": obj.get("required_inputs")
         })
         return _obj
 

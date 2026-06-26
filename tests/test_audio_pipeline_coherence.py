@@ -15,15 +15,12 @@ from __future__ import annotations
 
 import struct
 import time
-from dataclasses import dataclass, field
-from typing import Any
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
 from cyberwave.data.backend import Sample
-from cyberwave.data.header import HeaderMeta, HeaderTemplate, decode, encode
+from cyberwave.data.header import HeaderMeta, HeaderTemplate, encode
 from cyberwave.workers.context import HookContext
 from cyberwave.workers.decode import decode_sample_payload, extract_wire_metadata
 
@@ -34,9 +31,19 @@ from cyberwave.workers.decode import decode_sample_payload, extract_wire_metadat
 
 AUDIO_CONFIGS = [
     {"sample_rate_hz": 16000, "channels": 1, "encoding": "pcm_s16le", "layout": "mono"},
-    {"sample_rate_hz": 32000, "channels": 2, "encoding": "pcm_s16le", "layout": "stereo"},
+    {
+        "sample_rate_hz": 32000,
+        "channels": 2,
+        "encoding": "pcm_s16le",
+        "layout": "stereo",
+    },
     {"sample_rate_hz": 44100, "channels": 1, "encoding": "pcm_s16le", "layout": "mono"},
-    {"sample_rate_hz": 48000, "channels": 2, "encoding": "pcm_s16le", "layout": "stereo"},
+    {
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "encoding": "pcm_s16le",
+        "layout": "stereo",
+    },
     {"sample_rate_hz": 8000, "channels": 1, "encoding": "pcm_s16le", "layout": "mono"},
 ]
 
@@ -68,7 +75,7 @@ def _make_audio_sample(
     )
     wire_bytes = encode(header, payload_bytes)
     return Sample(
-        channel=f"cw/test-twin/data/audio/mic_0",
+        channel="cw/test-twin/data/audio/mic_0",
         payload=wire_bytes,
         timestamp=time.time(),
     )
@@ -92,9 +99,11 @@ def _make_raw_pcm_sample(num_frames: int = 960, channels: int = 1) -> Sample:
 class TestExtractWireMetadata:
     """Verify extract_wire_metadata correctly parses SDK wire headers."""
 
-    @pytest.mark.parametrize("config", AUDIO_CONFIGS, ids=[
-        f"{c['sample_rate_hz']}Hz_{c['channels']}ch" for c in AUDIO_CONFIGS
-    ])
+    @pytest.mark.parametrize(
+        "config",
+        AUDIO_CONFIGS,
+        ids=[f"{c['sample_rate_hz']}Hz_{c['channels']}ch" for c in AUDIO_CONFIGS],
+    )
     def test_extracts_audio_metadata_for_all_sample_rates(self, config):
         sample = _make_audio_sample(**config)
         meta = extract_wire_metadata(sample)
@@ -168,9 +177,11 @@ class TestExtractWireMetadata:
 class TestDecodeSamplePayload:
     """Verify audio samples are decoded correctly regardless of sample rate."""
 
-    @pytest.mark.parametrize("config", AUDIO_CONFIGS, ids=[
-        f"{c['sample_rate_hz']}Hz_{c['channels']}ch" for c in AUDIO_CONFIGS
-    ])
+    @pytest.mark.parametrize(
+        "config",
+        AUDIO_CONFIGS,
+        ids=[f"{c['sample_rate_hz']}Hz_{c['channels']}ch" for c in AUDIO_CONFIGS],
+    )
     def test_decodes_audio_numpy_array(self, config):
         sample = _make_audio_sample(**config, num_frames=960)
         decoded, ts = decode_sample_payload(sample, content_hint="numpy")
@@ -225,13 +236,16 @@ class TestHookContextMetadataPropagation:
 
         assert ctx.metadata == {}
 
-    @pytest.mark.parametrize("rate,channels", [
-        (16000, 1),
-        (32000, 2),
-        (44100, 1),
-        (48000, 2),
-        (8000, 1),
-    ])
+    @pytest.mark.parametrize(
+        "rate,channels",
+        [
+            (16000, 1),
+            (32000, 2),
+            (44100, 1),
+            (48000, 2),
+            (8000, 1),
+        ],
+    )
     def test_various_rates_propagate_to_context(self, rate, channels):
         sample = _make_audio_sample(sample_rate_hz=rate, channels=channels)
         wire_meta = extract_wire_metadata(sample)
@@ -293,14 +307,17 @@ def _cw_audio_to_wav_bytes(audio, *, sample_rate_hz=16000, channels=1):
 class TestWavByteConstruction:
     """Verify WAV bytes have correct RIFF headers for all sample rates."""
 
-    @pytest.mark.parametrize("rate,channels", [
-        (16000, 1),
-        (32000, 2),
-        (44100, 1),
-        (48000, 2),
-        (8000, 1),
-        (22050, 1),
-    ])
+    @pytest.mark.parametrize(
+        "rate,channels",
+        [
+            (16000, 1),
+            (32000, 2),
+            (44100, 1),
+            (48000, 2),
+            (8000, 1),
+            (22050, 1),
+        ],
+    )
     def test_wav_header_encodes_correct_parameters(self, rate, channels):
         num_frames = rate  # 1 second of audio
         pcm = np.zeros(num_frames * channels, dtype=np.int16)
@@ -361,28 +378,43 @@ class TestWavByteConstruction:
 # ===========================================================================
 
 
-def _cw_validate_audio_metadata(ctx_metadata, configured_rate, configured_channels, twin_uuid):
+_cw_audio_last_wire_format: dict[str, tuple[int, int]] = {}
+
+
+def _cw_validate_audio_metadata(
+    ctx_metadata, configured_rate, configured_channels, twin_uuid
+):
     """Mirror of the generated validation helper."""
-    warnings = []
     wire_rate = ctx_metadata.get("sample_rate_hz")
     wire_channels = ctx_metadata.get("channels")
     actual_rate = int(wire_rate) if wire_rate is not None else configured_rate
-    actual_channels = int(wire_channels) if wire_channels is not None else configured_channels
+    actual_channels = (
+        int(wire_channels) if wire_channels is not None else configured_channels
+    )
+    last_seen = _cw_audio_last_wire_format.get(twin_uuid)
+    current = (actual_rate, actual_channels)
+    if last_seen == current:
+        return actual_rate, actual_channels, []
+    _cw_audio_last_wire_format[twin_uuid] = current
+    warnings = []
     if wire_rate is not None and int(wire_rate) != configured_rate:
-        msg = (
-            f"[audio_track] Sample rate mismatch for twin {twin_uuid}: "
-            f"wire={wire_rate} Hz, configured={configured_rate} Hz. "
-            f"Using wire value ({wire_rate} Hz)."
+        warnings.append(
+            f"[audio_track] Adapting sample rate for twin {twin_uuid}: "
+            f"wire={wire_rate} Hz, configured={configured_rate} Hz."
         )
-        warnings.append(msg)
     if wire_channels is not None and int(wire_channels) != configured_channels:
-        msg = (
-            f"[audio_track] Channel count mismatch for twin {twin_uuid}: "
-            f"wire={wire_channels}, configured={configured_channels}. "
-            f"Using wire value ({wire_channels})."
+        warnings.append(
+            f"[audio_track] Adapting channel count for twin {twin_uuid}: "
+            f"wire={wire_channels}, configured={configured_channels}."
         )
-        warnings.append(msg)
     return actual_rate, actual_channels, warnings
+
+
+@pytest.fixture(autouse=True)
+def _reset_audio_wire_format_cache():
+    _cw_audio_last_wire_format.clear()
+    yield
+    _cw_audio_last_wire_format.clear()
 
 
 class TestMetadataValidation:
@@ -424,9 +456,7 @@ class TestMetadataValidation:
         assert "channels" in warnings[0].lower() or "channel" in warnings[0].lower()
 
     def test_fallback_when_no_wire_metadata(self):
-        rate, ch, warnings = _cw_validate_audio_metadata(
-            {}, 44100, 2, "twin-x"
-        )
+        rate, ch, warnings = _cw_validate_audio_metadata({}, 44100, 2, "twin-x")
         assert rate == 44100
         assert ch == 2
         assert warnings == []
@@ -438,18 +468,23 @@ class TestMetadataValidation:
         assert rate == 8000
         assert len(warnings) == 1
 
-    @pytest.mark.parametrize("wire_rate,configured_rate", [
-        (32000, 16000),
-        (44100, 16000),
-        (48000, 16000),
-        (16000, 48000),
-        (8000, 16000),
-        (22050, 44100),
-    ])
+    @pytest.mark.parametrize(
+        "wire_rate,configured_rate",
+        [
+            (32000, 16000),
+            (44100, 16000),
+            (48000, 16000),
+            (16000, 48000),
+            (8000, 16000),
+            (22050, 44100),
+        ],
+    )
     def test_all_rate_mismatches_detected(self, wire_rate, configured_rate):
         rate, _, warnings = _cw_validate_audio_metadata(
             {"sample_rate_hz": wire_rate, "channels": 1},
-            configured_rate, 1, "twin-x",
+            configured_rate,
+            1,
+            "twin-x",
         )
         assert rate == wire_rate
         assert len(warnings) >= 1
@@ -463,13 +498,16 @@ class TestMetadataValidation:
 class TestFullPipelineCoherence:
     """Simulate the complete audio path with various hardware configurations."""
 
-    @pytest.mark.parametrize("hw_rate,hw_channels,configured_rate,configured_channels", [
-        (32000, 2, 16000, 1),   # C920 microphone, default workflow config
-        (48000, 1, 16000, 1),   # Studio mic, default config
-        (44100, 2, 44100, 2),   # Matching config
-        (16000, 1, 16000, 1),   # Standard Whisper-native config
-        (8000, 1, 16000, 1),    # Telephony-grade mic
-    ])
+    @pytest.mark.parametrize(
+        "hw_rate,hw_channels,configured_rate,configured_channels",
+        [
+            (32000, 2, 16000, 1),  # C920 microphone, default workflow config
+            (48000, 1, 16000, 1),  # Studio mic, default config
+            (44100, 2, 44100, 2),  # Matching config
+            (16000, 1, 16000, 1),  # Standard Whisper-native config
+            (8000, 1, 16000, 1),  # Telephony-grade mic
+        ],
+    )
     def test_wire_metadata_overrides_configured_values(
         self, hw_rate, hw_channels, configured_rate, configured_channels
     ):
@@ -495,12 +533,15 @@ class TestFullPipelineCoherence:
         else:
             assert len(warnings) == 0
 
-    @pytest.mark.parametrize("hw_rate,hw_channels", [
-        (32000, 2),
-        (48000, 1),
-        (44100, 2),
-        (16000, 1),
-    ])
+    @pytest.mark.parametrize(
+        "hw_rate,hw_channels",
+        [
+            (32000, 2),
+            (48000, 1),
+            (44100, 2),
+            (16000, 1),
+        ],
+    )
     def test_wav_output_matches_wire_metadata(self, hw_rate, hw_channels):
         """WAV bytes produced with actual wire params, not configured defaults."""
         num_frames = hw_rate // 50  # 20ms chunk
@@ -537,7 +578,9 @@ class TestFullPipelineCoherence:
         )
 
         # WAV constructed with actual params
-        wav = _cw_audio_to_wav_bytes(pcm, sample_rate_hz=actual_rate, channels=actual_channels)
+        wav = _cw_audio_to_wav_bytes(
+            pcm, sample_rate_hz=actual_rate, channels=actual_channels
+        )
 
         # Verify WAV header declares 32kHz stereo
         wav_rate = struct.unpack_from("<I", wav, 24)[0]

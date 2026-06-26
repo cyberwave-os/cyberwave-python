@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.controller_ref_schema import ControllerRefSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -27,16 +28,22 @@ class AgentControlAction(BaseModel):
     """
     Existing Cyberwave API call proposed by the control planner.
     """ # noqa: E501
+    action_id: Optional[StrictStr] = None
+    display_label: Optional[StrictStr] = None
+    payload_summary: Optional[StrictStr] = None
     kind: StrictStr
     dispatchability: Optional[StrictStr] = 'dispatchable'
+    execution_channel: Optional[StrictStr] = None
     transport: Optional[StrictStr] = None
     target_twin_uuid: StrictStr
     payload: Optional[Dict[str, Any]] = None
     requires_confirmation: Optional[StrictBool] = True
+    controller_ref: Optional[ControllerRefSchema] = None
+    policy_ref: Optional[ControllerRefSchema] = None
     controller_policy_uuid: Optional[StrictStr] = None
     asset_uuid: Optional[StrictStr] = None
     trajectory_preview: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["kind", "dispatchability", "transport", "target_twin_uuid", "payload", "requires_confirmation", "controller_policy_uuid", "asset_uuid", "trajectory_preview"]
+    __properties: ClassVar[List[str]] = ["action_id", "display_label", "payload_summary", "kind", "dispatchability", "execution_channel", "transport", "target_twin_uuid", "payload", "requires_confirmation", "controller_ref", "policy_ref", "controller_policy_uuid", "asset_uuid", "trajectory_preview"]
 
     @field_validator('kind')
     def kind_validate_enum(cls, value):
@@ -84,10 +91,46 @@ class AgentControlAction(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of controller_ref
+        if self.controller_ref:
+            _dict['controller_ref'] = self.controller_ref.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of policy_ref
+        if self.policy_ref:
+            _dict['policy_ref'] = self.policy_ref.to_dict()
+        # set to None if action_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.action_id is None and "action_id" in self.model_fields_set:
+            _dict['action_id'] = None
+
+        # set to None if display_label (nullable) is None
+        # and model_fields_set contains the field
+        if self.display_label is None and "display_label" in self.model_fields_set:
+            _dict['display_label'] = None
+
+        # set to None if payload_summary (nullable) is None
+        # and model_fields_set contains the field
+        if self.payload_summary is None and "payload_summary" in self.model_fields_set:
+            _dict['payload_summary'] = None
+
+        # set to None if execution_channel (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_channel is None and "execution_channel" in self.model_fields_set:
+            _dict['execution_channel'] = None
+
         # set to None if transport (nullable) is None
         # and model_fields_set contains the field
         if self.transport is None and "transport" in self.model_fields_set:
             _dict['transport'] = None
+
+        # set to None if controller_ref (nullable) is None
+        # and model_fields_set contains the field
+        if self.controller_ref is None and "controller_ref" in self.model_fields_set:
+            _dict['controller_ref'] = None
+
+        # set to None if policy_ref (nullable) is None
+        # and model_fields_set contains the field
+        if self.policy_ref is None and "policy_ref" in self.model_fields_set:
+            _dict['policy_ref'] = None
 
         # set to None if controller_policy_uuid (nullable) is None
         # and model_fields_set contains the field
@@ -116,12 +159,18 @@ class AgentControlAction(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "action_id": obj.get("action_id"),
+            "display_label": obj.get("display_label"),
+            "payload_summary": obj.get("payload_summary"),
             "kind": obj.get("kind"),
             "dispatchability": obj.get("dispatchability") if obj.get("dispatchability") is not None else 'dispatchable',
+            "execution_channel": obj.get("execution_channel"),
             "transport": obj.get("transport"),
             "target_twin_uuid": obj.get("target_twin_uuid"),
             "payload": obj.get("payload"),
             "requires_confirmation": obj.get("requires_confirmation") if obj.get("requires_confirmation") is not None else True,
+            "controller_ref": ControllerRefSchema.from_dict(obj["controller_ref"]) if obj.get("controller_ref") is not None else None,
+            "policy_ref": ControllerRefSchema.from_dict(obj["policy_ref"]) if obj.get("policy_ref") is not None else None,
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "asset_uuid": obj.get("asset_uuid"),
             "trajectory_preview": obj.get("trajectory_preview")

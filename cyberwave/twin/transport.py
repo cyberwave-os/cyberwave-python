@@ -13,7 +13,12 @@ DEFAULT_BURST_RATE_HZ = 20.0
 
 from typing_extensions import Self
 
-from ..constants import SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE
+from ..constants import (
+    EDGE_STATE_SOURCE_TYPES,
+    SOURCE_TYPES,
+    SOURCE_TYPE_SIM_TELE,
+    SOURCE_TYPE_TELE,
+)
 from ..manifest.driver_config import (
     mqtt_topic_slugs,
     resolve_outbound_topic_slug,
@@ -29,7 +34,6 @@ from ._helpers import (
 logger = logging.getLogger(__name__)
 
 OutboundChannel = Literal["twin_command", "joint_update", "sensor_actuation"]
-
 
 @dataclass(frozen=True)
 class ResolvedOutbound:
@@ -68,7 +72,7 @@ class TwinTransportMixin:
         """Map command + catalog to topic + payload."""
         self._init_transport_state()
         resolved_source = self._resolve_outbound_source_type(source_type)
-        schema = self.commands.get_schema()
+        schema = self.driver.get_mqtt_schema()
         self._validate_outbound_command(command, schema)
 
         topic_slug = resolve_outbound_topic_slug(channel=channel, bundle=schema)
@@ -107,7 +111,8 @@ class TwinTransportMixin:
     def _publish_resolved(self: Self, resolved: ResolvedOutbound) -> None:
         """Publish resolved outbound to MQTT and retain a test log entry."""
         if motion_outbound_requires_policy(resolved.command):
-            self._prepare_outbound_command()
+            if resolved.source_type not in EDGE_STATE_SOURCE_TYPES:
+                self._prepare_outbound_command()
         self._init_transport_state()
         self._outbound_log.append(resolved)
         mqtt = getattr(self.client, "mqtt", None)
@@ -135,6 +140,29 @@ class TwinTransportMixin:
             source_type=source_type,
         )
         self._publish_resolved(resolved)
+
+    def publish_telemetry(self: Self, payload: dict[str, Any]) -> None:
+        """Publish *payload* on ``cyberwave/twin/{uuid}/telemetry``.
+
+        Used by :class:`~cyberwave.twin.telemetry.TwinTelemetry` and
+        :class:`~cyberwave.telemetry.base.BaseTelemetry` publish hooks.
+        """
+        from ..manifest.driver_config import TWIN_TELEMETRY_TOPIC_SLUG
+
+        self._init_transport_state()
+        topic_prefix = getattr(getattr(self.client, "config", None), "topic_prefix", None) or ""
+        topic = f"{topic_prefix}{TWIN_TELEMETRY_TOPIC_SLUG.format(twin_uuid=self.uuid)}"
+        mqtt = getattr(self.client, "mqtt", None)
+        if mqtt is None:
+            logger.warning("publish_telemetry: no MQTT client on twin %s", self.uuid)
+            return
+        self._ensure_mqtt_connected()
+        mqtt.publish(topic, payload)
+        logger.debug(
+            "twin telemetry publish: twin=%s type=%s",
+            self.uuid,
+            payload.get("type"),
+        )
 
     def publish_command_burst(
         self: Self,
@@ -222,7 +250,7 @@ class TwinTransportMixin:
         if source_type is None:
             return _default_control_source_type(self.client)
         normalized = _normalize_locomotion_source_type(source_type)
-        if normalized in {SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE}:
+        if normalized in SOURCE_TYPES:
             return normalized
         return _default_control_source_type(self.client)
 

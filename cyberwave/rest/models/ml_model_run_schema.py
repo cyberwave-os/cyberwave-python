@@ -51,7 +51,8 @@ class MLModelRunSchema(BaseModel):
     history: Optional[List[HistoryTurnSchema]] = None
     robot_state: Optional[RobotStateSchema] = None
     robot_context: Optional[RobotContextSchema] = None
-    __properties: ClassVar[List[str]] = ["prompt", "image_base64", "image_url", "audio_base64", "audio_b64", "audio_url", "language", "task", "structured_task", "twin_uuid", "params", "frames", "depth_base64", "camera_intrinsics", "camera_pose", "history", "robot_state", "robot_context"]
+    image_source: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["prompt", "image_base64", "image_url", "audio_base64", "audio_b64", "audio_url", "language", "task", "structured_task", "twin_uuid", "params", "frames", "depth_base64", "camera_intrinsics", "camera_pose", "history", "robot_state", "robot_context", "image_source"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -208,6 +209,11 @@ class MLModelRunSchema(BaseModel):
         if self.robot_context is None and "robot_context" in self.model_fields_set:
             _dict['robot_context'] = None
 
+        # set to None if image_source (nullable) is None
+        # and model_fields_set contains the field
+        if self.image_source is None and "image_source" in self.model_fields_set:
+            _dict['image_source'] = None
+
         return _dict
 
     @classmethod
@@ -237,7 +243,8 @@ class MLModelRunSchema(BaseModel):
             "camera_pose": CameraPoseSchema.from_dict(obj["camera_pose"]) if obj.get("camera_pose") is not None else None,
             "history": [HistoryTurnSchema.from_dict(_item) for _item in obj["history"]] if obj.get("history") is not None else None,
             "robot_state": RobotStateSchema.from_dict(obj["robot_state"]) if obj.get("robot_state") is not None else None,
-            "robot_context": RobotContextSchema.from_dict(obj["robot_context"]) if obj.get("robot_context") is not None else None
+            "robot_context": RobotContextSchema.from_dict(obj["robot_context"]) if obj.get("robot_context") is not None else None,
+            "image_source": obj.get("image_source")
         })
         return _obj
 

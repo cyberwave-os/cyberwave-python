@@ -28,15 +28,27 @@ class ControllerPolicyExecuteSchema(BaseModel):
     ControllerPolicyExecuteSchema
     """ # noqa: E501
     twin_uuid: StrictStr
-    instruction: Optional[StrictStr] = None
     execution: Optional[StrictStr] = 'async'
     mode: Optional[StrictStr] = None
+    runtime_kind: Optional[StrictStr] = None
+    simulation_backend: Optional[StrictStr] = None
+    payload: Optional[Dict[str, Any]] = None
+    instruction: Optional[StrictStr] = None
     max_steps: Optional[StrictInt] = None
+    device: Optional[StrictStr] = None
+    velocity_command: Optional[Dict[str, Any]] = None
+    linear_x: Optional[Union[StrictFloat, StrictInt]] = None
+    linear_y: Optional[Union[StrictFloat, StrictInt]] = None
+    linear_z: Optional[Union[StrictFloat, StrictInt]] = None
+    angular_z: Optional[Union[StrictFloat, StrictInt]] = None
+    duration_ms: Optional[StrictInt] = None
+    gait: Optional[StrictStr] = None
+    origin: Optional[StrictStr] = None
     target_left_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
     target_right_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
     current_joint_states: Optional[Dict[str, Dict[str, Union[StrictFloat, StrictInt]]]] = None
     server_mode: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["twin_uuid", "instruction", "execution", "mode", "max_steps", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode"]
+    __properties: ClassVar[List[str]] = ["twin_uuid", "execution", "mode", "runtime_kind", "simulation_backend", "payload", "instruction", "max_steps", "device", "velocity_command", "linear_x", "linear_y", "linear_z", "angular_z", "duration_ms", "gait", "origin", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -46,6 +58,46 @@ class ControllerPolicyExecuteSchema(BaseModel):
 
         if value not in set(['live', 'simulation']):
             raise ValueError("must be one of enum values ('live', 'simulation')")
+        return value
+
+    @field_validator('runtime_kind')
+    def runtime_kind_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['physical', 'simulation']):
+            raise ValueError("must be one of enum values ('physical', 'simulation')")
+        return value
+
+    @field_validator('device')
+    def device_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['cpu', 'gpu']):
+            raise ValueError("must be one of enum values ('cpu', 'gpu')")
+        return value
+
+    @field_validator('gait')
+    def gait_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['walk', 'trot', 'stand']):
+            raise ValueError("must be one of enum values ('walk', 'trot', 'stand')")
+        return value
+
+    @field_validator('origin')
+    def origin_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['teleop', 'ai_policy', 'navigation', 'workflow']):
+            raise ValueError("must be one of enum values ('teleop', 'ai_policy', 'navigation', 'workflow')")
         return value
 
     model_config = ConfigDict(
@@ -87,20 +139,75 @@ class ControllerPolicyExecuteSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if instruction (nullable) is None
-        # and model_fields_set contains the field
-        if self.instruction is None and "instruction" in self.model_fields_set:
-            _dict['instruction'] = None
-
         # set to None if mode (nullable) is None
         # and model_fields_set contains the field
         if self.mode is None and "mode" in self.model_fields_set:
             _dict['mode'] = None
 
+        # set to None if runtime_kind (nullable) is None
+        # and model_fields_set contains the field
+        if self.runtime_kind is None and "runtime_kind" in self.model_fields_set:
+            _dict['runtime_kind'] = None
+
+        # set to None if simulation_backend (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_backend is None and "simulation_backend" in self.model_fields_set:
+            _dict['simulation_backend'] = None
+
+        # set to None if instruction (nullable) is None
+        # and model_fields_set contains the field
+        if self.instruction is None and "instruction" in self.model_fields_set:
+            _dict['instruction'] = None
+
         # set to None if max_steps (nullable) is None
         # and model_fields_set contains the field
         if self.max_steps is None and "max_steps" in self.model_fields_set:
             _dict['max_steps'] = None
+
+        # set to None if device (nullable) is None
+        # and model_fields_set contains the field
+        if self.device is None and "device" in self.model_fields_set:
+            _dict['device'] = None
+
+        # set to None if velocity_command (nullable) is None
+        # and model_fields_set contains the field
+        if self.velocity_command is None and "velocity_command" in self.model_fields_set:
+            _dict['velocity_command'] = None
+
+        # set to None if linear_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.linear_x is None and "linear_x" in self.model_fields_set:
+            _dict['linear_x'] = None
+
+        # set to None if linear_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.linear_y is None and "linear_y" in self.model_fields_set:
+            _dict['linear_y'] = None
+
+        # set to None if linear_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.linear_z is None and "linear_z" in self.model_fields_set:
+            _dict['linear_z'] = None
+
+        # set to None if angular_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.angular_z is None and "angular_z" in self.model_fields_set:
+            _dict['angular_z'] = None
+
+        # set to None if duration_ms (nullable) is None
+        # and model_fields_set contains the field
+        if self.duration_ms is None and "duration_ms" in self.model_fields_set:
+            _dict['duration_ms'] = None
+
+        # set to None if gait (nullable) is None
+        # and model_fields_set contains the field
+        if self.gait is None and "gait" in self.model_fields_set:
+            _dict['gait'] = None
+
+        # set to None if origin (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin is None and "origin" in self.model_fields_set:
+            _dict['origin'] = None
 
         # set to None if target_left_pos (nullable) is None
         # and model_fields_set contains the field
@@ -130,10 +237,22 @@ class ControllerPolicyExecuteSchema(BaseModel):
 
         _obj = cls.model_validate({
             "twin_uuid": obj.get("twin_uuid"),
-            "instruction": obj.get("instruction"),
             "execution": obj.get("execution") if obj.get("execution") is not None else 'async',
             "mode": obj.get("mode"),
+            "runtime_kind": obj.get("runtime_kind"),
+            "simulation_backend": obj.get("simulation_backend"),
+            "payload": obj.get("payload"),
+            "instruction": obj.get("instruction"),
             "max_steps": obj.get("max_steps"),
+            "device": obj.get("device"),
+            "velocity_command": obj.get("velocity_command"),
+            "linear_x": obj.get("linear_x"),
+            "linear_y": obj.get("linear_y"),
+            "linear_z": obj.get("linear_z"),
+            "angular_z": obj.get("angular_z"),
+            "duration_ms": obj.get("duration_ms"),
+            "gait": obj.get("gait"),
+            "origin": obj.get("origin"),
             "target_left_pos": obj.get("target_left_pos"),
             "target_right_pos": obj.get("target_right_pos"),
             "current_joint_states": obj.get("current_joint_states"),

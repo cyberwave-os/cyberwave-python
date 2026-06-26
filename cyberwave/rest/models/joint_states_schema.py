@@ -18,20 +18,20 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Union
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class JointStatesSchema(BaseModel):
     """
-    JointStatesSchema
+    ROS-style ``sensor_msgs/JointState`` projection.  ``velocity`` / ``effort`` arrays follow ROS semantics: an empty array means the channel is not measured/commanded for any joint. They are only populated when every reported joint carries an explicit value.
     """ # noqa: E501
     header: Dict[str, StrictStr]
     name: List[StrictStr]
     position: List[Union[StrictFloat, StrictInt]]
-    velocity: List[Union[StrictFloat, StrictInt]]
-    effort: List[Union[StrictFloat, StrictInt]]
+    velocity: Optional[List[Union[StrictFloat, StrictInt]]] = None
+    effort: Optional[List[Union[StrictFloat, StrictInt]]] = None
     __properties: ClassVar[List[str]] = ["header", "name", "position", "velocity", "effort"]
 
     model_config = ConfigDict(

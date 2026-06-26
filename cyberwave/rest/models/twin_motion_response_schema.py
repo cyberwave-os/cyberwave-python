@@ -31,7 +31,7 @@ class TwinMotionResponseSchema(BaseModel):
     environment_uuid: Optional[StrictStr] = None
     keyframes: List[Any]
     animations: List[Any]
-    scopes: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
+    scopes: Optional[Dict[str, Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["twin_uuid", "environment_uuid", "keyframes", "animations", "scopes"]
 
     model_config = ConfigDict(

@@ -11,6 +11,7 @@ from cyberwave.rest.api.cloud_node_workloads_api import CloudNodeWorkloadsApi
 from cyberwave.rest.api.contact_api import ContactApi
 from cyberwave.rest.api.docker_registry_api import DockerRegistryApi
 from cyberwave.rest.api.features_api import FeaturesApi
+from cyberwave.rest.api.contracts_api import ContractsApi
 from cyberwave.rest.api.default_api import DefaultApi
 from cyberwave.rest.api.profile_api import ProfileApi
 

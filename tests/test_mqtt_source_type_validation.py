@@ -75,6 +75,52 @@ def test_update_joint_state_uses_validated_source_type(mqtt_client):
     assert message["timestamp"] == 123.0
 
 
+def test_update_joints_state_measured_uses_positions(mqtt_client):
+    mqtt_client._handle_twin_update_with_telemetry = MagicMock()
+    mqtt_client.publish = MagicMock()
+
+    mqtt_client.update_joints_state(
+        twin_uuid="twin-uuid",
+        joint_positions={"_1": 0.5},
+        source_type=SOURCE_TYPE_EDGE,
+        velocities={"_1": 0.1},
+        efforts={"_1": 0.2},
+        timestamp=123.0,
+    )
+
+    _, message = mqtt_client.publish.call_args.args[:2]
+    assert message["positions"] == {"_1": 0.5}
+    assert message["velocities"] == {"_1": 0.1}
+    assert message["efforts"] == {"_1": 0.2}
+    assert "target_positions" not in message
+
+
+def test_update_joints_state_as_targets_uses_target_fields(mqtt_client):
+    mqtt_client._handle_twin_update_with_telemetry = MagicMock()
+    mqtt_client.publish = MagicMock()
+
+    mqtt_client.update_joints_state(
+        twin_uuid="twin-uuid",
+        joint_positions={"_1": 0.5, "_2": -0.3},
+        source_type=SOURCE_TYPE_TELE,
+        velocities={"_1": 0.0, "_2": 0.0},
+        efforts={"_1": 0.0, "_2": 0.0},
+        timestamp=123.0,
+        as_targets=True,
+    )
+
+    topic, message = mqtt_client.publish.call_args.args[:2]
+    assert topic == "cyberwave/joint/twin-uuid/update"
+    assert message["source_type"] == SOURCE_TYPE_TELE
+    assert message["target_positions"] == {"_1": 0.5, "_2": -0.3}
+    assert message["target_velocities"] == {"_1": 0.0, "_2": 0.0}
+    assert message["target_efforts"] == {"_1": 0.0, "_2": 0.0}
+    # A command payload must never carry the measured field names.
+    assert "positions" not in message
+    assert "velocities" not in message
+    assert "efforts" not in message
+
+
 def test_update_joints_state_rejects_invalid_source_type_before_publish(mqtt_client):
     mqtt_client._handle_twin_update_with_telemetry = MagicMock()
     mqtt_client.publish = MagicMock()

@@ -23,6 +23,24 @@ def _parse_bool_env(value: Optional[str], default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_mqtt_protocol_env(value: Optional[str]) -> Optional[int]:
+    """Parse ``CYBERWAVE_MQTT_PROTOCOL`` into a Paho protocol constant."""
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    import paho.mqtt.client as mqtt
+
+    if normalized in {"5", "v5", "mqtt5", "mqttv5"}:
+        return mqtt.MQTTv5
+    if normalized in {"311", "3", "v311", "mqtt3", "mqttv311", "v3.1.1"}:
+        return mqtt.MQTTv311
+    raise ValueError(
+        f"Invalid CYBERWAVE_MQTT_PROTOCOL={value!r}; use 5 (MQTT v5) or 311 (MQTT v3.1.1)"
+    )
+
+
 @dataclass
 class CyberwaveConfig:
     """
@@ -35,6 +53,7 @@ class CyberwaveConfig:
         mqtt_host: MQTT broker host (defaults to mqtt.cyberwave.com)
         mqtt_port: MQTT broker port (defaults to 8883)
         mqtt_username: MQTT username (optional)
+        mqtt_password: MQTT password override (optional; defaults to CYBERWAVE_MQTT_PASSWORD)
         mqtt_use_tls: Whether to enable MQTT TLS transport
         mqtt_tls_ca_cert: Path to CA certificate bundle for MQTT TLS
         mqtt_protocol: MQTT protocol version (e.g. ``paho.mqtt.client.MQTTv311`` or
@@ -52,6 +71,7 @@ class CyberwaveConfig:
     mqtt_host: Optional[str] = None
     mqtt_port: int | None = None
     mqtt_username: Optional[str] = None
+    mqtt_password: Optional[str] = None
     mqtt_use_tls: bool = False
     mqtt_tls_ca_cert: Optional[str] = None
     mqtt_protocol: Optional[int] = None
@@ -87,6 +107,9 @@ class CyberwaveConfig:
                 "CYBERWAVE_MQTT_USERNAME", DEFAULT_MQTT_USERNAME
             )
 
+        if not self.mqtt_password:
+            self.mqtt_password = os.getenv("CYBERWAVE_MQTT_PASSWORD")
+
         self.mqtt_use_tls = _parse_bool_env(
             os.getenv("CYBERWAVE_MQTT_USE_TLS"), default=self.mqtt_use_tls
         )
@@ -95,6 +118,11 @@ class CyberwaveConfig:
             self.mqtt_use_tls = True
         if not self.mqtt_tls_ca_cert:
             self.mqtt_tls_ca_cert = os.getenv("CYBERWAVE_MQTT_TLS_CA_CERT")
+
+        if self.mqtt_protocol is None:
+            self.mqtt_protocol = _parse_mqtt_protocol_env(
+                os.getenv("CYBERWAVE_MQTT_PROTOCOL")
+            )
 
         if not self.environment_id:
             self.environment_id = os.getenv("CYBERWAVE_ENVIRONMENT_ID")

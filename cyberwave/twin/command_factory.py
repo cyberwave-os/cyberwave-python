@@ -26,13 +26,11 @@ _LOCOMOTION_DIRECTIONAL = frozenset(
 
 _RESERVED_COMMAND_HANDLE_ATTRS = frozenset(
     {
-        "get_schema",
-        "set_schema",
         "_twin",
-        "_load_mqtt_bundle",
-        "_merge_joint_control",
         "_bound_catalog_commands",
         "_command_routing",
+        "get_schema",
+        "get_supported_commands",
     }
 )
 
@@ -67,6 +65,43 @@ def _merge_catalog_payload(
     payload = dict(data or {})
     if kwargs:
         payload.update(kwargs)
+    return payload
+
+
+def _command_arg_names(spec: dict[str, Any]) -> list[str]:
+    raw = spec.get("args")
+    if not isinstance(raw, list):
+        return []
+    return [a["name"] for a in raw if isinstance(a, dict) and a.get("name")]
+
+
+def _command_arg_defaults(spec: dict[str, Any]) -> dict[str, Any]:
+    raw = spec.get("args")
+    if not isinstance(raw, list):
+        return {}
+    return {
+        a["name"]: a["default"]
+        for a in raw
+        if isinstance(a, dict) and a.get("name") and "default" in a
+    }
+
+
+def _build_arg_payload(
+    spec: dict[str, Any],
+    data: dict[str, Any] | Any | None,
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Map a positional primary arg + kwargs onto declared args (relaxed)."""
+    arg_names = _command_arg_names(spec)
+    if arg_names and not isinstance(data, dict):
+        payload = _command_arg_defaults(spec)
+        if data is not None:
+            payload[arg_names[0]] = data
+        payload.update(kwargs)
+        return payload
+    payload = _merge_catalog_payload(data, **kwargs)
+    for name, default in _command_arg_defaults(spec).items():
+        payload.setdefault(name, default)
     return payload
 
 
@@ -167,9 +202,9 @@ def _make_catalog_command_method(command: str) -> Callable[..., None]:
         **kwargs: Any,
     ) -> None:
         twin = self._twin
-        schema = self.get_schema()
+        schema = twin.driver.get_mqtt_schema()
         spec = command_spec(schema, command)
-        payload = _merge_catalog_payload(data, **kwargs)
+        payload = _build_arg_payload(spec, data, kwargs)
 
         if spec.get("continuous"):
             duration_s, rate_hz, burst_data = _burst_timing(payload, spec)
@@ -218,7 +253,7 @@ def bind_catalog_commands(handle: TwinCommandsHandle) -> list[str]:
 
     Returns the list of command names that were bound (for ``describe()`` / ``dir()``).
     """
-    schema = handle.get_schema()
+    schema = handle._twin.driver.get_mqtt_schema()
     bound: list[str] = []
     routing: dict[str, dict[str, Any]] = {}
     twin = handle._twin
@@ -274,4 +309,6 @@ def rebind_catalog_commands(handle: TwinCommandsHandle) -> list[str]:
     twin = handle._twin
     if hasattr(twin, "_mqtt_catalog_cache"):
         twin._mqtt_catalog_cache = None
+    if hasattr(twin, "_driver_catalog_cache"):
+        twin._driver_catalog_cache = None
     return bind_catalog_commands(handle)

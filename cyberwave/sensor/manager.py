@@ -33,6 +33,7 @@ def run_streamer_in_background(
     streamer: Any,
     stop_event: threading.Event,
     thread_name: str = "cam-streamer",
+    subscribe_to_commands: bool = True,
 ) -> threading.Thread:
     """Run *streamer* in a daemon thread with its own asyncio event loop.
 
@@ -95,7 +96,10 @@ def run_streamer_in_background(
 
         # 3. Run with auto-reconnect until stopped
         try:
-            await streamer.run_with_auto_reconnect(stop_event=async_stop)
+            await streamer.run_with_auto_reconnect(
+                stop_event=async_stop,
+                subscribe_to_commands=subscribe_to_commands,
+            )
         except Exception:
             logger.exception("run_with_auto_reconnect error (%r)", thread_name)
 

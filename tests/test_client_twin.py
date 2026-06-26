@@ -63,7 +63,7 @@ def test_quickstart_env_reuses_existing_environment():
     client.projects.list.return_value = [existing_project]
     client.environments.list.return_value = [existing_env]
 
-    env_id, created = client._get_or_create_quickstart_env()
+    env_id, created = client.get_or_create_quickstart_environment()
 
     assert env_id == "existing-env-uuid"
     assert created is False
@@ -83,11 +83,43 @@ def test_quickstart_env_creates_new_environment_when_none_exists():
     client.environments.list.return_value = []
     client.environments.create.return_value = new_env
 
-    env_id, created = client._get_or_create_quickstart_env()
+    env_id, created = client.get_or_create_quickstart_environment()
 
     assert env_id == "new-env-uuid"
     assert created is True
     client.environments.create.assert_called_once()
+
+
+def test_twin_create_reuses_quickstart_on_second_call():
+    """Second client.twin() call must not create another Quickstart Environment."""
+    client = _make_client_with_mocked_managers()
+
+    existing_env = SimpleNamespace(
+        uuid="existing-env-uuid",
+        name="Quickstart Environment",
+        slug="ws/envs/quickstart-environment",
+    )
+    existing_project = SimpleNamespace(
+        uuid="proj-uuid", name="Quickstart Project", workspace_uuid="ws-uuid"
+    )
+    existing_workspace = SimpleNamespace(uuid="ws-uuid", name="Quickstart Workspace")
+    existing_twin = SimpleNamespace(
+        uuid="twin-uuid", asset_uuid="asset-uuid", name="twin"
+    )
+    asset = SimpleNamespace(uuid="asset-uuid", registry_id="vendor/robot")
+
+    client.workspaces.list.return_value = [existing_workspace]
+    client.projects.list.return_value = [existing_project]
+    client.environments.list.return_value = [existing_env]
+    client.environments.get.return_value = existing_env
+    client.twins.list.return_value = [existing_twin]
+    client.assets.get_by_registry_id.return_value = asset
+
+    with patch("cyberwave.client.create_twin", return_value=MagicMock()):
+        client.twin("vendor/robot")
+        client.twin("vendor/robot")
+
+    client.environments.create.assert_not_called()
 
 
 def test_quickstart_env_logs_reused_message(capsys):
@@ -169,3 +201,89 @@ def test_quickstart_env_no_log_when_env_id_specified(capsys):
 
     captured = capsys.readouterr()
     assert "[Cyberwave]" not in captured.out
+
+
+def test_get_or_create_quickstart_environment_delegates_to_helper():
+    client = _make_client_with_mocked_managers()
+    with patch.object(
+        client,
+        "_get_or_create_quickstart_env",
+        return_value=("env-uuid", False),
+    ) as helper:
+        env_id, created = client.get_or_create_quickstart_environment()
+
+    assert env_id == "env-uuid"
+    assert created is False
+    helper.assert_called_once()
+
+
+def test_quickstart_env_prefers_project_in_active_workspace():
+    """Do not attach quickstart env to the first global project from another workspace."""
+    client = _make_client_with_mocked_managers()
+
+    other_project = SimpleNamespace(
+        uuid="other-proj", name="Edge Project", workspace_uuid="other-ws"
+    )
+    quickstart_project = SimpleNamespace(
+        uuid="proj-uuid", name="Quickstart Project", workspace_uuid="ws-uuid"
+    )
+    existing_workspace = SimpleNamespace(uuid="ws-uuid", name="Quickstart Workspace")
+    existing_env = SimpleNamespace(uuid="existing-env-uuid", name="Quickstart Environment")
+
+    client.config.workspace_id = "ws-uuid"
+    client.workspaces.list.return_value = [existing_workspace]
+    client.projects.list.return_value = [other_project, quickstart_project]
+    client.environments.list.return_value = [existing_env]
+
+    env_id, created = client._get_or_create_quickstart_env()
+
+    assert env_id == "existing-env-uuid"
+    assert created is False
+    client.environments.list.assert_called_once_with(project_id="proj-uuid")
+    client.environments.create.assert_not_called()
+
+
+def test_quickstart_env_creates_project_when_workspace_has_no_matching_projects():
+    """When workspace_id is set, never attach to a global project from another workspace."""
+    client = _make_client_with_mocked_managers()
+
+    other_project = SimpleNamespace(
+        uuid="other-proj", name="Edge Project", workspace_uuid="other-ws"
+    )
+    new_project = SimpleNamespace(uuid="new-proj", name="Quickstart Project")
+    new_env = SimpleNamespace(uuid="new-env-uuid", name="Quickstart Environment")
+
+    client.config.workspace_id = "ws-uuid"
+    client.projects.list.return_value = [other_project]
+    client.projects.create.return_value = new_project
+    client.environments.list.return_value = []
+    client.environments.create.return_value = new_env
+
+    env_id, created = client.get_or_create_quickstart_environment()
+
+    assert env_id == "new-env-uuid"
+    assert created is True
+    client.projects.create.assert_called_once_with(
+        name="Quickstart Project",
+        workspace_id="ws-uuid",
+    )
+    client.environments.create.assert_called_once_with(
+        name="Quickstart Environment",
+        project_id="new-proj",
+    )
+
+
+def test_quickstart_does_not_overwrite_preset_workspace_id():
+    client = _make_client_with_mocked_managers()
+
+    client.config.workspace_id = "preset-ws"
+    client.projects.list.return_value = []
+    new_project = SimpleNamespace(uuid="proj-uuid", name="Quickstart Project")
+    new_env = SimpleNamespace(uuid="env-uuid", name="Quickstart Environment")
+    client.projects.create.return_value = new_project
+    client.environments.list.return_value = []
+    client.environments.create.return_value = new_env
+
+    client.get_or_create_quickstart_environment()
+
+    assert client.config.workspace_id == "preset-ws"

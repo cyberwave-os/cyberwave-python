@@ -41,8 +41,9 @@ class AIMetricsSchema(BaseModel):
     by_model: Dict[str, AIUsageSummary]
     by_caller: Dict[str, AIUsageSummary]
     by_request_kind: Dict[str, AIUsageSummary]
+    by_usage_class: Dict[str, AIUsageSummary]
     by_day: List[AIUsageDayBucket]
-    __properties: ClassVar[List[str]] = ["workspace_uuid", "organization_uuid", "window", "totals", "cost_source_breakdown", "by_provider", "by_model", "by_caller", "by_request_kind", "by_day"]
+    __properties: ClassVar[List[str]] = ["workspace_uuid", "organization_uuid", "window", "totals", "cost_source_breakdown", "by_provider", "by_model", "by_caller", "by_request_kind", "by_usage_class", "by_day"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -120,6 +121,13 @@ class AIMetricsSchema(BaseModel):
                 if self.by_request_kind[_key_by_request_kind]:
                     _field_dict[_key_by_request_kind] = self.by_request_kind[_key_by_request_kind].to_dict()
             _dict['by_request_kind'] = _field_dict
+        # override the default output from pydantic by calling `to_dict()` of each value in by_usage_class (dict)
+        _field_dict = {}
+        if self.by_usage_class:
+            for _key_by_usage_class in self.by_usage_class:
+                if self.by_usage_class[_key_by_usage_class]:
+                    _field_dict[_key_by_usage_class] = self.by_usage_class[_key_by_usage_class].to_dict()
+            _dict['by_usage_class'] = _field_dict
         # override the default output from pydantic by calling `to_dict()` of each item in by_day (list)
         _items = []
         if self.by_day:
@@ -177,6 +185,12 @@ class AIMetricsSchema(BaseModel):
                 for _k, _v in obj["by_request_kind"].items()
             )
             if obj.get("by_request_kind") is not None
+            else None,
+            "by_usage_class": dict(
+                (_k, AIUsageSummary.from_dict(_v))
+                for _k, _v in obj["by_usage_class"].items()
+            )
+            if obj.get("by_usage_class") is not None
             else None,
             "by_day": [AIUsageDayBucket.from_dict(_item) for _item in obj["by_day"]] if obj.get("by_day") is not None else None
         })

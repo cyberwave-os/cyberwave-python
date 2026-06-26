@@ -34,7 +34,8 @@ class AgentControlDispatchRequest(BaseModel):
     confirmed: Optional[StrictBool] = False
     source_type: Optional[StrictStr] = None
     current_joint_states: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["plan_id", "action", "mode", "simulation_backend", "confirmed", "source_type", "current_joint_states"]
+    current_sensor_states: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["plan_id", "action", "mode", "simulation_backend", "confirmed", "source_type", "current_joint_states", "current_sensor_states"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -105,6 +106,11 @@ class AgentControlDispatchRequest(BaseModel):
         if self.current_joint_states is None and "current_joint_states" in self.model_fields_set:
             _dict['current_joint_states'] = None
 
+        # set to None if current_sensor_states (nullable) is None
+        # and model_fields_set contains the field
+        if self.current_sensor_states is None and "current_sensor_states" in self.model_fields_set:
+            _dict['current_sensor_states'] = None
+
         return _dict
 
     @classmethod
@@ -123,7 +129,8 @@ class AgentControlDispatchRequest(BaseModel):
             "simulation_backend": obj.get("simulation_backend"),
             "confirmed": obj.get("confirmed") if obj.get("confirmed") is not None else False,
             "source_type": obj.get("source_type"),
-            "current_joint_states": obj.get("current_joint_states")
+            "current_joint_states": obj.get("current_joint_states"),
+            "current_sensor_states": obj.get("current_sensor_states")
         })
         return _obj
 

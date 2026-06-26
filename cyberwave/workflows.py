@@ -42,7 +42,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from .exceptions import CyberwaveError, CyberwaveTimeoutError
+from .exceptions import CyberwaveAPIError, CyberwaveError, CyberwaveTimeoutError
 
 if TYPE_CHECKING:
     from .client import Cyberwave
@@ -650,6 +650,8 @@ def _trigger_workflow(
             response_data=response,
             response_types_map={"200": "WorkflowRunSchema"},
         ).data
+    except CyberwaveAPIError:
+        raise
     except Exception as e:
         raise CyberwaveError(f"Failed to trigger workflow {workflow_id}: {e}") from e
 

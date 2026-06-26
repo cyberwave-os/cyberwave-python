@@ -87,7 +87,15 @@ __all__ = [
     "DEFAULT_SAMPLE_RATE",
 ]
 
-_HAS_MUJOCO = importlib.util.find_spec("mujoco") is not None
+try:
+    _HAS_MUJOCO = importlib.util.find_spec("mujoco") is not None
+except ValueError:
+    # find_spec raises ValueError for modules without __spec__ (e.g. a
+    # sys.modules mock injected by tests); treat presence in sys.modules
+    # as available.
+    import sys as _sys
+
+    _HAS_MUJOCO = "mujoco" in _sys.modules
 
 _MUJOCO_EXPORT_NAMES: frozenset[str] = frozenset(
     {

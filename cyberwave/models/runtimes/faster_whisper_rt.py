@@ -83,12 +83,20 @@ class FasterWhisperRuntime(ModelRuntime):
         local_files_only = bool(kwargs.get("local_files_only", False))
 
         path = Path(model_path)
-        if path.is_dir():
+        if path.is_dir() and list(path.iterdir()):
             # Model is pre-staged or already cached locally — skip HuggingFace
             # entirely so edge devices without internet don't hang on startup.
             resolved_model_path = str(path)
         else:
+            # Empty or non-existent directory: download the model
+            # If no explicit download_root, use parent directory of model_path
             download_root = kwargs.get("download_root") or os.getenv("WHISPER_CACHE_DIR") or os.getenv("HF_HOME")
+            if not download_root and path.is_dir():
+                # Empty directory: use its parent as download root
+                download_root = str(path.parent)
+            elif not download_root and not path.is_dir():
+                # Non-existent path as model_id: use current directory as fallback
+                download_root = None
             # Pre-resolve to an absolute snapshot path so ``WhisperModel`` never
             # runs its ``os.path.isdir(model_id)`` check against CWD — a stale
             # ``./base.en/`` from a prior interrupted run would otherwise be

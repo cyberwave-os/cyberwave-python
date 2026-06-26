@@ -183,10 +183,10 @@ class ModelManager:
         return self._catalog
 
     def run(self, model_id: str, **kwargs: Any) -> Any:
-        """Run cloud playground inference for a model UUID or slug.
+        """Run cloud model inference for automation / workflow workers.
 
         Alias used by generated workflow workers (``client.mlmodels.run``).
-        Forwards to :meth:`PlaygroundClient.run`.
+        Uses the product ``POST /mlmodels/{uuid}/run`` endpoint (credit-gated).
         """
         if self.playground is None:
             raise CyberwaveAPIError(
@@ -194,7 +194,7 @@ class ModelManager:
                 "Use 'cw = Cyberwave(api_key=...)' instead of constructing "
                 "ModelManager directly without an api_client."
             )
-        return self.playground.run(model_id, **kwargs)
+        return self.playground(model_id).run(**kwargs, product=True)
 
     def list(
         self,

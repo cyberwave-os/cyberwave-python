@@ -38,7 +38,9 @@ class EnvironmentCreateSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template"]
+    twin_asset_uuid: Optional[StrictStr] = None
+    mlmodel_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template", "twin_asset_uuid", "mlmodel_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -124,6 +126,16 @@ class EnvironmentCreateSchema(BaseModel):
         if self.is_template is None and "is_template" in self.model_fields_set:
             _dict['is_template'] = None
 
+        # set to None if twin_asset_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.twin_asset_uuid is None and "twin_asset_uuid" in self.model_fields_set:
+            _dict['twin_asset_uuid'] = None
+
+        # set to None if mlmodel_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.mlmodel_uuid is None and "mlmodel_uuid" in self.model_fields_set:
+            _dict['mlmodel_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -146,7 +158,9 @@ class EnvironmentCreateSchema(BaseModel):
             "project_uuid": obj.get("project_uuid"),
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),
-            "is_template": obj.get("is_template")
+            "is_template": obj.get("is_template"),
+            "twin_asset_uuid": obj.get("twin_asset_uuid"),
+            "mlmodel_uuid": obj.get("mlmodel_uuid")
         })
         return _obj
 

@@ -1017,11 +1017,25 @@ class GripperCameraTwin(GripperTwin, CameraTwin):
         return f"GripperCameraTwin(uuid='{self.uuid}', name='{self.name}')"
 
 
+class GripperJointCameraTwin(GripperJointTwin, CameraTwin):
+    """Manipulator with joints, gripper, and camera (e.g. Kinova Gen3 + Robotiq)."""
+
+    def __repr__(self) -> str:
+        return f"GripperJointCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
 class GripperDepthCameraTwin(GripperTwin, DepthCameraTwin):
     """Twin with both gripper and depth camera capabilities (manipulators with vision)."""
 
     def __repr__(self) -> str:
         return f"GripperDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class GripperJointDepthCameraTwin(GripperJointTwin, DepthCameraTwin):
+    """Manipulator with joints, gripper, and depth camera."""
+
+    def __repr__(self) -> str:
+        return f"GripperJointDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
 
 
 class LocomoteGripperTwin(LocomoteTwin, GripperTwin):
@@ -1064,6 +1078,27 @@ class LocomoteCameraTwin(LocomoteTwin, CameraTwin):
 
     def __repr__(self) -> str:
         return f"LocomoteCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class LocomoteJointTwin(LocomoteTwin, JointTwin):
+    """Locomoting platform with controllable joints (e.g. legged robots without sensors)."""
+
+    def __repr__(self) -> str:
+        return f"LocomoteJointTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class LocomoteJointCameraTwin(LocomoteJointTwin, CameraTwin):
+    """Legged platform with joints and a camera (e.g. Unitree Go2, ANYmal)."""
+
+    def __repr__(self) -> str:
+        return f"LocomoteJointCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class LocomoteJointDepthCameraTwin(LocomoteJointTwin, DepthCameraTwin):
+    """Legged platform with joints and a depth camera (e.g. Spot, RealSense-equipped quadrupeds)."""
+
+    def __repr__(self) -> str:
+        return f"LocomoteJointDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
 
 
 class FlyingGripperCameraTwin(FlyingTwin, GripperCameraTwin):

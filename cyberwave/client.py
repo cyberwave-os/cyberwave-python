@@ -28,6 +28,7 @@ from cyberwave.data.utils import (
 from cyberwave.exceptions import (
     CyberwaveAPIError,
     CyberwaveError,
+    CyberwaveInsufficientCreditsError,
     UnauthorizedException,
 )
 from cyberwave.models.manager import ModelManager
@@ -207,6 +208,33 @@ class Cyberwave:
             except Exception as e:
                 if hasattr(e, "__dict__") and not hasattr(e, "request_headers"):
                     e.request_headers = last_request_headers.copy()
+                if getattr(e, "status", None) == 402:
+                    import json as _json
+
+                    balance: Optional[float] = None
+                    manual_block = False
+                    manual_block_reason = ""
+                    try:
+                        body = _json.loads(getattr(e, "body", "") or "{}")
+                        detail = body.get("detail", "")
+                        if "balance=" in detail:
+                            balance = float(detail.split("balance=")[-1])
+                        manual_block = bool(body.get("manual_block", False))
+                        manual_block_reason = body.get("manual_block_reason", "")
+                    except Exception:
+                        pass
+                    msg = "Insufficient credits"
+                    if balance is not None:
+                        msg += f" (balance: {balance})"
+                    raise CyberwaveInsufficientCreditsError(
+                        message=msg,
+                        status_code=402,
+                        response_data=getattr(e, "body", None),
+                        request_headers=last_request_headers.copy(),
+                        balance=balance,
+                        manual_block=manual_block,
+                        manual_block_reason=manual_block_reason,
+                    ) from e
                 raise
 
         original_call_api = api_client.call_api
@@ -550,12 +578,18 @@ class Cyberwave:
             twin_uuid = twin_data.get("uuid", twin_uuid)
         return f"{self._WEB_BASE_URL}/twins/{twin_uuid}"
 
-    def _get_or_create_quickstart_env(self) -> tuple[str, bool]:
-        """Return (env_uuid, created) for the quickstart environment.
+    def get_or_create_quickstart_environment(self) -> tuple[str, bool]:
+        """Return ``(environment_uuid, created)`` for the quickstart environment.
 
-        Reuses an existing environment named ``_QUICKSTART_ENV_NAME`` when one
-        is available so that repeated runs do not produce duplicate environments.
+        Reuses ``"Quickstart Environment"`` in the active workspace when present.
+        May persist ``workspace_id`` / ``environment_id`` on the client config if
+        they were unset. Assumes one quickstart env per project.
         """
+        return self._get_or_create_quickstart_env()
+
+    def _get_or_create_quickstart_env(self) -> tuple[str, bool]:
+        """Internal implementation for :meth:`get_or_create_quickstart_environment`."""
+        workspace_id_was_set = bool(self.config.workspace_id)
         workspace_id = self.config.workspace_id
         if not workspace_id:
             workspaces = self.workspaces.list()
@@ -575,27 +609,42 @@ class Cyberwave:
                 workspace_id = self.workspaces.create(
                     name=self._QUICKSTART_WORKSPACE_NAME,
                 ).uuid
-        self.config.workspace_id = workspace_id
+        if not workspace_id_was_set:
+            self.config.workspace_id = workspace_id
 
         projects = self.projects.list()
+        workspace_projects = [
+            p
+            for p in projects
+            if str(
+                getattr(p, "workspace_uuid", None)
+                or getattr(p, "workspace_id", None)
+                or ""
+            )
+            == str(workspace_id)
+        ]
+        # Never fall back to global projects when a workspace is known — that
+        # re-attaches quickstart envs to another workspace's Edge Project.
+        project_pool = workspace_projects
         existing_project = next(
             (
                 p
-                for p in projects
+                for p in project_pool
                 if getattr(p, "name", None) == self._QUICKSTART_PROJECT_NAME
             ),
             None,
         )
         if existing_project:
             project_id = existing_project.uuid
-        elif projects:
-            project_id = projects[0].uuid
+        elif project_pool:
+            project_id = project_pool[0].uuid
         else:
             project_id = self.projects.create(
                 name=self._QUICKSTART_PROJECT_NAME,
                 workspace_id=workspace_id,
             ).uuid
 
+        # Single API page; steady state is one quickstart env per project.
         environments = self.environments.list(project_id=project_id)
         existing_env = next(
             (
@@ -669,9 +718,11 @@ class Cyberwave:
         twin_name = kwargs.get("name", None)
 
         env_id = environment_id or self.config.environment_id
+        environment_id_was_set = bool(env_id)
         if not env_id:
-            env_id, created = self._get_or_create_quickstart_env()
-            self.config.environment_id = env_id
+            env_id, created = self.get_or_create_quickstart_environment()
+            if not environment_id_was_set and not self.config.environment_id:
+                self.config.environment_id = env_id
             env_url = self._build_environment_url(env_id)
             if created:
                 print(

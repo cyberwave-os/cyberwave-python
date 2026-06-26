@@ -29,10 +29,11 @@ class AgentControlCancelRequest(BaseModel):
     """ # noqa: E501
     action_id: StrictStr
     target_twin_uuid: StrictStr
+    execution_channel: Optional[StrictStr] = None
     transport: Optional[StrictStr] = None
     mode: Optional[StrictStr] = 'simulation'
     simulation_backend: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["action_id", "target_twin_uuid", "transport", "mode", "simulation_backend"]
+    __properties: ClassVar[List[str]] = ["action_id", "target_twin_uuid", "execution_channel", "transport", "mode", "simulation_backend"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -83,6 +84,11 @@ class AgentControlCancelRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if execution_channel (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_channel is None and "execution_channel" in self.model_fields_set:
+            _dict['execution_channel'] = None
+
         # set to None if transport (nullable) is None
         # and model_fields_set contains the field
         if self.transport is None and "transport" in self.model_fields_set:
@@ -107,6 +113,7 @@ class AgentControlCancelRequest(BaseModel):
         _obj = cls.model_validate({
             "action_id": obj.get("action_id"),
             "target_twin_uuid": obj.get("target_twin_uuid"),
+            "execution_channel": obj.get("execution_channel"),
             "transport": obj.get("transport"),
             "mode": obj.get("mode") if obj.get("mode") is not None else 'simulation',
             "simulation_backend": obj.get("simulation_backend")

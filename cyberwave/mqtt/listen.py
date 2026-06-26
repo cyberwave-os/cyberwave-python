@@ -49,7 +49,7 @@ def build_listen_specs(
     topic_prefix: str | None = None,
 ) -> dict[str, TopicListenSpec]:
     """Build listen specs from catalog without connecting MQTT."""
-    schema = twin.commands.get_schema()
+    schema = twin.driver.get_mqtt_schema()
     prefix = topic_prefix
     if prefix is None:
         config = getattr(getattr(twin, "client", None), "config", None)
