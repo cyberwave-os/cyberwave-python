@@ -380,14 +380,29 @@ class EnvironmentManager(BaseResourceManager):
     """Manager for environment operations"""
 
     def list(self, project_id: Optional[str] = None) -> List[EnvironmentSchema]:
-        """List all environments, optionally filtered by project"""
+        """List all environments, optionally filtered by project.
+
+        Paginates automatically so callers always receive the full result set
+        regardless of how many environments exist.
+        """
+        _page_size = 200
         try:
-            if project_id:
-                return self.api.src_app_api_environments_list_environments_for_project(
-                    project_id
-                )
-            else:
-                return self.api.src_app_api_environments_list_all_environments()
+            results: List[EnvironmentSchema] = []
+            offset = 0
+            while True:
+                if project_id:
+                    page = self.api.src_app_api_environments_list_environments_for_project(
+                        project_id, limit=_page_size, offset=offset
+                    )
+                else:
+                    page = self.api.src_app_api_environments_list_all_environments(
+                        limit=_page_size, offset=offset
+                    )
+                results.extend(page)
+                if len(page) < _page_size:
+                    break
+                offset += _page_size
+            return results
         except Exception as e:
             self._handle_error(e, "list environments")
             raise  # For type checker
