@@ -189,8 +189,9 @@ def test_joint_update_uses_joint_topic_slug() -> None:
             },
         ),
     )
-    with patch(
-        "cyberwave.twin.capabilities.joints.controllable_joint_names",
+    with patch.object(
+        _joints,
+        "controllable_joint_names",
         return_value=["j1"],
     ):
         with patch.object(twin, "_prepare_outbound_command"):

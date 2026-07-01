@@ -194,8 +194,9 @@ def test_joint_set_edge_allows_hardware_joint_names_outside_schema() -> None:
     twin = JointTwin(
         client, SimpleNamespace(uuid="arm-1", name="Arm", asset_uuid="asset-1")
     )
-    with patch(
-        "cyberwave.twin.capabilities.joints.controllable_joint_names",
+    with patch.object(
+        _joints,
+        "controllable_joint_names",
         return_value=["j1"],
     ):
         twin.joints.set(
@@ -232,7 +233,7 @@ def test_joint_set_explicit_edge_preserves_source_and_skips_policy() -> None:
     twin = JointTwin(
         client, SimpleNamespace(uuid="arm-1", name="Arm", asset_uuid="asset-1")
     )
-    with patch("cyberwave.twin.capabilities.joints.controllable_joint_names", return_value=["j1"]):
+    with patch.object(_joints, "controllable_joint_names", return_value=["j1"]):
         with patch.object(twin.policy, "ensure_attached") as ensure_attached:
             twin.joints.set({"j1": 1.0}, source_type="edge")
     ensure_attached.assert_not_called()
