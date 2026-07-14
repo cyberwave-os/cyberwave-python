@@ -12,9 +12,7 @@
 </p>
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/606b7fc3-f91c-40d0-bfef-4bfceb801aae" poster="assets/digital-twin-one-platform.png" width="800" controls muted loop playsinline>
-    <img src="assets/digital-twin-one-platform.png" alt="Cyberwave catalog — deploy any robot as a digital twin with cw.twin(\"company/your-asset\")" width="800" />
-  </video>
+  <img src="assets/hero-montage.gif" alt="Cyberwave SDK — deploy any robot as a digital twin, in simulation and on real hardware" width="800" />
 </p>
 
 <p align="center">
