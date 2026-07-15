@@ -294,10 +294,8 @@ def _apply_gimbal_pose(
         source_type=st,
         timestamp=time.time(),
     )
-    try:
-        robot.joints.refresh()
-    except Exception:
-        pass
+    # The live joints view refreshes itself on inbound MQTT updates, so there is
+    # nothing to poll here after publishing the command.
 
 
 def _run_gimbal_sequence(
@@ -502,14 +500,14 @@ def _joint_positions_near_zero(joints: Dict[str, float], *, eps: float = 1e-4) -
 
 
 def _refresh_joint_map_from_rest(robot) -> Dict[str, float]:
-    """Poll GET joint-states; some twins only update REST after a delay (or never)."""
+    """Poll joint state; some twins only publish positions after a delay (or never).
+
+    ``robot.joints.get()`` returns a live view backed by MQTT that refreshes in
+    place, so each poll re-reads the latest known positions.
+    """
     last: Dict[str, float] = {}
     for i in range(JOINT_REST_POLL_ATTEMPTS):
-        try:
-            robot.joints.refresh()
-        except CyberwaveError:
-            raise
-        last = robot.joints.get_all() or {}
+        last = dict(robot.joints.get()) or {}
         if not last:
             if i + 1 < JOINT_REST_POLL_ATTEMPTS and JOINT_REST_POLL_INTERVAL_S > 0:
                 time.sleep(JOINT_REST_POLL_INTERVAL_S)
