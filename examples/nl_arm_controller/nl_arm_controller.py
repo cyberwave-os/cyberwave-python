@@ -46,6 +46,8 @@ load_dotenv(override=False)
 
 CYBERWAVE_API_KEY = os.environ.get("CYBERWAVE_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite-preview-07-15:free")
 MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")
 
 CW_MODE = os.environ.get("CW_MODE", "live")
@@ -74,15 +76,23 @@ def _check_secret(name: str, value: str | None) -> tuple[str, bool]:
         return f"  {name:<24} ❌ not set", False
     return f"  {name:<24} ✅ {value[:8]}…  (len {len(value)})", True
 
+def _check_secret_any(*names: str) -> tuple[str, bool]:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return f"  {name:<24} ✅ {value[:8]}…  (len {len(value)})", True
+    return f"  {' or '.join(names):<24} ❌ none set", False
+        
 
 def run_self_check() -> int:
-    print("─" * 64)
+    return f"  {name:<24} ✅ {value[:8]}…  (len {len(value)})", True
     print("  NL → SO-101 Controller — environment self-check")
     print("─" * 64)
 
     rows = [
         _check_secret("CYBERWAVE_API_KEY", CYBERWAVE_API_KEY),
-        _check_secret("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
+        # _check_secret("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
+        _check_secret_any("OPENROUTER_API_KEY", "OPENROUTER_MODEL"),
         _check_secret("MISTRAL_API_KEY", MISTRAL_API_KEY),
     ]
     for line, _ in rows:
