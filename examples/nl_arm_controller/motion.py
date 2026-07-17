@@ -48,6 +48,16 @@ DEFAULT_DURATION_S: float = 1.0
 RAMP_HZ: int = 20
 
 
+def _sdk_joint_name(joint: str) -> str:
+    """Map our canonical joint names ("1".."6") to the SDK's controllable names.
+
+    The so101 twin's universal schema exposes joints as "_1".."_6" (leading
+    underscore), while the rest of this app — plans, prompts, limits — uses
+    the bare "1".."6" convention. Translate only at this SDK boundary.
+    """
+    return joint if joint.startswith("_") else f"_{joint}"
+
+
 class _RobotJoints(Protocol):
     def set(  # noqa: D401 — match SDK signature
         self,
@@ -279,7 +289,7 @@ class MotionExecutor:
     def _snap_to(self, pose: dict[str, float]) -> None:
         for joint, angle in pose.items():
             if not self.dry_run:
-                self.robot.joints.set(joint, angle, degrees=True)
+                self.robot.joints.set(_sdk_joint_name(joint), angle, degrees=True)
             self._current_pose[joint] = angle
 
     def _format_pose(self) -> str:

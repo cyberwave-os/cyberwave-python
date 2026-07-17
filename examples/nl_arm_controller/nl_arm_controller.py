@@ -82,17 +82,25 @@ def _check_secret_any(*names: str) -> tuple[str, bool]:
         if value:
             return f"  {name:<24} ✅ {value[:8]}…  (len {len(value)})", True
     return f"  {' or '.join(names):<24} ❌ none set", False
-        
+
+
+def _active_planner_label() -> str:
+    """Which LLM/provider `planner.py` will actually use, for banner/self-check display."""
+    if OPENROUTER_API_KEY:
+        return f"{OPENROUTER_MODEL} (via OpenRouter / agents SDK)"
+    if ANTHROPIC_API_KEY:
+        return f"{ANTHROPIC_MODEL} (via Anthropic)"
+    return "(no ANTHROPIC_API_KEY or OPENROUTER_API_KEY set)"
+
+
 
 def run_self_check() -> int:
-    return f"  {name:<24} ✅ {value[:8]}…  (len {len(value)})", True
     print("  NL → SO-101 Controller — environment self-check")
     print("─" * 64)
 
     rows = [
         _check_secret("CYBERWAVE_API_KEY", CYBERWAVE_API_KEY),
-        # _check_secret("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
-        _check_secret_any("OPENROUTER_API_KEY", "OPENROUTER_MODEL"),
+        _check_secret_any("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"),
         _check_secret("MISTRAL_API_KEY", MISTRAL_API_KEY),
     ]
     for line, _ in rows:
@@ -100,16 +108,18 @@ def run_self_check() -> int:
     keys_ok = all(ok for _, ok in rows)
 
     print()
+    print(f"  active planner           = {_active_planner_label()}")
     print(f"  CW_MODE                  = {CW_MODE}")
     print(f"  CYBERWAVE_TWIN_ID        = {CW_TWIN_ID or '(unset)'}")
     print(f"  CYBERWAVE_ENVIRONMENT_ID = {CW_ENV_ID or '(unset)'}")
     print(f"  ANTHROPIC_MODEL          = {ANTHROPIC_MODEL}")
+    print(f"  OPENROUTER_MODEL         = {OPENROUTER_MODEL}")
     print(f"  MISTRAL_STT_MODEL        = {MISTRAL_STT_MODEL}")
     print(f"  VOICE_ENABLED            = {VOICE_ENABLED}")
 
     print()
     deps_ok = True
-    for mod_name in ("cyberwave", "anthropic", "httpx", "sounddevice", "soundfile", "pynput"):
+    for mod_name in ("cyberwave", "anthropic", "agents", "httpx", "sounddevice", "soundfile", "pynput"):
         try:
             __import__(mod_name)
             print(f"  import {mod_name:<14} ✅")
@@ -148,7 +158,7 @@ def _print_banner(
     print(f"  NL → SO-101 controller  ({' + '.join(inputs)})")
     print("─" * 64)
     print(f"  mode:        {'DRY-RUN (no arm)' if dry_run else CW_MODE}")
-    print(f"  planner:     {ANTHROPIC_MODEL}")
+    print(f"  planner:     {_active_planner_label()}")
     if voice:
         print(f"  STT model:   {MISTRAL_STT_MODEL}")
     if vision and camera_info:
@@ -189,8 +199,8 @@ def _read_voice() -> str | None:
 
 
 def run_agent(dry_run: bool, voice: bool, vision: bool) -> int:
-    if not ANTHROPIC_API_KEY:
-        print("❌ ANTHROPIC_API_KEY not set in .env")
+    if not (OPENROUTER_API_KEY or ANTHROPIC_API_KEY):
+        print("❌ Need either OPENROUTER_API_KEY or ANTHROPIC_API_KEY set in .env")
         return 1
 
     if voice and not MISTRAL_API_KEY:

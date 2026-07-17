@@ -146,5 +146,6 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
+    "cyberwave>=0.5.3",
     "openai-agents>=0.18.2",
 ]

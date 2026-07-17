@@ -4,6 +4,12 @@
 # new changes:  pip install -e cyberwave-sdks/cyberwave-python
 
 anthropic>=0.40.0
+# OpenAI Agents SDK — used to route planning through OpenRouter (any provider/
+# model reachable via OpenRouter) when OPENROUTER_API_KEY is set, via
+# AnyLLMModel. The `any-llm` extra pulls in `any-llm-sdk`, which AnyLLMModel
+# requires. Falls back to calling Claude directly when only
+# ANTHROPIC_API_KEY is set.
+openai-agents[any-llm]>=0.1.0
 # Mistral STT is called via direct HTTP (httpx) — the official `mistralai`
 # v2.x SDK on PyPI is currently unstable for our use case.
 httpx>=0.28.1
