@@ -33,9 +33,10 @@ class NavigationWaypointSchema(BaseModel):
     position: Dict[str, Union[StrictFloat, StrictInt]]
     rotation: Optional[NavigationRotationSchema] = None
     yaw: Optional[Union[StrictFloat, StrictInt]] = None
+    duration_seconds: Optional[Union[StrictFloat, StrictInt]] = None
     actions: Optional[List[NavigationWaypointActionSchema]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "position", "rotation", "yaw", "actions", "metadata"]
+    __properties: ClassVar[List[str]] = ["id", "position", "rotation", "yaw", "duration_seconds", "actions", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -101,6 +102,11 @@ class NavigationWaypointSchema(BaseModel):
         if self.yaw is None and "yaw" in self.model_fields_set:
             _dict['yaw'] = None
 
+        # set to None if duration_seconds (nullable) is None
+        # and model_fields_set contains the field
+        if self.duration_seconds is None and "duration_seconds" in self.model_fields_set:
+            _dict['duration_seconds'] = None
+
         # set to None if actions (nullable) is None
         # and model_fields_set contains the field
         if self.actions is None and "actions" in self.model_fields_set:
@@ -127,6 +133,7 @@ class NavigationWaypointSchema(BaseModel):
             "position": obj.get("position"),
             "rotation": NavigationRotationSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
             "yaw": obj.get("yaw"),
+            "duration_seconds": obj.get("duration_seconds"),
             "actions": [NavigationWaypointActionSchema.from_dict(_item) for _item in obj["actions"]] if obj.get("actions") is not None else None,
             "metadata": obj.get("metadata")
         })

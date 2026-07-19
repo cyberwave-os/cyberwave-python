@@ -7,6 +7,8 @@ It uses paho-mqtt (2.1.0+) for reliable MQTT connectivity.
 
 import json
 import logging
+import math
+import os
 import threading
 import time
 import uuid
@@ -26,6 +28,27 @@ SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
 # Sentinel distinguishing "remove every handler for the topic" (default) from
 # an explicit ``subscriber_key=None`` (remove only the default slot).
 _UNSET = object()
+
+
+def _replace_non_finite(value: Any) -> Any:
+    """Recursively replace non-finite floats (``NaN`` / ``inf``) with ``None``.
+
+    ``json.dumps`` defaults to ``allow_nan=True`` and emits the bare tokens
+    ``NaN`` / ``Infinity`` / ``-Infinity``, which are NOT valid JSON (RFC 8259).
+    A strict consumer — the browser's ``JSON.parse``, the C++/other SDKs — then
+    rejects the ENTIRE payload, silently dropping otherwise-valid joint / pose /
+    telemetry messages. Producers legitimately end up with non-finite values
+    (e.g. a driver forwarding an unmeasured ``NaN`` joint effort), so the MQTT
+    wire boundary maps them to ``null`` (a valid JSON marker for "no value")
+    rather than letting an invalid document reach subscribers.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _replace_non_finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_replace_non_finite(v) for v in value]
+    return value
 
 
 class CyberwaveMQTTClient:
@@ -109,6 +132,17 @@ class CyberwaveMQTTClient:
         self.connected = False
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
+
+        # Initial-connect resilience. The first CONNACK can be delayed when the
+        # broker is briefly overloaded (e.g. a reconnect storm from other
+        # clients saturating the auth callback). Rather than failing the whole
+        # process after a single short window, retry the connect a bounded
+        # number of times with backoff. Tunable for callers that prefer
+        # fast-fail via these env vars.
+        self._connect_timeout = float(os.getenv("CYBERWAVE_MQTT_CONNECT_TIMEOUT", "10"))
+        self._connect_max_attempts = max(
+            1, int(os.getenv("CYBERWAVE_MQTT_CONNECT_ATTEMPTS", "3"))
+        )
 
         # Event handlers, keyed per topic by an opaque ``subscriber_key``.
         # ``None`` is the default single-subscriber slot (replace semantics);
@@ -482,44 +516,79 @@ class CyberwaveMQTTClient:
         self.publish(topic, message)
 
     def connect(self):
-        """Connect to MQTT broker."""
-        try:
-            logger.warning(
-                "MQTT connection settings: tls=%s, broker=%s, port=%s, custom_ca=%s",
-                self.use_tls,
-                self.mqtt_broker,
-                self.mqtt_port,
-                bool(self.tls_ca_cert),
-            )
-            logger.debug(
-                f"Connecting to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}"
-            )
-            self.client.connect(self.mqtt_broker, self.mqtt_port, keepalive=60)
-            self.client.loop_start()
+        """Connect to MQTT broker.
 
-            # Wait for connection to establish
-            timeout = 10
-            start_time = time.time()
-            while not self.connected and (time.time() - start_time) < timeout:
-                time.sleep(0.5)
+        Retries the initial connect a bounded number of times with backoff so a
+        briefly-overloaded broker (delayed CONNACK) does not fail the whole
+        process on the first short window. Tunable via
+        ``CYBERWAVE_MQTT_CONNECT_TIMEOUT`` (per-attempt seconds) and
+        ``CYBERWAVE_MQTT_CONNECT_ATTEMPTS``.
+        """
+        logger.warning(
+            "MQTT connection settings: tls=%s, broker=%s, port=%s, custom_ca=%s",
+            self.use_tls,
+            self.mqtt_broker,
+            self.mqtt_port,
+            bool(self.tls_ca_cert),
+        )
 
-            if not self.connected:
-                raise Exception("Failed to connect to MQTT broker within timeout")
+        timeout = self._connect_timeout
+        max_attempts = self._connect_max_attempts
+        self.client.loop_start()
 
-            logger.debug("Successfully connected to MQTT broker")
+        last_error: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # paho's first call must be connect(); subsequent retries reuse
+                # the already-configured socket via reconnect().
+                if attempt == 1:
+                    self.client.connect(self.mqtt_broker, self.mqtt_port, keepalive=60)
+                else:
+                    self.client.reconnect()
+            except Exception as e:
+                # Socket-level failure (broker down, DNS, refused connection).
+                last_error = e
+                logger.warning(
+                    "MQTT connect attempt %d/%d failed at socket level: %s",
+                    attempt,
+                    max_attempts,
+                    e,
+                )
+            else:
+                # CONNACK arrives asynchronously; _on_connect flips self.connected.
+                start_time = time.time()
+                while not self.connected and (time.time() - start_time) < timeout:
+                    time.sleep(0.5)
+                if self.connected:
+                    logger.debug("Successfully connected to MQTT broker")
+                    break
+                last_error = Exception(
+                    "Failed to connect to MQTT broker within timeout"
+                )
+                logger.warning(
+                    "MQTT CONNACK not received within %ss (attempt %d/%d)",
+                    timeout,
+                    attempt,
+                    max_attempts,
+                )
 
-            # Send telemetry start message only for twins that haven't received one yet
-            # This prevents duplicate telemetry_start messages on reconnection
-            # Thread-safe: Uses lock to coordinate with _handle_twin_update_with_telemetry
-            with self._telemetry_lock:
-                for twin_uuid in self.twin_uuids:
-                    if twin_uuid not in self.twin_uuids_with_telemetry_start:
-                        self.twin_uuids_with_telemetry_start.append(twin_uuid)
-                        self._publish_connect_message(twin_uuid)
-                        self._publish_telemetry_start_message(twin_uuid, None)
-        except Exception as e:
-            logger.error(f"Failed to connect to MQTT broker: {e}")
-            raise
+            if attempt < max_attempts:
+                time.sleep(min(2.0 * attempt, 5.0))
+
+        if not self.connected:
+            self.client.loop_stop()
+            logger.error("Failed to connect to MQTT broker: %s", last_error)
+            raise last_error or Exception("Failed to connect to MQTT broker")
+
+        # Send telemetry start message only for twins that haven't received one yet
+        # This prevents duplicate telemetry_start messages on reconnection
+        # Thread-safe: Uses lock to coordinate with _handle_twin_update_with_telemetry
+        with self._telemetry_lock:
+            for twin_uuid in self.twin_uuids:
+                if twin_uuid not in self.twin_uuids_with_telemetry_start:
+                    self.twin_uuids_with_telemetry_start.append(twin_uuid)
+                    self._publish_connect_message(twin_uuid)
+                    self._publish_telemetry_start_message(twin_uuid, None)
 
     def disconnect(self):
         """Disconnect from MQTT broker."""
@@ -542,7 +611,16 @@ class CyberwaveMQTTClient:
         try:
             if isinstance(message, dict):
                 message.setdefault("session_id", self.client_id)
-            payload = json.dumps(message) if isinstance(message, dict) else message
+            if isinstance(message, dict):
+                # Fast path: emit strict JSON (allow_nan=False rejects NaN/inf).
+                # Only pay the recursive-sanitize cost when a non-finite value is
+                # actually present, so the wire never carries invalid-JSON tokens.
+                try:
+                    payload = json.dumps(message, allow_nan=False)
+                except ValueError:
+                    payload = json.dumps(_replace_non_finite(message), allow_nan=False)
+            else:
+                payload = message
             result = self.client.publish(topic, payload, qos=qos)
 
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
@@ -846,9 +924,9 @@ class CyberwaveMQTTClient:
         """
         Publish raw GPS data for a twin.
 
-        The GPS payload is stored as a ``twin_gps_update`` telemetry event
-        in the backend database via Vector.  It does **not** update the
-        twin's rendered position — use ``update_twin_position`` for that.
+        The GPS payload is stored as a ``twin_gps_update`` telemetry event.
+        It does **not** update the twin's rendered position — use
+        ``update_twin_position`` for that.
 
         Args:
             twin_uuid: UUID of the twin.
@@ -972,6 +1050,7 @@ class CyberwaveMQTTClient:
         session_id: Optional[str] = None,
         camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
         as_targets: bool = False,
+        stream_instance_id: Optional[str] = None,
     ):
         """
         Update multiple joints at once via MQTT.
@@ -1010,7 +1089,7 @@ class CyberwaveMQTTClient:
            }
            ```
 
-        Both formats are parsed by Vector into individual joint_state_update telemetry events.
+        Both formats are parsed into individual joint_state_update telemetry events.
 
         Args:
             twin_uuid: UUID of the twin
@@ -1025,6 +1104,9 @@ class CyberwaveMQTTClient:
             camera_frame_counters: Optional dict mapping camera track_id to frame info.
                 Each value is a dict with "frame_count" (int) and "sensor_id" (str).
                 Used for robot-camera synchronization. Only included in aggregated format.
+            stream_instance_id: Optional id of the producing sim/stream process. Lets
+                consumers detect two producers publishing measured state to one twin
+                (source_type alone cannot). Only included in aggregated format.
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
@@ -1047,6 +1129,7 @@ class CyberwaveMQTTClient:
             or workload_uuid is not None
             or session_id is not None
             or camera_frame_counters is not None
+            or stream_instance_id is not None
         )
 
         if use_aggregated:
@@ -1068,6 +1151,13 @@ class CyberwaveMQTTClient:
                 message["workload_uuid"] = workload_uuid
             if session_id:
                 message["session_id"] = session_id
+            if stream_instance_id:
+                # Identifies the specific sim/stream process that produced this
+                # measured state. Lets a consumer detect when two producers (e.g.
+                # a stale sim not torn down + a fresh one) publish to the same twin
+                # joint topic — otherwise indistinguishable, since source_type is
+                # identical ("sim") and command_seq is per-process.
+                message["stream_instance_id"] = stream_instance_id
             if camera_frame_counters:
                 message["camera_frame_counters"] = camera_frame_counters
 

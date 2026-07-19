@@ -8,32 +8,39 @@ from ...constants import SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE
 from ...exceptions import CyberwaveError
 
 from .._helpers import _default_control_source_type, _normalize_locomotion_source_type
+from ..simulation_support import SimLevel, simulation_level
 
 if TYPE_CHECKING:
     from ..base import Twin
 
 
 class FlightHandle:
-    """Grouped flight/drone commands (mock transport in PR1)."""
+    """Grouped flight/drone commands."""
 
     def __init__(self, twin: Twin) -> None:
         self._twin = twin
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def takeoff(self, *, source_type: Optional[str] = None, **kwargs: Any) -> None:
         self._send("takeoff", kwargs, source_type=source_type)
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def land(self, *, source_type: Optional[str] = None, **kwargs: Any) -> None:
         self._send("land", kwargs, source_type=source_type)
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def hover(self, *, source_type: Optional[str] = None, **kwargs: Any) -> None:
         self._send("hover", kwargs, source_type=source_type)
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def ascend(self, distance: float, *, source_type: Optional[str] = None) -> None:
         self._send("ascend", {"distance": distance}, source_type=source_type)
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def descend(self, distance: float, *, source_type: Optional[str] = None) -> None:
         self._send("descend", {"distance": distance}, source_type=source_type)
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def gimbal_rotate(
         self,
         *,
@@ -55,6 +62,7 @@ class FlightHandle:
             data["duration"] = float(duration)
         self._send("gimbal_rotate", data, source_type=source_type)
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def _send(
         self,
         command: str,

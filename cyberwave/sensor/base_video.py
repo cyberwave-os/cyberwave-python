@@ -48,6 +48,113 @@ SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS = 60
 SDK_EDGE_HEALTH_INTERVAL_SECONDS = 5
 
 
+# We strip these video codecs so the mediasoup SFU picks H264 in its router
+# codec priority order (VP8 > VP9 > H264). The SFU *does* support
+# VP8 and VP9, but leaving them in the offer causes mediasoup to negotiate a
+# codec Safari <14 cannot decode. If the SFU router order is ever changed to
+# prefer H264, this filter can be removed entirely.
+_STRIPPED_VIDEO_CODECS = frozenset({"VP8", "VP9"})
+
+
+def _strip_vp8_video(sdp: str) -> str:
+    """Remove VP8/VP9 (and their RTX) payload types from the video m-section.
+
+    Discovers PTs by their ``a=rtpmap`` codec name so the filter stays correct
+    across aiortc's default-codec reshuffles. Also drops every ``a=rtpmap``,
+    ``a=fmtp`` and ``a=rtcp-fb`` line that would otherwise reference a stripped
+    PT — Safari's SDP parser rejects such orphans.
+
+    Bails out (returns the SDP untouched) when stripping would leave *any*
+    ``m=video`` section without a surviving payload type. That prevents us
+    from shipping a malformed offer with orphan PTs on the m-line, and lets
+    the SFU reject the offer with a clear error instead.
+    """
+    joiner = "\r\n" if "\r\n" in sdp else "\n"
+    lines = sdp.split(joiner)
+
+    stripped_pts: set[str] = set()
+    for line in lines:
+        if not line.startswith("a=rtpmap:"):
+            continue
+        rest = line[len("a=rtpmap:") :]
+        pt, _, codec_clock = rest.partition(" ")
+        codec = codec_clock.split("/")[0].strip().upper()
+        if codec in _STRIPPED_VIDEO_CODECS:
+            stripped_pts.add(pt)
+
+    # RTX payload types reference their apt via ``a=fmtp:<rtx_pt> apt=<pt>``.
+    # Iterate until stable so RTX-chains (rare, non-standard) are still caught.
+    while True:
+        added = False
+        for line in lines:
+            if not line.startswith("a=fmtp:"):
+                continue
+            rest = line[len("a=fmtp:") :]
+            pt, _, params = rest.partition(" ")
+            if not params or pt in stripped_pts:
+                continue
+            for token in params.replace(";", " ").split():
+                key, _, value = token.partition("=")
+                if key.strip() == "apt" and value.strip() in stripped_pts:
+                    stripped_pts.add(pt)
+                    added = True
+                    break
+        if not added:
+            break
+
+    if not stripped_pts:
+        return sdp
+
+    # Safety check: if any m=video section would end up with no PTs left,
+    # something is wrong upstream (aiortc failed to negotiate H264). Return
+    # the SDP untouched rather than emit a malformed offer.
+    in_video = False
+    for line in lines:
+        if line.startswith("m="):
+            in_video = line.startswith("m=video")
+        if not in_video or not line.startswith("m=video"):
+            continue
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        if all(pt in stripped_pts for pt in parts[3:]):
+            logger.warning(
+                "SDP filter would strip every video PT (%s); leaving SDP "
+                "untouched so the SFU fails visibly instead of receiving "
+                "an offer with orphan payload types",
+                ",".join(parts[3:]),
+            )
+            return sdp
+
+    def _rewrite_m_video(line: str) -> str:
+        parts = line.split()
+        if len(parts) < 4:
+            return line
+        header, pts = parts[:3], parts[3:]
+        kept = [pt for pt in pts if pt not in stripped_pts]
+        return " ".join(header + kept)
+
+    per_pt_prefixes = tuple(
+        prefix.format(pt=pt)
+        for pt in stripped_pts
+        for prefix in ("a=rtpmap:{pt} ", "a=fmtp:{pt} ", "a=rtcp-fb:{pt} ")
+    )
+
+    in_video = False
+    result: list[str] = []
+    for line in lines:
+        if line.startswith("m="):
+            in_video = line.startswith("m=video")
+        if in_video and line.startswith("m=video"):
+            result.append(_rewrite_m_video(line))
+            continue
+        if in_video and line.startswith(per_pt_prefixes):
+            continue
+        result.append(line)
+
+    return joiner.join(result)
+
+
 # =============================================================================
 # Abstract Base Classes
 # =============================================================================
@@ -631,38 +738,35 @@ class BaseVideoStreamer(abc.ABC):
             else self._answer_data
         )
 
+        # Only apply the remote answer while this peer connection is still waiting
+        # for one ("have-local-offer"). If a race or a duplicate answer already
+        # advanced the connection to "stable" (or it was closed), applying another
+        # answer raises aiortc InvalidStateError ("Cannot handle answer in
+        # signaling state stable"), which propagates up and tears down the stream.
+        # Skipping here keeps the already-established connection alive.
+        signaling_state = getattr(self.pc, "signalingState", None)
+        if signaling_state != "have-local-offer":
+            logger.warning(
+                "Skipping setRemoteDescription: peer connection not awaiting an "
+                f"answer (signalingState={signaling_state}). Likely a duplicate or "
+                "stale answer; keeping the current connection."
+            )
+            return
+
         await self.pc.setRemoteDescription(
             RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
         )
 
     def _filter_sdp(self, sdp: str) -> str:
-        """Filter SDP to remove VP8 codec lines."""
-        VP8_PREFIXES = (
-            "a=rtpmap:97",
-            "a=rtpmap:98",
-            "a=rtcp-fb:97 nack",
-            "a=rtcp-fb:97 nack pli",
-            "a=rtcp-fb:97 goog-remb",
-            "a=rtcp-fb:98 nack",
-            "a=rtcp-fb:98 nack pli",
-            "a=rtcp-fb:98 goog-remb",
-            "a=fmtp:98",
-        )
+        """Strip VP8 (and its RTX) from the video m-section so the SFU picks H264.
 
-        sdp_lines = sdp.split("\r\n")
-        final_sdp_lines = []
-
-        for line in sdp_lines:
-            if line.startswith("m=video"):
-                parts = line.split()
-                filtered_parts = [part for part in parts if part not in ["97", "98"]]
-                final_sdp_lines.append(" ".join(filtered_parts))
-            elif line.startswith(VP8_PREFIXES):
-                continue
-            else:
-                final_sdp_lines.append(line)
-
-        return "\r\n".join(final_sdp_lines)
+        Historically this filter hard-coded aiortc's default payload types
+        (97/98). aiortc's codec table can shift across versions and Safari's
+        SDP parser rejects orphan a=fmtp/a=rtcp-fb lines pointing to PTs that
+        no longer appear on the m= line, so we discover PTs by codec name and
+        strip every attribute referencing them.
+        """
+        return _strip_vp8_video(sdp)
 
     # -------------------------------------------------------------------------
     # MQTT Communication
@@ -705,6 +809,22 @@ class BaseVideoStreamer(abc.ABC):
                         and answer_stream_source == expected_stream_source
                         and answer_stream_instance_id == expected_stream_instance_id
                     ):
+                        # Answer idempotency: only the FIRST matching answer per
+                        # offer is captured. The SFU (or a reconnecting consumer)
+                        # can re-publish an answer on this shared, twin-scoped
+                        # topic after we've already applied one; accepting a second
+                        # answer would drive setRemoteDescription() while the peer
+                        # connection is already "stable", raising aiortc
+                        # InvalidStateError ("Cannot handle answer in signaling
+                        # state stable") and killing the live tile. _reset_state()
+                        # clears this flag for each fresh offer (start/reconnect).
+                        if self._answer_received:
+                            logger.debug(
+                                "Ignoring duplicate WebRTC answer "
+                                f"(sensor={answer_sensor}); answer already applied "
+                                "for the current offer"
+                            )
+                            return
                         logger.info(
                             "Processing answer targeted at edge"
                             + (
@@ -1039,8 +1159,7 @@ class BaseVideoStreamer(abc.ABC):
                 # ``CV2CameraStreamer`` publish ``actual_fps`` once the
                 # V4L2 stack has negotiated — registered-once snapshots
                 # would have shipped the requested fps for the lifetime
-                # of the streamer, which is exactly what the ticket's
-                # static-vs-runtime split table says we must not do.
+                # of the streamer instead of the runtime-negotiated value.
                 stream_config_provider=self._collect_stream_configs,
             )
             self._health_check.start()

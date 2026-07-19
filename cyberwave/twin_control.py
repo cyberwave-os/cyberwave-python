@@ -17,10 +17,10 @@ _RelativeTranslation = List[float] | tuple[float, float, float] | Dict[str, floa
 class TwinControlHandle:
     """Backend-dispatched control commands for any twin.
 
-    The methods in this handle intentionally reuse the Control Agent dispatch
-    API. SDK callers and agents therefore execute the same server-side
-    contracts for navigation, policy selection, runtime routing, and live
-    safety checks.
+    The methods in this handle intentionally reuse the same server-side
+    dispatch API used elsewhere in the platform. SDK callers therefore
+    execute the same server-side contracts for navigation, policy selection,
+    runtime routing, and live safety checks.
     """
 
     def __init__(self, twin: "Twin"):

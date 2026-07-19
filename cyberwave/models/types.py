@@ -865,6 +865,40 @@ class SemanticSegmentationResult(PredictionResult):
 
 
 @dataclass
+class DepthResult(PredictionResult):
+    """Per-pixel depth map from a monocular depth estimator.
+
+    Attributes:
+        depth_map: ``np.ndarray`` of shape ``(H, W)`` in ``float32``. Value
+                   interpretation depends on the model:
+
+                   * **Metric** (``metric=True``): absolute depth in metres.
+                   * **Relative** (``metric=False``): unitless disparity or
+                     inverse depth suitable for visualisation but not for
+                     downstream geometric consumers (e.g. ``object_pose``).
+        metric:    Whether ``depth_map`` values carry a metric unit (metres).
+                   Downstream metric-only consumers gate on this flag.
+        h, w:      Original input image dimensions (``0`` if unknown).
+    """
+
+    depth_map: Any = None  # np.ndarray[H, W], float32
+    metric: bool = False
+    h: int = 0
+    w: int = 0
+
+    def __len__(self) -> int:
+        return 1 if self.depth_map is not None else 0
+
+    def __bool__(self) -> bool:
+        return self.depth_map is not None
+
+    def describe(self) -> str:
+        shape = getattr(self.depth_map, "shape", "?")
+        kind = "metric" if self.metric else "relative"
+        return f"Depth({kind}, shape={shape})"
+
+
+@dataclass
 class EmbeddingResult(PredictionResult):
     """Feature embedding vector(s) from an encoder model (CLIP, ViT, etc.).
 

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from ..compat import time
 
-from ...exceptions import CyberwaveError
+from ...exceptions import CyberwaveError, NoOngoingVideoStreamAvailable
 from ...manifest.driver_config import (
     TWIN_CAMERA_PHOTO_TOPIC_SLUG,
     supported_mqtt_commands,
@@ -25,9 +25,11 @@ from .._helpers import (
     _default_control_source_type,
 )
 from ..runtime_state import RUNTIME_MODE_SIMULATION, active_runtime_mode
+from ..simulation_support import SimLevel, simulation_level
 
 if TYPE_CHECKING:
     from ..base import Twin
+    from ...consumers.video import IncomingVideoStream
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,7 @@ _FRAME_SOURCE_ALIASES = {
 CAMERA_HANDLE_PUBLIC_METHODS: tuple[str, ...] = (
     "get_frame",
     "get_frames",
+    "get_video",
     "stream",
     "read",
     "snapshot",
@@ -128,6 +131,13 @@ class TwinCameraHandle:
                     "mode; use source='cloud'."
                 )
 
+        # Camera frames require a running MuJoCo simulation in sim mode (no-op in
+        # live mode). Checked after source validation so an invalid source still
+        # raises the clearer ValueError above.
+        self._twin._ensure_simulation_support(
+            SimLevel.MUJOCO, method="TwinCameraHandle.get_frame"
+        )
+
         resolved_sensor = self._twin._resolve_sensor_id(
             sensor_id if sensor_id is not None else self._sensor_id
         )
@@ -157,6 +167,7 @@ class TwinCameraHandle:
             return frame
         return self._resolve_frame_path(frame, path)
 
+    @simulation_level(SimLevel.MUJOCO)
     def get_frames(
         self,
         count: int,
@@ -229,6 +240,74 @@ class TwinCameraHandle:
             if i < count - 1 and interval_ms > 0:
                 time.sleep(interval_ms / 1000.0)
         return frames
+
+    @simulation_level(SimLevel.MUJOCO)
+    def get_video(
+        self,
+        *,
+        timeout: float = 30.0,
+        wait_for_producer: Optional[float] = None,
+    ) -> "IncomingVideoStream":
+        """Consume the twin's ongoing WebRTC video stream.
+
+        Returns an ``IncomingVideoStream`` whose :meth:`get_frame` yields the
+        latest decoded frame as a numpy BGR array. Call ``.stop()`` when done.
+
+        In simulation mode (``cw.affect("simulation")``) this resolves the
+        running simulation for the twin's environment and consumes its camera
+        stream — no arguments needed. Raises if no simulation is running.
+
+        A simulation reports ``running`` before its per-twin WebRTC producer has
+        registered, so the first offers can be answered "no producer yet".
+        ``wait_for_producer`` (seconds) polls through that window before giving
+        up. It defaults to ``30`` in simulation mode (where we typically just
+        started the producer) and ``0`` in live mode (raise on the first
+        "no producer" reply, preserving the pure-consumer contract).
+
+        Raises:
+            CyberwaveError: sim mode with no active simulation for the environment.
+            NoOngoingVideoStreamAvailable: no producer for this stream within
+                ``wait_for_producer`` seconds.
+            TimeoutError: the SFU sent no reply within ``timeout`` seconds.
+        """
+        from ...consumers.video import IncomingVideoStream
+
+        self._twin._ensure_mqtt_connected()
+        resolved_sensor = self._twin._resolve_sensor_id(self._sensor_id)
+
+        stream_source: str | None = None
+        stream_instance_id: str | None = None
+        client = self._twin.client
+        runtime_mode = getattr(getattr(client, "config", None), "runtime_mode", "live")
+        # The decorator guarantees a running MuJoCo sim in sim mode; read it
+        # passively to label the stream. No-op (None) in live mode.
+        from ...managers.simulations import running_simulation
+
+        sim = running_simulation(self._twin)
+        if sim is not None:
+            stream_source = "simulation"
+            stream_instance_id = sim.simulation_id
+
+        if wait_for_producer is None:
+            wait_for_producer = 30.0 if runtime_mode == "simulation" else 0.0
+        deadline = time.monotonic() + wait_for_producer
+
+        while True:
+            stream = IncomingVideoStream(
+                client.mqtt,
+                self._twin.uuid,
+                sensor_id=resolved_sensor,
+                stream_source=stream_source,
+                stream_instance_id=stream_instance_id,
+                timeout=timeout,
+            )
+            try:
+                stream.start()
+                return stream
+            except NoOngoingVideoStreamAvailable:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(1.0)
 
     @staticmethod
     def _resolve_frame_path(frame: Any | None, path: Optional[str]) -> str | None:
@@ -437,14 +516,9 @@ class TwinCameraHandle:
         self._twin.start_streaming(fps=fps, camera_id=camera_id)
 
     def rotate(self, *args: Any, **kwargs: Any) -> None:
-        """PR1 stub — real gimbal/camera rotate ships in a later PR."""
-        warnings.warn(
-            "twin.camera.rotate() is not implemented in PR1",
-            UserWarning,
-            stacklevel=2,
-        )
+        """Gimbal / camera rotation — not yet available in this SDK release."""
         raise NotImplementedError(
-            "camera.rotate is not implemented in the mock-twin PR1 slice"
+            "twin.camera.rotate() is not yet implemented."
         )
 
     # --- Deprecated aliases (use twin.get_frame / twin.camera.get_frame) ---

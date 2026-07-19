@@ -49,10 +49,11 @@ class WorkflowTemplateSchema(BaseModel):
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     metadata: Dict[str, Any]
+    has_worker_source_override: Optional[StrictBool] = False
     nodes: Optional[List[WorkflowNodeSchema]] = None
     connections: Optional[List[WorkflowConnectionSchema]] = None
     node_count: Optional[StrictInt] = 0
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "execution_target", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "nodes", "connections", "node_count"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "execution_target", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections", "node_count"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -173,6 +174,7 @@ class WorkflowTemplateSchema(BaseModel):
             "created_by": obj.get("created_by"),
             "updated_by": obj.get("updated_by"),
             "metadata": obj.get("metadata"),
+            "has_worker_source_override": obj.get("has_worker_source_override") if obj.get("has_worker_source_override") is not None else False,
             "nodes": [WorkflowNodeSchema.from_dict(_item) for _item in obj["nodes"]] if obj.get("nodes") is not None else None,
             "connections": [WorkflowConnectionSchema.from_dict(_item) for _item in obj["connections"]] if obj.get("connections") is not None else None,
             "node_count": obj.get("node_count") if obj.get("node_count") is not None else 0

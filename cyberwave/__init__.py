@@ -44,6 +44,8 @@ from .exceptions import (
     CyberwaveInsufficientCreditsError,
     CyberwaveTimeoutError,
     CyberwaveValidationError,
+    DepthTransportNotMQTTError,
+    NoOngoingVideoStreamAvailable,
 )
 from ._version import get_version
 
@@ -229,6 +231,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
 
 # Optional camera streaming symbols — only available with extra deps.
 _OPTIONAL_CAMERA_IMPORTS: dict[str, tuple[str, str]] = {
+    "IncomingVideoStream": (".consumers.video", "IncomingVideoStream"),
     "CV2VideoTrack": (".sensor", "CV2VideoTrack"),
     "CV2CameraStreamer": (".sensor", "CV2CameraStreamer"),
     "VirtualVideoTrack": (".sensor", "VirtualVideoTrack"),
@@ -345,6 +348,7 @@ __all__ = [
     "CyberwaveInsufficientCreditsError",
     "CyberwaveTimeoutError",
     "CyberwaveValidationError",
+    "DepthTransportNotMQTTError",
     # Compact API
     "configure",
     "twin",

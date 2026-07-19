@@ -27,11 +27,14 @@ from .mixins import (
     PowerCapableMixin,
     SpatialPoseCapableMixin,
 )
+from .simulation_support import SimLevel, simulation_level
 
 if TYPE_CHECKING:
     from ..camera import CameraStreamer
+    from ..managers.simulations import Simulation
 
 logger = logging.getLogger(__name__)
+
 
 class CameraTwin(CameraCapableMixin, Twin):
     """
@@ -47,6 +50,7 @@ class CameraTwin(CameraCapableMixin, Twin):
     """
 
     _camera_streamer: Optional["CameraStreamer"] = None
+    _active_simulation: Optional["Simulation"] = None
 
     @property
     def default_camera_name(self) -> str:
@@ -65,6 +69,32 @@ class CameraTwin(CameraCapableMixin, Twin):
             raise CyberwaveError("Camera streamer not initialized")
         return self._camera_streamer
 
+    def _is_simulation_mode(self) -> bool:
+        """True when the client is affecting the simulator (``cw.affect("simulation")``)."""
+        return (
+            getattr(getattr(self.client, "config", None), "runtime_mode", "live")
+            == "simulation"
+        )
+
+    def _block_on_simulation(self, sim: "Simulation") -> None:
+        """Block until Ctrl+C, then stop ``sim`` and clear the active handle.
+
+        Shared body of the simulation branch of :meth:`start_streaming` for both
+        ``CameraTwin`` and ``DepthCameraTwin``.
+        """
+        print(f"Started simulation {sim.simulation_id}. Press Ctrl+C to stop.")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            try:
+                sim.stop()
+            finally:
+                self._active_simulation = None
+
+    @simulation_level(SimLevel.MUJOCO)
     async def stream_video_background(
         self,
         fps: int = 30,
@@ -72,12 +102,14 @@ class CameraTwin(CameraCapableMixin, Twin):
         fourcc: Optional[str] = None,
         camera_name: Optional[str] = None,
         **kwargs,
-    ) -> "CameraStreamer":
-        """
-        Start video streaming in the background. Non-blocking.
+    ) -> "CameraStreamer | Simulation":
+        """Start streaming in the background. Non-blocking.
 
-        Returns immediately with the streamer so you can run other code.
-        Use stream_video_background() for simple blocking scripts.
+        In simulation mode consumes the environment's already-running MuJoCo
+        simulation (start one with ``cw.affect("sim")`` or
+        ``cw.environments.simulations.start(...)``) and returns its
+        :class:`~cyberwave.managers.simulations.Simulation` handle. In live mode
+        returns the ``CameraStreamer`` as before.
 
         Args:
             fps: Frames per second (default: 30)
@@ -89,8 +121,14 @@ class CameraTwin(CameraCapableMixin, Twin):
                 (e.g. ``resolution``, ``keyframe_interval``, ``frame_callback``, ``time_reference``).
 
         Returns:
-            CameraStreamer instance for managing the stream
+            CameraStreamer instance for managing the stream (live mode), or
+            Simulation handle (simulation mode).
         """
+        if self._is_simulation_mode():
+            # _resolve_simulation_stream() may block on wait_until_active; offload
+            # it so an "await" here doesn't stall the caller's event loop.
+            return await asyncio.to_thread(self._resolve_simulation_stream)
+
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_id=camera_id,
@@ -103,11 +141,35 @@ class CameraTwin(CameraCapableMixin, Twin):
         return self._camera_streamer
 
     async def stop_streaming(self) -> None:
-        """Stop camera streaming."""
+        """Stop the active simulation (sim mode) or the local camera stream."""
+        if self._active_simulation is not None:
+            sim = self._active_simulation
+            self._active_simulation = None
+            sim.stop()
+            return
         if self._camera_streamer is not None:
             await self._camera_streamer.stop()
             self._camera_streamer = None
 
+    def _resolve_simulation_stream(self) -> "Simulation":
+        """Resolve the environment's running MuJoCo simulation for streaming.
+
+        The ``@simulation_level(SimLevel.MUJOCO)`` gate on the streaming
+        entrypoints guarantees a MuJoCo simulation is already running (started
+        via ``cw.affect("sim")`` or ``cw.environments.simulations.start(...)``);
+        this consumes it as the camera-frame producer and stores the handle on
+        ``self._active_simulation`` so :meth:`stop_streaming` can stop it. The SDK
+        never starts a simulation from a streaming call.
+        """
+        from ..managers.simulations import running_simulation
+
+        sim = running_simulation(self)
+        if sim is not None and sim.status != "running":
+            sim.wait_until_active()
+        self._active_simulation = sim
+        return sim
+
+    @simulation_level(SimLevel.MUJOCO)
     def start_streaming(
         self,
         fps: int = 30,
@@ -117,8 +179,12 @@ class CameraTwin(CameraCapableMixin, Twin):
     ) -> None:
         """Stream video until Ctrl+C. Blocking.
 
-        Starts video streaming and blocks until KeyboardInterrupt (Ctrl+C).
-        Ideal for 2-line scripts: twin = cw.twin(...); twin.start_streaming()
+        In simulation mode (``cw.affect("simulation")``) this consumes the
+        environment's already-running MuJoCo simulation (its camera streams from
+        the simulation) and blocks until Ctrl+C — stopping the simulation on exit.
+        Start the simulation first with ``cw.affect("sim")`` or
+        ``cw.environments.simulations.start(...)``. In live mode it pushes the
+        local camera as before.
 
         Args:
             fps: Frames per second (default: 30)
@@ -127,6 +193,10 @@ class CameraTwin(CameraCapableMixin, Twin):
             **kwargs: Additional arguments forwarded to :meth:`~cyberwave.client.Cyberwave.video_stream`
                 (e.g. ``fourcc``, ``resolution``, ``keyframe_interval``, ``frame_callback``).
         """
+        if self._is_simulation_mode():
+            self._block_on_simulation(self._resolve_simulation_stream())
+            return
+
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_id=camera_id,
@@ -181,12 +251,18 @@ class DepthCameraTwin(CameraTwin):
         return self._camera_streamer
 
     async def stop_streaming(self) -> None:
-        """Stop camera streaming."""
+        """Stop the active simulation (sim mode) or the local camera stream."""
+        if self._active_simulation is not None:
+            sim = self._active_simulation
+            self._active_simulation = None
+            sim.stop()
+            return
         if self._camera_streamer is not None:
             # The streamer handles cleanup in its stop method
             await self._camera_streamer.stop()
             self._camera_streamer = None
 
+    @simulation_level(SimLevel.MUJOCO)
     async def stream_video_background(
         self,
         fps: int = 30,
@@ -196,25 +272,39 @@ class DepthCameraTwin(CameraTwin):
         *,
         enable_depth: bool = True,
         **kwargs,
-    ) -> "CameraStreamer":
-        """
-        Start video streaming in the background. Non-blocking.
+    ) -> "CameraStreamer | Simulation":
+        """Start video streaming in the background. Non-blocking.
 
-        Returns immediately with the streamer so you can run other code.
-        Use start_streaming() for simple blocking scripts.
+        In simulation mode consumes the environment's already-running MuJoCo
+        simulation (start one with ``cw.affect("sim")`` or
+        ``cw.environments.simulations.start(...)``) and returns its
+        :class:`~cyberwave.managers.simulations.Simulation` handle. In live mode
+        returns the ``CameraStreamer`` as before.
+
+        Note:
+            The simulation is environment-wide, so in simulation mode
+            ``enable_depth`` (and the other local-camera kwargs) are ignored —
+            what streams is whatever the simulation publishes for this twin.
 
         Args:
             fps: Frames per second (default: 30)
             camera_id: Camera device ID (default: 0)
             fourcc: Optional FOURCC code (inherited from CameraTwin, unused for RealSense)
             camera_name: WebRTC signaling sensor id; defaults to :attr:`default_camera_name`.
-            enable_depth: Enable depth streaming (default: True for DepthCameraTwin)
+            enable_depth: Enable depth streaming (default: True for DepthCameraTwin).
+                Ignored in simulation mode.
             **kwargs: Additional arguments forwarded to :meth:`~cyberwave.client.Cyberwave.video_stream`
                 (e.g. ``resolution``, ``keyframe_interval``, ``time_reference``).
 
         Returns:
-            CameraStreamer instance for managing the stream
+            CameraStreamer instance for managing the stream (live mode), or
+            Simulation handle (simulation mode).
         """
+        if self._is_simulation_mode():
+            # _resolve_simulation_stream() may block on wait_until_active; offload
+            # it so an "await" here doesn't stall the caller's event loop.
+            return await asyncio.to_thread(self._resolve_simulation_stream)
+
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_type="realsense",
@@ -227,6 +317,7 @@ class DepthCameraTwin(CameraTwin):
         await self._camera_streamer.start()
         return self._camera_streamer
 
+    @simulation_level(SimLevel.MUJOCO)
     def start_streaming(
         self,
         fps: int = 30,
@@ -237,17 +328,31 @@ class DepthCameraTwin(CameraTwin):
     ) -> None:
         """Stream video until Ctrl+C. Blocking.
 
-        Starts video streaming and blocks until KeyboardInterrupt (Ctrl+C).
-        Ideal for 2-line scripts: twin = cw.twin(...); twin.start_streaming()
+        In simulation mode (``cw.affect("simulation")``) this consumes the
+        environment's already-running MuJoCo simulation (its camera streams from
+        the simulation) and blocks until Ctrl+C — stopping the simulation on exit.
+        Start the simulation first with ``cw.affect("sim")`` or
+        ``cw.environments.simulations.start(...)``. In live mode it pushes the
+        local camera as before.
+
+        Note:
+            The simulation is environment-wide, so in simulation mode
+            ``enable_depth`` (and the other local-camera kwargs) are ignored —
+            what streams is whatever the simulation publishes for this twin.
 
         Args:
             fps: Frames per second (default: 30)
             camera_id: Camera device ID (default: 0)
-            enable_depth: Enable depth streaming (default: True for DepthCameraTwin)
+            enable_depth: Enable depth streaming (default: True for DepthCameraTwin).
+                Ignored in simulation mode.
             camera_name: WebRTC signaling sensor id; defaults to :attr:`default_camera_name`.
             **kwargs: Additional arguments forwarded to :meth:`~cyberwave.client.Cyberwave.video_stream`
                 (e.g. ``resolution``, ``keyframe_interval``, ``time_reference``).
         """
+        if self._is_simulation_mode():
+            self._block_on_simulation(self._resolve_simulation_stream())
+            return
+
         self._camera_streamer = self.client.video_stream(
             twin_uuid=self.uuid,
             camera_type="realsense",
@@ -281,29 +386,41 @@ class DepthCameraTwin(CameraTwin):
                     pass
                 self._camera_streamer = None
 
-    def capture_depth_frame(self) -> bytes:
-        """
-        Capture a single depth frame.
+    def _depth_sensor_handle(self) -> Any:
+        """Return the DepthSensorHandle for this twin's depth sensor."""
+        for entry in self.capabilities.get("sensors", []):
+            if isinstance(entry, dict) and str(entry.get("type")) == "depth":
+                key = str(entry.get("id") or entry.get("name") or "")
+                return self._imaging_handle(sensor_id=key)
+        raise CyberwaveError("No depth sensor on this twin")
 
-        Returns:
-            Raw depth frame bytes
+    def capture_depth_frame(self) -> Any:
+        """Deprecated — use ``twin.camera['<id>'].get_frame()``.
+
+        Returns whatever ``get_frame()`` returns for the MQTT raw depth path: a
+        numpy ``uint16 H×W`` array (not raw bytes).
         """
-        raise NotImplementedError(
-            "capture_depth_frame() requires an active depth stream. "
-            "Use stream_video_background() first."
+        import warnings
+
+        warnings.warn(
+            "DepthCameraTwin.capture_depth_frame() is deprecated; use "
+            "twin.camera['<id>'].get_frame() (or twin.camera.get_frame())",
+            DeprecationWarning,
+            stacklevel=2,
         )
+        return self._depth_sensor_handle().get_frame(source="mqtt", raw=True)
 
-    def get_point_cloud(self) -> List[tuple]:
-        """
-        Get point cloud from depth sensor.
+    def get_point_cloud(self, *, timeout: float = 3.0) -> Any:
+        """Deprecated — use ``twin.camera['<id>'].get_pointcloud()``."""
+        import warnings
 
-        Returns:
-            List of (x, y, z) tuples representing 3D points
-        """
-        raise NotImplementedError(
-            "get_point_cloud() requires depth sensor data processing. "
-            "This feature is not yet implemented."
+        warnings.warn(
+            "DepthCameraTwin.get_point_cloud() is deprecated; use "
+            "twin.camera['<id>'].get_pointcloud() (or twin.camera.get_pointcloud())",
+            DeprecationWarning,
+            stacklevel=2,
         )
+        return self._depth_sensor_handle().get_pointcloud(timeout=timeout)
 
     def __repr__(self) -> str:
         return f"DepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
@@ -440,43 +557,21 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
     continuous-stick commands and they drive **the real aircraft**
     on every Cyberwave drone driver:
 
-    * The DJI Mini Android driver routes them through DJI MSDK v5's
-      Virtual Stick API (off-RC teleoperation). Per-twin opt-in via
-      ``metadata.drivers.default.virtual_stick = true`` (peer to the
-      existing ``drivers.default.android`` APK URL and
-      ``drivers.default.docker_image`` fields); the driver refuses to
-      engage Virtual Stick on twins missing the flag and publishes a
-      ``failed`` MQTT status — by design, so a phone that was paired
-      against a workspace-managed twin without the explicit opt-in
-      can't drive the aircraft. Continuous targets
-      decay to zero after 500 ms of silence and Virtual Stick is
-      handed back to the physical RC after 5 s of zero-velocity —
-      see ``cyberwave-edge-nodes/cyberwave-edge-dji-mini-android``
-      for the safety state machine.
-    * The Go2 driver and the Cyberwave playground simulator consume
-      them directly.
-
     Aerial-specific methods include takeoff, landing, return-to-home,
     hovering, gimbal control, and the DJI service / safety surface
-    (set home, compass calibration, reboot, emergency stop). Issuing
-    ``land`` / ``return_to_home`` / ``emergency_stop`` on the DJI
-    driver shuts Virtual Stick down before the automated motion
-    starts, so a stale continuous setpoint can never fight an
-    automated descent.
+    (set home, compass calibration, reboot, emergency stop).
 
     All commands publish on the canonical
     ``{topic_prefix}cyberwave/twin/{uuid}/command`` topic with the
     standard ``{source_type, command, data, timestamp}`` envelope —
-    the contract every Cyberwave edge driver
-    (``cyberwave-edge-nodes/cyberwave-edge-dji-mini-android``,
-    ``cyberwave-edge-nodes/cyberwave-edge-ros-ugv``, the Go2 driver,
-    the playground simulator, …) listens on.
+    the contract every Cyberwave edge driver uses.
     """
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def _send_drone_command(
         self,
         command: str,
@@ -530,10 +625,7 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
         Take off to the specified altitude.
 
         Args:
-            altitude: Target altitude in meters (default: 1.0). Only
-                meaningful in ``sim_tele`` — the DJI MSDK ``takeoff``
-                action is parameter-less and goes to the firmware
-                default (~1.2 m).
+            altitude: Target altitude in meters (default: 1.0).
             source_type: ``"sim_tele"``/``"sim"`` for simulation,
                 ``"tele"`` for the real aircraft. Falls back to the
                 client-level setting from ``cw.affect()``.
@@ -559,7 +651,6 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
         asks the operator to confirm (over water / glass / glossy
         surfaces), a Cyberwave alert is raised and a second
         ``land()`` call from the operator confirms the touchdown.
-        See ``DroneCommandManager`` for the full state machine.
         """
         resolved = self._send_drone_command("land", source_type=source_type)
         if resolved == SOURCE_TYPE_SIM_TELE:
@@ -637,12 +728,6 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
     def emergency_stop(self, *, source_type: Optional[str] = None) -> None:
         """
         Best-effort emergency stop.
-
-        MSDK v5 deliberately doesn't expose a mid-air motor cut, so
-        on a DJI Mini this maps to "cancel every automated motion"
-        (auto-landing, RTH, takeoff). The aircraft then hovers and
-        stick control returns to the operator on the physical RC.
-        For a real kill switch use the RC's hardware combo (CSC).
         """
         self._send_drone_command("emergency_stop", source_type=source_type)
 
@@ -747,10 +832,9 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
         at ``refresh_hz`` for the duration needed to cover
         ``angle_deg`` at ``yaw_rate_deg_s``, then explicitly zeros
         the yaw axis. The refresh cadence has to stay inside the
-        DJI Android driver's 500 ms command-stale watchdog (see
-        ``cyberwave-edge-nodes/cyberwave-edge-dji-mini-android``);
-        anything below 2 Hz risks the watchdog snapping the target
-        to zero mid-pan.
+        DJI Android driver's 500 ms command-stale watchdog; anything
+        below 2 Hz risks the watchdog snapping the target to zero
+        mid-pan.
 
         Args:
             angle_deg: Target rotation in degrees. Positive yaws
@@ -785,9 +869,7 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
         if abs(angle_deg) < 1e-6:
             return
         if yaw_rate_deg_s <= 0:
-            raise ValueError(
-                f"yaw_rate_deg_s must be positive (got {yaw_rate_deg_s})"
-            )
+            raise ValueError(f"yaw_rate_deg_s must be positive (got {yaw_rate_deg_s})")
         if refresh_hz <= 2:
             raise ValueError(
                 f"refresh_hz must be > 2 Hz to stay inside the 500 ms "
@@ -879,9 +961,7 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
             meta = dict(self._data.metadata)
         elif isinstance(self._data, dict):
             meta = self._data.get("metadata") or {}
-        return bool(
-            meta.get("status", {}).get("controller_requested_hovering", False)
-        )
+        return bool(meta.get("status", {}).get("controller_requested_hovering", False))
 
     def get_hovering_status(self) -> Dict[str, Any]:
         """
@@ -1113,4 +1193,3 @@ class FlyingDepthCameraTwin(FlyingTwin, DepthCameraTwin):
 
     def __repr__(self) -> str:
         return f"FlyingDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
-

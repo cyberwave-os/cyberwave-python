@@ -177,6 +177,8 @@ class TestDetectDevice:
     def test_cuda_when_available_and_probe_ok(self):
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 0)
+        mock_torch.cuda.get_arch_list.return_value = ["sm_80", "sm_90"]
         with patch.dict("sys.modules", {"torch": mock_torch}):
             assert ModelManager._detect_device() == "cuda:0"
 
@@ -189,6 +191,66 @@ class TestDetectDevice:
         assert zeros_calls[1].args == (1, 3, 3, 3)
         mock_torch.cuda.synchronize.assert_called_once()
         mock_torch.nn.functional.conv2d.return_value.cpu.assert_called_once()
+
+    def test_cuda_when_available_and_probe_ok_cc_in_list(self):
+        """Probe passes and device CC is in arch list → cuda:0."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.return_value = ["sm_80", "sm_87", "sm_90"]
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
+
+    def test_cpu_when_device_cc_excluded_from_arch_list(self, caplog):
+        """Probe passes but device CC is absent from arch list → cpu + warning.
+
+        This is the Jetson Orin (sm_87) scenario: SBSA cu126/cu132 wheels
+        include sm_80 and sm_90 but explicitly exclude sm_87, so the conv2d
+        probe succeeds via PTX JIT while complex op kernels silently run on
+        CPU.
+        """
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_device_name.return_value = "Orin"
+        mock_torch.cuda.get_arch_list.return_value = ["sm_80", "sm_90"]
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            with caplog.at_level("WARNING", logger="cyberwave.models.manager"):
+                assert ModelManager._detect_device() == "cpu"
+
+        assert any("sm_87" in rec.message for rec in caplog.records), (
+            "expected a warning mentioning the missing sm_87 arch"
+        )
+        assert any("CYBERWAVE_MODEL_DEVICE" in rec.message for rec in caplog.records), (
+            "expected the warning to mention the CYBERWAVE_MODEL_DEVICE escape hatch"
+        )
+
+    def test_cuda_when_arch_list_empty(self):
+        """Empty arch list means we cannot tell — don't block, return cuda:0."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.return_value = []
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
+
+    def test_cuda_when_get_arch_list_raises(self):
+        """If get_arch_list() raises, we don't block — return cuda:0."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.side_effect = RuntimeError("not implemented")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
+
+    def test_cuda_arch_list_with_compute_prefix(self):
+        """``compute_87`` notation (older torch) should also be accepted."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.return_value = ["compute_80", "compute_87", "compute_90"]
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
 
     def test_cuda_is_available_itself_raising(self):
         """If torch.cuda.is_available() raises, we must still return cpu."""

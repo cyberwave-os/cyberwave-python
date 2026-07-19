@@ -1,8 +1,7 @@
 """env_params.py — Environment variable handling for Cyberwave ROS 2 Python drivers.
 
-Mirrors the C++ env_params.cpp logic.  All Cyberwave ROS 2 overrides use the
-CW_ROS2_<PARAM_NAME_UPPER> convention so the same env file works for both the
-C++ and Python driver bases.
+All Cyberwave ROS 2 overrides use the CW_ROS2_<PARAM_NAME_UPPER> convention,
+so the same env file works regardless of driver language.
 """
 
 from __future__ import annotations

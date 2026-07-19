@@ -7,10 +7,11 @@ import json
 import logging
 import os
 import signal
+import socket
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -18,7 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from cyberwave.data.exceptions import ChannelError
 from cyberwave.data.keys import build_key, build_wildcard, parse_key
 from cyberwave.exceptions import CyberwaveError
-from cyberwave.workers.constants import MONITOR_STATS_KEY
+from cyberwave.workers.constants import build_monitor_stats_key
 from cyberwave.workers.context import HookContext
 from cyberwave.workers.decode import decode_sample_payload, extract_wire_metadata
 from cyberwave.workers.hooks import (
@@ -55,6 +56,25 @@ class _ScheduleRegistration:
     options: dict[str, Any]
 
 
+def _read_container_hostname() -> str:
+    """Return the container's assigned hostname.
+
+    Prefers ``/etc/hostname`` (which Docker always writes with the container-
+    assigned hostname, matching ``docker inspect --format {{.Config.Hostname}}``)
+    over :func:`socket.gethostname` (which can drift under ``--network host``
+    when the UTS namespace is shared with the host).  Falls back to
+    :func:`socket.gethostname` when ``/etc/hostname`` is missing or empty
+    (non-container environments, tests).
+    """
+    try:
+        value = Path("/etc/hostname").read_text().strip()
+        if value:
+            return value
+    except OSError:
+        pass
+    return socket.gethostname()
+
+
 def _hook_min_interval_seconds(hook: HookRegistration) -> float:
     """Return the minimum dispatch interval enforced by ``hook.options['fps']``.
 
@@ -78,9 +98,9 @@ def _previous_cron_fire(cron: str, local_now: datetime) -> datetime | None:
     Returns ``None`` when the expression is unparseable or croniter is
     missing. Uses ``second_at_beginning=True`` so 6-field expressions
     (``second minute hour dom month dow``) are interpreted with seconds
-    as the leading field — matching the cloud's
-    :mod:`src.lib.schedule_utils` and Quartz convention. This is what
-    makes sub-minute schedules work on edge.
+    as the leading field — matching the cloud platform's own
+    cron-scheduling and Quartz convention. This is what makes
+    sub-minute schedules work on edge.
 
     ``croniter.get_prev`` is strict-less-than, so the candidate tick
     that lands exactly on ``local_now`` is treated as "future" and only
@@ -346,18 +366,21 @@ class WorkerRuntime:
         self._schedule_thread.start()
 
     def _dispatch_due_schedules(self, now: datetime | None = None) -> None:
-        now = now or datetime.now(tz=ZoneInfo("UTC"))
+        now = now or datetime.now(tz=timezone.utc)
         for registration in self._schedule_registrations:
             try:
                 local_now = now.astimezone(ZoneInfo(registration.timezone))
             except ZoneInfoNotFoundError:
-                logger.warning(
-                    "Skipping schedule %s from %s with unknown timezone %r",
-                    registration.node_uuid,
-                    registration.module_name,
-                    registration.timezone,
-                )
-                continue
+                if registration.timezone.upper() in {"UTC", "UTC+0", "UTC-0", "GMT"}:
+                    local_now = now.astimezone(timezone.utc)
+                else:
+                    logger.warning(
+                        "Skipping schedule %s from %s with unknown timezone %r",
+                        registration.node_uuid,
+                        registration.module_name,
+                        registration.timezone,
+                    )
+                    continue
             registration_key = f"{registration.module_name}:{registration.node_uuid}"
             prev_fire = _previous_cron_fire(registration.cron, local_now)
             if prev_fire is None:
@@ -367,10 +390,11 @@ class WorkerRuntime:
                 # Instant-level dedup. The first time we see a
                 # registration we anchor at ``local_now`` so we only
                 # fire for ticks strictly after worker startup — this
-                # mirrors the cloud's ``reference = created_at`` seed
-                # and avoids replaying a tick that already passed
-                # before the worker came online. Subsequent polls fire
-                # whenever a strictly newer cron instant has elapsed.
+                # mirrors how the cloud-side scheduler seeds its own
+                # reference point on first run, and avoids replaying a
+                # tick that already passed before the worker came
+                # online. Subsequent polls fire whenever a strictly
+                # newer cron instant has elapsed.
                 if last_fire is None:
                     self._schedule_last_fire[registration_key] = local_now
                     continue
@@ -716,13 +740,29 @@ class WorkerRuntime:
         """
         subtopic = str(hook.options.get("subtopic") or "").strip()
         qos = int(hook.options.get("qos") or 0)
+        # ``scope`` selects the topic base. The default ``"twin"`` scope
+        # (plain ``@cw.on_mqtt``) subscribes under
+        # ``cyberwave/twin/<twin_uuid>/<subtopic>``; ``"workflow"`` scope
+        # (``@cw.on_manual_trigger``) subscribes under
+        # ``cyberwave/workflow/<workflow_uuid>/<subtopic>`` so a
+        # workflow's inbound run command shares the same base as its
+        # outbound ``execution/*`` telemetry.
+        scope = str(hook.options.get("scope") or "twin").strip() or "twin"
+        workflow_uuid = str(hook.options.get("workflow_uuid") or "").strip()
         if not subtopic:
             logger.warning(
                 "Skipping MQTT hook '%s': missing subtopic option",
                 hook.callback.__name__,
             )
             return
-        if not hook.twin_uuid:
+        if scope == "workflow":
+            if not workflow_uuid:
+                logger.warning(
+                    "Skipping MQTT hook '%s': workflow scope requires workflow_uuid",
+                    hook.callback.__name__,
+                )
+                return
+        elif not hook.twin_uuid:
             logger.warning(
                 "Skipping MQTT hook '%s': missing twin_uuid",
                 hook.callback.__name__,
@@ -749,7 +789,10 @@ class WorkerRuntime:
                 return
 
         prefix = getattr(mqtt_client, "topic_prefix", "") or ""
-        full_topic = f"{prefix}cyberwave/twin/{hook.twin_uuid}/{subtopic}"
+        if scope == "workflow":
+            full_topic = f"{prefix}cyberwave/workflow/{workflow_uuid}/{subtopic}"
+        else:
+            full_topic = f"{prefix}cyberwave/twin/{hook.twin_uuid}/{subtopic}"
         hook_name = hook.callback.__name__
 
         with self._hook_stats_lock:
@@ -943,13 +986,21 @@ class WorkerRuntime:
             logger.debug("No data bus — monitor stats publisher disabled.")
             return
 
+        # Cache the container hostname once; it does not change during the
+        # lifetime of the process.  Prefer /etc/hostname over socket.gethostname()
+        # because Docker always writes the container-assigned hostname there —
+        # this matches `docker inspect --format {{.Config.Hostname}}` on the CLI
+        # side, even under `--network host` where the kernel UTS namespace may
+        # be shared with the host.
+        hostname = _read_container_hostname()
+
         def _publish_loop() -> None:
             while not self._stop_event.is_set():
                 self._stop_event.wait(MONITOR_PUBLISH_INTERVAL_S)
                 if self._stop_event.is_set():
                     break
                 try:
-                    self._publish_stats_snapshot(data_bus)
+                    self._publish_stats_snapshot(data_bus, hostname=hostname)
                 except Exception:
                     logger.debug("Failed to publish monitor stats", exc_info=True)
 
@@ -957,7 +1008,7 @@ class WorkerRuntime:
         t.start()
         self._stats_thread = t
 
-    def _publish_stats_snapshot(self, data_bus: Any) -> None:
+    def _publish_stats_snapshot(self, data_bus: Any, *, hostname: str) -> None:
         """Collect and publish a single stats snapshot."""
         # Hook stats.
         with self._hook_stats_lock:
@@ -979,13 +1030,14 @@ class WorkerRuntime:
 
         snapshot = {
             "ts": time.time(),
+            "hostname": hostname,
             "hooks": hooks_snap,
             "transport": transport_stats,
             "models": model_stats,
             "zenoh_connected": backend_connected if backend_connected is not None else True,
         }
         payload = json.dumps(snapshot, separators=(",", ":")).encode()
-        data_bus.backend.publish(MONITOR_STATS_KEY, payload)
+        data_bus.backend.publish(build_monitor_stats_key(hostname), payload)
 
     def _build_key_for_hook(self, hook: HookRegistration, data_bus: Any) -> str:
         """Build the Zenoh key expression for a hook registration.

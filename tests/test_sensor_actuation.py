@@ -30,6 +30,7 @@ def test_get_frame_local_never_calls_rest() -> None:
         client,
         SimpleNamespace(uuid="t", name="T", capabilities=_CAMERA_CAPS),
     )
-    with patch.object(twin.camera, "_capture_local_array", return_value=None):
-        twin.camera.get_frame(source="local")
+    cam = twin.camera[0]
+    with patch.object(cam, "_capture_local_array", return_value=None):
+        cam.get_frame(source="local")
     client.twins.get_latest_frame.assert_not_called()

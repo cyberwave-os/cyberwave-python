@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+from ..simulation_support import SimLevel, simulation_level
 from ..transport import DEFAULT_BURST_DURATION_S, DEFAULT_BURST_RATE_HZ
 
 if TYPE_CHECKING:
@@ -16,6 +17,7 @@ class LocomotionHandle:
     def __init__(self, twin: Twin) -> None:
         self._twin = twin
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def move_forward(
         self,
         distance: float = 0.3,
@@ -37,6 +39,7 @@ class LocomotionHandle:
             source_type=source_type,
         )
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def move_backward(
         self,
         distance: float = 0.3,
@@ -54,6 +57,7 @@ class LocomotionHandle:
             source_type=source_type,
         )
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def turn_left(
         self,
         angle: float = 0.5,
@@ -71,6 +75,7 @@ class LocomotionHandle:
             source_type=source_type,
         )
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def turn_right(
         self,
         angle: float = 0.5,
@@ -88,9 +93,11 @@ class LocomotionHandle:
             source_type=source_type,
         )
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def stop(self, *, source_type: Optional[str] = None) -> None:
         self._twin.publish_command("stop", {}, source_type=source_type)
 
+    @simulation_level(SimLevel.PLAYGROUND)
     def move(
         self,
         *,

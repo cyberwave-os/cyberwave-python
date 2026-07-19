@@ -33,8 +33,9 @@ class ControllerPolicyUpdateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     visibility: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
+    asset_registry_ids: Optional[List[StrictStr]] = None
     device: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "controller_type", "metadata", "visibility", "asset_uuids", "device"]
+    __properties: ClassVar[List[str]] = ["name", "description", "controller_type", "metadata", "visibility", "asset_uuids", "asset_registry_ids", "device"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -105,6 +106,11 @@ class ControllerPolicyUpdateSchema(BaseModel):
         if self.asset_uuids is None and "asset_uuids" in self.model_fields_set:
             _dict['asset_uuids'] = None
 
+        # set to None if asset_registry_ids (nullable) is None
+        # and model_fields_set contains the field
+        if self.asset_registry_ids is None and "asset_registry_ids" in self.model_fields_set:
+            _dict['asset_registry_ids'] = None
+
         # set to None if device (nullable) is None
         # and model_fields_set contains the field
         if self.device is None and "device" in self.model_fields_set:
@@ -128,6 +134,7 @@ class ControllerPolicyUpdateSchema(BaseModel):
             "metadata": obj.get("metadata"),
             "visibility": obj.get("visibility"),
             "asset_uuids": obj.get("asset_uuids"),
+            "asset_registry_ids": obj.get("asset_registry_ids"),
             "device": obj.get("device")
         })
         return _obj

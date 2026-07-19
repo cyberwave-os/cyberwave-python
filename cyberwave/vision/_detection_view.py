@@ -10,22 +10,18 @@ runtime:
   ``tflite_rt``, ``opencv_rt``, ``hailo_rt``, ``onnxruntime_rt`` and
   the cloud adapter in ``cyberwave.models.cloud``) return
   ``Detection`` instances directly.
-- Backend workflow-node emitters compile to handler code that produces
-  plain dicts: ``call_model`` (via
-  ``cyberwave-backend/src/lib/detection_extraction.normalize_detection``)
-  and ``barcode_reader`` (via
-  ``cyberwave-backend/src/lib/workflow_utils._barcode_codes_to_detections``)
-  both hand downstream perception nodes a list of
+- Workflow nodes compiled into generated worker code (e.g.
+  ``call_model``, ``barcode_reader``) hand downstream perception nodes
+  plain dicts instead of typed instances: a list of
   ``{"label", "class", "confidence", "bbox", "bbox_pixels", ...}`` dicts.
 - Operator-authored payloads (webhook nodes, data warehouse rows) can
   hand in either shape.
 
 Coercing once at the SDK boundary keeps every drawing / redaction loop
 attribute-typed and avoids each helper having to branch on
-``isinstance(det, dict)``. The cloud executor already does the same
-polymorphism in ``workflow_utils._coerce_bbox`` and generated edge
-workers do it in ``_cw_detection_gate_label`` — this helper mirrors
-the same pattern at the SDK layer.
+``isinstance(det, dict)``. Other parts of the pipeline that produce
+these dicts implement the same polymorphism — this helper mirrors
+that pattern at the SDK layer.
 """
 
 from __future__ import annotations
@@ -46,8 +42,8 @@ _RESERVED_DICT_KEYS = frozenset(
 def _coerce_bbox(value: Any) -> BoundingBox | None:
     """Accept list / tuple / dict / duck-typed bbox shapes; return ``BoundingBox``.
 
-    Mirrors the polymorphism of ``workflow_utils._coerce_bbox`` on the
-    backend side so producers that emit either shape land at the same
+    Mirrors the same bbox-shape polymorphism used elsewhere in the
+    pipeline so producers that emit either shape land at the same
     typed view here.
     """
     if value is None:

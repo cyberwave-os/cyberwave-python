@@ -93,6 +93,7 @@ import numpy as np
 from cyberwave.models.runtimes.base import ModelRuntime
 from cyberwave.models.types import (
     BoundingBox,
+    DepthResult,
     Detection,
     DetectionResult,
     EmbeddingResult,
@@ -205,10 +206,11 @@ class HailoRuntime(ModelRuntime):
             model_kind: ``"detection"`` (YOLO NMS output),
                 ``"detection_raw"`` (YOLO feature-map output, no on-chip NMS),
                 ``"instance_segmentation"`` (yolov8_seg raw feature maps),
-                or ``"embedding"`` (CLIP/encoder models). When omitted
-                (the default) the runtime auto-detects the kind from the
-                HEF's output-stream shapes so callers do not need to set
-                this explicitly.
+                ``"depth_estimation"`` (single-channel monocular depth
+                map, e.g. fast_depth / SCDepthV3), or ``"embedding"``
+                (CLIP/encoder models). When omitted (the default) the
+                runtime auto-detects the kind from the HEF's output-stream
+                shapes so callers do not need to set this explicitly.
         """
         from hailo_platform import (
             HEF,
@@ -305,8 +307,6 @@ class HailoRuntime(ModelRuntime):
         classes: list[str] | None = None,
         **kwargs: Any,
     ) -> PredictionResult:
-        import time
-
         handle: _HailoHandle = model_handle
         target_h, target_w = handle.input_shape_hw
 
@@ -335,6 +335,37 @@ class HailoRuntime(ModelRuntime):
                 len(vec),
             )
             return EmbeddingResult(vector=vec, raw=outputs)
+
+        if handle.model_kind == "depth_estimation":
+            t0 = time.perf_counter()
+            tensor = _resize_for_depth(img, target_h=target_h, target_w=target_w)
+            t1 = time.perf_counter()
+
+            with handle.lock:
+                outputs = handle.pipeline.infer({handle.input_name: tensor})
+            t2 = time.perf_counter()
+
+            depth_map = _extract_depth_map(
+                outputs, orig_h=img_h or target_h, orig_w=img_w or target_w
+            )
+            t3 = time.perf_counter()
+
+            logger.debug(
+                "hailo depth: pre=%.1fms infer=%.1fms post=%.1fms total=%.1fms "
+                "shape=%s",
+                (t1 - t0) * 1000,
+                (t2 - t1) * 1000,
+                (t3 - t2) * 1000,
+                (t3 - t0) * 1000,
+                depth_map.shape,
+            )
+            return DepthResult(
+                depth_map=depth_map,
+                metric=False,
+                h=int(img_h),
+                w=int(img_w),
+                raw=outputs,
+            )
 
         t0 = time.perf_counter()
         tensor, letterbox = _preprocess(img, target_h=target_h, target_w=target_w)
@@ -637,6 +668,102 @@ def _resize_for_embedding(
     return np.expand_dims(np.ascontiguousarray(resized), 0)  # NHWC, batch=1
 
 
+def _resize_for_depth(
+    img: np.ndarray,
+    *,
+    target_h: int,
+    target_w: int,
+) -> np.ndarray:
+    """Resize HWC uint8 image -> NHWC uint8 tensor for monocular depth models.
+
+    Depth HEFs (fast_depth, SCDepthV3) are trained with plain resized inputs —
+    no letterbox padding — so we skip aspect-ratio preservation to match how
+    the model was calibrated. Callers post-process the returned depth map
+    against the original image dimensions.
+    """
+    if img.ndim == 2:
+        img = np.stack([img] * 3, axis=-1)
+    if img.ndim != 3 or img.shape[2] not in (1, 3, 4):
+        raise ValueError(f"Expected HWC image, got shape {img.shape}")
+    if img.shape[0] == 0 or img.shape[1] == 0:
+        raise ValueError("Empty input image")
+
+    try:
+        import cv2
+
+        resized = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+    except ImportError:
+        from PIL import Image
+
+        resized = np.asarray(
+            Image.fromarray(img).resize((target_w, target_h), Image.BILINEAR)
+        )
+
+    if resized.dtype != np.uint8:
+        resized = resized.astype(np.uint8)
+
+    return np.expand_dims(np.ascontiguousarray(resized), 0)  # NHWC, batch=1
+
+
+def _extract_depth_map(
+    outputs: dict[str, Any] | Any,
+    *,
+    orig_h: int,
+    orig_w: int,
+) -> np.ndarray:
+    """Return an ``(orig_h, orig_w)`` float32 depth map from a Hailo depth HEF.
+
+    Accepts ``(H, W, 1)`` / ``(1, H, W, 1)`` / ``(1, 1, H, W)``; squeezes to
+    2-D and bilinearly resizes to the original image dimensions.
+    """
+    if isinstance(outputs, dict):
+        if not outputs:
+            logger.warning("Hailo depth: inference returned empty outputs dict.")
+            return np.zeros((max(1, orig_h), max(1, orig_w)), dtype=np.float32)
+        tensors = list(outputs.values())
+    else:
+        tensors = [outputs]
+
+    if len(tensors) > 1:
+        logger.warning(
+            "Hailo depth: expected 1 output tensor, got %d. Using the first.",
+            len(tensors),
+        )
+
+    raw = np.asarray(tensors[0], dtype=np.float32)
+
+    # Drop batch / channel-of-1 axes -> 2-D depth map.
+    depth = np.squeeze(raw)
+    if depth.ndim != 2:
+        logger.warning(
+            "Hailo depth: unexpected output shape %s; flattening to 2-D.", raw.shape
+        )
+        depth = depth.reshape(depth.shape[-2], depth.shape[-1])
+
+    target_h = int(max(1, orig_h))
+    target_w = int(max(1, orig_w))
+    if depth.shape == (target_h, target_w):
+        return depth.astype(np.float32, copy=False)
+
+    try:
+        import cv2
+
+        return cv2.resize(
+            depth.astype(np.float32),
+            (target_w, target_h),
+            interpolation=cv2.INTER_LINEAR,
+        )
+    except ImportError:
+        from PIL import Image
+
+        return np.asarray(
+            Image.fromarray(depth.astype(np.float32)).resize(
+                (target_w, target_h), Image.BILINEAR
+            ),
+            dtype=np.float32,
+        )
+
+
 def _extract_embedding(
     outputs: dict[str, Any] | Any,
 ) -> np.ndarray:
@@ -841,6 +968,10 @@ def _infer_model_kind(output_infos: list[Any]) -> str:
         signal (a plain detection model only gets ``C = 32`` if it has exactly
         32 classes, which is handled by requesting ``model_kind`` explicitly).
 
+    * **depth_estimation** — single spatial output with a channel axis of
+      ``1``. Monocular depth HEFs (fast_depth, SCDepthV3, MiDaS-style)
+      produce a single ``H x W x 1`` (or ``1 x H x W``) depth map per frame.
+
     * **embedding** — single 1-D (or batch-1 2-D) output, no spatial dims.
 
     * **detection** — everything else, including on-chip NMS outputs and
@@ -875,6 +1006,13 @@ def _infer_model_kind(output_infos: list[Any]) -> str:
     if has_combined_seg or has_split_seg:
         return "instance_segmentation"
 
+    # --- Depth estimation --------------------------------------------------
+    # Single spatial output with channel axis = 1 (a per-pixel depth map).
+    if len(output_infos) == 1:
+        s = tuple(getattr(output_infos[0], "shape", ()))
+        if _looks_like_depth_shape(s):
+            return "depth_estimation"
+
     # --- Embedding ---------------------------------------------------------
     if len(output_infos) == 1:
         s = tuple(getattr(output_infos[0], "shape", ()))
@@ -882,6 +1020,29 @@ def _infer_model_kind(output_infos: list[Any]) -> str:
             return "embedding"
 
     return "detection"
+
+
+def _looks_like_depth_shape(shape: tuple[Any, ...]) -> bool:
+    """True when *shape* matches ``(H, W, 1)`` / ``(1, H, W, 1)`` / ``(1, 1, H, W)``.
+
+    Filters on the channel axis (must equal 1) and on the presence of spatial
+    dimensions greater than 1, so a 32-class detection HEF that happens to
+    have ``C = 1`` per stream (there aren't any real ones) or a flat ``(1, D)``
+    embedding output does not accidentally match.
+    """
+    if len(shape) == 3:
+        h, w, c = shape
+        return isinstance(h, int) and isinstance(w, int) and c == 1 and h > 1 and w > 1
+    if len(shape) == 4:
+        n, a, b, c = shape
+        # NHWC: n=1, c=1 with spatial in the middle.
+        if c == 1 and isinstance(a, int) and isinstance(b, int) and a > 1 and b > 1:
+            return True
+        # NCHW: n=1, a=1 (channels) with spatial trailing.
+        if a == 1 and isinstance(b, int) and isinstance(c, int) and b > 1 and c > 1:
+            return True
+        del n
+    return False
 
 
 def _split_seg_outputs(

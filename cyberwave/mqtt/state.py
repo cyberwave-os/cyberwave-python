@@ -1,4 +1,4 @@
-"""MQTT inbound topic listeners (plane C — decode callbacks, not a separate cache layer)."""
+"""MQTT inbound topic listeners — decode callbacks, not a separate cache layer."""
 
 from __future__ import annotations
 
@@ -16,7 +16,11 @@ def mqtt_client_for(twin: Any) -> Any:
     client = getattr(twin, "client", None)
     mqtt = getattr(client, "mqtt", None) if client is not None else None
     if mqtt is None:
-        raise TwinStateUnavailableError("MQTT client is not available on this twin")
+        raise TwinStateUnavailableError(
+            "MQTT client is not available on this twin. "
+            "Ensure you created the client with a valid API key and that the twin "
+            "has an active edge driver running."
+        )
     return mqtt
 
 
@@ -63,5 +67,6 @@ def wait_for_first_message(
         return
     if not ready.wait(timeout=timeout):
         raise TwinStateTimeoutError(
-            f"No MQTT {stream} update received within {timeout}s for twin {twin_uuid}"
+            f"No MQTT '{stream}' update received within {timeout}s for twin {twin_uuid}. "
+            f"Ensure the edge driver is running and publishing to this twin."
         )

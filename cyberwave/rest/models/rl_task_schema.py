@@ -52,6 +52,10 @@ class RLTaskSchema(BaseModel):
     action_spec: Optional[Dict[str, Any]] = None
     observation_spec: Optional[Dict[str, Any]] = None
     rl_config_spec: Optional[Dict[str, Any]] = None
+    training_command_spec: Optional[Dict[str, Any]] = None
+    inference_command_spec: Optional[Dict[str, Any]] = None
+    training_command_setup_enabled: Optional[StrictBool] = False
+    inference_command_setup_enabled: Optional[StrictBool] = False
     has_scene_cfg: StrictBool
     has_env_entrypoint: StrictBool
     has_rl_entrypoint: StrictBool
@@ -63,7 +67,7 @@ class RLTaskSchema(BaseModel):
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     owner_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "workspace_uuid", "workspace_name", "project_uuid", "environment_uuid", "environment_name", "environment_slug", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "action_spec", "observation_spec", "rl_config_spec", "has_scene_cfg", "has_env_entrypoint", "has_rl_entrypoint", "source_file_count", "source_bundle_hash", "is_deleted", "created_at", "updated_at", "created_by", "updated_by", "owner_uuid"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "workspace_uuid", "workspace_name", "project_uuid", "environment_uuid", "environment_name", "environment_slug", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "action_spec", "observation_spec", "rl_config_spec", "training_command_spec", "inference_command_spec", "training_command_setup_enabled", "inference_command_setup_enabled", "has_scene_cfg", "has_env_entrypoint", "has_rl_entrypoint", "source_file_count", "source_bundle_hash", "is_deleted", "created_at", "updated_at", "created_by", "updated_by", "owner_uuid"]
 
     @field_validator('runtime_target')
     def runtime_target_validate_enum(cls, value):
@@ -210,6 +214,10 @@ class RLTaskSchema(BaseModel):
             "action_spec": obj.get("action_spec"),
             "observation_spec": obj.get("observation_spec"),
             "rl_config_spec": obj.get("rl_config_spec"),
+            "training_command_spec": obj.get("training_command_spec"),
+            "inference_command_spec": obj.get("inference_command_spec"),
+            "training_command_setup_enabled": obj.get("training_command_setup_enabled") if obj.get("training_command_setup_enabled") is not None else False,
+            "inference_command_setup_enabled": obj.get("inference_command_setup_enabled") if obj.get("inference_command_setup_enabled") is not None else False,
             "has_scene_cfg": obj.get("has_scene_cfg"),
             "has_env_entrypoint": obj.get("has_env_entrypoint"),
             "has_rl_entrypoint": obj.get("has_rl_entrypoint"),

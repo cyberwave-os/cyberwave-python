@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class GripperHandle:
-    """Grouped gripper commands (mock transport in PR1)."""
+    """Grouped gripper commands."""
 
     def __init__(self, twin: Twin) -> None:
         self._twin = twin

@@ -707,22 +707,6 @@ class UnitreeunitreeZ1Twin(Twin):
         """Controller for robot joints"""
         ...
 
-class FictionlableoRoverTwin(Twin):
-    """
-    Digital twin for Leo Rover
-    Registry ID: fictionlab/leo-rover
-    """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
-    @property
-    def joints(self) -> JointsHandle:
-        """Controller for robot joints"""
-        ...
-
 class CyberwavegenericCubeTwin(Twin):
     """
     Digital twin for Generic Cube
@@ -1089,10 +1073,10 @@ class PollenRoboticsreachyMiniTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class Djimavic3EnterpriseTwin(Twin):
+class Djimavic3Enterprise2Twin(Twin):
     """
     Digital twin for DJI Mavic 3 Enterprise
-    Registry ID: dji/mavic-3-enterprise
+    Registry ID: dji/mavic-3-enterprise-2
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1279,6 +1263,34 @@ class ObsbotobsbotTiny3Twin(Twin):
         """Controller for robot joints"""
         ...
 
+class CyberwavedoosanA0509sTwin(Twin):
+    """
+    Digital twin for Doosan A0509S
+    Registry ID: cyberwave/doosan-a0509s
+    """
+    pass
+
+class CyberwavedoosanA0509s2Twin(Twin):
+    """
+    Digital twin for Doosan A0509S
+    Registry ID: cyberwave/doosan-a0509s-2
+    """
+    pass
+
+class CyberwavedoosanA0509s3Twin(Twin):
+    """
+    Digital twin for Doosan A0509S
+    Registry ID: cyberwave/doosan-a0509s-3
+    """
+    pass
+
+class CyberwavedoosanA0509s4Twin(Twin):
+    """
+    Digital twin for Doosan A0509S
+    Registry ID: cyberwave/doosan-a0509s-4
+    """
+    pass
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1333,7 +1345,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "unitree/unitree_a1": UnitreeunitreeA1Twin,
     "kuka/kuka_iiwa14": KukakukaIiwa14Twin,
     "unitree/unitree_z1": UnitreeunitreeZ1Twin,
-    "fictionlab/leo-rover": FictionlableoRoverTwin,
     "cyberwave/generic_cube": CyberwavegenericCubeTwin,
     "cube": CyberwavegenericCubeTwin,
     "cyberwave/generictable": CyberwavegenerictableTwin,
@@ -1379,7 +1390,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "generic-drone-payloads/rf-scanner-pod": GenericDronePayloadsrfScannerPodTwin,
     "fwr/robotic-arm": FwrroboticArmTwin,
     "pollen-robotics/reachy-mini": PollenRoboticsreachyMiniTwin,
-    "dji/mavic-3-enterprise": Djimavic3EnterpriseTwin,
+    "dji/mavic-3-enterprise-2": Djimavic3Enterprise2Twin,
     "sam-wilcocks-workspace/d500-lidar-2": SamWilcocksWorkspaced500Lidar2Twin,
     "neura-robotics/maira7s": NeuraRoboticsmaira7sTwin,
     "neura-robotics/maira6m": NeuraRoboticsmaira6mTwin,
@@ -1398,4 +1409,8 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "mls-team/obsbot-tiny-3": MlsTeamobsbotTiny3Twin,
     "cyberwave/go2-backpack": Cyberwavego2BackpackTwin,
     "obsbot/obsbot-tiny-3": ObsbotobsbotTiny3Twin,
+    "cyberwave/doosan-a0509s": CyberwavedoosanA0509sTwin,
+    "cyberwave/doosan-a0509s-2": CyberwavedoosanA0509s2Twin,
+    "cyberwave/doosan-a0509s-3": CyberwavedoosanA0509s3Twin,
+    "cyberwave/doosan-a0509s-4": CyberwavedoosanA0509s4Twin,
 }

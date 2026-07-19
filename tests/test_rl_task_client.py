@@ -802,6 +802,136 @@ def test_set_rl_config_spec_targets_rl_config_endpoint(
     assert payload["rl_config_spec"]["algorithm_config"]["rollouts"] == 24
 
 
+def test_set_training_command_spec_targets_task_update_endpoint(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    """``set_training_command_spec`` has no dedicated sub-resource — it writes
+    the training command spec through the RL task update endpoint, wrapped
+    under ``training_command_spec``."""
+    rl = RLTaskClient(fake_client)
+    patched_requests["put"].return_value = patched_requests["_make_response"](
+        {
+            "uuid": "task-uuid",
+            "training_command_spec": {"schema_version": 1, "commands": []},
+        }
+    )
+
+    spec = {
+        "schema_version": 1,
+        "commands": [
+            {
+                "name": "viewpoint",
+                "type": "custom",
+                "module": "env_cfg",
+                "symbol": "ViewpointCommandCfg",
+                "resampling_time_range": [1.0e9, 1.0e9],
+                "kwargs": {"target_source": "sampled"},
+            }
+        ],
+    }
+
+    rl.set_training_command_spec("task-uuid", spec)
+
+    call = patched_requests["put"].call_args
+    # Hits the task update endpoint, NOT a /commands sub-resource.
+    assert call.args[0].endswith("/rl-tasks/task-uuid")
+    assert not call.args[0].endswith("/commands")
+    payload = call.kwargs["json"]
+    cmd = payload["training_command_spec"]["commands"][0]
+    assert cmd["name"] == "viewpoint"
+    assert cmd["symbol"] == "ViewpointCommandCfg"
+    assert cmd["resampling_time_range"] == [1.0e9, 1.0e9]
+
+
+def test_set_inference_command_spec_targets_task_update_endpoint(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    """``set_inference_command_spec`` writes the inference command spec through
+    the RL task update endpoint, wrapped under ``inference_command_spec``."""
+    rl = RLTaskClient(fake_client)
+    patched_requests["put"].return_value = patched_requests["_make_response"](
+        {
+            "uuid": "task-uuid",
+            "inference_command_spec": {"schema_version": 1, "commands": []},
+        }
+    )
+
+    spec = {
+        "schema_version": 1,
+        "commands": [
+            {
+                "name": "viewpoint",
+                "type": "custom",
+                "module": "env_cfg",
+                "symbol": "ViewpointCommandCfg",
+                "payload_schema": {"target_position": "vec3"},
+                "source": {"kind": "mqtt"},
+                "kwargs": {"target_source": "external_target"},
+            }
+        ],
+    }
+
+    rl.set_inference_command_spec("task-uuid", spec)
+
+    call = patched_requests["put"].call_args
+    assert call.args[0].endswith("/rl-tasks/task-uuid")
+    payload = call.kwargs["json"]
+    cmd = payload["inference_command_spec"]["commands"][0]
+    assert cmd["name"] == "viewpoint"
+    assert cmd["payload_schema"]["target_position"] == "vec3"
+    assert cmd["source"]["kind"] == "mqtt"
+    # No explicit ``enabled`` → the toggle key is omitted (backend derives it).
+    assert "inference_command_setup_enabled" not in payload
+
+
+def test_set_command_spec_forwards_explicit_enabled_toggle(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    """The explicit ``enabled`` switch (ADR 0004) is forwarded verbatim, so a
+    caller can disable a lifecycle (clearing its spec) in one request."""
+    rl = RLTaskClient(fake_client)
+    patched_requests["put"].return_value = patched_requests["_make_response"](
+        {"uuid": "task-uuid", "training_command_spec": {}}
+    )
+
+    rl.set_training_command_spec("task-uuid", {}, enabled=False)
+
+    payload = patched_requests["put"].call_args.kwargs["json"]
+    assert payload["training_command_setup_enabled"] is False
+    assert payload["training_command_spec"] == {}
+
+
+def test_upsert_source_file_writes_to_source_files_endpoint(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    """``upsert_source_file`` PUTs path + content to the source-files endpoint.
+
+    This is how a code-backed command term's ``commands/<name>.py`` is uploaded
+    before the term is registered via ``set_*_command_spec`` (module
+    ``commands.<name>`` / symbol ``<CfgClass>``)."""
+    rl = RLTaskClient(fake_client)
+    patched_requests["put"].return_value = patched_requests["_make_response"](
+        {
+            "path": "commands/viewpoint.py",
+            "content": "class ViewpointCommandCfg: pass",
+        }
+    )
+
+    rl.upsert_source_file(
+        "task-uuid",
+        "commands/viewpoint.py",
+        "class ViewpointCommandCfg: pass\n",
+    )
+
+    call = patched_requests["put"].call_args
+    assert call.args[0].endswith("/rl-tasks/task-uuid/source-files")
+    payload = call.kwargs["json"]
+    assert payload["path"] == "commands/viewpoint.py"
+    assert "ViewpointCommandCfg" in payload["content"]
+    # Optional flag omitted unless requested (absent != False server-side).
+    assert "is_entrypoint" not in payload
+
+
 def test_make_action_term_only_sets_provided_optional_fields() -> None:
     """Optional knobs must not appear in the dict if the caller omitted them.
 
@@ -991,6 +1121,26 @@ def test_make_camera_observation_default_data_type() -> None:
         "sensor": "robot__wrist_cam",
         "data_type": "depth",
     }
+
+
+def test_make_camera_observation_grayscale_rgb() -> None:
+    term = make_camera_observation(
+        "wrist_color", sensor="robot__wrist_cam", data_type="rgb", grayscale=True
+    )
+    assert term == {
+        "name": "wrist_color",
+        "type": "camera",
+        "sensor": "robot__wrist_cam",
+        "data_type": "rgb",
+        "grayscale": True,
+    }
+
+
+def test_make_camera_observation_grayscale_defaults_off() -> None:
+    term = make_camera_observation(
+        "wrist_color", sensor="robot__wrist_cam", data_type="rgb"
+    )
+    assert "grayscale" not in term
 
 
 def test_make_custom_observation_defaults_symbol_to_name() -> None:

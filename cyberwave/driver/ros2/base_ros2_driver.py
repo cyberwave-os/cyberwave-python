@@ -1,10 +1,9 @@
 """base_ros2_driver.py — Python ROS 2 driver base for Cyberwave drivers.
 
 Provides :class:`BaseROS2Driver`, combining :class:`~cyberwave.driver.BaseDriver`
-with ``rclpy.lifecycle.LifecycleNode`` (C++ ``rclcpp_lifecycle::LifecycleNode`` /
-``Ros2DriverBase`` parity). Inherits from :class:`rclpy.lifecycle.LifecycleNode`
-and routes lifecycle transitions to the same set of driver hooks as the C++
-version.
+with ``rclpy.lifecycle.LifecycleNode``. Inherits from
+:class:`rclpy.lifecycle.LifecycleNode` and routes lifecycle transitions to a
+consistent set of driver hooks.
 
 ## Hook naming
 
@@ -16,15 +15,15 @@ those names in a subclass would silently break the lifecycle machinery.
 To preserve a clean, consistent API while avoiding the conflict, lifecycle
 hooks drop the 'on_' prefix:
 
-    C++ hook                   Python hook
-    ─────────────────────────  ─────────────────────
-    on_configure()             configure()
-    on_connect_to_device()     connect_to_device()
-    on_register_callbacks()    register_callbacks()
-    on_activate()              activate()
-    on_deactivate()            deactivate()           (default no-op)
-    on_tick()                  tick()                 (default no-op)
-    on_shutdown()              shutdown()
+    Lifecycle stage      Python hook
+    ───────────────────  ─────────────────────
+    configure            configure()
+    connect to device    connect_to_device()
+    register callbacks   register_callbacks()
+    activate             activate()
+    deactivate           deactivate()           (default no-op)
+    tick                 tick()                 (default no-op)
+    shutdown             shutdown()
 
 Event callbacks keep 'on_' since they have no rclpy naming conflict:
 
@@ -45,7 +44,8 @@ Service-name parameters are read at startup only; no runtime remap or callback.
 ## CW_ROS2_AUTO_ACTIVATE
 
 Set CW_ROS2_AUTO_ACTIVATE=true to auto-drive the node to ACTIVE on the
-first executor cycle.  Placeholder until the HTTP lifecycle bridge is built.
+first executor cycle. Placeholder until remote, on-demand lifecycle
+activation is available.
 """
 
 from __future__ import annotations
@@ -841,7 +841,7 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
         """Build unified manifest: ROS node fields + uncompiled cw-driver MQTT catalog."""
         if compiled:
             raise ValueError(
-                "compiled driver catalogs are produced by the backend; "
+                "compiled driver catalogs are produced server-side; "
                 "use compiled=False and twin.driver.set_schema()"
             )
         from .env_params import node_name_from_env

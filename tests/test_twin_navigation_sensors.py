@@ -49,17 +49,21 @@ def test_has_sensor_for_navigation_families() -> None:
     assert twin.has_sensor("compass")
 
 
-def test_read_methods_raise_not_implemented() -> None:
+def test_gps_read_returns_empty_live_view_without_transport() -> None:
+    # GPS is wired to the MQTT live-view read path (full coverage in
+    # test_gps_sensor_handle.py). Without an MQTT client it returns an empty
+    # live view rather than raising.
     twin = _twin(sensors=[{"id": "gps_main", "type": "gps"}])
-    with pytest.raises(NotImplementedError, match="on_gps"):
-        twin.gps.get_fix()
+    assert twin.gps.get_fix(timeout=0.0) == {}
 
+
+def test_compass_read_methods_raise_not_implemented() -> None:
     twin = _twin(sensors=[{"id": "compass_main", "type": "compass"}])
-    with pytest.raises(NotImplementedError, match="MQTT inbound"):
+    with pytest.raises(NotImplementedError, match="get_heading"):
         twin.compass.get_heading()
 
 
-def test_cameras_rejects_gps_sensor_key() -> None:
+def test_camera_family_rejects_gps_sensor_key() -> None:
     twin = _twin(
         sensors=[
             {"id": "gps_main", "type": "gps"},
@@ -68,4 +72,4 @@ def test_cameras_rejects_gps_sensor_key() -> None:
         ]
     )
     with pytest.raises(KeyError, match="use twin.gps"):
-        twin.cameras["gps_main"]
+        twin.camera["gps_main"]

@@ -7,11 +7,11 @@ that want to report mission-workflow progress back to Cyberwave.
 Transport
 ---------
 Reporters publish to MQTT topics under
-``cyberwave/workflow/{workflow_uuid}/execution/...`` which the backend
-consumer (``src/app/mqtt_consumer.py``) funnels into the
-``workflow_execution_ingress`` service. MQTT is the only supported
-transport — callers must be connected to a Cyberwave-backed MQTT broker
-via ``client.mqtt`` before calling :meth:`WorkflowExecutionManager.start`.
+``cyberwave/workflow/{workflow_uuid}/execution/...``, which Cyberwave
+ingests and turns into persisted execution and node history. MQTT is
+the only supported transport — callers must be connected to a
+Cyberwave-backed MQTT broker via ``client.mqtt`` before calling
+:meth:`WorkflowExecutionManager.start`.
 
 Example::
 
@@ -368,7 +368,7 @@ class WorkflowExecutionManager:
                 to the execution before receiving a response (the
                 backend accepts this and treats repeats idempotently).
             trigger_data: Optional payload describing what kicked off
-                the run; carried through into ``WorkflowExecution.trigger_data``.
+                the run; stored on the execution record's ``trigger_data`` field.
             source_type: Tag stored on the execution/node metadata for
                 lineage (``"edge"``, ``"sim"``, ``"tele"``, ``"edit"``).
             strict: When ``True``, every MQTT publish failure is raised.

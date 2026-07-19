@@ -69,7 +69,9 @@ class TwinSchema(BaseModel):
     fixed_base: StrictBool
     supported_simulation_backends: Optional[List[StrictStr]] = None
     export_warnings: Optional[List[Dict[str, StrictStr]]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "universal_schema", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings"]
+    mqtt_command_schema: Optional[Dict[str, Any]] = None
+    controllable_joint_names: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "universal_schema", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -217,7 +219,9 @@ class TwinSchema(BaseModel):
             "attach_offset_rotation_z": obj.get("attach_offset_rotation_z"),
             "fixed_base": obj.get("fixed_base"),
             "supported_simulation_backends": obj.get("supported_simulation_backends"),
-            "export_warnings": obj.get("export_warnings")
+            "export_warnings": obj.get("export_warnings"),
+            "mqtt_command_schema": obj.get("mqtt_command_schema"),
+            "controllable_joint_names": obj.get("controllable_joint_names")
         })
         return _obj
 

@@ -116,6 +116,37 @@ class TwinPolicyHandle:
             input_device=slice_meta.get("input_device") or meta.get("input_device"),
         )
 
+    def playground_actuations(self) -> frozenset[str]:
+        """Actuation names the attached controller policy renders in the playground.
+
+        Mirrors the frontend's ``PlaygroundLocomotionCommandDrivers``, which reads
+        the same policy's ``metadata.keyboard_bindings`` to resolve a catalog
+        command's velocity: an actuation counts here only if its binding carries a
+        ``playground`` extension. Used by ``twin.commands.<name>()`` to allow
+        commands that a specific asset's controller wires up for playground preview,
+        without hardcoding the command list into the SDK. Cached per policy UUID on
+        the twin so repeated preflight checks (e.g. before each ``commands.<name>()``
+        call) don't refetch the policy over the network.
+        """
+        policy_uuid = self.attached.policy_uuid
+        if not policy_uuid:
+            return frozenset()
+
+        cached = getattr(self._twin, "_playground_actuations_cache", None)
+        if cached is not None and cached[0] == policy_uuid:
+            return cached[1]
+
+        policy = self.get()
+        metadata = getattr(policy, "metadata", None) if policy is not None else None
+        keyboard_bindings = metadata.get("keyboard_bindings") if isinstance(metadata, dict) else None
+        actuations = frozenset(
+            str(binding["actuation"])
+            for binding in (keyboard_bindings or [])
+            if isinstance(binding, dict) and binding.get("actuation") and binding.get("playground")
+        )
+        self._twin._playground_actuations_cache = (policy_uuid, actuations)
+        return actuations
+
     def _has_attached_teleop_policy(self) -> bool:
         attached = self.attached
         return bool(

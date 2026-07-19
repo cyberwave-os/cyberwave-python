@@ -59,9 +59,8 @@ def _mask_url_credentials(source: str) -> str:
 
     Applied to every ``stream_config.source`` field a driver publishes.
     The ``edge_health`` payload is broadcast to every MQTT subscriber on
-    ``cyberwave/twin/+/edge_health``, persisted by Vector to
-    ``app_twintelemetry``, and cached in browser ``localStorage`` — none
-    of those should ever see plaintext RTSP credentials.
+    ``cyberwave/twin/+/edge_health`` and may be persisted or cached
+    downstream — none of those should ever see plaintext RTSP credentials.
 
     Non-URL sources (integer device indices coerced to ``str``, ``/dev/videoN``
     paths) pass through unchanged because they don't match ``://x@``.
@@ -75,8 +74,8 @@ def _format_camera_source(camera_id: Union[int, str]) -> str:
     """Render ``camera_id`` as a human-meaningful ``stream_config.source``.
 
     A bare integer device index is what ``cv2.VideoCapture`` accepts on
-    every platform, but it isn't what an operator wants to read in the
-    Edge Details "src:" line — ``"0"`` could mean three different things
+    every platform, but it isn't what an operator wants to read in a
+    dashboard's "src:" line — ``"0"`` could mean three different things
     depending on the host OS, and the dashboard has no platform context
     to disambiguate.  We resolve that here, at the publisher, by
     rendering the index as the platform-native identifier:
@@ -123,8 +122,8 @@ def _strict_geometry_enabled() -> bool:
 
     Off by default because some cameras legitimately round the requested
     resolution to the nearest supported mode. Enable on edge images we
-    control so a silent 56x bandwidth blowup (the YUYV-1080p-fallback case
-    in CYB-1998) fails the driver instead of shipping a "working" stream.
+    control so a silent 56x bandwidth blowup (the YUYV-1080p-fallback case)
+    fails the driver instead of shipping a "working" stream.
     """
     return os.environ.get("CYBERWAVE_CAMERA_STRICT_GEOMETRY", "").strip().lower() in (
         "1",
@@ -151,7 +150,7 @@ def _assert_v4l2_backend_or_raise() -> None:
     is effectively a no-op and ``cap.get(CAP_PROP_FOURCC)`` returns 0, so
     the SDK's negotiator falls back to reopening without an override and
     the camera lands on its kernel default (often YUYV 1920x1080 @ 5 fps
-    on USB 2.0). See CYB-1998.
+    on USB 2.0).
 
     Set ``CYBERWAVE_CAMERA_SKIP_V4L2_CHECK=1`` to bypass this check.
     Non-Linux platforms never trigger it.
@@ -380,7 +379,7 @@ class CV2VideoTrack(BaseVideoTrack):
 
         # Linux + local camera only: fail fast if OpenCV lacks V4L2. The
         # alternative is a silent downgrade to YUYV 1080p @ 5 fps once
-        # negotiation fails through the FFmpeg V4L2 demuxer. See CYB-1998.
+        # negotiation fails through the FFmpeg V4L2 demuxer.
         if not self._is_url_stream(camera_id):
             _assert_v4l2_backend_or_raise()
         _log_video_backends_once()
@@ -706,8 +705,8 @@ class CV2VideoTrack(BaseVideoTrack):
         # Track Linux-only geometry-based trust so the telemetry fallback
         # below can surface the requested FOURCC even when there is no
         # user_fourcc and the V4L2 backend reports CAP_PROP_FOURCC=0.
-        # macOS / Windows behavior remains EXACTLY as it was before
-        # CYB-1998: the long-standing cross-platform empty-readback guard
+        # macOS / Windows behavior remains EXACTLY as it was before this
+        # change: the long-standing cross-platform empty-readback guard
         # for explicit user_fourcc is preserved, and the telemetry
         # fallback condition is unchanged on those platforms.
         linux_geometry_trust = False
@@ -733,7 +732,7 @@ class CV2VideoTrack(BaseVideoTrack):
                     # (e.g. "YUYV"), the readback is the truth — we
                     # respect it and reopen. macOS/Windows do not need
                     # this because AVFoundation / MSMF / DSHOW report
-                    # FOURCC correctly. See CYB-1998.
+                    # FOURCC correctly.
                     readback_empty = not (got or "").strip()
                     geometry_match_trust = (
                         is_linux
@@ -748,7 +747,7 @@ class CV2VideoTrack(BaseVideoTrack):
                     # Originally added for the uvcvideo quirk on Linux
                     # but historically also active on Darwin/Windows,
                     # so we keep it cross-platform to avoid changing
-                    # the macOS flow in CYB-1998.
+                    # the macOS flow.
                     user_fourcc_empty_readback_trust = (
                         bool(user_fourcc) and not (got or "").strip()
                     )
@@ -1238,7 +1237,7 @@ class CV2VideoTrack(BaseVideoTrack):
         the original open is preserved across reconnects so a USB camera
         that negotiated MJPG initially keeps MJPG after reconnect.
 
-        TODO(CYB-1998 follow-up): on Linux + local USB cameras the original
+        TODO: on Linux + local USB cameras the original
         open uses ``_negotiate_and_configure_capture`` → ``_open_local_v4l2_atomic``,
         which works around uvcvideo bugs that can otherwise leave the device
         on the wrong FOURCC. Reopening here goes through the sequential
@@ -1436,7 +1435,7 @@ class CV2CameraStreamer(BaseVideoStreamer):
     def _build_stream_config(self) -> Optional[Dict[str, Any]]:
         """Advertise the cv2 camera config in every ``edge_health`` heartbeat.
 
-        Lets the Edge Details pane render ``resolution · fps · cv2`` from
+        Lets a dashboard render ``resolution · fps · cv2`` directly from
         the wire instead of inferring kind from the twin's asset spec —
         the asset-spec fallback misclassifies single-sensor twins that
         use the generic ``"stream"`` id when the asset's sensor id
@@ -1453,14 +1452,14 @@ class CV2CameraStreamer(BaseVideoStreamer):
         integer index renders as the platform-native identifier
         (``/dev/video<N>`` on Linux, ``avfoundation:<N>`` on macOS,
         ``dshow:<N>`` on Windows) instead of a context-free ``"0"`` —
-        operators reading the Edge Details pane should be able to tell
-        which physical device the driver opened without cross-referencing
+        operators reading a dashboard should be able to tell which
+        physical device the driver opened without cross-referencing
         the host OS.  Pre-formatted string sources (paths, RTSP / HTTP
         URLs, RealSense serials) pass through with credential masking:
         an RTSP URL like ``rtsp://admin:hunter2@host`` becomes
-        ``rtsp://***@host`` before it crosses the wire, so MQTT
-        subscribers, Vector's ``app_twintelemetry`` table, and the
-        browser localStorage cache never see secrets.
+        ``rtsp://***@host`` before it crosses the wire, so nothing
+        downstream — MQTT subscribers, persisted telemetry, or a
+        browser cache — ever sees secrets.
         """
         if isinstance(self.resolution, Resolution):
             resolution_str = str(self.resolution)

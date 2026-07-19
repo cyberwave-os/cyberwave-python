@@ -4,7 +4,7 @@ from typing import List, Optional
 
 
 class TwinEditorMixin:
-    """REST-only scene layout edits (PR0 extract)."""
+    """REST-only scene layout edits."""
 
     def edit_position(
         self,

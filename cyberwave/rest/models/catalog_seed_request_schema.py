@@ -31,10 +31,14 @@ class CatalogSeedRequestSchema(BaseModel):
     seed_controller_policies: Optional[StrictBool] = True
     seed_mlmodels: Optional[StrictBool] = True
     seed_workflow_templates: Optional[StrictBool] = False
+    seed_asset_patches: Optional[StrictBool] = False
+    seed_simplified_meshes: Optional[StrictBool] = False
     controller_keys: Optional[List[StrictStr]] = None
     mlmodel_keys: Optional[List[StrictStr]] = None
     workflow_template_keys: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["workspace_uuid", "seed_controller_policies", "seed_mlmodels", "seed_workflow_templates", "controller_keys", "mlmodel_keys", "workflow_template_keys"]
+    asset_patch_keys: Optional[List[StrictStr]] = None
+    simplified_mesh_keys: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["workspace_uuid", "seed_controller_policies", "seed_mlmodels", "seed_workflow_templates", "seed_asset_patches", "seed_simplified_meshes", "controller_keys", "mlmodel_keys", "workflow_template_keys", "asset_patch_keys", "simplified_mesh_keys"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -95,6 +99,16 @@ class CatalogSeedRequestSchema(BaseModel):
         if self.workflow_template_keys is None and "workflow_template_keys" in self.model_fields_set:
             _dict['workflow_template_keys'] = None
 
+        # set to None if asset_patch_keys (nullable) is None
+        # and model_fields_set contains the field
+        if self.asset_patch_keys is None and "asset_patch_keys" in self.model_fields_set:
+            _dict['asset_patch_keys'] = None
+
+        # set to None if simplified_mesh_keys (nullable) is None
+        # and model_fields_set contains the field
+        if self.simplified_mesh_keys is None and "simplified_mesh_keys" in self.model_fields_set:
+            _dict['simplified_mesh_keys'] = None
+
         return _dict
 
     @classmethod
@@ -111,9 +125,13 @@ class CatalogSeedRequestSchema(BaseModel):
             "seed_controller_policies": obj.get("seed_controller_policies") if obj.get("seed_controller_policies") is not None else True,
             "seed_mlmodels": obj.get("seed_mlmodels") if obj.get("seed_mlmodels") is not None else True,
             "seed_workflow_templates": obj.get("seed_workflow_templates") if obj.get("seed_workflow_templates") is not None else False,
+            "seed_asset_patches": obj.get("seed_asset_patches") if obj.get("seed_asset_patches") is not None else False,
+            "seed_simplified_meshes": obj.get("seed_simplified_meshes") if obj.get("seed_simplified_meshes") is not None else False,
             "controller_keys": obj.get("controller_keys"),
             "mlmodel_keys": obj.get("mlmodel_keys"),
-            "workflow_template_keys": obj.get("workflow_template_keys")
+            "workflow_template_keys": obj.get("workflow_template_keys"),
+            "asset_patch_keys": obj.get("asset_patch_keys"),
+            "simplified_mesh_keys": obj.get("simplified_mesh_keys")
         })
         return _obj
 

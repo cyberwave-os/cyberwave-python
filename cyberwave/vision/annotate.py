@@ -1,5 +1,5 @@
 """Detection annotation overlay — the numpy-frame analogue of the
-cloud-side ``ANNOTATE_IMAGE`` workflow node.
+platform's ``annotate`` workflow node.
 
 Used by edge workers that want to publish a "human-readable" version of
 their model output back through the camera driver's frame-filter, e.g.
@@ -12,8 +12,8 @@ their model output back through the camera driver's frame-filter, e.g.
 The helper draws an axis-aligned bounding box around each matching
 detection and a small ``label conf`` caption above (or just below, if
 the box hugs the top of the frame). It is intentionally a thin,
-predictable utility — just rectangle + caption — so the codegen
-template stays trivial.
+predictable utility — just rectangle + caption — so it stays easy to
+drop into generated or hand-written worker code.
 """
 
 from __future__ import annotations
@@ -140,7 +140,7 @@ def annotate_detections(
         detections: Iterable of :class:`~cyberwave.models.types.Detection`.
         labels: Optional iterable restricting which classes are drawn.
             ``None`` (default) draws every detection. An empty iterable
-            draws nothing — useful when codegen passes a dynamically
+            draws nothing — useful when the caller passes a dynamically
             computed target-class list and may end up with zero classes.
         line_width: Bounding-box line thickness in pixels. ``0`` skips
             the box (caption-only mode).
@@ -307,10 +307,8 @@ def mask_to_polygon(
     largest contour fails the area filter. v1 silently drops holes and
     secondary blobs (single-instance YOLO-seg case is the common one).
 
-    Public so the backend's ``spatial_filter`` codegen can import it
-    without reaching across packages for a private symbol — the worker
-    inlines :func:`workflow_utils._detection_polygon` via
-    ``inspect.getsource`` and that helper imports this name at runtime.
+    Public so other tooling that needs the same mask-to-polygon
+    conversion can import it directly instead of duplicating the logic.
     """
     try:
         cv2 = _require_cv2()
@@ -422,14 +420,14 @@ def build_overlay_payload(
             from the upstream ``call_model`` node.
         labels: Optional iterable restricting which classes are drawn.
             ``None`` (default) draws every detection. An empty iterable
-            draws nothing — useful when codegen passes a dynamically
+            draws nothing — useful when the caller passes a dynamically
             computed target-class list and may end up with zero classes.
         line_width: Bounding-box line thickness in pixels. Mirrors the
             same parameter on :func:`annotate_detections`.
         font_size: Caption font size in points (the workflow node's
             user-facing unit). Converted to ``font_scale`` using the
-            same divisor (``28``) the codegen uses today so the visual
-            output matches the in-process numpy helper.
+            same divisor (``28``) used elsewhere so the visual output
+            matches the in-process numpy helper.
         font_scale: Direct cv2 font-scale override. When set, takes
             precedence over ``font_size``. Lets callers that already
             have a scale keep using it.
@@ -516,8 +514,8 @@ def build_overlay_payload(
         boxes.append(entry)
 
     if font_scale is None:
-        # Same divisor codegen used historically when translating the
-        # node's user-facing ``font_size`` (points) to cv2 ``font_scale``.
+        # Same divisor used historically when translating the node's
+        # user-facing ``font_size`` (points) to cv2 ``font_scale``.
         # Kept here so the conversion lives next to the schema and the
         # in-process helper stays a pure cv2 wrapper.
         font_scale = font_size / 28.0

@@ -5,10 +5,9 @@ This module provides a high-level API for programmatically composing scenes in C
 It allows adding assets (as twins) to environments, with transforms and docking.
 
 Architecture:
-- Each Twin owns its universal_schema (snapshot of Asset.universal_schema at creation)
-- Twin flat fields store state: position_x/y/z, rotation_w/x/y/z, scale_x/y/z, joint_states
-- Scene exports compose all twins' schemas on-demand via compose_environment_schema_from_twins()
-- Environment does not store universal_schema
+- Each Twin has its own schema, captured from its Asset at creation time
+- Twin state is stored in flat fields: position_x/y/z, rotation_w/x/y/z, scale_x/y/z, joint_states
+- The composed scene schema is assembled server-side from all twins' schemas on each fetch
 """
 
 import logging
@@ -72,8 +71,8 @@ class Scene:
     def get_composed_schema(self) -> CommonSchema:
         """Get the composed scene schema from all twins.
 
-        Fetches the composed schema from the backend API, which uses
-        compose_environment_schema_from_twins() to merge all twins' schemas.
+        Fetches the composed schema from the backend API, which merges
+        all twins' schemas into one.
 
         Returns:
             CommonSchema containing world link and all twins' entities merged
@@ -138,12 +137,12 @@ class Scene:
                 pose.orientation.w,
             ]
 
-        # Map position/orientation lists to the flat fields expected by TwinCreateSchema.
+        # Map position/orientation lists to the flat fields the API expects
         # (position_x/y/z, rotation_w/x/y/z — not list-based aliases)
         pos = position or [0.0, 0.0, 0.0]
         ori = orientation or [0.0, 0.0, 0.0, 1.0]  # [x, y, z, w]
 
-        # Create Twin via API - backend will initialize Twin.universal_schema
+        # Create Twin via API - the backend initializes the twin's schema
         twin = self.client.twin(
             asset_key=asset_key,
             environment_id=self.environment_id,

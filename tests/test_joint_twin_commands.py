@@ -71,6 +71,69 @@ def test_joint_twin_set_publishes_joint_update() -> None:
     client.mqtt.publish.assert_called_once()
 
 
+def test_joint_twin_set_accepts_joint_name_keyword_alias() -> None:
+    client = SimpleNamespace(
+        mqtt=MagicMock(),
+        assets=MagicMock(),
+        config=SimpleNamespace(runtime_mode="live", topic_prefix="", source_type="tele"),
+        twins=SimpleNamespace(api=None),
+    )
+    client.assets.get.return_value = SimpleNamespace(
+        metadata={
+            "mqtt": {
+                "topics": {
+                    "cyberwave/joint/{twin_uuid}/update": {},
+                    "cyberwave/twin/{twin_uuid}/command": {},
+                },
+                "commands": {"supported": []},
+            }
+        }
+    )
+    twin = JointTwin(
+        client, SimpleNamespace(uuid="arm-1", name="Arm", asset_uuid="asset-1")
+    )
+    with patch.object(_joints, "controllable_joint_names", return_value=["j1"]):
+        with patch.object(twin, "_prepare_outbound_command"):
+            with pytest.warns(FutureWarning, match="joint_name"):
+                twin.joints.set(
+                    joint_name="j1",
+                    position=90.0,
+                    degrees=True,
+                )
+    payload = twin._outbound_log[-1].payload
+    assert payload["j1"] == pytest.approx(math.pi / 2)
+    assert payload["source_type"] == "tele"
+
+
+def test_joint_twin_set_rejects_conflicting_joint_aliases() -> None:
+    client = SimpleNamespace(
+        mqtt=MagicMock(),
+        assets=MagicMock(),
+        config=SimpleNamespace(runtime_mode="live", topic_prefix="", source_type="tele"),
+        twins=SimpleNamespace(api=None),
+    )
+    client.assets.get.return_value = SimpleNamespace(
+        metadata={
+            "mqtt": {
+                "topics": {
+                    "cyberwave/joint/{twin_uuid}/update": {},
+                    "cyberwave/twin/{twin_uuid}/command": {},
+                },
+                "commands": {"supported": []},
+            }
+        }
+    )
+    twin = JointTwin(
+        client, SimpleNamespace(uuid="arm-1", name="Arm", asset_uuid="asset-1")
+    )
+    with pytest.raises(ValueError, match="conflicting joint names"):
+        twin.joints.set(
+            values=1.0,
+            joint="j1",
+            joint_name="j2",
+        )
+
+
 def test_joints_get_default_and_subset() -> None:
     assets = MagicMock()
     assets.get.return_value = SimpleNamespace(

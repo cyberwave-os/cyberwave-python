@@ -1,9 +1,9 @@
 """Driver/edge telemetry snapshot collector (health-monitor style).
 
-Modeled after :class:`~cyberwave.edge.health.EdgeHealthCheck` (periodic snapshot
-+ provider callbacks) and edge-core ``WorkerHealthMonitor`` (append-only event
-records, non-blocking public API). Publishing is delegated to an injected
-transport hook — typically :meth:`~cyberwave.twin.base.Twin.publish_telemetry`.
+Modeled after :class:`~cyberwave.edge.health.EdgeHealthCheck`: periodic snapshot
++ provider callbacks, with append-only event records and a non-blocking public
+API. Publishing is delegated to an injected transport hook — typically
+:meth:`~cyberwave.twin.base.Twin.publish_telemetry`.
 """
 
 from __future__ import annotations

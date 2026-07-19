@@ -44,6 +44,7 @@ from . import (
     SDK_EDGE_HEALTH_INTERVAL_SECONDS,
     SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
 )
+from .base_video import _strip_vp8_video
 from .microphone import BaseAudioTrack, _strip_non_opus_audio
 
 if TYPE_CHECKING:
@@ -51,34 +52,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# VP8 codec lines that aiortc inserts by default.  We strip them so only
-# H264 remains, matching what the mediasoup SFU expects.
-_VP8_PREFIXES = (
-    "a=rtpmap:97",
-    "a=rtpmap:98",
-    "a=rtcp-fb:97 nack",
-    "a=rtcp-fb:97 nack pli",
-    "a=rtcp-fb:97 goog-remb",
-    "a=rtcp-fb:98 nack",
-    "a=rtcp-fb:98 nack pli",
-    "a=rtcp-fb:98 goog-remb",
-    "a=fmtp:98",
-)
-
 
 def _filter_multimedia_sdp(sdp: str) -> str:
-    """Remove VP8 video codecs and non-Opus audio codecs from the SDP."""
-    lines = sdp.split("\r\n")
-    filtered: list[str] = []
-    for line in lines:
-        if line.startswith("m=video"):
-            parts = line.split()
-            filtered.append(" ".join(p for p in parts if p not in ("97", "98")))
-        elif line.startswith(_VP8_PREFIXES):
-            continue
-        else:
-            filtered.append(line)
-    return _strip_non_opus_audio("\r\n".join(filtered))
+    """Strip VP8/VP9 video codecs and non-Opus audio codecs from a WebRTC SDP.
+
+    aiortc's default codec table includes VP8 (video) and PCMU/PCMA (audio),
+    both of which the mediasoup SFU rejects. We discover payload types by
+    codec name so the filter tracks aiortc's PT-shuffles across versions.
+    """
+    return _strip_non_opus_audio(_strip_vp8_video(sdp))
 
 
 class MultimediaStreamer:
@@ -125,7 +107,9 @@ class MultimediaStreamer:
         self.auto_reconnect = auto_reconnect
         self._should_record = recording
         self.enable_health_check = enable_health_check
-        self.turn_servers = turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
+        self.turn_servers = (
+            turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
+        )
 
         # WebRTC state
         self.pc: Optional[RTCPeerConnection] = None
@@ -236,7 +220,9 @@ class MultimediaStreamer:
                 await self._start_webrtc()
                 self._should_reconnect = self.auto_reconnect
             except Exception as e:
-                logger.error("Auto-start multimedia stream failed: %s", e, exc_info=True)
+                logger.error(
+                    "Auto-start multimedia stream failed: %s", e, exc_info=True
+                )
 
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
@@ -250,7 +236,9 @@ class MultimediaStreamer:
                 if self.pc is None and self.auto_reconnect and not _initial_connected:
                     if time.monotonic() >= _next_retry_at:
                         try:
-                            logger.info("No active multimedia stream — retrying offer...")
+                            logger.info(
+                                "No active multimedia stream — retrying offer..."
+                            )
                             await self._start_webrtc()
                             self._should_reconnect = self.auto_reconnect
                             _initial_connected = True
@@ -311,8 +299,12 @@ class MultimediaStreamer:
         prefix = self.client.topic_prefix
         topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-offer"
 
-        video_attrs = self.video_track.get_stream_attributes() if self.video_track else {}
-        audio_attrs = self.audio_track.get_stream_attributes() if self.audio_track else {}
+        video_attrs = (
+            self.video_track.get_stream_attributes() if self.video_track else {}
+        )
+        audio_attrs = (
+            self.audio_track.get_stream_attributes() if self.audio_track else {}
+        )
 
         offer_payload: dict[str, Any] = {
             "target": "backend",
@@ -371,13 +363,14 @@ class MultimediaStreamer:
                     # Single-track answers (video-only or audio-only) are left
                     # for the standalone streamer that sent the original offer.
                     if "m=video" not in sdp or "m=audio" not in sdp:
-                        logger.debug(
-                            "Ignoring answer without both m=video and m=audio"
-                        )
+                        logger.debug("Ignoring answer without both m=video and m=audio")
                         return
                     self._answer_data = payload
                     self._answer_received = True
-                elif payload.get("type") == "candidate" and payload.get("target") == "edge":
+                elif (
+                    payload.get("type") == "candidate"
+                    and payload.get("target") == "edge"
+                ):
                     self._handle_candidate(payload)
             except Exception as e:
                 logger.error("Error in multimedia on_answer: %s", e)
@@ -429,7 +422,9 @@ class MultimediaStreamer:
                         self._handle_stop_command(), self._event_loop
                     )
             except Exception as e:
-                logger.error("Error processing multimedia command: %s", e, exc_info=True)
+                logger.error(
+                    "Error processing multimedia command: %s", e, exc_info=True
+                )
 
         self.client.subscribe(command_topic, on_command)
 
@@ -530,20 +525,18 @@ class MultimediaStreamer:
                 edge_id=self.twin_uuid,
                 stale_timeout=SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
                 interval=SDK_EDGE_HEALTH_INTERVAL_SECONDS,
-                # CYB-2005: surface the audio track's typed config on the
+                # Surface the audio track's typed config on the
                 # wire so multimedia twins render ``48 kHz · stereo``
                 # from the heartbeat instead of falling back to the
                 # asset spec (which silently mis-classifies multi-sensor
-                # twins).  Video is left to a future ticket — the
+                # twins).  Video is left for later — the
                 # video track here is a generic ``BaseVideoTrack`` that
                 # does not implement ``get_stream_config`` yet.
                 stream_config_provider=self._collect_stream_configs,
             )
             self._health_check.start()
             self._last_frame_count = 0
-            self._health_monitor_task = asyncio.create_task(
-                self._monitor_frame_count()
-            )
+            self._health_monitor_task = asyncio.create_task(self._monitor_frame_count())
             logger.debug("Multimedia health check started")
         except Exception as e:
             logger.warning("Failed to start multimedia health check: %s", e)
@@ -556,9 +549,9 @@ class MultimediaStreamer:
         :meth:`BaseAudioTrack.get_stream_config` under the ``"audio"``
         key — NOT the legacy ``"stream"`` key that audio-only
         publishers use — so when the video side gets a
-        ``get_stream_config`` hook in a future ticket the wire shape
+        ``get_stream_config`` hook later the wire shape
         is already prepared for ``{"video": …, "audio": …}`` per the
-        CYB-2004 multi-stream design.  Stuffing audio into ``"stream"``
+        multi-stream design.  Stuffing audio into ``"stream"``
         today would force a wire-breaking rename then.
 
         Known limitation (shared liveness counters).  ``EdgeHealthCheck``
@@ -568,14 +561,14 @@ class MultimediaStreamer:
         this rename, the wire entry ``streams["audio"].frames_sent``
         therefore reflects video frames, not audio packets, while the
         ``stream_config.kind`` says ``"audio"``.  This mismatch is not
-        new — pre-CYB-2005 the same wire data lived under the
+        new — previously the same wire data lived under the
         ambiguous ``streams["stream"]`` key — but the rename surfaces
         it.  The dashboard hides ``fps`` / ``frames_sent`` for audio
         rows so users don't see the mismatch; raw MQTT subscribers do.
         Proper fix is one ``EdgeHealthCheck`` per stream (see the
         ``get_health_data`` docstring's "inadequate for drivers with
         truly independent per-stream live metrics" note) — out of
-        scope for CYB-2005.
+        scope here.
 
         Empty when the audio track is gone (between reconnects) or
         hasn't implemented the hook — keeps the wire on the legacy
@@ -673,8 +666,7 @@ class MultimediaStreamer:
         while self.video_track and self.video_track.sync_frame_pts is None:
             if time.time() - start_time > timeout:
                 logger.warning(
-                    "Timeout waiting for multimedia sync frame %s, "
-                    "current frame: %s",
+                    "Timeout waiting for multimedia sync frame %s, current frame: %s",
                     sync_frame,
                     self.video_track.frame_count if self.video_track else 0,
                 )

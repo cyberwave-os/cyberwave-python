@@ -164,7 +164,9 @@ class ZenohBackend(DataBackend):
         self._active_sub_specs_lock = threading.Lock()
 
         self._watchdog_thread = threading.Thread(
-            target=self._session_watchdog, name="zenoh-watchdog", daemon=True,
+            target=self._session_watchdog,
+            name="zenoh-watchdog",
+            daemon=True,
         )
         self._watchdog_thread.start()
 
@@ -251,7 +253,10 @@ class ZenohBackend(DataBackend):
             except Exception as exc:
                 logger.warning(
                     "Zenoh reconnect attempt %d/%d failed: %s — retrying in %.1fs",
-                    attempt, _RECONNECT_MAX_ATTEMPTS, exc, delay,
+                    attempt,
+                    _RECONNECT_MAX_ATTEMPTS,
+                    exc,
+                    delay,
                 )
                 self._watchdog_stop.wait(delay)
                 delay = min(delay * 2, _RECONNECT_BACKOFF_MAX_S)
@@ -276,7 +281,9 @@ class ZenohBackend(DataBackend):
                 logger.debug("Re-subscribing to '%s' (policy=%s)", channel, policy)
                 self._subscribe_on_session(channel, callback, policy=policy)
             except Exception:
-                logger.exception("Failed to re-subscribe to '%s' after reconnect", channel)
+                logger.exception(
+                    "Failed to re-subscribe to '%s' after reconnect", channel
+                )
 
     # -- DataBackend implementation -------------------------------------------
 
@@ -323,7 +330,9 @@ class ZenohBackend(DataBackend):
                 except ValueError:
                     pass
 
-        return self._subscribe_on_session(channel, callback, policy=policy, on_close=_remove_spec)
+        return self._subscribe_on_session(
+            channel, callback, policy=policy, on_close=_remove_spec
+        )
 
     def _subscribe_on_session(
         self,
@@ -360,7 +369,8 @@ class ZenohBackend(DataBackend):
                         zenoh_sample = subscriber.try_recv()
                     except Exception:
                         logger.debug(
-                            "Zenoh recv exception on '%s' — waiting for reconnect", ch,
+                            "Zenoh recv exception on '%s' — waiting for reconnect",
+                            ch,
                         )
                         while not stop.is_set() and not backend_ref._connected:
                             stop.wait(1.0)
@@ -477,11 +487,10 @@ class ZenohBackend(DataBackend):
         *,
         timeout_s: float = 1.0,
     ) -> Sample | None:
-        with self._store_lock:
-            cached = self._latest_store.get(channel)
-        if cached is not None:
-            return cached
-
+        # Always do a fresh network query. ``_latest_store`` is only for
+        # the publish side (feeds the local queryable); caching replies
+        # here has no invalidation and would freeze polling callers on
+        # the first-tick frame.
         try:
             replies = self._session.get(channel, timeout=timeout_s)
             for reply in replies:
@@ -498,7 +507,8 @@ class ZenohBackend(DataBackend):
                     payload=raw,
                     timestamp=time.time(),
                 )
-                self._latest_store[channel] = sample
+                self._recv_counts[channel] += 1
+                self._recv_bytes[channel] += len(raw)
                 return sample
         except Exception:
             logger.debug("Zenoh get('%s') returned no results", channel, exc_info=True)

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,7 +30,8 @@ class DatasetCreateSchema(BaseModel):
     episodes: List[StrictStr]
     name: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata"]
+    include_audio: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata", "include_audio"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +82,11 @@ class DatasetCreateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if include_audio (nullable) is None
+        # and model_fields_set contains the field
+        if self.include_audio is None and "include_audio" in self.model_fields_set:
+            _dict['include_audio'] = None
+
         return _dict
 
     @classmethod
@@ -95,7 +101,8 @@ class DatasetCreateSchema(BaseModel):
         _obj = cls.model_validate({
             "episodes": obj.get("episodes"),
             "name": obj.get("name"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "include_audio": obj.get("include_audio")
         })
         return _obj
 

@@ -6,7 +6,12 @@ import warnings
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
-from ..exceptions import CyberwaveError
+from ..exceptions import (
+    CyberwaveError,
+    NotSimulatedError,
+    SimulationLevelError,
+    SimulationNotRunningError,
+)
 
 from ._helpers import (
     _SDK_JOINT_INPUT_DEVICES,
@@ -27,7 +32,9 @@ from .transport import TwinTransportMixin
 if TYPE_CHECKING:
     from ..client import Cyberwave
     from ..alerts import TwinAlertManager
+    from .simulation_support import SimLevel
     from ..motion import TwinMotionHandle
+    from ..managers.recordings import TwinRecordingsHandle
     from .capability_resolve import HandlerResolution
     from cyberwave.rest.models.twin_joint_calibration_schema import (
         TwinJointCalibrationSchema,
@@ -35,36 +42,25 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_SENSOR_FAMILY_PLURAL: dict[str, str] = {
-    "lidar": "lidars",
-    "gps": "gpss",
-    "compass": "compasses",
-    "imu": "imus",
-    "flashlight": "flashlights",
-}
-
-_SENSOR_FAMILIES: tuple[
-    tuple[str, str, str, type[Any], Callable[["Twin"], Any]],
-    ...,
-] = (
-    ("lidar", "lidars", "_lidars_namespace", "LidarsNamespace", "_lidar_handle_for"),
-    ("gps", "gpss", "_gpss_namespace", "GpssNamespace", "_gps_handle_for"),
-    (
-        "compass",
-        "compasses",
-        "_compasses_namespace",
-        "CompassesNamespace",
-        "_compass_handle_for",
-    ),
-    ("imu", "imus", "_imus_namespace", "ImusNamespace", "_imu_handle_for"),
-    (
-        "flashlight",
-        "flashlights",
-        "_flashlights_namespace",
-        "FlashlightsNamespace",
-        "_flashlight_handle_for",
-    ),
+_SENSOR_FAMILY_ATTRS: tuple[str, ...] = (
+    "camera",
+    "lidar",
+    "gps",
+    "compass",
+    "imu",
+    "flashlight",
 )
+
+# Removed plural sensor namespaces mapped to their singular replacement family.
+# Accessing the old plural raises a directed AttributeError instead of a bare one.
+_REMOVED_PLURAL_SENSOR_ATTRS: dict[str, str] = {
+    "cameras": "camera",
+    "lidars": "lidar",
+    "gpss": "gps",
+    "compasses": "compass",
+    "imus": "imu",
+    "flashlights": "flashlight",
+}
 
 
 class Twin(TwinEditorMixin, TwinTransportMixin):
@@ -103,6 +99,7 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         # Lazy-initialized handles (capability-specific handles live on mixins)
         self._alerts: Optional["TwinAlertManager"] = None
         self._commands_handle: Optional[TwinCommandsHandle] = None
+        self._recordings_handle: Optional["TwinRecordingsHandle"] = None
         self._driver_handle: Optional[TwinDriverHandle] = None
         self._telemetry_handle: Optional[TwinTelemetry] = None
         self._motion: Optional["TwinMotionHandle"] = None
@@ -169,8 +166,8 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
                 "No controller policy suitable for SDK joint commands was found "
                 f"(need a teleop policy with input_device in "
                 f"{sorted(_SDK_JOINT_INPUT_DEVICES)!r}). "
-                "Attach a teleop controller to this twin in the UI, or re-run "
-                "backend seed_controllers so sdk/keyboard policies exist."
+                "Attach a teleop controller to this twin in the UI, or ensure "
+                "this workspace has default sdk/keyboard controller policies."
             )
         chosen_uuid = _pick_default_sdk_joint_policy_uuid(candidates)
         return next(p for p in candidates if str(p.uuid) == chosen_uuid)
@@ -305,6 +302,15 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         return self._commands_handle
 
     @property
+    def recordings(self) -> "TwinRecordingsHandle":
+        """List and fetch this twin's recordings (``twin.recordings``)."""
+        if self._recordings_handle is None:
+            from ..managers.recordings import TwinRecordingsHandle
+
+            self._recordings_handle = TwinRecordingsHandle(self)
+        return self._recordings_handle
+
+    @property
     def driver(self) -> TwinDriverHandle:
         """Driver interface catalogs (MQTT + Zenoh): getters and ``set_schema``."""
         if self._driver_handle is None:
@@ -395,8 +401,14 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         mock: bool = False,
         source_type: Optional[str] = None,
         frame_bucket: Optional[str] = None,
+        _request_timeout: Any = None,
     ) -> bytes | None:
-        """Fetch the latest cloud JPEG (deprecated — prefer :meth:`get_frame`)."""
+        """Fetch the latest cloud JPEG (deprecated — prefer :meth:`get_frame`).
+
+        ``_request_timeout`` is forwarded to the HTTP client (single total
+        timeout or ``(connect, read)`` tuple). Background polling callers MUST
+        set it so a stalled socket cannot block the fetch thread indefinitely.
+        """
         from ._helpers import _decode_frame
 
         warnings.warn(
@@ -436,6 +448,8 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
                 manager_kwargs["source_type"] = resolved_source_type
             if frame_bucket:
                 manager_kwargs["frame_bucket"] = frame_bucket
+            if _request_timeout is not None:
+                manager_kwargs["_request_timeout"] = _request_timeout
 
             jpeg = self.client.twins.get_latest_frame(self.uuid, **manager_kwargs)
             if jpeg is None:
@@ -487,17 +501,27 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
                 return str(s.get("role") or s.get("name") or s.get("id"))
         raise ValueError(f"Unknown sensor {sensor!r}")
 
-    def _default_imaging_handle(self) -> Any:
-        """Cached handle for the default (first) imaging sensor."""
+    def _imaging_handle_for_sid(self, sid: Optional[str]) -> Any:
+        """Build the right imaging handle (RGB vs depth) for *sid* by sensor type."""
+        from .sensors import sensor_handle_for_key
         from .sensors.camera import TwinCameraHandle
 
+        if sid is None:
+            return TwinCameraHandle(self, sensor_id=sid)
+        try:
+            return sensor_handle_for_key(self, sid)
+        except KeyError:
+            return TwinCameraHandle(self, sensor_id=sid)
+
+    def _default_imaging_handle(self) -> Any:
+        """Cached handle for the default (first) imaging sensor."""
         resolution = self._resolve_handler("camera")
         if not resolution.available:
             raise ValueError("No imaging sensor on this twin")
         sid = resolution.default_sensor_id
         handle = self._camera_handle
         if handle is None or handle._sensor_id != sid:
-            handle = TwinCameraHandle(self, sensor_id=sid)
+            handle = self._imaging_handle_for_sid(sid)
             self._camera_handle = handle
         return handle
 
@@ -508,8 +532,6 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         sensor: str | None = None,
     ) -> Any:
         """Return a per-sensor camera handle."""
-        from .sensors.camera import TwinCameraHandle
-
         resolution = self._resolve_handler("camera")
         if not resolution.available:
             raise ValueError("No imaging sensor on this twin")
@@ -523,163 +545,73 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         default_sid = resolution.default_sensor_id
         if sid == default_sid:
             return self._default_imaging_handle()
-        return TwinCameraHandle(self, sensor_id=sid)
+        return self._imaging_handle_for_sid(sid)
 
-    def _lidar_handle_for(self, sensor_id: Optional[str] = None) -> Any:
-        from .sensors.lidar import LidarSensorHandle
-
-        return self._sensor_handle_for("lidar", LidarSensorHandle, sensor_id=sensor_id)
-
-    def _gps_handle_for(self, sensor_id: Optional[str] = None) -> Any:
-        from .sensors.gps import GpsSensorHandle
-
-        return self._sensor_handle_for("gps", GpsSensorHandle, sensor_id=sensor_id)
-
-    def _compass_handle_for(self, sensor_id: Optional[str] = None) -> Any:
-        from .sensors.compass import CompassSensorHandle
-
-        return self._sensor_handle_for(
-            "compass", CompassSensorHandle, sensor_id=sensor_id
+    def _build_sensor_family(self, attr: str) -> Any:
+        from .sensors import (
+            CAMERA_HANDLE_PUBLIC_METHODS,
+            COMPASS_HANDLE_PUBLIC_METHODS,
+            FLASHLIGHT_HANDLE_PUBLIC_METHODS,
+            GPS_HANDLE_PUBLIC_METHODS,
+            IMU_HANDLE_PUBLIC_METHODS,
+            LIDAR_HANDLE_PUBLIC_METHODS,
+            SensorFamily,
+            compass_handle_for_key,
+            flashlight_handle_for_key,
+            gps_handle_for_key,
+            imu_handle_for_key,
+            lidar_handle_for_key,
+            sensor_handle_for_key,
         )
 
-    def _imu_handle_for(self, sensor_id: Optional[str] = None) -> Any:
-        from .sensors.imu import ImuSensorHandle
-
-        return self._sensor_handle_for("imu", ImuSensorHandle, sensor_id=sensor_id)
-
-    def _flashlight_handle_for(self, sensor_id: Optional[str] = None) -> Any:
-        from .sensors.flashlight import FlashlightSensorHandle
-
-        return self._sensor_handle_for(
-            "flashlight", FlashlightSensorHandle, sensor_id=sensor_id
+        config: dict[str, tuple[Any, tuple[str, ...]]] = {
+            "camera": (sensor_handle_for_key, CAMERA_HANDLE_PUBLIC_METHODS),
+            "lidar": (lidar_handle_for_key, LIDAR_HANDLE_PUBLIC_METHODS),
+            "gps": (gps_handle_for_key, GPS_HANDLE_PUBLIC_METHODS),
+            "compass": (compass_handle_for_key, COMPASS_HANDLE_PUBLIC_METHODS),
+            "imu": (imu_handle_for_key, IMU_HANDLE_PUBLIC_METHODS),
+            "flashlight": (flashlight_handle_for_key, FLASHLIGHT_HANDLE_PUBLIC_METHODS),
+        }
+        handle_for_key, public_methods = config[attr]
+        return SensorFamily(
+            self,
+            handler_key=attr,
+            family_label=attr,
+            public_methods=public_methods,
+            handle_for_key=handle_for_key,
         )
-
-    def _sensor_handle_for(
-        self,
-        handler: str,
-        handle_cls: type[Any],
-        *,
-        sensor_id: Optional[str] = None,
-    ) -> Any:
-        resolution = self._resolve_handler(handler)
-        plural = _SENSOR_FAMILY_PLURAL.get(handler, f"{handler}s")
-        label = handler.replace("_", " ")
-        if not resolution.available:
-            raise ValueError(f"No {label} sensor on this twin")
-        if resolution.multi_sensor and sensor_id is None:
-            raise ValueError(
-                f"Multiple {label} sensors configured; use twin.{plural}[<id>]"
-            )
-        sid = sensor_id or resolution.default_sensor_id
-        return handle_cls(self, sensor_id=sid)
-
-    _GETATTR_SENSOR_MISS = object()
-
-    def _try_getattr_sensor_family(self, name: str) -> Any:
-        from . import namespaces
-
-        for (
-            handler,
-            plural,
-            cache_attr,
-            ns_cls_name,
-            handle_for_name,
-        ) in _SENSOR_FAMILIES:
-            if name == handler:
-                resolution = self._resolve_handler(handler)
-                if not resolution.available:
-                    raise AttributeError(
-                        f"'{type(self).__name__}' object has no attribute '{handler}'"
-                    )
-                if resolution.multi_sensor:
-                    raise AttributeError(
-                        f"'{type(self).__name__}' object has no attribute '{handler}'; "
-                        f"use .{plural} (sensors: {', '.join(resolution.sensor_ids)})"
-                    )
-                return getattr(self, handle_for_name)()
-            if name == plural:
-                resolution = self._resolve_handler(handler)
-                if not resolution.available:
-                    raise AttributeError(
-                        f"'{type(self).__name__}' object has no attribute '{plural}'"
-                    )
-                if not resolution.multi_sensor:
-                    raise AttributeError(
-                        f"'{type(self).__name__}' object has no attribute '{plural}'; "
-                        f"use .{handler} (sensor {resolution.default_sensor_id!r})"
-                    )
-                ns = object.__getattribute__(self, "__dict__").get(cache_attr)
-                if ns is None:
-                    ns_cls = getattr(namespaces, ns_cls_name)
-                    ns = ns_cls(self)
-                    setattr(self, cache_attr, ns)  # type: ignore[attr-defined]
-                return ns
-        return self._GETATTR_SENSOR_MISS
 
     def __getattr__(self, name: str) -> Any:
-        """Inject sensor handles from capabilities (singular XOR plural per family)."""
-        if name == "camera":
-            resolution = self._resolve_handler("camera")
-            if not resolution.available:
-                raise AttributeError(
-                    f"'{type(self).__name__}' object has no attribute 'camera'"
-                )
-            if resolution.multi_sensor:
-                raise AttributeError(
-                    f"'{type(self).__name__}' object has no attribute 'camera'; "
-                    f"use .cameras (sensors: {', '.join(resolution.sensor_ids)})"
-                )
-            return self._default_imaging_handle()
-        if name == "cameras":
-            resolution = self._resolve_handler("camera")
-            if not resolution.available:
-                raise AttributeError(
-                    f"'{type(self).__name__}' object has no attribute 'cameras'"
-                )
-            if not resolution.multi_sensor:
-                raise AttributeError(
-                    f"'{type(self).__name__}' object has no attribute 'cameras'; "
-                    f"use .camera (sensor {resolution.default_sensor_id!r})"
-                )
-            from .namespaces import CamerasNamespace
-
-            ns = object.__getattribute__(self, "__dict__").get("_cameras_namespace")
-            if ns is None:
-                ns = CamerasNamespace(self)
-                self._cameras_namespace = ns  # type: ignore[attr-defined]
-            return ns
-        family = self._try_getattr_sensor_family(name)
-        if family is not self._GETATTR_SENSOR_MISS:
-            return family
+        """Expose each available sensor family as an indexable ``twin.<family>``."""
+        if name in _SENSOR_FAMILY_ATTRS:
+            resolution = self._resolve_handler(name)
+            if resolution.available:
+                cache = self.__dict__.setdefault("_sensor_family_cache", {})
+                family = cache.get(name)
+                if family is None:
+                    family = self._build_sensor_family(name)
+                    cache[name] = family
+                return family
+        singular = _REMOVED_PLURAL_SENSOR_ATTRS.get(name)
+        if singular is not None:
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'. "
+                f"The plural sensor namespaces were removed; use the singular "
+                f"family 'twin.{singular}' "
+                f"(indexable: twin.{singular}[0], twin.{singular}['<sensor_id>'])."
+            )
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
 
     def __dir__(self) -> List[str]:
-        names = list(super().__dir__())
-        cam = self._resolve_handler("camera")
-        if cam.available:
-            if cam.multi_sensor:
-                names = [n for n in names if n != "camera"]
-                if "cameras" not in names:
-                    names.append("cameras")
+        names = set(super().__dir__())
+        for attr in _SENSOR_FAMILY_ATTRS:
+            if self._resolve_handler(attr).available:
+                names.add(attr)
             else:
-                names = [n for n in names if n != "cameras"]
-                if "camera" not in names:
-                    names.append("camera")
-        for handler, plural, *_rest in _SENSOR_FAMILIES:
-            res = self._resolve_handler(handler)
-            if not res.available:
-                continue
-            if res.multi_sensor:
-                names = [n for n in names if n != handler]
-                if plural not in names:
-                    names.append(plural)
-            else:
-                names = [n for n in names if n != plural]
-                if handler not in names:
-                    names.append(handler)
-        return sorted(set(names))
+                names.discard(attr)
+        return sorted(names)
 
     def describe(self) -> Dict[str, Any]:
         """Agent contract: handles and callable methods on this twin instance.
@@ -738,37 +670,29 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         camera_res = self._resolve_handler("camera")
         if camera_res.available:
             flat_methods.extend(["get_frame", "get_frames"])
-            if camera_res.multi_sensor:
-                from .sensors.camera import CAMERA_HANDLE_PUBLIC_METHODS
 
-                first_id = camera_res.sensor_ids[0]
-                handles["cameras"] = {
-                    "keys": list(camera_res.sensor_ids),
-                    "methods": list(CAMERA_HANDLE_PUBLIC_METHODS),
-                    "access": [f"cameras['{first_id}']", f"cameras.{first_id}"],
-                    "per_sensor": "cameras.describe()",
-                }
-            else:
-                handles["camera"] = {
-                    "sensor_id": camera_res.default_sensor_id,
-                    "methods": ["get_frame", "get_frames", "stream"],
-                }
-        from .namespaces import READ_SENSOR_METHODS
+        from .sensors import CAMERA_HANDLE_PUBLIC_METHODS, READ_SENSOR_METHODS
 
-        for handler, methods in READ_SENSOR_METHODS.items():
-            res = self._resolve_handler(handler)
+        family_methods: Dict[str, tuple[str, ...]] = {
+            "camera": CAMERA_HANDLE_PUBLIC_METHODS,
+            **READ_SENSOR_METHODS,
+        }
+        for family, methods in family_methods.items():
+            res = self._resolve_handler(family)
             if not res.available:
                 continue
-            if res.multi_sensor:
-                handles[_SENSOR_FAMILY_PLURAL[handler]] = {
-                    "keys": list(res.sensor_ids),
-                    "methods": list(methods),
-                }
-            else:
-                handles[handler] = {
-                    "sensor_id": res.default_sensor_id,
-                    "methods": list(methods),
-                }
+            first_id = res.sensor_ids[0]
+            handles[family] = {
+                "keys": list(res.sensor_ids),
+                "default_sensor_id": res.default_sensor_id,
+                "methods": list(methods),
+                "access": [
+                    f"{family}[0]",
+                    f"{family}['{first_id}']",
+                    f"{family}.{first_id}",
+                ],
+                "per_sensor": f"{family}.describe()",
+            }
         handles["motion"] = {
             "methods": ["list_movements", "run_movement", "move_to_pose"],
             "scope_default": "auto",
@@ -922,6 +846,58 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             self._driver_catalog_cache = None
         except Exception as e:
             raise CyberwaveError(f"Failed to refresh twin: {e}")
+
+    def _ensure_simulation_support(self, level: "SimLevel", *, method: str) -> None:
+        """Preflight for a simulation-dependent method (see ``@simulation_level``).
+
+        No-op in live runtime mode. In simulation mode: raises
+        ``NotSimulatedError`` for ``UNSUPPORTED``; no further check for
+        ``PLAYGROUND``. For ``BOTH`` and ``MUJOCO`` raises
+        ``SimulationNotRunningError`` when nothing is running (or the running
+        instance hasn't finished starting yet); ``MUJOCO`` additionally raises
+        ``SimulationLevelError`` when the running backend isn't MuJoCo. ``BOTH``
+        accepts any running backend.
+        """
+        from .runtime_state import RUNTIME_MODE_SIMULATION, active_runtime_mode
+        from .simulation_support import SimLevel, backend_sim_level
+
+        if active_runtime_mode(self.client) != RUNTIME_MODE_SIMULATION:
+            return
+
+        if level == SimLevel.UNSUPPORTED:
+            raise NotSimulatedError(
+                f"{method} is not supported in simulation mode."
+            )
+        if level == SimLevel.PLAYGROUND:
+            return
+
+        from ..managers.simulations import running_simulation
+
+        env_id = self.environment_id
+        sim = running_simulation(self)
+        if sim is None or sim.status != "running":
+            status_note = (
+                f" (currently {sim.status!r} — not ready yet; wait for it with "
+                "sim.wait_until_active())"
+                if sim is not None
+                else ""
+            )
+            raise SimulationNotRunningError(
+                f"No running simulation for environment {env_id}{status_note}.\n"
+                "Start one, either:\n\n"
+                f'    cw.environments.simulations.start("{env_id}", '
+                'backend="mujoco", duration=300)\n\n'
+                "or select a simulation runtime (which auto-starts one for the "
+                "client's environment):\n\n"
+                '    cw.affect("sim")   # set CYBERWAVE_ENVIRONMENT_ID=... or '
+                "pass environment_id= so it knows which environment\n\n"
+                "Stop it when finished with sim.stop()."
+            )
+        if level == SimLevel.MUJOCO and backend_sim_level(sim.backend) < SimLevel.MUJOCO:
+            raise SimulationLevelError(
+                f"{method} requires a MuJoCo simulation; the running backend "
+                f"is {sim.backend!r}."
+            )
 
     def _data_get(self, field: str, default: Any = None) -> Any:
         """Read a field from TwinSchema object or dict payload."""

@@ -183,7 +183,10 @@ def test_camera_twin_capture_frame_uses_local_capture_not_rest():
     )
     fake = np.zeros((8, 8, 3), dtype=np.uint8)
 
-    with patch.object(camera_twin.camera, "_capture_local_array", return_value=fake):
+    # capture_frame() routes through the default imaging handle (mixin path),
+    # which is distinct from the twin.camera family collection.
+    handle = camera_twin._default_imaging_handle()
+    with patch.object(handle, "_capture_local_array", return_value=fake):
         result = camera_twin.capture_frame("numpy", sensor_id="front")
 
     assert result.shape == (8, 8, 3)

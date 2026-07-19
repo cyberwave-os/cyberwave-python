@@ -135,12 +135,15 @@ def test_affect_changes_emitted_command_and_state_source_types() -> None:
         simulation_mqtt._client.connected = True
         simulation_mqtt._client.publish = MagicMock()
 
+        # Locomotion is PLAYGROUND-compatible: it publishes with sim_tele in
+        # simulation runtime mode rather than raising.
         with patch.object(twin, "_prepare_outbound_command"):
             twin.move_forward(1.0, duration=0)
-        forward = next(
+        forward_sim = next(
             entry for entry in twin._outbound_log if entry.command == "move_forward"
         )
-        assert forward.payload["source_type"] == "sim_tele"
+        assert forward_sim.payload["source_type"] == "sim_tele"
+        twin._outbound_log.clear()
 
         simulation_mqtt._client.publish.reset_mock()
         simulation_mqtt.update_twin_position(

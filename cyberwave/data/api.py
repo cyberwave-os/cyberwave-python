@@ -22,7 +22,7 @@ import time
 from typing import TYPE_CHECKING, Any, Callable
 
 from .backend import DataBackend, Sample, Subscription
-from .exceptions import DataBackendError
+from .exceptions import DataBackendError, WireFormatError
 from .header import (
     CONTENT_TYPE_BYTES,
     CONTENT_TYPE_JSON,
@@ -57,6 +57,33 @@ def _decode_sample(header: HeaderMeta, payload: bytes) -> Any:
         return np.frombuffer(payload, dtype=header.dtype).reshape(header.shape).copy()
     if header.content_type == CONTENT_TYPE_JSON:
         return json.loads(payload)
+    return payload
+
+
+_JSON_START_BYTES = frozenset({ord("{"), ord("[")})
+
+
+def _permissive_decode(sample: Sample) -> Any:
+    """Decode a header'd payload; fall back to raw JSON / bytes on WireFormatError.
+
+    Lets subscribers read ``publish_raw`` producers (e.g. detection JSON)
+    through the standard headered API.
+    """
+    try:
+        header, payload = decode(sample.payload)
+    except WireFormatError:
+        return _fallback_decode_headerless(sample.payload)
+    return _decode_sample(header, payload)
+
+
+def _fallback_decode_headerless(payload: bytes) -> Any:
+    if not payload:
+        return payload
+    if payload[0] in _JSON_START_BYTES:
+        try:
+            return json.loads(payload)
+        except (ValueError, UnicodeDecodeError):
+            pass
     return payload
 
 
@@ -207,8 +234,7 @@ class DataBus:
 
         def _on_sample(sample: Sample) -> None:
             try:
-                header, payload = decode(sample.payload)
-                decoded = _decode_sample(header, payload)
+                decoded = _permissive_decode(sample)
             except Exception:
                 logger.warning(
                     "Failed to decode sample on channel '%s'",
@@ -238,22 +264,20 @@ class DataBus:
         timeout_s: float = 1.0,
         max_age_ms: float | None = None,
         raw: bool = False,
+        twin_uuid: str | None = None,
     ) -> Any:
         """Return the latest value on *channel*, decoded.
 
-        If *max_age_ms* is set, returns ``None`` when the sample's
-        acquisition timestamp (``header.ts``) is older than *max_age_ms*
-        milliseconds — Phase 1 temporal synchronisation primitive.
+        If *max_age_ms* is set, returns ``None`` when the sample is older
+        than *max_age_ms* (based on ``header.ts`` for headered producers,
+        transport ``Sample.timestamp`` for headerless). Headerless JSON
+        payloads are decoded transparently via :func:`_permissive_decode`.
 
-        .. note::
-
-            The staleness check compares the publisher's ``time.time()``
-            against the local clock.  On a single machine this is exact;
-            across machines the accuracy is bounded by NTP drift, so very
-            small thresholds (< ~20 ms) may be unreliable.
+        Args:
+            twin_uuid: Read from a different twin than the bus is scoped
+                to (parity with :meth:`publish` / :meth:`subscribe`).
 
         Raises:
-            WireFormatError: If the sample's wire header is corrupt.
             ValueError: If *max_age_ms* is negative.
         """
         if max_age_ms is not None and max_age_ms < 0:
@@ -261,8 +285,9 @@ class DataBus:
                 f"max_age_ms must be >= 0, got {max_age_ms}"
             )
 
+        effective_twin = twin_uuid if twin_uuid is not None else self._twin_uuid
         key = build_key(
-            self._twin_uuid,
+            effective_twin,
             channel,
             self._sensor_name,
             prefix=self._key_prefix,
@@ -274,7 +299,14 @@ class DataBus:
         if raw:
             return sample
 
-        header, payload = decode(sample.payload)
+        try:
+            header, payload = decode(sample.payload)
+        except WireFormatError:
+            if max_age_ms is not None:
+                age_s = time.time() - sample.timestamp
+                if age_s > max_age_ms / 1000.0:
+                    return None
+            return _fallback_decode_headerless(sample.payload)
 
         if max_age_ms is not None:
             age_s = time.time() - header.ts

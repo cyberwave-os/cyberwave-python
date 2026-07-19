@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import copy
 import threading
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from ...consumers.callback_hub import CallbackHub, StateSubscription
+from ...consumers.mqtt_live_view import LiveMappingView
 from ...manifest.driver_config import resolve_inbound_topics
-from ...mqtt.state import attach_topic_listener, wait_for_first_message
+from ...mqtt.state import attach_topic_listener
 
 if TYPE_CHECKING:
     from ..base import Twin
@@ -21,6 +23,8 @@ class PowerHandle:
         self._power_listeners_attached = False
         self._power_ready = threading.Event()
         self._power_lock = threading.Lock()
+        self._power_hub = CallbackHub(label="power")
+        self._power_view: LiveMappingView | None = None
 
     def _topic_prefix(self) -> str:
         config = getattr(getattr(self._twin, "client", None), "config", None)
@@ -30,6 +34,7 @@ class PowerHandle:
         with self._power_lock:
             self._curr_power = dict(payload)
             self._power_ready.set()
+        self._power_hub.notify(self._power_snapshot)
 
     def _ensure_power_listeners(self) -> None:
         if self._power_listeners_attached:
@@ -58,20 +63,34 @@ class PowerHandle:
         )
         self._twin._publish_resolved(resolved)
 
-    def get(self, *, timeout: float = 3.0) -> dict[str, Any]:
-        """Read battery/status from MQTT listeners (``_curr_power``)."""
-        self._ensure_power_listeners()
-        wait_for_first_message(
-            self._power_ready,
-            timeout=timeout if self._curr_power is None else 0.0,
-            twin_uuid=self._twin.uuid,
-            stream="power",
-        )
-        with self._power_lock:
-            if self._curr_power is None:
-                from ...exceptions import TwinStateTimeoutError
+    def _safe_ensure_power_listeners(self) -> None:
+        from ...exceptions import TwinStateUnavailableError
 
-                raise TwinStateTimeoutError(
-                    f"No MQTT power/battery update within {timeout}s for twin {self._twin.uuid}"
-                )
-            return copy.deepcopy(self._curr_power)
+        try:
+            self._ensure_power_listeners()
+        except (TwinStateUnavailableError, NotImplementedError):
+            pass
+
+    def _power_snapshot(self) -> dict[str, Any]:
+        with self._power_lock:
+            return copy.deepcopy(self._curr_power) if self._curr_power is not None else {}
+
+    def get(self, *, timeout: float = 3.0) -> LiveMappingView:
+        """Return a **live** battery/status view.
+
+        Refreshes in place on every inbound status; empty (``{}``) until the first
+        message. If empty, waits up to *timeout* for the first message. The same
+        view is returned on later calls.
+        """
+        self._safe_ensure_power_listeners()
+        if self._curr_power is None:
+            self._power_ready.wait(timeout=timeout)
+        if self._power_view is None:
+            self._power_view = LiveMappingView(self._power_hub, self._power_snapshot)
+        return self._power_view
+
+    def on_update(
+        self, callback: "Callable[[dict[str, Any]], None]"
+    ) -> StateSubscription:
+        self._safe_ensure_power_listeners()
+        return self._power_hub.subscribe(callback)

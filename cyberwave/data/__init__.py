@@ -24,7 +24,7 @@ Debug / replay::
 
     replay(backend, "/tmp/session", speed=1.0)
 
-Time-aware fusion (Phases 3–4)::
+Time-aware fusion::
 
     from cyberwave.data import FusionLayer
 
@@ -137,11 +137,11 @@ __all__ = [
     "RecordingManifest",
     "record",
     "replay",
-    # Ring buffer (CYB-1584)
+    # Ring buffer
     "TimeIndexedRingBuffer",
     "TimestampedSample",
     "BracketResult",
-    # Fusion (CYB-1584)
+    # Fusion
     "FusionLayer",
     "ChannelBuffer",
     "Quaternion",

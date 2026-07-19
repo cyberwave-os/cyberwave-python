@@ -33,8 +33,10 @@ class RLTaskPolicyProvenanceSchema(BaseModel):
     checkpoint: Optional[Dict[str, Any]] = None
     weights: Optional[Dict[str, Any]] = None
     source_code_available: Optional[StrictBool] = False
+    inference_command_setup_enabled: Optional[StrictBool] = False
+    inference_command_spec: Optional[Dict[str, Any]] = None
     warnings: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["policy_uuid", "source_status", "rl_task", "checkpoint", "weights", "source_code_available", "warnings"]
+    __properties: ClassVar[List[str]] = ["policy_uuid", "source_status", "rl_task", "checkpoint", "weights", "source_code_available", "inference_command_setup_enabled", "inference_command_spec", "warnings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -90,6 +92,11 @@ class RLTaskPolicyProvenanceSchema(BaseModel):
         if self.weights is None and "weights" in self.model_fields_set:
             _dict['weights'] = None
 
+        # set to None if inference_command_spec (nullable) is None
+        # and model_fields_set contains the field
+        if self.inference_command_spec is None and "inference_command_spec" in self.model_fields_set:
+            _dict['inference_command_spec'] = None
+
         return _dict
 
     @classmethod
@@ -108,6 +115,8 @@ class RLTaskPolicyProvenanceSchema(BaseModel):
             "checkpoint": obj.get("checkpoint"),
             "weights": obj.get("weights"),
             "source_code_available": obj.get("source_code_available") if obj.get("source_code_available") is not None else False,
+            "inference_command_setup_enabled": obj.get("inference_command_setup_enabled") if obj.get("inference_command_setup_enabled") is not None else False,
+            "inference_command_spec": obj.get("inference_command_spec"),
             "warnings": obj.get("warnings")
         })
         return _obj

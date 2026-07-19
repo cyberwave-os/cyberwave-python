@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock
 
 from cyberwave.motion import TwinMotionHandle
 from cyberwave.twin import Twin
@@ -135,6 +136,34 @@ def test_motion_handle_move_to_pose_defaults_to_auto_scope():
     motion.move_to_pose("Stand")
 
     assert api_client.serialized[0]["body"]["scope"] == "auto"
+
+
+def test_pose_with_joints_uses_joint_mqtt_path_instead_of_actions_endpoint():
+    api_client = FakeApiClient({"unused": True})
+    twin = FakeTwin(api_client)
+    twin.joints = MagicMock()
+    motion = TwinMotionHandle(twin)
+
+    result = motion.pose(joints={"joint_1": 0.4}, source_type="sim")
+
+    twin.joints.set.assert_called_once_with({"joint_1": 0.4}, source_type="sim")
+    assert api_client.serialized == []
+    assert result == {
+        "status": "published",
+        "transport": "mqtt",
+        "command": "joint_update",
+    }
+
+
+def test_pose_with_joints_requires_joint_capable_twin():
+    api_client = FakeApiClient({"unused": True})
+    motion = TwinMotionHandle(FakeTwin(api_client))
+
+    try:
+        motion.pose(joints={"joint_1": 0.4})
+        raise AssertionError("Expected ValueError for twin without joints handle")
+    except ValueError as exc:
+        assert "joint-capable twin" in str(exc)
 
 
 def test_motion_handle_list_movements_defaults_to_auto_scope():

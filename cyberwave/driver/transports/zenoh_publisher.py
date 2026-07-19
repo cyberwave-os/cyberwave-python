@@ -82,6 +82,7 @@ class ZenohPublisherMixin:
         _zenoh_stop:        threading.Event
         _zenoh_thread:      threading.Thread | None
         _zenoh_channel:     str  (frame channel name)
+        _zenoh_frame_metadata: dict | None  (metadata bound on the first frame)
     """
 
     def _init_zenoh_bus(
@@ -90,6 +91,7 @@ class ZenohPublisherMixin:
         twin_uuid: str,
         cw_client: Any = None,
         frame_channel: str = "frames/default",
+        frame_metadata: dict[str, Any] | None = {"color_format": "rgb24"},
     ) -> None:
         """Initialize the Zenoh data bus and frame publisher thread.
 
@@ -102,12 +104,18 @@ class ZenohPublisherMixin:
                             provided, prefer ``cw_client.data_bus_for(twin_uuid)``.
                             When ``None``, ``DataBus`` is built from env vars.
             frame_channel:  Zenoh channel for binary frames.
+            frame_metadata: Metadata bound to *frame_channel* on the first frame
+                            (see ``HeaderTemplate`` -- metadata is immutable after
+                            the first publish). Defaults to ``rgb24`` for camera
+                            callers; pass ``None`` (or a suitable dict) for
+                            non-RGB frames such as uint16 depth.
         """
         self._zenoh_data_bus: DataBus | None = None
         self._zenoh_frame_slot: _FrameSlot | None = None
         self._zenoh_stop: threading.Event = threading.Event()
         self._zenoh_thread: threading.Thread | None = None
         self._zenoh_channel: str = frame_channel
+        self._zenoh_frame_metadata: dict[str, Any] | None = frame_metadata
 
         if not os.getenv("CYBERWAVE_DATA_BACKEND"):
             return
@@ -167,7 +175,7 @@ class ZenohPublisherMixin:
                     self._zenoh_data_bus.publish(
                         self._zenoh_channel,
                         frame,
-                        metadata={"color_format": "rgb24"},
+                        metadata=self._zenoh_frame_metadata,
                     )
                     _first = False
                 else:

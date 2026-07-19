@@ -32,7 +32,9 @@ class CatalogSeedResponseSchema(BaseModel):
     controllers: CatalogSeedGroupSchema
     mlmodels: CatalogSeedGroupSchema
     workflow_templates: CatalogSeedGroupSchema
-    __properties: ClassVar[List[str]] = ["workspace_uuid", "controllers", "mlmodels", "workflow_templates"]
+    asset_patches: CatalogSeedGroupSchema
+    simplified_meshes: CatalogSeedGroupSchema
+    __properties: ClassVar[List[str]] = ["workspace_uuid", "controllers", "mlmodels", "workflow_templates", "asset_patches", "simplified_meshes"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -82,6 +84,12 @@ class CatalogSeedResponseSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of workflow_templates
         if self.workflow_templates:
             _dict['workflow_templates'] = self.workflow_templates.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of asset_patches
+        if self.asset_patches:
+            _dict['asset_patches'] = self.asset_patches.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of simplified_meshes
+        if self.simplified_meshes:
+            _dict['simplified_meshes'] = self.simplified_meshes.to_dict()
         return _dict
 
     @classmethod
@@ -97,7 +105,9 @@ class CatalogSeedResponseSchema(BaseModel):
             "workspace_uuid": obj.get("workspace_uuid"),
             "controllers": CatalogSeedGroupSchema.from_dict(obj["controllers"]) if obj.get("controllers") is not None else None,
             "mlmodels": CatalogSeedGroupSchema.from_dict(obj["mlmodels"]) if obj.get("mlmodels") is not None else None,
-            "workflow_templates": CatalogSeedGroupSchema.from_dict(obj["workflow_templates"]) if obj.get("workflow_templates") is not None else None
+            "workflow_templates": CatalogSeedGroupSchema.from_dict(obj["workflow_templates"]) if obj.get("workflow_templates") is not None else None,
+            "asset_patches": CatalogSeedGroupSchema.from_dict(obj["asset_patches"]) if obj.get("asset_patches") is not None else None,
+            "simplified_meshes": CatalogSeedGroupSchema.from_dict(obj["simplified_meshes"]) if obj.get("simplified_meshes") is not None else None
         })
         return _obj
 

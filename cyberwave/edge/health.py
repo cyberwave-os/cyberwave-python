@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 #: payload with host-level metrics (memory %, CPU temp, watchdog layers,
 #: ...).  The callable must be cheap (executed every ``interval`` seconds
 #: on the publisher thread) and must not raise — exceptions are caught and
-#: logged at debug.  See ``cyberwave-edge-core`` for the canonical
-#: implementation that wraps the host ``SystemResourceMonitor`` and
-#: ``ProcessWatchdog``.
+#: logged at debug.
 HostMetricsProvider = Callable[[], Dict[str, Any]]
 
 
@@ -42,12 +40,11 @@ KNOWN_STREAM_CONFIG_KINDS = frozenset({"camera", "audio", "lidar", "imu"})
 
 
 #: Required fields per kind, enforced by :meth:`_validate_stream_config`.
-#: Mirrors the frontend's ``StreamConfig`` discriminated union in
-#: ``cyberwave-frontend/hooks/useMQTTEdgeHealth.ts``: when a driver
-#: claims a kind, it must supply the fields the dashboard needs to
-#: render meaningfully.  Without this validation we would happily ship
-#: wire payloads that pass Pydantic ``extra="allow"`` on the backend
-#: but render as empty rows on the frontend.
+#: Mirrors the frontend's discriminated ``StreamConfig`` union: when a
+#: driver claims a kind, it must supply the fields the dashboard needs
+#: to render meaningfully.  Without this validation we would happily
+#: ship wire payloads that pass loose server-side validation but
+#: render as empty rows on the frontend.
 #:
 #: ``source`` is required for kinds whose source is a device path,
 #: URL, or ROS topic (``camera``, ``lidar``, ``imu``) because the
@@ -58,8 +55,8 @@ KNOWN_STREAM_CONFIG_KINDS = frozenset({"camera", "audio", "lidar", "imu"})
 #: device path is a leak risk, and publishing the codec instead
 #: would overload the field's semantics (camera publishes
 #: ``/dev/video0``, lidar publishes ``/point_cloud2`` — audio
-#: publishing ``"opus"`` was the CYB-2005 contract drift this
-#: relaxation fixes).  Audio drivers may still attach ``source``
+#: publishing ``"opus"`` was a contract drift this relaxation
+#: fixes).  Audio drivers may still attach ``source``
 #: when they have a meaningful identifier (e.g. a JACK port name);
 #: the validator just doesn't demand one.
 #:
@@ -292,11 +289,10 @@ class EdgeHealthCheck:
         - **Audio**: a WebRTC microphone emits a frame every 20 ms,
           so ``update_frame_count`` per frame would put ``fps: 50.0``
           and ``frames_sent: <packet count>`` on the wire.  The
-          dashboard explicitly hides these fields for audio rows
-          (see ``computeStreamMetaFromWire``'s audio branch) but raw
-          MQTT subscribers and Vector's ``app_twintelemetry`` table
-          would still see misleading numbers.  ``mark_alive`` keeps
-          those fields at ``0``.
+          dashboard explicitly hides these fields for audio rows, but
+          raw MQTT subscribers and other telemetry consumers would
+          still see misleading numbers.  ``mark_alive`` keeps those
+          fields at ``0``.
         - **Future IMU / encoder / GPS**: same shape — sample rate
           belongs in ``stream_config.rate_hz`` (the configured
           target), not as an SDK-derived running average.
@@ -382,8 +378,9 @@ class EdgeHealthCheck:
             # historical single-stream entry so its fps / staleness
             # surfaces on the dashboard.  Covers two flavours:
             # ``update_frame_count`` callers (``camera_sim``, the
-            # pre-CYB-2004 ``av_streamer`` path) AND ``mark_alive``
-            # callers (the microphone publisher, future IMU / encoder
+            # legacy ``av_streamer`` path that predates the
+            # stream_config contract) AND ``mark_alive`` callers
+            # (the microphone publisher, future IMU / encoder
             # publishers — see :meth:`mark_alive`).  Keying off
             # ``_has_alive_signal`` rather than ``frame_count > 0`` is
             # what lets the audio path surface at all: ``mark_alive``
@@ -398,9 +395,9 @@ class EdgeHealthCheck:
             # ever — most commonly the edge-core bootstrap publisher
             # in the gap before a real driver container starts.  Emit
             # an empty ``streams`` map rather than a phantom "0.0 fps"
-            # row; the dashboard's ``StreamsSection`` then renders
-            # nothing instead of a misleading entry that flickers
-            # away when the driver takes over.  See CYB-2004 PR 2.
+            # row; the dashboard then renders nothing instead of a
+            # misleading entry that flickers away when the driver
+            # takes over.
             stream_ids = []
 
         def _build_stream_entry(stream_id: str) -> Dict[str, Any]:
@@ -499,7 +496,7 @@ class EdgeHealthCheck:
     ) -> Optional[Dict[str, Any]]:
         """Mirror the first camera-kind ``stream_config`` into the legacy slot.
 
-        Only the fields the frontend's ``EdgeCameraConfig`` interface
+        Only the fields the frontend's legacy camera_config shape
         declares are forwarded; extras are dropped so the shim does not
         accidentally leak new fields under an old field name.  Iteration
         is sorted by ``stream_id`` so multi-camera devices (e.g.

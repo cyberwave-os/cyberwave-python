@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class RLTaskSourceFileUpsertSchema(BaseModel):
     """
-    Upsert payload for a single user-owned source file.
+    Upsert payload for a single user-written source file.
     """ # noqa: E501
     path: StrictStr
     content: StrictStr

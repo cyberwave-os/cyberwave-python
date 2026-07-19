@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 if TYPE_CHECKING:
     from ..base import Twin
 
-__all__ = ["FlashlightSensorHandle"]
+__all__ = ["FlashlightSensorHandle", "FLASHLIGHT_HANDLE_PUBLIC_METHODS"]
+
+FLASHLIGHT_HANDLE_PUBLIC_METHODS: tuple[str, ...] = ("metadata", "set")
 
 
 class FlashlightSensorHandle:
@@ -18,14 +20,10 @@ class FlashlightSensorHandle:
         self.sensor_id = sensor_id
 
     def __repr__(self) -> str:
-        from ..namespaces.flashlight import FLASHLIGHT_HANDLE_PUBLIC_METHODS
-
         methods = ", ".join(FLASHLIGHT_HANDLE_PUBLIC_METHODS)
         return f"{type(self).__name__}(sensor_id={self.sensor_id!r}; {methods})"
 
     def __dir__(self) -> list[str]:
-        from ..namespaces.flashlight import FLASHLIGHT_HANDLE_PUBLIC_METHODS
-
         names = {n for n in object.__dir__(self) if not n.startswith("_")}
         names.update(FLASHLIGHT_HANDLE_PUBLIC_METHODS)
         return sorted(names)

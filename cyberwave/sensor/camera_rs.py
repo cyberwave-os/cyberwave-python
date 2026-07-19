@@ -3,14 +3,14 @@
 Provides video streaming using Intel RealSense cameras with RGB and depth support.
 """
 
-import base64
 import fractions
 import logging
-from typing import TYPE_CHECKING, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Optional, Tuple, Union
 
 import numpy as np
 from av import VideoFrame
 
+from ..utils.depth import build_depth_mqtt_payload
 from . import BaseVideoTrack, BaseVideoStreamer
 from .config import Resolution, RealSenseConfig
 
@@ -56,6 +56,8 @@ class RealSenseVideoTrack(BaseVideoTrack):
         time_reference: Optional["TimeReference"] = None,
         twin_uuid: Optional[str] = None,
         depth_publish_interval: int = 30,
+        frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        depth_callback: Optional[Callable[[np.ndarray, int], None]] = None,
     ):
         """Initialize the RealSense video stream track.
 
@@ -65,10 +67,18 @@ class RealSenseVideoTrack(BaseVideoTrack):
             color_resolution: RGB stream resolution (default: VGA 640x480)
             depth_resolution: Depth stream resolution (default: VGA 640x480)
             enable_depth: Whether to enable depth streaming (default: True)
-            client: MQTT client for publishing depth frames
+            client: MQTT client for the throttled MQTT depth publish path
+                (optional).
             time_reference: Time reference for synchronization
             twin_uuid: UUID of the digital twin
-            depth_publish_interval: Publish depth every N frames (default: 30)
+            depth_publish_interval: MQTT depth publish period in frames
+                (default: 30). Does not throttle ``depth_callback``.
+            frame_callback: Optional per-frame color callback. Fires on
+                every fresh capture with a Python-owned array (safe to
+                queue). Signature: ``(frame, frame_count) -> None``.
+            depth_callback: Optional per-frame depth callback. Same
+                contract as ``frame_callback``; only invoked when
+                ``enable_depth`` is True.
         """
         require_realsense()
         super().__init__()
@@ -76,6 +86,8 @@ class RealSenseVideoTrack(BaseVideoTrack):
         self.client = client
         self.time_reference = time_reference
         self.twin_uuid = twin_uuid
+        self.frame_callback = frame_callback
+        self.depth_callback = depth_callback
 
         # Parse color resolution
         if isinstance(color_resolution, Resolution):
@@ -105,10 +117,14 @@ class RealSenseVideoTrack(BaseVideoTrack):
         self._cached_color_image: Optional[np.ndarray] = None
         self._cached_depth_image: Optional[np.ndarray] = None
 
-        # Validate depth requirements
-        if self.enable_depth and (not self.client or not self.twin_uuid):
+        # MQTT client + twin_uuid are only required for the throttled MQTT
+        # depth publish path; a ``depth_callback``-only caller can skip both.
+        needs_mqtt_depth = self.enable_depth and self.depth_callback is None
+        if needs_mqtt_depth and (not self.client or not self.twin_uuid):
             raise ValueError(
-                "To enable depth streaming, client and twin_uuid must be provided"
+                "To enable MQTT depth streaming, client and twin_uuid must be "
+                "provided; alternatively pass a depth_callback for a "
+                "callback-only path (no MQTT client required)."
             )
 
         # Initialize camera
@@ -254,41 +270,34 @@ class RealSenseVideoTrack(BaseVideoTrack):
             return False, None
 
     def _publish_depth_frame(self, depth_image: np.ndarray, timestamp: float):
-        """Publish depth frame via MQTT."""
+        """Publish a depth frame via MQTT using the canonical wire payload."""
         if self.client is None or self.twin_uuid is None:
             return
-
-        if depth_image.dtype != np.uint16:
-            depth_image = depth_image.astype(np.uint16)
-
-        # Use actual image dimensions (depth is aligned to color, so dimensions may differ)
-        height, width = depth_image.shape[:2]
-
-        depth_binary = base64.b64encode(depth_image.tobytes()).decode("utf-8")
-        depth_data = {
-            "depth_binary": depth_binary,
-            "width": width,
-            "height": height,
-            "dtype": "uint16",
-        }
+        depth_data = build_depth_mqtt_payload(depth_image)
         self.client.publish_depth_frame(self.twin_uuid, depth_data, timestamp)
 
     async def recv(self):
         """Receive and encode the next video frame."""
         ret, frames = self._get_frames()
-        
+
+        # Gates the per-frame callbacks and MQTT depth publish: on a
+        # cached-frame fallback we still re-encode for WebRTC, but must
+        # NOT re-publish the same pixels with a fresh ``ts``/``seq`` —
+        # that would misrepresent frame freshness to subscribers.
+        fresh_capture = True
+
         # If reading failed, use cached frame
         if not ret or frames is None:
             if self._cached_color_image is not None:
                 logger.debug("Failed to read frames from RealSense camera, using cached frame")
                 color_image = self._cached_color_image
-                depth_image = self._cached_depth_image if self.enable_depth else None
+                fresh_capture = False
             else:
                 # No cached frame available - return None
                 logger.error("Failed to read frames and no cached frame available")
                 return None
         else:
-            color_image, depth_image = frames
+            color_image, _ = frames
 
         try:
             self._current_frame = color_image.copy()  # type: ignore[union-attr]
@@ -333,13 +342,54 @@ class RealSenseVideoTrack(BaseVideoTrack):
             time_base_den=time_base.denominator,
         )
 
-        # Publish depth frame at configured interval
+        # Callbacks receive the cached (Python-owned) copy, not
+        # ``color_image`` / ``depth_image`` — those are views over
+        # librealsense memory that gets reclaimed on the next
+        # ``wait_for_frames()`` call, so a callback that queues the
+        # array would read garbage by the time it's consumed.
+        if (
+            fresh_capture
+            and self.frame_callback is not None
+            and self._cached_color_image is not None
+        ):
+            try:
+                self.frame_callback(self._cached_color_image, self.frame_count)
+            except Exception:
+                logger.warning(
+                    "frame_callback raised on frame %d; continuing",
+                    self.frame_count,
+                    exc_info=True,
+                )
+
+        if (
+            fresh_capture
+            and self.enable_depth
+            and self.depth_callback is not None
+            and self._cached_depth_image is not None
+        ):
+            try:
+                self.depth_callback(self._cached_depth_image, self.frame_count)
+            except Exception:
+                logger.warning(
+                    "depth_callback raised on frame %d; continuing",
+                    self.frame_count,
+                    exc_info=True,
+                )
+
+        # MQTT depth publish (throttled). Independent of
+        # ``depth_callback``, which fires every frame. Intentionally NOT
+        # gated on ``fresh_capture``: legacy MQTT subscribers relied on
+        # cached-fallback publishes to "keep the last-known depth warm"
+        # during transient camera hiccups. Gating this would silently
+        # break them.
         if (
             self.enable_depth
-            and depth_image is not None
+            and self._cached_depth_image is not None
+            and self.client is not None
+            and self.twin_uuid is not None
             and self.frame_count % self.depth_publish_interval == 0
         ):
-            self._publish_depth_frame(depth_image, timestamp)
+            self._publish_depth_frame(self._cached_depth_image, timestamp)
 
         self.frame_count += 1
 
@@ -416,6 +466,8 @@ class RealSenseStreamer(BaseVideoStreamer):
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
         camera_name: Optional[str] = None,
+        frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        depth_callback: Optional[Callable[[np.ndarray, int], None]] = None,
     ):
         """Initialize the RealSense camera streamer.
 
@@ -426,12 +478,15 @@ class RealSenseStreamer(BaseVideoStreamer):
             color_resolution: RGB stream resolution (default: VGA 640x480)
             depth_resolution: Depth stream resolution (default: VGA 640x480)
             enable_depth: Whether to enable depth streaming (default: True)
-            depth_publish_interval: Publish depth every N frames (default: 30)
+            depth_publish_interval: MQTT depth publish period in frames
+                (default: 30). Does not throttle ``depth_callback``.
             turn_servers: Optional list of TURN server configurations
             twin_uuid: Optional UUID of the digital twin
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
             camera_name: Optional sensor identifier for multi-stream twins
+            frame_callback: See :class:`RealSenseVideoTrack`.
+            depth_callback: See :class:`RealSenseVideoTrack`.
         """
         require_realsense()
         super().__init__(
@@ -450,6 +505,8 @@ class RealSenseStreamer(BaseVideoStreamer):
         self.depth_resolution = depth_resolution
         self.enable_depth = enable_depth
         self.depth_publish_interval = depth_publish_interval
+        self.frame_callback = frame_callback
+        self.depth_callback = depth_callback
 
     @classmethod
     def from_config(
@@ -462,6 +519,8 @@ class RealSenseStreamer(BaseVideoStreamer):
         auto_reconnect: bool = True,
         validate: bool = True,
         camera_name: Optional[str] = None,
+        frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        depth_callback: Optional[Callable[[np.ndarray, int], None]] = None,
     ) -> "RealSenseStreamer":
         """Create streamer from RealSenseConfig.
 
@@ -473,6 +532,8 @@ class RealSenseStreamer(BaseVideoStreamer):
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
             validate: Whether to validate config against device capabilities (default: True)
+            frame_callback: See :class:`RealSenseVideoTrack`.
+            depth_callback: See :class:`RealSenseVideoTrack`.
 
         Returns:
             Configured RealSenseStreamer instance
@@ -498,6 +559,8 @@ class RealSenseStreamer(BaseVideoStreamer):
             time_reference=time_reference,
             auto_reconnect=auto_reconnect,
             camera_name=camera_name,
+            frame_callback=frame_callback,
+            depth_callback=depth_callback,
         )
 
     @classmethod
@@ -513,6 +576,8 @@ class RealSenseStreamer(BaseVideoStreamer):
         time_reference: Optional["TimeReference"] = None,
         auto_reconnect: bool = True,
         camera_name: Optional[str] = None,
+        frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        depth_callback: Optional[Callable[[np.ndarray, int], None]] = None,
     ) -> "RealSenseStreamer":
         """Create streamer with auto-detected device configuration.
 
@@ -549,6 +614,8 @@ class RealSenseStreamer(BaseVideoStreamer):
             auto_reconnect=auto_reconnect,
             validate=False,  # Already validated during from_device
             camera_name=camera_name,
+            frame_callback=frame_callback,
+            depth_callback=depth_callback,
         )
 
     def initialize_track(self) -> RealSenseVideoTrack:
@@ -563,5 +630,7 @@ class RealSenseStreamer(BaseVideoStreamer):
             time_reference=self.time_reference,
             twin_uuid=self.twin_uuid,
             depth_publish_interval=self.depth_publish_interval,
+            frame_callback=self.frame_callback,
+            depth_callback=self.depth_callback,
         )
         return self.streamer

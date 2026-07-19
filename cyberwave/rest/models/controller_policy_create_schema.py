@@ -35,8 +35,9 @@ class ControllerPolicyCreateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     workspace_uuid: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
+    asset_registry_ids: Optional[List[StrictStr]] = None
     device: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "visibility", "description", "controller_type", "metadata", "workspace_uuid", "asset_uuids", "device"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "visibility", "description", "controller_type", "metadata", "workspace_uuid", "asset_uuids", "asset_registry_ids", "device"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -117,6 +118,7 @@ class ControllerPolicyCreateSchema(BaseModel):
             "metadata": obj.get("metadata"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "asset_uuids": obj.get("asset_uuids"),
+            "asset_registry_ids": obj.get("asset_registry_ids"),
             "device": obj.get("device")
         })
         return _obj

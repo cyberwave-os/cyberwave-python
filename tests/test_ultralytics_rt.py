@@ -183,6 +183,11 @@ class TestUltralyticsYoloePrompt:
         handle.get_text_pe = MagicMock(return_value="text_pe_tensor")
         del handle._cw_active_prompt
         del handle._cw_writable_dir  # opt out of the chdir sandbox, covered separately
+        # ``spec=[]`` blocks MagicMock's auto-attribute creation so the
+        # prompt-free probe (``hasattr(layer, "lrpc")``) stays False by
+        # default — prompt-free tests reassign ``handle.model`` with an
+        # ``lrpc``-bearing layer to opt in.
+        handle.model = [MagicMock(spec=[])]
         return handle
 
     @staticmethod
@@ -312,6 +317,105 @@ class TestUltralyticsYoloePrompt:
         handle.set_classes.assert_called_once_with(
             ["helmet", "safety vest"], "text_pe_tensor"
         )
+
+    def test_prompt_free_yoloe_skips_set_classes_with_warning(self, caplog):
+        # Prompt-free YOLOE (``*-seg-pf``) exposes ``set_classes`` but
+        # asserts on ``lrpc`` inside it — proactive detection must skip
+        # the call instead of letting it raise on every frame.
+        rt = UltralyticsRuntime()
+        handle = self._yoloe_handle(self._single_box_result())
+        head_layer = MagicMock()
+        head_layer.lrpc = MagicMock()
+        handle.model = [MagicMock(), MagicMock(), head_layer]
+
+        with caplog.at_level("WARNING", logger="cyberwave.models.runtimes.ultralytics"):
+            pred = rt.predict(
+                handle, np.zeros((480, 640, 3), dtype=np.uint8), prompt="helmet"
+            )
+
+        handle.set_classes.assert_not_called()
+        handle.get_text_pe.assert_not_called()
+        assert isinstance(pred, PredictionResult)
+
+        warning_records = [r for r in caplog.records if "prompt-free" in r.getMessage()]
+        assert warning_records, caplog.records
+        msg = warning_records[0].getMessage()
+        assert "helmet" in msg
+        assert "clear the prompt" in msg.lower() or "Clear the prompt" in msg
+        assert "yoloe-26" in msg
+
+    def test_prompt_free_yoloe_warns_once_per_unique_prompt(self, caplog):
+        # The skip path must update ``_cw_active_prompt`` so the cache
+        # short-circuits subsequent same-prompt frames — at 30 fps a
+        # warning per frame would drown the log.
+        rt = UltralyticsRuntime()
+        handle = self._yoloe_handle(self._single_box_result())
+        head_layer = MagicMock()
+        head_layer.lrpc = MagicMock()
+        handle.model = [head_layer]
+
+        with caplog.at_level("WARNING", logger="cyberwave.models.runtimes.ultralytics"):
+            rt.predict(handle, np.zeros((480, 640, 3), dtype=np.uint8), prompt="helmet")
+            rt.predict(handle, np.zeros((480, 640, 3), dtype=np.uint8), prompt="helmet")
+            rt.predict(handle, np.zeros((480, 640, 3), dtype=np.uint8), prompt="helmet")
+
+        warning_records = [r for r in caplog.records if "prompt-free" in r.getMessage()]
+        assert len(warning_records) == 1, (
+            f"Expected exactly one prompt-free warning, got "
+            f"{len(warning_records)}: {[r.getMessage() for r in warning_records]}"
+        )
+
+    def test_assertion_error_from_set_classes_is_caught(self, caplog):
+        # Defensive fallback when the proactive ``lrpc`` probe misses a
+        # variant — AssertionError must degrade to a warning, not a
+        # per-frame crash.
+        rt = UltralyticsRuntime()
+        handle = self._yoloe_handle(self._single_box_result())
+        handle.set_classes.side_effect = AssertionError(
+            "Prompt-free model does not support setting classes."
+        )
+
+        with caplog.at_level("WARNING", logger="cyberwave.models.runtimes.ultralytics"):
+            pred = rt.predict(
+                handle, np.zeros((480, 640, 3), dtype=np.uint8), prompt="helmet"
+            )
+
+        assert isinstance(pred, PredictionResult)
+        assert any(
+            "Failed to apply YOLOE text prompt" in r.getMessage()
+            for r in caplog.records
+        ), caplog.records
+
+    @pytest.mark.parametrize(
+        "build_handle",
+        [
+            # Each case targets one defensive exit in _is_prompt_free_yoloe.
+            pytest.param(lambda h: setattr(h, "model", None), id="model_is_none"),
+            pytest.param(lambda h: setattr(h, "model", []), id="empty_list_indexerror"),
+            pytest.param(lambda h: setattr(h, "model", 42), id="int_not_subscriptable"),
+            pytest.param(
+                lambda h: setattr(h, "model", {0: MagicMock(spec=[])}),
+                id="dict_missing_minus_one_key",
+            ),
+        ],
+    )
+    def test_is_prompt_free_yoloe_returns_false_on_malformed_handles(
+        self, build_handle
+    ) -> None:
+        handle = MagicMock()
+        build_handle(handle)
+        assert UltralyticsRuntime._is_prompt_free_yoloe(handle) is False
+
+    def test_is_prompt_free_yoloe_true_only_when_lrpc_present(self) -> None:
+        handle = MagicMock()
+        # Without lrpc → prompt-driven.
+        handle.model = [MagicMock(spec=[])]
+        assert UltralyticsRuntime._is_prompt_free_yoloe(handle) is False
+        # With lrpc on the *last* layer → prompt-free.
+        head = MagicMock()
+        head.lrpc = MagicMock()
+        handle.model = [MagicMock(spec=[]), head]
+        assert UltralyticsRuntime._is_prompt_free_yoloe(handle) is True
 
     def test_set_classes_failure_logs_warning_and_does_not_cache(self, caplog):
         # If Ultralytics raises (bad tokenizer state, OOM during text
@@ -459,6 +563,95 @@ class TestUltralyticsLoadDeviceCompat:
         rt = UltralyticsRuntime()
         with pytest.raises(RuntimeError, match="CUDA out of memory"):
             rt.load(str(model_path), device="cuda:0")
+
+    def test_load_stashes_device_on_handle_after_successful_to(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``predict()`` re-asserts device on every call by reading this
+        stashed value — without it, the fix in ``predict()`` has nothing
+        to forward and the lazily-built Ultralytics predictor silently
+        falls back to auto-detected device instead of ``model.to()``'s."""
+        model_path = tmp_path / "yolov8n.pt"
+        model_path.write_bytes(b"")
+
+        handle = MagicMock(name="pt_yolo_handle")
+        self._install_fake_ultralytics(monkeypatch, yolo_factory=lambda _: handle)
+
+        rt = UltralyticsRuntime()
+        rt.load(str(model_path), device="cuda:0")
+
+        assert handle._cw_device == "cuda:0"
+
+    def test_load_does_not_stash_device_when_to_raises_typeerror(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """For non-PyTorch backends where ``.to()`` is a no-op format
+        mismatch, nothing should be stashed — ``predict()`` must fall
+        back to Ultralytics' own device handling for those formats."""
+        model_path = tmp_path / "yolov8n.onnx"
+        model_path.write_bytes(b"")
+
+        handle = MagicMock(name="onnx_yolo_handle")
+        handle.to.side_effect = TypeError(
+            "model='yolov8n.onnx' should be a *.pt PyTorch model"
+        )
+        self._install_fake_ultralytics(monkeypatch, yolo_factory=lambda _: handle)
+
+        rt = UltralyticsRuntime()
+        rt.load(str(model_path), device="cpu")
+
+        # Check ``__dict__`` directly rather than ``hasattr``/``getattr`` —
+        # either of those would trigger MagicMock's auto-vivification and
+        # falsely "find" an attribute that was never actually set.
+        assert "_cw_device" not in handle.__dict__
+
+
+class TestUltralyticsPredictDevice:
+    """Ultralytics builds its ``Predictor`` lazily on the *first*
+    inference call and resolves ``device`` from that call's own
+    ``overrides``, not from wherever ``model.to(device)`` moved the
+    weights at ``load()`` time. ``predict()`` must therefore re-assert
+    the device stashed by ``load()`` (or an explicit per-call override)
+    on every single call — otherwise a GPU-loaded model silently runs
+    its first inference (and predictor-caching) pass on CPU.
+    """
+
+    @staticmethod
+    def _handle(return_value: list) -> MagicMock:
+        handle = MagicMock(name="yolo_handle", return_value=return_value)
+        del handle._cw_device  # undo MagicMock auto-vivification
+        return handle
+
+    def test_predict_forwards_device_stashed_by_load(self) -> None:
+        rt = UltralyticsRuntime()
+        handle = self._handle([])
+        handle._cw_device = "cuda:0"
+
+        rt.predict(handle, np.zeros((480, 640, 3), dtype=np.uint8))
+
+        _, kwargs = handle.call_args
+        assert kwargs["device"] == "cuda:0"
+        assert kwargs["conf"] == 0.5
+        assert kwargs["verbose"] is False
+
+    def test_predict_explicit_device_overrides_stashed_device(self) -> None:
+        rt = UltralyticsRuntime()
+        handle = self._handle([])
+        handle._cw_device = "cuda:0"
+
+        rt.predict(handle, np.zeros((480, 640, 3), dtype=np.uint8), device="cpu")
+
+        _, kwargs = handle.call_args
+        assert kwargs["device"] == "cpu"
+
+    def test_predict_omits_device_when_none_was_ever_stashed(self) -> None:
+        rt = UltralyticsRuntime()
+        handle = self._handle([])
+
+        rt.predict(handle, np.zeros((480, 640, 3), dtype=np.uint8))
+
+        _, kwargs = handle.call_args
+        assert "device" not in kwargs
 
 
 class TestUltralyticsLoadOrphanDirSelfHeal:
@@ -620,6 +813,9 @@ class TestUltralyticsWritableModelDirContract:
         )
         del handle._cw_active_prompt
         handle._cw_writable_dir = str(writable_dir)
+        handle.model = [
+            MagicMock(spec=[])
+        ]  # prompt-driven (no lrpc); see _yoloe_handle
 
         cwd_before = Path.cwd()
         try:
@@ -642,6 +838,7 @@ class TestUltralyticsWritableModelDirContract:
         handle.get_text_pe = MagicMock(side_effect=RuntimeError("text encoder OOM"))
         del handle._cw_active_prompt
         handle._cw_writable_dir = str(writable_dir)
+        handle.model = [MagicMock(spec=[])]  # prompt-driven (no lrpc)
 
         cwd_before = Path.cwd()
         UltralyticsRuntime._apply_text_prompt(handle, "helmet")
@@ -656,6 +853,7 @@ class TestUltralyticsWritableModelDirContract:
         handle.get_text_pe = MagicMock(return_value="text_pe_tensor")
         del handle._cw_active_prompt
         del handle._cw_writable_dir
+        handle.model = [MagicMock(spec=[])]  # prompt-driven (no lrpc)
 
         cwd_before = Path.cwd()
         UltralyticsRuntime._apply_text_prompt(handle, "helmet")
@@ -670,6 +868,7 @@ class TestUltralyticsWritableModelDirContract:
         handle.set_classes = MagicMock()
         handle.get_text_pe = MagicMock(return_value="text_pe_tensor")
         del handle._cw_active_prompt
+        handle.model = [MagicMock(spec=[])]  # prompt-driven (no lrpc)
 
         cwd_before = Path.cwd()
         UltralyticsRuntime._apply_text_prompt(handle, "helmet")

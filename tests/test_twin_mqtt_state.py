@@ -62,11 +62,17 @@ def _make_locomote_twin(*, metadata: dict | None = None) -> LocomoteTwin:
     mqtt = _fake_mqtt()
     assets = MagicMock()
     assets.get.return_value = SimpleNamespace(metadata=metadata or _locomote_metadata())
+    _active_sim = SimpleNamespace(
+        simulation_id="sim-1", status="running", raw={}, total_duration_s=None
+    )
     client = SimpleNamespace(
         mqtt=mqtt,
         assets=assets,
         config=SimpleNamespace(runtime_mode="live", source_type="tele", topic_prefix=""),
         twins=SimpleNamespace(api=None, update_state=MagicMock(), get_raw=MagicMock()),
+        environments=SimpleNamespace(
+            simulations=SimpleNamespace(get_active=lambda env: _active_sim)
+        ),
     )
     return LocomoteTwin(
         client,
@@ -74,6 +80,7 @@ def _make_locomote_twin(*, metadata: dict | None = None) -> LocomoteTwin:
             uuid="twin-uuid",
             name="Go2",
             asset_uuid="asset-uuid",
+            environment_uuid="env-1",
             capabilities={"can_locomote": True},
             position_x=0.0,
             position_y=0.0,
@@ -120,7 +127,7 @@ def test_pose_get_single_canonical_state() -> None:
     assert pose.orientation.w == 0.99
 
 
-def test_pose_get_returns_copy_not_shared_reference() -> None:
+def test_pose_get_returns_same_live_view() -> None:
     twin = _make_locomote_twin()
     pos_topic = TWIN_POSITION_TOPIC_SLUG.format(twin_uuid=twin.uuid)
     rot_topic = TWIN_ROTATION_TOPIC_SLUG.format(twin_uuid=twin.uuid)
@@ -128,12 +135,11 @@ def test_pose_get_returns_copy_not_shared_reference() -> None:
     _inject(twin.client.mqtt, pos_topic, {"position": {"x": 1.0, "y": 0.0, "z": 0.0}})
     _inject(twin.client.mqtt, rot_topic, {"rotation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}})
     thread.join(timeout=2.0)
-    result[0]
 
     first = twin.pose.get(timeout=0.0)
     second = twin.pose.get(timeout=0.0)
-    assert first is not second
-    assert first.position.x == second.position.x == 1.0
+    assert first is second  # cached live view per mode
+    assert first.position.x == 1.0
 
 
 def test_pose_get_first_read_waits_for_mqtt_message() -> None:
@@ -145,13 +151,31 @@ def test_pose_get_first_read_waits_for_mqtt_message() -> None:
     assert result[0].position.x == 4.0
 
 
-def test_pose_get_first_read_timeout_returns_default_pose() -> None:
+def test_pose_get_first_read_timeout_returns_empty_view() -> None:
     twin = _make_locomote_twin()
-    pose = twin.pose.get(timeout=0.05)
-    assert pose.position.x == 0.0
-    assert pose.position.y == 0.0
-    assert pose.position.z == 0.0
-    assert pose.orientation.w == 1.0
+    view = twin.pose.get(timeout=0.05)
+    assert view.pose is None
+    assert view.position is None
+
+
+def test_pose_get_returns_empty_view_without_mqtt_transport() -> None:
+    twin = _make_locomote_twin()
+    twin.client.mqtt = None
+    view = twin.pose.get(timeout=0.05)
+    assert view.pose is None
+    assert twin.get_pose() is None
+    assert view.frame_id() is None
+
+
+def test_pose_view_auto_refreshes_and_fires_callback() -> None:
+    twin = _make_locomote_twin()
+    pos_topic = TWIN_POSITION_TOPIC_SLUG.format(twin_uuid=twin.uuid)
+    view = twin.pose.get(timeout=0.0)
+    seen: list[object] = []
+    view.on_update(lambda p: seen.append(p))
+    _inject(twin.client.mqtt, pos_topic, {"position": {"x": 5.0, "y": 0.0, "z": 0.0}})
+    assert view.position.x == 5.0  # same object refreshed in place
+    assert seen and seen[-1].position.x == 5.0
 
 
 def test_pose_get_does_not_call_prepare_outbound_command() -> None:
@@ -219,11 +243,17 @@ def _make_joint_twin(*, metadata: dict) -> JointTwin:
     mqtt = _fake_mqtt()
     assets = MagicMock()
     assets.get.return_value = SimpleNamespace(metadata=metadata)
+    _active_sim = SimpleNamespace(
+        simulation_id="sim-1", status="running", raw={}, total_duration_s=None
+    )
     client = SimpleNamespace(
         mqtt=mqtt,
         assets=assets,
         config=SimpleNamespace(runtime_mode="live", topic_prefix="", source_type="tele"),
         twins=SimpleNamespace(api=None),
+        environments=SimpleNamespace(
+            simulations=SimpleNamespace(get_active=lambda env: _active_sim)
+        ),
     )
     return JointTwin(
         client,
@@ -231,6 +261,7 @@ def _make_joint_twin(*, metadata: dict) -> JointTwin:
             uuid="arm-1",
             name="Arm",
             asset_uuid="a",
+            environment_uuid="env-1",
             capabilities={
                 "has_joints": True,
                 "joints": [

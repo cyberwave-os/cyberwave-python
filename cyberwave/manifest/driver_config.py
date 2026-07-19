@@ -1,13 +1,13 @@
 """Read driver/MQTT interface catalogs from platform metadata (API payloads).
 
-Structured driver config is compiled at seed time by the backend
-(``seed_asset_driver_config`` from ``cw-driver.yml``) and stored on catalog assets.
-Twins receive it via asset metadata sync. This module only **reads** those payloads —
-it does not load or compile on-disk ``cw-driver.yml`` files.
+Structured driver config is compiled server-side from ``cw-driver.yml`` and stored
+on catalog assets. Twins receive it via asset metadata sync. This module only
+**reads** those payloads — it does not load or compile on-disk ``cw-driver.yml``
+files.
 
 Canonical lookup order (first match wins):
 
-1. ``metadata["mqtt"]`` — PR0 seed shape
+1. ``metadata["mqtt"]`` — original seed shape
 2. ``metadata["driver"]["config"]`` — target twin/asset shape (bundle or ``{"mqtt": ...}``)
 3. ``metadata["driver_config"]["mqtt"]`` — legacy nested shape
 """
@@ -27,8 +27,13 @@ TWIN_KINEMATICS_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/state/kinematics"
 TWIN_TELEMETRY_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/telemetry"
 TWIN_CAMERA_PHOTO_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/camera/photo"
 TWIN_IMU_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/imu"
+TWIN_GPS_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/gps"
+TWIN_DEPTH_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/depth"
+TWIN_POINTCLOUD_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/pointcloud"
 
-InboundStream = Literal["pose", "joints", "power", "camera", "imu"]
+InboundStream = Literal[
+    "pose", "joints", "power", "camera", "imu", "gps", "depth", "pointcloud"
+]
 
 INBOUND_STREAM_SLUGS: dict[InboundStream, tuple[str, ...]] = {
     "pose": (
@@ -40,9 +45,14 @@ INBOUND_STREAM_SLUGS: dict[InboundStream, tuple[str, ...]] = {
     "power": (),  # resolved by battery slug pattern below
     "camera": (TWIN_CAMERA_PHOTO_TOPIC_SLUG,),
     "imu": (TWIN_IMU_TOPIC_SLUG,),
+    "gps": (TWIN_GPS_TOPIC_SLUG,),
+    "depth": (TWIN_DEPTH_TOPIC_SLUG,),
+    "pointcloud": (TWIN_POINTCLOUD_TOPIC_SLUG,),
 }
 
-_LISTEN_FILTER_NAMES = frozenset({"pose", "joints", "power", "camera", "imu"})
+_LISTEN_FILTER_NAMES = frozenset(
+    {"pose", "joints", "power", "camera", "imu", "depth", "pointcloud"}
+)
 
 _LOCOMOTION_COMMANDS = frozenset(
     {
@@ -138,7 +148,7 @@ def extract_driver_config_from_metadata(
     """Return the structured ``driver.config`` object when present.
 
     Falls back to the MQTT bundle under ``metadata["mqtt"]`` when ``driver.config``
-    is not set (PR0 seed layout).
+    is not set (original seed layout).
     """
     if not isinstance(metadata, dict):
         return None
@@ -350,6 +360,30 @@ def resolve_inbound_topics(
                     f"{prefix}{TWIN_IMU_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
                 )
             )
+    elif stream == "gps":
+        if TWIN_GPS_TOPIC_SLUG in catalog_slugs:
+            resolved.append(
+                (
+                    TWIN_GPS_TOPIC_SLUG,
+                    f"{prefix}{TWIN_GPS_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+                )
+            )
+    elif stream == "depth":
+        if TWIN_DEPTH_TOPIC_SLUG in catalog_slugs:
+            resolved.append(
+                (
+                    TWIN_DEPTH_TOPIC_SLUG,
+                    f"{prefix}{TWIN_DEPTH_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+                )
+            )
+    elif stream == "pointcloud":
+        if TWIN_POINTCLOUD_TOPIC_SLUG in catalog_slugs:
+            resolved.append(
+                (
+                    TWIN_POINTCLOUD_TOPIC_SLUG,
+                    f"{prefix}{TWIN_POINTCLOUD_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+                )
+            )
     else:
         for slug in candidates:
             if slug not in catalog_slugs and stream != "pose":
@@ -396,6 +430,27 @@ def resolve_inbound_topics(
             (
                 TWIN_IMU_TOPIC_SLUG,
                 f"{prefix}{TWIN_IMU_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+            ),
+        ]
+    if not resolved and stream == "gps":
+        resolved = [
+            (
+                TWIN_GPS_TOPIC_SLUG,
+                f"{prefix}{TWIN_GPS_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+            ),
+        ]
+    if not resolved and stream == "depth":
+        resolved = [
+            (
+                TWIN_DEPTH_TOPIC_SLUG,
+                f"{prefix}{TWIN_DEPTH_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+            ),
+        ]
+    if not resolved and stream == "pointcloud":
+        resolved = [
+            (
+                TWIN_POINTCLOUD_TOPIC_SLUG,
+                f"{prefix}{TWIN_POINTCLOUD_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
             ),
         ]
 

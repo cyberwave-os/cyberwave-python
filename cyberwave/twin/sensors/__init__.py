@@ -10,15 +10,15 @@ from ..capability_resolve import (
     _is_gps_type,
     _is_imu_type,
     _is_lidar_type,
-    resolve_handler_from_capabilities,
 )
-from .camera import TwinCameraHandle  # noqa: F401 — load before imaging subclasses
-from .compass import CompassSensorHandle
+from .camera import CAMERA_HANDLE_PUBLIC_METHODS, TwinCameraHandle  # noqa: F401
+from .compass import COMPASS_HANDLE_PUBLIC_METHODS, CompassSensorHandle
 from .depth import DepthSensorHandle
-from .flashlight import FlashlightSensorHandle
-from .gps import GpsSensorHandle
-from .imu import ImuSensorHandle
-from .lidar import LidarSensorHandle
+from .family import SensorFamily
+from .flashlight import FLASHLIGHT_HANDLE_PUBLIC_METHODS, FlashlightSensorHandle
+from .gps import GPS_HANDLE_PUBLIC_METHODS, GpsSensorHandle
+from .imu import IMU_HANDLE_PUBLIC_METHODS, ImuSensorHandle
+from .lidar import LIDAR_HANDLE_PUBLIC_METHODS, LidarSensorHandle
 from .base import BaseSensorHandle
 from .rgb import RGBSensorHandle
 
@@ -32,31 +32,25 @@ _SENSOR_TYPES = {
     "depth": DepthSensorHandle,
 }
 
-_NON_IMAGING_REDIRECTS: tuple[tuple[str, str, str, str], ...] = (
-    ("lidar", "lidar", "lidars", "LiDAR"),
-    ("gps", "gps", "gpss", "GPS"),
-    ("compass", "compass", "compasses", "compass"),
-    ("imu", "imu", "imus", "IMU"),
-    ("flashlight", "flashlight", "flashlights", "flashlight"),
+READ_SENSOR_METHODS: dict[str, tuple[str, ...]] = {
+    "lidar": LIDAR_HANDLE_PUBLIC_METHODS,
+    "gps": GPS_HANDLE_PUBLIC_METHODS,
+    "compass": COMPASS_HANDLE_PUBLIC_METHODS,
+    "imu": IMU_HANDLE_PUBLIC_METHODS,
+    "flashlight": FLASHLIGHT_HANDLE_PUBLIC_METHODS,
+}
+
+_NON_IMAGING_REDIRECTS: tuple[tuple[str, str, str], ...] = (
+    ("lidar", "lidar", "LiDAR"),
+    ("gps", "gps", "GPS"),
+    ("compass", "compass", "compass"),
+    ("imu", "imu", "IMU"),
+    ("flashlight", "flashlight", "flashlight"),
 )
 
 
-def _redirect_hint(
-    twin: "Twin",
-    *,
-    handler: str,
-    singular: str,
-    plural: str,
-    key: str,
-    label: str,
-) -> str:
-    resolution = resolve_handler_from_capabilities(twin.capabilities, handler)
-    hint = (
-        f"twin.{plural}['{key}']"
-        if resolution.multi_sensor
-        else f"twin.{singular}  # sensor {resolution.default_sensor_id!r}"
-    )
-    return f"Sensor '{key}' is {label}; use {hint}"
+def _redirect_hint(twin: "Twin", *, singular: str, key: str, label: str) -> str:
+    return f"Sensor '{key}' is {label}; use twin.{singular}['{key}']"
 
 
 def sensor_handle_for_key(twin: "Twin", key: str) -> "TwinCameraHandle":
@@ -65,7 +59,7 @@ def sensor_handle_for_key(twin: "Twin", key: str) -> "TwinCameraHandle":
         if entry_id != key:
             continue
         sensor_type = str(entry.get("type") or "rgb").lower()
-        for handler, singular, plural, label in _NON_IMAGING_REDIRECTS:
+        for handler, singular, label in _NON_IMAGING_REDIRECTS:
             pred = {
                 "lidar": _is_lidar_type,
                 "gps": _is_gps_type,
@@ -75,14 +69,7 @@ def sensor_handle_for_key(twin: "Twin", key: str) -> "TwinCameraHandle":
             }[handler]
             if pred(sensor_type):
                 raise KeyError(
-                    _redirect_hint(
-                        twin,
-                        handler=handler,
-                        singular=singular,
-                        plural=plural,
-                        key=key,
-                        label=label,
-                    )
+                    _redirect_hint(twin, singular=singular, key=key, label=label)
                 )
         cls = _SENSOR_TYPES.get(sensor_type, RGBSensorHandle)
         return cls(twin, entry_id)  # type: ignore[return-value]
@@ -181,4 +168,12 @@ __all__ = [
     "compass_handle_for_key",
     "imu_handle_for_key",
     "flashlight_handle_for_key",
+    "SensorFamily",
+    "READ_SENSOR_METHODS",
+    "CAMERA_HANDLE_PUBLIC_METHODS",
+    "LIDAR_HANDLE_PUBLIC_METHODS",
+    "GPS_HANDLE_PUBLIC_METHODS",
+    "COMPASS_HANDLE_PUBLIC_METHODS",
+    "IMU_HANDLE_PUBLIC_METHODS",
+    "FLASHLIGHT_HANDLE_PUBLIC_METHODS",
 ]

@@ -25,9 +25,9 @@ def ros_joint_state_to_transport_payload(
 ) -> dict[str, Any] | None:
     """Map ``sensor_msgs/msg/JointState`` to a joint ``/update`` transport payload.
 
-    By default emits the **flat** shape parsed by Vector ``to_twintelemetry_joint``:
-    ``names[i]: position[i]`` as top-level keys, plus optional sibling
-    ``velocities`` / ``efforts`` maps and ``timestamp``. This matches
+    By default emits the **flat** shape expected by the Cyberwave joint-telemetry
+    ingestion pipeline: ``names[i]: position[i]`` as top-level keys, plus optional
+    sibling ``velocities`` / ``efforts`` maps and ``timestamp``. This matches
     :meth:`cyberwave.mqtt.CyberwaveMQTTClient.update_joints_state` when only
     positions are passed (flat), while still forwarding velocity/effort per joint.
 
@@ -66,7 +66,7 @@ def ros_joint_state_to_transport_payload(
 
 
 # Top-level keys on joint ``/update`` payloads that are not ``name: position`` pairs
-# (aligned with Vector ``to_twintelemetry_joint`` flat parsing).
+# (aligned with the flat joint-telemetry wire format described above).
 _JOINT_UPDATE_METADATA_KEYS = frozenset(
     {
         "source_type",

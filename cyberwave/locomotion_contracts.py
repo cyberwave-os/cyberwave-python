@@ -1,7 +1,5 @@
-# !! GENERATED — do not edit. Source of truth: cyberwave-backend/src/lib/locomotion_contracts.py
-# Run python-sdk-gen.sh to regenerate.
+# !! GENERATED — do not edit directly. Run python-sdk-gen.sh to regenerate.
 
-# by python-sdk-gen.sh at SDK build time. Edit here, not in the SDK.
 """Locomotion and free-body velocity contracts shared by runtime adapters."""
 
 from __future__ import annotations

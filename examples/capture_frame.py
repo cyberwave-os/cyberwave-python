@@ -16,7 +16,7 @@ import cv2
 from cyberwave import Cyberwave
 
 cw = Cyberwave()
-robot = cw.twin("the-robot-studio/so101")
+robot = cw.twin("logitech/c920")
 
 # Cloud (default) — first imaging sensor when sensor_id omitted
 # frame = robot.get_frame("numpy")

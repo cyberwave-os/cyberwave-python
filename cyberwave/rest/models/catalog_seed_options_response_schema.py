@@ -31,7 +31,9 @@ class CatalogSeedOptionsResponseSchema(BaseModel):
     controllers: List[CatalogSeedOptionSchema]
     mlmodels: List[CatalogSeedOptionSchema]
     workflow_templates: List[CatalogSeedOptionSchema]
-    __properties: ClassVar[List[str]] = ["controllers", "mlmodels", "workflow_templates"]
+    asset_patches: List[CatalogSeedOptionSchema]
+    simplified_meshes: List[CatalogSeedOptionSchema]
+    __properties: ClassVar[List[str]] = ["controllers", "mlmodels", "workflow_templates", "asset_patches", "simplified_meshes"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -93,6 +95,20 @@ class CatalogSeedOptionsResponseSchema(BaseModel):
                 if _item_workflow_templates:
                     _items.append(_item_workflow_templates.to_dict())
             _dict['workflow_templates'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in asset_patches (list)
+        _items = []
+        if self.asset_patches:
+            for _item_asset_patches in self.asset_patches:
+                if _item_asset_patches:
+                    _items.append(_item_asset_patches.to_dict())
+            _dict['asset_patches'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in simplified_meshes (list)
+        _items = []
+        if self.simplified_meshes:
+            for _item_simplified_meshes in self.simplified_meshes:
+                if _item_simplified_meshes:
+                    _items.append(_item_simplified_meshes.to_dict())
+            _dict['simplified_meshes'] = _items
         return _dict
 
     @classmethod
@@ -107,7 +123,9 @@ class CatalogSeedOptionsResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "controllers": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["controllers"]] if obj.get("controllers") is not None else None,
             "mlmodels": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["mlmodels"]] if obj.get("mlmodels") is not None else None,
-            "workflow_templates": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["workflow_templates"]] if obj.get("workflow_templates") is not None else None
+            "workflow_templates": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["workflow_templates"]] if obj.get("workflow_templates") is not None else None,
+            "asset_patches": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["asset_patches"]] if obj.get("asset_patches") is not None else None,
+            "simplified_meshes": [CatalogSeedOptionSchema.from_dict(_item) for _item in obj["simplified_meshes"]] if obj.get("simplified_meshes") is not None else None
         })
         return _obj
 

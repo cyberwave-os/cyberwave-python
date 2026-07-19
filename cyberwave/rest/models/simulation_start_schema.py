@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, 
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from cyberwave.rest.models.online_controller_spec_schema import OnlineControllerSpecSchema
 from cyberwave.rest.models.simulation_runtime_options_schema import SimulationRuntimeOptionsSchema
+from cyberwave.rest.models.simulation_stream_profile_schema import SimulationStreamProfileSchema
 from cyberwave.rest.models.simulation_timing_options_schema import SimulationTimingOptionsSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -37,7 +38,8 @@ class SimulationStartSchema(BaseModel):
     timing: Optional[SimulationTimingOptionsSchema] = None
     online_controllers: Optional[List[OnlineControllerSpecSchema]] = None
     auto_run_controllers: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["duration", "stream_data", "backend", "runtime", "timing", "online_controllers", "auto_run_controllers"]
+    stream_profile: Optional[Dict[str, SimulationStreamProfileSchema]] = None
+    __properties: ClassVar[List[str]] = ["duration", "stream_data", "backend", "runtime", "timing", "online_controllers", "auto_run_controllers", "stream_profile"]
 
     @field_validator('backend')
     def backend_validate_enum(cls, value):
@@ -101,6 +103,13 @@ class SimulationStartSchema(BaseModel):
                 if _item_online_controllers:
                     _items.append(_item_online_controllers.to_dict())
             _dict['online_controllers'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each value in stream_profile (dict)
+        _field_dict = {}
+        if self.stream_profile:
+            for _key_stream_profile in self.stream_profile:
+                if self.stream_profile[_key_stream_profile]:
+                    _field_dict[_key_stream_profile] = self.stream_profile[_key_stream_profile].to_dict()
+            _dict['stream_profile'] = _field_dict
         # set to None if duration (nullable) is None
         # and model_fields_set contains the field
         if self.duration is None and "duration" in self.model_fields_set:
@@ -131,6 +140,11 @@ class SimulationStartSchema(BaseModel):
         if self.online_controllers is None and "online_controllers" in self.model_fields_set:
             _dict['online_controllers'] = None
 
+        # set to None if stream_profile (nullable) is None
+        # and model_fields_set contains the field
+        if self.stream_profile is None and "stream_profile" in self.model_fields_set:
+            _dict['stream_profile'] = None
+
         return _dict
 
     @classmethod
@@ -149,7 +163,13 @@ class SimulationStartSchema(BaseModel):
             "runtime": SimulationRuntimeOptionsSchema.from_dict(obj["runtime"]) if obj.get("runtime") is not None else None,
             "timing": SimulationTimingOptionsSchema.from_dict(obj["timing"]) if obj.get("timing") is not None else None,
             "online_controllers": [OnlineControllerSpecSchema.from_dict(_item) for _item in obj["online_controllers"]] if obj.get("online_controllers") is not None else None,
-            "auto_run_controllers": obj.get("auto_run_controllers") if obj.get("auto_run_controllers") is not None else False
+            "auto_run_controllers": obj.get("auto_run_controllers") if obj.get("auto_run_controllers") is not None else False,
+            "stream_profile": dict(
+                (_k, SimulationStreamProfileSchema.from_dict(_v))
+                for _k, _v in obj["stream_profile"].items()
+            )
+            if obj.get("stream_profile") is not None
+            else None
         })
         return _obj
 

@@ -389,6 +389,71 @@ def test_motion_publish_blocked_without_teleop_policy() -> None:
     mqtt.publish.assert_not_called()
 
 
+def test_playground_actuations_empty_without_attached_policy() -> None:
+    twin = JointTwin(
+        SimpleNamespace(twins=SimpleNamespace(api=MagicMock())),
+        SimpleNamespace(
+            uuid="twin-1",
+            metadata={},
+            controller_policy_uuid=None,
+            capabilities={"has_joints": True},
+        ),
+    )
+    assert twin.policy.playground_actuations() == frozenset()
+
+
+def test_playground_actuations_reads_keyboard_bindings_with_playground_config() -> None:
+    api = MagicMock()
+    api.src_app_api_controller_policies_get_controller_policy.return_value = SimpleNamespace(
+        metadata={
+            "keyboard_bindings": [
+                {"actuation": "move_forward", "continuous": True, "playground": {"linear_x": 1.0}},
+                {"actuation": "turn_left", "continuous": True, "playground": {"angular_z": 1.5}},
+                # No `playground` extension declared for this actuation -- excluded.
+                {"actuation": "recovery_stand", "continuous": False},
+            ]
+        }
+    )
+    twin = LocomoteTwin(
+        SimpleNamespace(twins=SimpleNamespace(api=api)),
+        SimpleNamespace(
+            uuid="twin-1",
+            metadata={"controller_policy_uuid": "p1"},
+            controller_policy_uuid="p1",
+            capabilities={"can_locomote": True},
+        ),
+    )
+
+    actuations = twin.policy.playground_actuations()
+
+    assert actuations == frozenset({"move_forward", "turn_left"})
+    api.src_app_api_controller_policies_get_controller_policy.assert_called_once_with("p1")
+
+
+def test_playground_actuations_caches_per_policy_uuid() -> None:
+    api = MagicMock()
+    api.src_app_api_controller_policies_get_controller_policy.return_value = SimpleNamespace(
+        metadata={"keyboard_bindings": [{"actuation": "takeoff", "playground": {"delta_z": 2.0}}]}
+    )
+    twin = FlyingTwin(
+        SimpleNamespace(twins=SimpleNamespace(api=api)),
+        SimpleNamespace(
+            uuid="drone-1",
+            metadata={"controller_policy_uuid": "p1"},
+            controller_policy_uuid="p1",
+            capabilities={"can_fly": True, "can_locomote": True},
+        ),
+    )
+
+    first = twin.policy.playground_actuations()
+    second = twin.policy.playground_actuations()
+
+    assert first == second == frozenset({"takeoff"})
+    # Only one network round-trip -- the burst-loop preflight check (up to 20 Hz)
+    # must not refetch the policy on every call.
+    api.src_app_api_controller_policies_get_controller_policy.assert_called_once_with("p1")
+
+
 def test_ensure_attached_logs_retry_warning_when_policy_newly_attached(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

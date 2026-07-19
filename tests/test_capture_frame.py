@@ -51,7 +51,7 @@ def _make_twin(cls=CameraTwin, source_type=None):
 
     if hasattr(twin, "get_frame"):
         twin.get_frame = MagicMock(side_effect=_capture_side_effect)  # type: ignore[method-assign]
-        twin.camera.get_frame = twin.get_frame  # type: ignore[method-assign, union-attr]
+        twin.camera[0].get_frame = twin.get_frame  # type: ignore[method-assign, union-attr]
     return twin, twins_manager
 
 
@@ -266,15 +266,17 @@ class TestCameraTwinUnified:
 class TestTwinCameraHandle:
     def test_read_defaults_to_numpy(self):
         twin, _ = _make_twin()
-        with patch.object(twin.camera, "get_frame", return_value="frame") as mock_gf:
-            result = twin.camera.read()
+        cam = twin.camera[0]
+        with patch.object(cam, "get_frame", return_value="frame") as mock_gf:
+            result = cam.read()
         mock_gf.assert_called_once_with("numpy", source="local")
         assert result == "frame"
 
     def test_read_passes_format(self):
         twin, _ = _make_twin()
-        with patch.object(twin.camera, "get_frame", return_value="img") as mock_gf:
-            twin.camera.read("pil", sensor_id="top")
+        cam = twin.camera[0]
+        with patch.object(cam, "get_frame", return_value="img") as mock_gf:
+            cam.read("pil", sensor_id="top")
         mock_gf.assert_called_once_with(
             "pil", source="local", sensor_id="top"
         )
@@ -287,7 +289,7 @@ class TestTwinCameraHandle:
             return_value="/tmp/cyberwave_test.jpg",
         ):
             mgr.get_latest_frame.return_value = FAKE_JPEG
-            result = real_get_frame(twin.camera, "path", source="cloud")
+            result = real_get_frame(twin.camera[0], "path", source="cloud")
         assert result == os.path.abspath("/tmp/cyberwave_test.jpg")
 
     def test_get_frame_path_with_dest_writes_file(self, tmp_path):
@@ -303,7 +305,7 @@ class TestTwinCameraHandle:
         ):
             mgr.get_latest_frame.return_value = FAKE_JPEG
             result = real_get_frame(
-                twin.camera, "path", path=dest, source="cloud"
+                twin.camera[0], "path", path=dest, source="cloud"
             )
         assert result == os.path.abspath(dest)
         with open(dest, "rb") as f:
@@ -311,23 +313,25 @@ class TestTwinCameraHandle:
 
     def test_snapshot_without_path_uses_get_frame_path(self):
         twin, _ = _make_twin()
+        cam = twin.camera[0]
         with patch.object(
-            twin.camera, "get_frame", return_value="/tmp/snap.jpg"
+            cam, "get_frame", return_value="/tmp/snap.jpg"
         ) as mock_gf:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
-                result = twin.camera.snapshot()
+                result = cam.snapshot()
         mock_gf.assert_called_once_with("path", path=None, source="local")
         assert result == "/tmp/snap.jpg"
 
     def test_snapshot_with_path_writes_file(self, tmp_path):
         twin, _ = _make_twin()
+        cam = twin.camera[0]
         dest = str(tmp_path / "out.jpg")
         mock_gf = MagicMock(return_value=dest)
-        twin.camera.get_frame = mock_gf
+        cam.get_frame = mock_gf
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            result = twin.camera.snapshot(dest)
+            result = cam.snapshot(dest)
         assert result == dest
         mock_gf.assert_called_once_with("path", path=dest, source="local")
 

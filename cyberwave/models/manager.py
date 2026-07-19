@@ -603,15 +603,15 @@ class ModelManager:
         Self-heal contract: when a staging directory at
         ``self._model_dir / model_id`` exists but contains no recognized
         weight file, it is treated as a poison-pill orphan left by a
-        previously-failed Edge Core download (see
-        ``cyberwave-edge-core/cyberwave_edge_core/model_manager.py``,
-        ``_download_runtime_managed`` / ``_download_model`` create the
-        directory before the network call). Returning that directory
-        path here would forward a directory into ``torch.load`` and
-        crash with ``IsADirectoryError`` on every worker start, so we
-        prune it (best-effort) and let the Ultralytics auto-download
-        convenience branch — or a clear ``FileNotFoundError`` for
-        non-Ultralytics runtimes — take over.
+        previously-failed download from the edge orchestrator (which
+        creates the destination directory before starting the network
+        transfer, so an interrupted download can leave an empty directory
+        behind). Returning that directory path here would forward a
+        directory into ``torch.load`` and crash with
+        ``IsADirectoryError`` on every worker start, so we prune it
+        (best-effort) and let the Ultralytics auto-download convenience
+        branch — or a clear ``FileNotFoundError`` for non-Ultralytics
+        runtimes — take over.
         """
         exact = self._model_dir / model_id
         if exact.is_file():
@@ -715,7 +715,7 @@ class ModelManager:
         metadata sidecar (``MODEL_METADATA_FILENAME``) or a partial
         streaming download (``.dl_*.part`` — matches the temp-file
         prefix used by both the SDK's :meth:`_stream_download_to` and
-        Edge Core's ``_stream_download``).
+        the edge orchestrator's own download helper).
 
         We deliberately keep this strict: any other file in the
         directory (a half-written weight file with an unexpected
@@ -1014,10 +1014,10 @@ class ModelManager:
     def _stream_download_to(url: str, dest: Path) -> None:
         """Stream ``url`` to ``dest`` via a sibling tempfile, then rename.
 
-        Mirrors ``cyberwave_edge_core.model_manager._stream_download``:
-        downloading to ``tmp`` in the same directory as ``dest`` means
-        the ``os.replace`` at the end is atomic on POSIX, so an
-        interrupted download never leaves a half-written file that
+        Mirrors the same atomic-rename download pattern used by the edge
+        orchestrator: downloading to ``tmp`` in the same directory as
+        ``dest`` means the ``os.replace`` at the end is atomic on POSIX,
+        so an interrupted download never leaves a half-written file that
         ``_find_cached_download`` would later mistake for a valid
         cache hit.
 
@@ -1210,8 +1210,78 @@ def _safe_call(fn: Any) -> Any:
         return None
 
 
+def _device_cc_is_natively_supported(torch: Any) -> bool:
+    """Return True when the device's compute capability has native SASS kernels.
+
+    PyTorch SBSA wheels (and some desktop wheels) are compiled for a finite
+    set of GPU architectures.  When the wheel's ``get_arch_list()`` does not
+    contain the device's compute capability, PyTorch falls back to PTX JIT
+    from the nearest lower arch.  Simple convolutions succeed via PTX, which
+    is why the conv2d probe passes, but more complex op fusions (e.g.
+    YOLOE / diffusion attention blocks) may have no PTX fallback and silently
+    run on CPU instead.
+
+    Concretely: the standard SBSA cu126/cu132 wheels include sm_80 and
+    sm_90 but explicitly exclude sm_87 (Orin/Orin NX/Orin Nano).  The
+    wheel's arch entry reads ``8.0 which supports hardware CC >=8.0,<9.0
+    except {8.7}`` — the exclusion set is not exposed by any public
+    PyTorch API, so we derive it by checking whether
+    ``f"sm_{major}{minor}"`` appears directly in ``get_arch_list()``.
+
+    Returns ``True`` when:
+
+    * ``get_arch_list()`` is unavailable (old torch / unexpected error) — we
+      cannot tell, so we don't block.
+    * ``get_device_capability()`` is unavailable — same.
+    * The device's ``sm_XY`` string is present in the arch list.
+    * The arch list is empty (edge case; don't block).
+
+    Returns ``False`` (log a warning, fall back to CPU) only when we can
+    positively confirm the device CC is absent from the arch list.
+    """
+    try:
+        cap = _safe_call(lambda: torch.cuda.get_device_capability(0))
+        if cap is None:
+            return True
+        major, minor = int(cap[0]), int(cap[1])
+        sm_key = f"sm_{major}{minor}"
+
+        arch_list: list[str] | None = _safe_call(torch.cuda.get_arch_list)
+        if not arch_list:
+            return True
+
+        # Normalise: PyTorch uses both ``sm_87`` and ``compute_87`` notation
+        # depending on the version; accept either.
+        normalised = {a.replace("compute_", "sm_") for a in arch_list}
+        if sm_key in normalised:
+            return True
+
+        name = _safe_call(lambda: torch.cuda.get_device_name(0))
+        logger.warning(
+            "CUDA device %s (compute capability %d.%d, %s) is not in this "
+            "PyTorch build's arch list %s — complex op kernels (e.g. "
+            "Ultralytics YOLOE, diffusion attention) have no SASS image for "
+            "this GPU and will silently fall back to CPU even though the "
+            "conv2d probe passes via PTX JIT. "
+            "Set CYBERWAVE_MODEL_DEVICE=cuda:0 to use CUDA anyway (at risk "
+            "of silent CPU fallback on unsupported ops), or rebuild the "
+            "worker image with a PyTorch wheel that includes %s.",
+            name,
+            major,
+            minor,
+            sm_key,
+            sorted(normalised),
+            sm_key,
+        )
+        return False
+    except Exception:
+        return True
+
+
 def _cuda_is_usable() -> bool:
-    """Return True iff CUDA is present *and* cuDNN can actually run a conv2d.
+    """Return True iff CUDA is present *and* cuDNN can actually run a conv2d,
+    *and* the device's compute capability has native SASS coverage in this
+    PyTorch build.
 
     Auto-device detection used to return ``cuda:0`` whenever
     ``torch.cuda.is_available()`` was True, but on some hosts the CUDA runtime
@@ -1220,6 +1290,13 @@ def _cuda_is_usable() -> bool:
     baked into the installed torch build). Those setups crash at the first
     ``F.conv2d`` call with ``GET was unable to find an engine to execute this
     computation``.
+
+    Additionally, some SBSA wheels (e.g. cu126/cu132 for JetPack 7) exclude
+    specific compute capabilities from their arch list (e.g. sm_87 for Orin)
+    even though the conv2d probe passes via PTX JIT.  Complex op kernels used
+    by models like YOLOE have no PTX fallback and silently run on CPU in those
+    configurations. :func:`_device_cc_is_natively_supported` catches this case
+    and logs a clear warning before returning False.
 
     This helper runs a tiny conv2d on ``cuda:0`` once per module-load; on
     failure it logs the GPU / cuDNN / arch list and falls back to CPU so
@@ -1273,6 +1350,10 @@ def _cuda_is_usable() -> bool:
             type(exc).__name__,
             first_line,
         )
+        _CUDA_PROBE_CACHE = False
+        return False
+
+    if not _device_cc_is_natively_supported(torch):
         _CUDA_PROBE_CACHE = False
         return False
 

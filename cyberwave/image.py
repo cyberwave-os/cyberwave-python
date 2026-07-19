@@ -233,9 +233,10 @@ def _normalize_output(
     """Normalize a playground run output into (format, items).
 
     The backend ``POST /mlmodels/{uuid}/run`` endpoint returns either a
-    ``MLModelRunCompleted`` dict or the equivalent SDK dataclass. We also
-    accept a bare list (assumed to be the ``output`` field already) as a
-    convenience for users parsing provider responses manually.
+    result dict with ``output_format`` / ``output`` fields or the
+    equivalent SDK dataclass. We also accept a bare list (assumed to be
+    the ``output`` field already) as a convenience for users parsing
+    provider responses manually.
     """
     # Prefer the dict shape emitted by the backend / SDK.
     if isinstance(output, Mapping):
@@ -314,7 +315,7 @@ def _draw_boxes(draw: Any, boxes: list[dict[str, Any]], w: int, h: int) -> None:
 
 
 def _draw_masks(canvas: Any, masks: list[dict[str, Any]], w: int, h: int) -> None:
-    # Paletted tints matching the frontend `MaskOverlay`.
+    # Paletted tints for distinguishing overlapping mask overlays.
     palette = [
         (244, 63, 94, 140),
         (59, 130, 246, 140),

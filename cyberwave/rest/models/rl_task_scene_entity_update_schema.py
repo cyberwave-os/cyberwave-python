@@ -32,6 +32,7 @@ class RLTaskSceneEntityUpdateSchema(BaseModel):
     base_type: Optional[StrictStr] = None
     twin_uuid: Optional[StrictStr] = None
     twin_name: Optional[StrictStr] = None
+    environment_object_external_id: Optional[StrictStr] = None
     initial_state: Optional[Dict[str, Any]] = None
     articulation: Optional[Dict[str, Any]] = None
     selectors: Optional[Dict[str, Any]] = None
@@ -41,7 +42,7 @@ class RLTaskSceneEntityUpdateSchema(BaseModel):
     include_actuators: Optional[StrictBool] = None
     zero_root_pose: Optional[StrictBool] = None
     sort_order: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["name", "entity_kind", "base_type", "twin_uuid", "twin_name", "initial_state", "articulation", "selectors", "entity_cfg", "sensors", "include_contacts", "include_actuators", "zero_root_pose", "sort_order"]
+    __properties: ClassVar[List[str]] = ["name", "entity_kind", "base_type", "twin_uuid", "twin_name", "environment_object_external_id", "initial_state", "articulation", "selectors", "entity_cfg", "sensors", "include_contacts", "include_actuators", "zero_root_pose", "sort_order"]
 
     @field_validator('entity_kind')
     def entity_kind_validate_enum(cls, value):
@@ -127,6 +128,11 @@ class RLTaskSceneEntityUpdateSchema(BaseModel):
         if self.twin_name is None and "twin_name" in self.model_fields_set:
             _dict['twin_name'] = None
 
+        # set to None if environment_object_external_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_object_external_id is None and "environment_object_external_id" in self.model_fields_set:
+            _dict['environment_object_external_id'] = None
+
         # set to None if initial_state (nullable) is None
         # and model_fields_set contains the field
         if self.initial_state is None and "initial_state" in self.model_fields_set:
@@ -189,6 +195,7 @@ class RLTaskSceneEntityUpdateSchema(BaseModel):
             "base_type": obj.get("base_type"),
             "twin_uuid": obj.get("twin_uuid"),
             "twin_name": obj.get("twin_name"),
+            "environment_object_external_id": obj.get("environment_object_external_id"),
             "initial_state": obj.get("initial_state"),
             "articulation": obj.get("articulation"),
             "selectors": obj.get("selectors"),

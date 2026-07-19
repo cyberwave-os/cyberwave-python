@@ -10,8 +10,10 @@ authoritative consumer:
   payload : ``{"source_type", "command", "data", "timestamp"}``
 
 Covered:
-- takeoff / land / hover go to the canonical topic with the proper
-  ``source_type`` (``tele`` in live mode, ``sim_tele`` in simulation)
+- takeoff / land / hover go to the canonical topic with ``source_type=tele``
+  in live mode; they also publish (with ``source_type=sim_tele``) in a
+  simulation runtime — flight is PLAYGROUND-compatible, since the browser
+  playground renders these commands directly
 - return_to_home / cancel_return_to_home / cancel_takeoff /
   cancel_landing / set_home_here / start_compass_calibration /
   stop_compass_calibration / reboot / emergency_stop
@@ -133,7 +135,7 @@ class TestSourceType:
         _, payload = _last_command_publish(twin)
         assert payload["source_type"] == "tele"
 
-    def test_simulation_mode_defaults_to_sim_tele(self):
+    def test_drone_commands_publish_sim_tele_in_simulation_mode(self):
         twin, client = _make_drone(runtime_mode="simulation")
         twin.land()
 
@@ -312,14 +314,22 @@ class TestLocomoteInheritance:
         assert callable(twin.turn_right)
 
     def test_move_forward_publishes_to_canonical_topic(self):
-        twin, client = _make_drone(runtime_mode="simulation")
+        # Live mode: locomotion inherited by flying twins publishes normally.
+        twin, client = _make_drone(runtime_mode="live")
         twin.move_forward(1.5, duration=0)
 
         topic, payload = _last_command_publish(twin)
         assert topic == CANONICAL_TOPIC
         assert payload["command"] == "move_forward"
-        assert payload["source_type"] == "sim_tele"
+        assert payload["source_type"] == "tele"
         assert payload["data"] == {"linear_x": 1.5, "angular_z": 0.0}
+
+    def test_move_forward_publishes_sim_tele_in_simulation(self):
+        twin, client = _make_drone(runtime_mode="simulation")
+        twin.move_forward(1.5, duration=0)
+
+        _, payload = _last_command_publish(twin)
+        assert payload["source_type"] == "sim_tele"
 
 
 # ---------------------------------------------------------------------------

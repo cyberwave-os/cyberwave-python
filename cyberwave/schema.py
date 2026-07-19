@@ -493,7 +493,7 @@ class Metadata:
     """Robot model metadata."""
 
     name: str
-    version: str = "1.0"  # TODO(AI): What is this used for?
+    version: str = "1.0"  # Version of this robot description document, bumped when its structure changes
     author: str | None = None
     description: str | None = None
     source_format: str | None = None

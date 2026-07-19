@@ -58,10 +58,16 @@ class NavigationPlan:
         rotation: Optional[Sequence[float] | Dict[str, Any]] = None,
         yaw: Optional[float] = None,
         waypoint_id: Optional[str] = None,
+        duration_seconds: Optional[float] = None,
         actions: Optional[List[Dict[str, Any]]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "NavigationPlan":
-        """Add a waypoint to the plan."""
+        """Add a waypoint to the plan.
+
+        ``duration_seconds`` is the trajectory time a controller should take to
+        reach this waypoint from the prior pose. Not every controller honors
+        it; ``None`` leaves the pacing to the controller default.
+        """
         if position is None:
             if x is None or y is None or z is None:
                 raise ValueError("waypoint requires position or x,y,z")
@@ -71,6 +77,7 @@ class NavigationPlan:
             "position": position,
             "rotation": rotation,
             "yaw": yaw,
+            "duration_seconds": duration_seconds,
             "actions": actions,
             "metadata": metadata or {},
         })
@@ -151,6 +158,9 @@ def _normalize_waypoint(item: Any) -> Dict[str, Any]:
         }
         if rotation is not None:
             waypoint["rotation"] = rotation
+        duration_seconds = item.get("duration_seconds")
+        if duration_seconds is not None:
+            waypoint["duration_seconds"] = float(duration_seconds)
         actions = item.get("actions")
         if actions is not None:
             if not isinstance(actions, list):

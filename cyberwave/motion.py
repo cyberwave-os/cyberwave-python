@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence
 
 from .navigation import NavigationPlan
@@ -301,7 +302,46 @@ class TwinMotionHandle:
         transition_ms: Optional[int] = None,
         hold_ms: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Apply a pose/keyframe to the twin."""
+        """Apply a pose/keyframe to the twin.
+
+        Deprecated: ``motion.pose()`` will be removed in a future SDK version.
+        Saved/named pose collections are becoming a dedicated feature (save,
+        edit, load, and apply whole joint-position collections) with its own
+        SDK interface; ad-hoc ``joints=`` calls should use
+        :meth:`twin.joints.set` directly instead.
+
+        ``pose(joints=...)`` is treated as runtime control and published over MQTT
+        via ``twin.joints.set(...)`` so it targets simulation/live controllers
+        (not editor scene state).
+        """
+        if joints is not None and name is None:
+            warnings.warn(
+                "motion.pose(joints=...) is deprecated and will be removed in "
+                "a future SDK version; call twin.joints.set(joints) directly "
+                "instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            joints_handle = getattr(self._twin, "joints", None)
+            if joints_handle is None:
+                raise ValueError(
+                    "motion.pose(joints=...) requires a joint-capable twin. "
+                    "Use motion.pose(name=...) for saved pose actions."
+                )
+            joints_handle.set(joints, source_type=source_type)
+            return {
+                "status": "published",
+                "transport": "mqtt",
+                "command": "joint_update",
+            }
+
+        warnings.warn(
+            "motion.pose() for saved/named poses is deprecated and will be "
+            "removed in a future SDK version; saved pose collections are "
+            "moving to a dedicated pose-library SDK interface.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         payload: Dict[str, Any] = {
             "action_type": "pose",
             "scope": scope,
@@ -712,6 +752,7 @@ class TwinNavigationHandle:
         environment_uuid: Optional[str] = None,
         source_type: Optional[str] = None,
         constraints: Optional[Dict[str, Any]] = None,
+        reference_frame: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
@@ -726,6 +767,9 @@ class TwinNavigationHandle:
             environment_uuid: Environment context
             source_type: Source type for tracking
             constraints: Navigation constraints
+            reference_frame: Coordinate frame the waypoints are expressed in
+                (e.g. ``map``, ``odom``, ``base_link``). Defaults to ``map``
+                server-side when omitted.
             metadata: Additional metadata
 
         Returns:
@@ -744,6 +788,8 @@ class TwinNavigationHandle:
             payload["source_type"] = source_type
         if constraints:
             payload["constraints"] = constraints
+        if reference_frame:
+            payload["reference_frame"] = reference_frame
 
         nav_metadata = dict(metadata or {})
         if wait_s > 0:

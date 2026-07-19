@@ -5,6 +5,8 @@ import pytest
 
 from cyberwave import Cyberwave
 from cyberwave.config import CyberwaveConfig
+from cyberwave.data.api import DataBus
+from cyberwave.data.filesystem_backend import FilesystemBackend
 
 
 def _make_client_with_mocked_managers():
@@ -20,6 +22,8 @@ def _make_client_with_mocked_managers():
         client.api = MagicMock()
         client._mqtt_client = None
         client._data_bus = None
+        client._data_twin_uuid_override = None
+        client._data_sensor_name_override = None
         from cyberwave.workers.hooks import HookRegistry
         from cyberwave.models.manager import ModelManager
 
@@ -287,3 +291,50 @@ def test_quickstart_does_not_overwrite_preset_workspace_id():
     client.get_or_create_quickstart_environment()
 
     assert client.config.workspace_id == "preset-ws"
+
+
+def test_use_data_bus_for_binds_and_rebinds(tmp_path):
+    client = _make_client_with_mocked_managers()
+    client._data_backend = FilesystemBackend(base_dir=tmp_path)
+
+    twin_a = "11111111-1111-4111-8111-111111111111"
+    twin_b = "22222222-2222-4222-8222-222222222222"
+
+    client.use_data_bus_for(twin_a)
+    bus_a = client.data
+    assert isinstance(bus_a, DataBus)
+    assert bus_a.twin_uuid == twin_a
+
+    client.use_data_bus_for(twin_b)
+    bus_b = client.data
+    assert bus_a is not bus_b
+    assert bus_b.twin_uuid == twin_b
+
+
+def test_use_data_bus_for_is_lazy_and_idempotent(tmp_path):
+    """Repeated calls with the same twin must not rebuild the bus.
+
+    Preserves per-channel ``HeaderTemplate.seq`` counters across
+    multi-trigger hook invocations that re-seed on every frame.
+    """
+    client = _make_client_with_mocked_managers()
+    client._data_backend = FilesystemBackend(base_dir=tmp_path)
+
+    twin = "11111111-1111-4111-8111-111111111111"
+
+    client.use_data_bus_for(twin)
+    assert client._data_bus is None, "pinning must not eagerly create a bus"
+
+    bus = client.data
+    client.use_data_bus_for(twin)
+    assert client.data is bus, "same-twin re-seed must reuse the existing bus"
+
+
+def test_use_data_bus_for_overrides_env_var(monkeypatch, tmp_path):
+    monkeypatch.setenv("CYBERWAVE_TWIN_UUID", "env-twin-uuid")
+    client = _make_client_with_mocked_managers()
+    client._data_backend = FilesystemBackend(base_dir=tmp_path)
+
+    pinned = "11111111-1111-4111-8111-111111111111"
+    client.use_data_bus_for(pinned)
+    assert client.data.twin_uuid == pinned

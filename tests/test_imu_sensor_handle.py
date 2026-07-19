@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from cyberwave.exceptions import TwinStateTimeoutError
 from cyberwave.manifest.driver_config import TWIN_IMU_TOPIC_SLUG
 from cyberwave.twin import LocomoteTwin
 from cyberwave.twin.sensors.imu import normalize_imu_payload
@@ -66,7 +65,7 @@ def test_imu_get_returns_latest_sample() -> None:
     twin.client.mqtt.subscribe = subscribe  # type: ignore[attr-defined]
     twin.client.mqtt.connected = True
 
-    handle = twin.imu
+    handle = twin.imu[0]
     handle._ensure_imu_listeners()
     topic = f"cyberwave/twin/{twin.uuid}/imu"
 
@@ -95,7 +94,7 @@ def test_imu_get_filters_by_sensor_id() -> None:
     twin.client.mqtt.subscribe = subscribe  # type: ignore[attr-defined]
     twin.client.mqtt.connected = True
 
-    handle = twin.imu
+    handle = twin.imu[0]
     handle._ensure_imu_listeners()
     topic = f"cyberwave/twin/{twin.uuid}/imu"
     callbacks[topic](
@@ -106,5 +105,28 @@ def test_imu_get_filters_by_sensor_id() -> None:
         }
     )
 
-    with pytest.raises(TwinStateTimeoutError, match="No MQTT imu"):
-        handle.get(timeout=0.05)
+    view = handle.get(timeout=0.05)
+    assert view == {}  # wrong sensor_id dropped; empty live view, no raise
+
+
+def test_imu_get_auto_refreshes_and_fires_callback() -> None:
+    twin = _twin_with_imu()
+    callbacks: dict[str, object] = {}
+
+    def subscribe(topic: str, callback, **kwargs):  # type: ignore[no-untyped-def]
+        callbacks[topic] = callback
+
+    twin.client.mqtt.subscribe = subscribe  # type: ignore[attr-defined]
+    twin.client.mqtt.connected = True
+
+    handle = twin.imu[0]
+    view = handle.get(timeout=0.0)
+    seen: list[dict] = []
+    view.on_update(lambda s: seen.append(s))
+    topic = f"cyberwave/twin/{twin.uuid}/imu"
+    callbacks[topic](
+        {"gyro": {"x": 0.0, "y": 0.0, "z": 0.3}, "accel": {"x": 0.0, "y": 0.0, "z": 9.81}}
+    )
+    assert view["gyro"]["z"] == 0.3  # same object refreshed
+    assert seen and seen[-1]["accel"]["z"] == 9.81
+    assert handle.get(timeout=0.0) is view  # cached view

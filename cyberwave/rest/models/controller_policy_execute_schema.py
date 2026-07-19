@@ -30,6 +30,8 @@ class ControllerPolicyExecuteSchema(BaseModel):
     twin_uuid: StrictStr
     execution: Optional[StrictStr] = 'async'
     mode: Optional[StrictStr] = None
+    transport: Optional[StrictStr] = None
+    confirm_live: Optional[StrictBool] = False
     runtime_kind: Optional[StrictStr] = None
     simulation_backend: Optional[StrictStr] = None
     payload: Optional[Dict[str, Any]] = None
@@ -48,7 +50,9 @@ class ControllerPolicyExecuteSchema(BaseModel):
     target_right_pos: Optional[List[Union[StrictFloat, StrictInt]]] = None
     current_joint_states: Optional[Dict[str, Dict[str, Union[StrictFloat, StrictInt]]]] = None
     server_mode: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["twin_uuid", "execution", "mode", "runtime_kind", "simulation_backend", "payload", "instruction", "max_steps", "device", "velocity_command", "linear_x", "linear_y", "linear_z", "angular_z", "duration_ms", "gait", "origin", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode"]
+    inference_command: Optional[Dict[str, Any]] = None
+    runtime_params: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["twin_uuid", "execution", "mode", "transport", "confirm_live", "runtime_kind", "simulation_backend", "payload", "instruction", "max_steps", "device", "velocity_command", "linear_x", "linear_y", "linear_z", "angular_z", "duration_ms", "gait", "origin", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode", "inference_command", "runtime_params"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -58,6 +62,16 @@ class ControllerPolicyExecuteSchema(BaseModel):
 
         if value not in set(['live', 'simulation']):
             raise ValueError("must be one of enum values ('live', 'simulation')")
+        return value
+
+    @field_validator('transport')
+    def transport_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['zenoh', 'mqtt']):
+            raise ValueError("must be one of enum values ('zenoh', 'mqtt')")
         return value
 
     @field_validator('runtime_kind')
@@ -144,6 +158,11 @@ class ControllerPolicyExecuteSchema(BaseModel):
         if self.mode is None and "mode" in self.model_fields_set:
             _dict['mode'] = None
 
+        # set to None if transport (nullable) is None
+        # and model_fields_set contains the field
+        if self.transport is None and "transport" in self.model_fields_set:
+            _dict['transport'] = None
+
         # set to None if runtime_kind (nullable) is None
         # and model_fields_set contains the field
         if self.runtime_kind is None and "runtime_kind" in self.model_fields_set:
@@ -224,6 +243,16 @@ class ControllerPolicyExecuteSchema(BaseModel):
         if self.current_joint_states is None and "current_joint_states" in self.model_fields_set:
             _dict['current_joint_states'] = None
 
+        # set to None if inference_command (nullable) is None
+        # and model_fields_set contains the field
+        if self.inference_command is None and "inference_command" in self.model_fields_set:
+            _dict['inference_command'] = None
+
+        # set to None if runtime_params (nullable) is None
+        # and model_fields_set contains the field
+        if self.runtime_params is None and "runtime_params" in self.model_fields_set:
+            _dict['runtime_params'] = None
+
         return _dict
 
     @classmethod
@@ -239,6 +268,8 @@ class ControllerPolicyExecuteSchema(BaseModel):
             "twin_uuid": obj.get("twin_uuid"),
             "execution": obj.get("execution") if obj.get("execution") is not None else 'async',
             "mode": obj.get("mode"),
+            "transport": obj.get("transport"),
+            "confirm_live": obj.get("confirm_live") if obj.get("confirm_live") is not None else False,
             "runtime_kind": obj.get("runtime_kind"),
             "simulation_backend": obj.get("simulation_backend"),
             "payload": obj.get("payload"),
@@ -256,7 +287,9 @@ class ControllerPolicyExecuteSchema(BaseModel):
             "target_left_pos": obj.get("target_left_pos"),
             "target_right_pos": obj.get("target_right_pos"),
             "current_joint_states": obj.get("current_joint_states"),
-            "server_mode": obj.get("server_mode") if obj.get("server_mode") is not None else False
+            "server_mode": obj.get("server_mode") if obj.get("server_mode") is not None else False,
+            "inference_command": obj.get("inference_command"),
+            "runtime_params": obj.get("runtime_params")
         })
         return _obj
 

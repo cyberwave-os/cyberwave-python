@@ -34,7 +34,7 @@ class ManifestSchema(BaseModel):
     install_script: str | None = None
     requirements: list[str] | None = None
 
-    # Model pre-loading (parsed, execution deferred to CYB-1546)
+    # Model pre-loading (parsed; execution is not yet implemented)
     models: list[str] | None = None
 
     # On-demand dispatch paths

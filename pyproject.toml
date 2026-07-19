@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.5.3"
+version = "0.6.0"
 description = "Python SDK for Cyberwave"
 authors = [
     "Simone Di Somma <sdisomma@cyberwave.com>",
@@ -28,10 +28,17 @@ numpy = ">=1.26.0"
 pillow = { version = ">=10.0.0", optional = true }
 # Optional schedule trigger support for edge workers
 croniter = { version = ">=6.2.2", optional = true }
-# Optional camera streaming dependencies
-aiortc = { version = "^1.5.0", optional = true }
+# Optional camera streaming dependencies. twin.camera[...].get_video()
+# (IncomingVideoStream) lazy-imports this via consumers/__init__.py's
+# __getattr__, so it's only required when video is actually used.
+aiortc = { version = "^1.14.0", optional = true }
 av = { version = "^16.0.1", optional = true }
-opencv-python = { version = "^4.8.0", optional = true }
+# Headless OpenCV for vision/ML/camera/data extras (no GUI libs).
+opencv-python-headless = { version = "^4.8.0", optional = true }
+# Optional recording-data reader dependency. Recording.read_robot()/read_depth()/
+# read_pointcloud() lazy-import this (managers/recordings.py); only required to read
+# fetched recordings.
+pyarrow = { version = ">=14.0.0", optional = true }
 # Optional host microphone capture dependencies
 sounddevice = { version = ">=0.5.2", optional = true }
 pyudev = { version = ">=0.24.3", optional = true }
@@ -59,15 +66,15 @@ zxing-cpp = { version = "3.0.0", optional = true }
 [tool.poetry.extras]
 image = ["pillow"]
 schedule = ["croniter"]
-camera = ["aiortc", "av", "opencv-python"]
+camera = ["aiortc", "av", "opencv-python-headless"]
 microphone = ["aiortc", "av", "sounddevice", "pyudev"]
 speaker = ["aiortc", "av", "sounddevice", "pyudev"]
-realsense = ["aiortc", "av", "opencv-python", "pyrealsense2"]
+realsense = ["aiortc", "av", "opencv-python-headless", "pyrealsense2"]
 zenoh = ["eclipse-zenoh"]
-data = ["eclipse-zenoh"]
+data = ["eclipse-zenoh", "opencv-python-headless", "pyarrow"]
 ml = ["ultralytics"]
 ml-onnx = ["onnxruntime"]
-ml-opencv = ["opencv-python"]
+ml-opencv = ["opencv-python-headless"]
 ml-tflite = ["tflite-runtime"]
 ml-stt = ["pywhispercpp"]
 ml-stt-faster = ["faster-whisper"]
@@ -89,7 +96,7 @@ ml-hailo = []
 ml-all-vision = [
     "ultralytics",
     "onnxruntime",
-    "opencv-python",
+    "opencv-python-headless",
     "tflite-runtime",
 ]
 # Speech / voice-assistant — every audio workflow + STT runtime dep (fat image / CI).
@@ -108,7 +115,7 @@ ml-all-audio = [
 ml-all = [
     "ultralytics",
     "onnxruntime",
-    "opencv-python",
+    "opencv-python-headless",
     "tflite-runtime",
     "openwakeword",
     "pywhispercpp",

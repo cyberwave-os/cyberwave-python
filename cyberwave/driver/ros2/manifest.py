@@ -1,7 +1,7 @@
 """manifest.py — YAML manifest loader for Cyberwave ROS 2 Python drivers.
 
-Mirrors the C++ manifest.hpp / manifest.cpp structures exactly so that the
-same manifest.yaml file can be used with both the C++ and Python driver bases.
+The manifest schema is shared across Cyberwave ROS 2 driver implementations,
+so the same manifest.yaml file works regardless of driver language.
 """
 
 from __future__ import annotations
@@ -350,4 +350,7 @@ def load_manifest(
     if not isinstance(root, dict):
         raise RuntimeError(f"Manifest root must be a mapping, got {type(root).__name__}")
 
+    # Support combined cw-driver.yml format: descend into ros2: section if present.
+    if isinstance(root.get("ros2"), dict):
+        root = root["ros2"]
     return _parse_manifest_root(root)

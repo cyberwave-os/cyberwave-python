@@ -26,7 +26,7 @@ from pydantic_core import to_jsonable_python
 
 class RLTaskSourceFileSchema(BaseModel):
     """
-    A single source file in an RL task tree (user- or Cyberwave-owned).
+    A single source file in an RL task tree (user- or Cyberwave-generated).
     """ # noqa: E501
     path: StrictStr
     content: StrictStr

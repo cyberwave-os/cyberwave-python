@@ -352,7 +352,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["dji/mavic-3-enterprise"],
+        asset_key: Literal["dji/mavic-3-enterprise-2"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -497,15 +497,6 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["unitree/unitree_a1"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> LocomoteJointCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["fictionlab/leo-rover"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

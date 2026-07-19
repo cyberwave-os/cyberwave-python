@@ -64,7 +64,7 @@ DEFAULT_SPEAKER_FRONTEND_TYPE = "speaker"
 DEFAULT_SPEAKER_BIT_DEPTH = 16
 
 # Passive speaker twin sensor *types* — edge/frontend consumers only.
-# Keep in sync with ``SPEAKER_SENSOR_TYPES`` in ``audio_sensor.rs``.
+# Keep in sync with the corresponding sensor type list on the server side.
 SPEAKER_SENSOR_TYPES = frozenset(
     {"speaker", "loudspeaker", "speakerphone", "audio_out"}
 )

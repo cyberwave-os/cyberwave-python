@@ -10,6 +10,7 @@ import time
 import warnings
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from cyberwave._version import get_version
 from cyberwave.config import (
     CyberwaveConfig,
     DEFAULT_BASE_URL,
@@ -61,6 +62,30 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# SDK identity headers attached to every outbound REST request. These let the
+# backend attribute API traffic to an SDK version cohort (``backend_api_activity``
+# in ``src/lib/posthog_tracking.py``) without any per-call payload changes.
+_SDK_VERSION = get_version()
+_SDK_USER_AGENT = f"cyberwave-python/{_SDK_VERSION}"
+_SDK_VERSION_HEADER = "X-Cyberwave-SDK-Version"
+
+
+def _apply_sdk_identity_headers(header_params: dict[str, Any]) -> dict[str, Any]:
+    """Add SDK identity headers without overriding caller-provided values.
+
+    Sets a ``User-Agent`` and ``X-Cyberwave-SDK-Version`` header so backend
+    request tracking can report SDK version distribution over REST. Callers that
+    set their own ``User-Agent`` (e.g. the CLI) keep it.
+    """
+    if not any(str(key).lower() == "user-agent" for key in header_params):
+        header_params["User-Agent"] = _SDK_USER_AGENT
+    if not any(
+        str(key).lower() == _SDK_VERSION_HEADER.lower() for key in header_params
+    ):
+        header_params[_SDK_VERSION_HEADER] = _SDK_VERSION
+    return header_params
+
+
 _RUNTIME_MODE_MAP = {
     "live": "live",
     "real-world": "live",
@@ -70,7 +95,24 @@ _RUNTIME_MODE_MAP = {
     "simulation": "simulation",
     "sim": "simulation",
     "sim_tele": "simulation",
+    "mujoco": "simulation",
+    "playground": "simulation",
 }
+
+# Simulation profiles that spin up a MuJoCo cloud instance when selected via
+# ``affect(...)``. ``playground`` is a simulation runtime too, but a lightweight
+# kinematic one with no MuJoCo instance to start (level-0 only), so it is absent.
+_AFFECT_MUJOCO_PROFILES = frozenset({"sim", "simulation", "sim_tele", "mujoco"})
+
+
+def _affect_autostart_backend(mode: Optional[str]) -> Optional[str]:
+    """Backend to auto-start for an ``affect(...)`` profile, or ``None``.
+
+    Returns ``"mujoco"`` for MuJoCo simulation profiles; ``None`` for
+    ``playground`` and every live profile (nothing to start).
+    """
+    normalized = (mode or "").lower().strip()
+    return "mujoco" if normalized in _AFFECT_MUJOCO_PROFILES else None
 
 
 def _resolve_runtime_mode(mode: Optional[str]) -> str:
@@ -182,6 +224,8 @@ class Cyberwave:
         self._mqtt_client: Optional[CyberwaveMQTTClient] = None
         self._data_backend: Optional[DataBackend] = None
         self._data_bus: Optional[DataBus] = None
+        self._data_twin_uuid_override: Optional[str] = None
+        self._data_sensor_name_override: Optional[str] = None
         self._hook_registry = HookRegistry()
         self._init_managers()
 
@@ -254,6 +298,8 @@ class Cyberwave:
             )
             if self.config.api_key and not has_authorization:
                 header_params["Authorization"] = f"Bearer {self.config.api_key}"
+
+            _apply_sdk_identity_headers(header_params)
 
             last_request_headers.clear()
             if header_params:
@@ -412,6 +458,31 @@ class Cyberwave:
         """Return a :class:`~cyberwave.data.api.DataBus` for any twin on the shared backend."""
         return DataBus(self._get_data_backend(), twin_uuid, sensor_name=sensor_name)
 
+    def use_data_bus_for(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str | None = None,
+    ) -> None:
+        """Pin :attr:`data` to *twin_uuid*, overriding ``CYBERWAVE_TWIN_UUID``.
+
+        Lazy: does not open a transport backend until :attr:`data` is
+        first accessed, so calling this in a compiled worker prelude
+        costs nothing for workflows that never touch the data bus.
+        Idempotent: repeated calls with the same twin/sensor are no-ops,
+        which preserves the existing :class:`DataBus` (and its per-channel
+        ``HeaderTemplate.seq`` counters) across multi-trigger hook
+        invocations that re-seed on every frame.
+        """
+        if (
+            self._data_twin_uuid_override == twin_uuid
+            and self._data_sensor_name_override == sensor_name
+        ):
+            return
+        self._data_bus = None
+        self._data_twin_uuid_override = twin_uuid
+        self._data_sensor_name_override = sensor_name
+
     def fetch_zenoh_frame(
         self,
         twin_uuid: str,
@@ -490,20 +561,27 @@ class Cyberwave:
         """Data-layer bus (lazy initialization).
 
         Returns a :class:`~cyberwave.data.api.DataBus` backed by the
-        backend selected via ``CYBERWAVE_DATA_BACKEND``.
+        backend selected via ``CYBERWAVE_DATA_BACKEND``. Scoped to the
+        twin set by :meth:`use_data_bus_for` if called, otherwise to
+        ``CYBERWAVE_TWIN_UUID``.
 
         Raises:
-            CyberwaveError: If ``CYBERWAVE_TWIN_UUID`` is not set.
+            CyberwaveError: If no twin has been pinned and
+                ``CYBERWAVE_TWIN_UUID`` is not set.
         """
         if self._data_bus is None:
-            twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
+            twin_uuid = self._data_twin_uuid_override or os.getenv(
+                "CYBERWAVE_TWIN_UUID"
+            )
             if not twin_uuid:
                 raise CyberwaveError(
                     "CYBERWAVE_TWIN_UUID environment variable is required "
                     "for cw.data but is not set.  Export it before accessing "
                     "the data bus, e.g.: export CYBERWAVE_TWIN_UUID=<uuid>"
                 )
-            self._data_bus = self.data_bus_for(twin_uuid)
+            self._data_bus = self.data_bus_for(
+                twin_uuid, sensor_name=self._data_sensor_name_override
+            )
         return self._data_bus
 
     def _try_get_data_bus(self) -> DataBus | None:
@@ -761,7 +839,13 @@ class Cyberwave:
         except Exception:
             raise
 
-    def affect(self, mode: str) -> "Cyberwave":
+    def affect(
+        self,
+        mode: str,
+        *,
+        environment_id: Optional[str] = None,
+        duration: Optional[float] = None,
+    ) -> "Cyberwave":
         """
         Set whether commands affect the simulation or the real robot.
 
@@ -769,42 +853,118 @@ class Cyberwave:
         locomotion APIs, and keeps generic state/telemetry publishers aligned with
         the selected runtime (`edge` in live mode, `sim` in simulation mode).
 
+        Selecting a MuJoCo simulation profile (``"sim"`` / ``"simulation"`` /
+        ``"mujoco"``) **auto-starts** a MuJoCo simulation for the resolved
+        environment — a billable cloud instance. The lighter ``"playground"``
+        profile is a simulation runtime with no MuJoCo instance to start.
+
         Args:
-            mode: ``"simulation"`` (or ``"sim"``) to target the simulated
-                  environment, ``"live"`` / ``"real-world"`` (or
-                  ``"real"`` / ``"tele"``) to target the real robot.
+            mode: ``"sim"`` / ``"simulation"`` / ``"mujoco"`` to target (and start)
+                  a MuJoCo simulation, ``"playground"`` for the lightweight
+                  kinematic simulation runtime, ``"live"`` / ``"real-world"``
+                  (or ``"real"`` / ``"tele"``) to target the real robot.
+            environment_id: Environment to start the simulation for. Falls back to
+                  the client's configured environment when omitted.
+            duration: Optional simulation run duration in seconds (defaults to the
+                  backend's own default).
 
         Returns:
             self, for method chaining.
 
+        Note:
+            Locomotion, flight, and driver commands (``twin.locomote.*``,
+            ``twin.flying.*``, ``twin.commands.*``) are live/driver-only and raise
+            ``NotSimulatedError`` in any simulation runtime.
+
         Example:
-            >>> cw = Cyberwave()
-            >>> cw.affect("simulation")
-            >>> rover.move_forward(1.0)        # moves in simulation
+            >>> cw = Cyberwave(environment_id="acme/envs/floor")
+            >>> cw.affect("simulation")        # starts a MuJoCo sim (logs the cost)
+            >>> frame = robot.get_frame()      # reads from the running sim
 
             >>> cw.affect("real-world")
             >>> rover.move_forward(1.0)        # moves the real robot
-
-            >>> # Per-call override still works:
-            >>> rover.move_forward(1.0, source_type="tele")
         """
         runtime_mode = _resolve_runtime_mode(mode)
         source_type = _default_state_source_type(runtime_mode)
 
-        if (
+        if not (
             self.config.runtime_mode == runtime_mode
             and self.config.source_type == source_type
         ):
-            return self
+            self.config.runtime_mode = runtime_mode
+            self.config.source_type = source_type
 
-        self.config.runtime_mode = runtime_mode
-        self.config.source_type = source_type
+            if self._mqtt_client:
+                self._mqtt_client.disconnect()
+                self._mqtt_client = None
 
-        if self._mqtt_client:
-            self._mqtt_client.disconnect()
-            self._mqtt_client = None
+        # A MuJoCo profile spins up a billable cloud instance; playground/live do not.
+        if _affect_autostart_backend(mode) == "mujoco":
+            self._autostart_simulation(
+                backend="mujoco", environment_id=environment_id, duration=duration
+            )
 
         return self
+
+    def _autostart_simulation(
+        self,
+        *,
+        backend: str,
+        environment_id: Optional[str],
+        duration: Optional[float],
+    ) -> Any:
+        """Start (or reuse) a simulation selected via :meth:`affect`, logging the cost.
+
+        Resolves the environment from ``environment_id`` or the client's configured
+        environment. When neither is available, logs how to start one and returns
+        ``None`` rather than raising — the runtime mode is still set. Blocks until
+        the simulation reports ``running`` (mirrors every other simulation-start
+        path in the SDK) so that a getter called right after ``affect()`` returns
+        never races a still-``loading`` instance.
+        """
+        from cyberwave.managers.simulations import (
+            SIMULATION_CREDITS_PER_HOUR,
+            SIMULATION_CREDITS_PER_MINUTE,
+        )
+
+        env_id = environment_id or self.config.environment_id
+        if not env_id:
+            logger.warning(
+                "affect(%r) selected a MuJoCo simulation runtime, but no environment "
+                "is set — no simulation was started. Pass environment_id=... to "
+                "affect(), set CYBERWAVE_ENVIRONMENT_ID, or start one explicitly with "
+                "cw.environments.simulations.start(environment_id, backend='mujoco').",
+                backend,
+            )
+            return None
+
+        env_id = self._resolve_environment_id(env_id)
+        simulations = self.environments.simulations
+
+        sim = simulations.get_active(env_id)
+        if sim is not None:
+            logger.info(
+                "Reusing active simulation %s for environment %s "
+                "(MuJoCo simulations are billed at ~%.2f credits/hour).",
+                sim.simulation_id,
+                env_id,
+                SIMULATION_CREDITS_PER_HOUR,
+            )
+        else:
+            sim = simulations.start(env_id, backend=backend, duration=duration)
+            logger.warning(
+                "Started MuJoCo simulation %s for environment %s — this is a billable "
+                "cloud instance consuming credits at ~%.2f credits/hour "
+                "(%.2f credits/min). Stop it with sim.stop() when done.",
+                sim.simulation_id,
+                env_id,
+                SIMULATION_CREDITS_PER_HOUR,
+                SIMULATION_CREDITS_PER_MINUTE,
+            )
+
+        if sim.status != "running":
+            sim.wait_until_active()
+        return sim
 
     def configure(
         self,
@@ -875,7 +1035,8 @@ class Cyberwave:
         turn_servers: Optional[list] = None,
         time_reference: Optional[TimeReference] = None,
         keyframe_interval: Optional[int] = None,
-        frame_callback: Optional[callable] = None,
+        frame_callback: Optional[Callable] = None,
+        depth_callback: Optional[Callable] = None,
         camera_name: Optional[str] = None,
         fourcc: Optional[str] = None,
     ):
@@ -907,8 +1068,10 @@ class Cyberwave:
             keyframe_interval: Force a keyframe every N frames for better streaming start.
                 If None, uses CYBERWAVE_KEYFRAME_INTERVAL env var, or disables forced keyframes.
                 Recommended: fps * 2 (e.g., 60 for 30fps = keyframe every 2 seconds)
-            frame_callback: Optional callback for each frame (ML inference, etc.).
+            frame_callback: Optional per-frame color callback (ML inference, etc.).
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
+            depth_callback: Optional per-frame depth callback (RealSense only).
+                Signature: callback(depth: np.ndarray, frame_count: int) -> None
             camera_name: Optional sensor identifier for multi-stream twins.
             fourcc: Optional FOURCC for local V4L2/USB cameras (e.g. ``'MJPG'``, ``'YUYV'``).
                 Passed to :class:`~cyberwave.sensor.camera_cv2.CV2VideoTrack`. If omitted for a
@@ -1020,6 +1183,8 @@ class Cyberwave:
                     twin_uuid=twin_uuid,
                     time_reference=time_reference,
                     camera_name=camera_name,
+                    frame_callback=frame_callback,
+                    depth_callback=depth_callback,
                 )
             else:
                 return RealSenseStreamer(
@@ -1033,6 +1198,8 @@ class Cyberwave:
                     twin_uuid=twin_uuid,
                     time_reference=time_reference,
                     camera_name=camera_name,
+                    frame_callback=frame_callback,
+                    depth_callback=depth_callback,
                 )
         else:
             raise CyberwaveError(
@@ -1140,6 +1307,10 @@ class Cyberwave:
         return self._hook_registry.on_mqtt
 
     @property
+    def on_manual_trigger(self) -> Callable:
+        return self._hook_registry.on_manual_trigger
+
+    @property
     def on_temperature(self) -> Callable:
         return self._hook_registry.on_temperature
 
@@ -1171,8 +1342,7 @@ class Cyberwave:
     ) -> None:
         """Publish a business event via MQTT.
 
-        Payload shape matches ``BaseEdgeNode.publish_event()`` and the
-        backend ``mqtt_consumer.handle_twin_event_message()``::
+        Published payload shape::
 
             {"event_type": ..., "source": ..., "data": ..., "timestamp": ...}
         """
@@ -1226,8 +1396,8 @@ class Cyberwave:
             source_type: Alert origin (``edge``, ``cloud``, ``simulation``, etc.).
             metadata: Optional dict of extra data stored on the alert.
             workflow_uuid: UUID of the workflow that produced the alert. When
-                provided the backend sets ``Alert.workflow`` so the alert is
-                queryable via ``GET /api/v1/alerts?workflow_uuid=...``.
+                provided, the alert becomes queryable via
+                ``GET /api/v1/alerts?workflow_uuid=...``.
             workflow_node_uuid: UUID of the workflow node (e.g. ``send_alert``)
                 that produced the alert. Stored under ``metadata`` for
                 provenance — does not require a schema change on the backend.

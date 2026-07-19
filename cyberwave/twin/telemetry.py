@@ -7,21 +7,14 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .base import Twin
 
-_NOT_IMPL = (
-    "Not implemented on twin.telemetry in v1. "
-    "Drivers use cyberwave.telemetry.BaseTelemetry + a registry publisher on "
-    "twin/telemetry; session start/end use client.mqtt.publish_telemetry_* . "
-    "For ad-hoc payloads call twin.telemetry.publish({...}) or twin.publish_telemetry(...)."
-)
-
-
 class TwinTelemetry:
     """High-level telemetry handle for a :class:`~cyberwave.twin.base.Twin`.
 
-  In v1 only :meth:`publish` is implemented; it delegates to
-  :meth:`~cyberwave.twin.base.Twin.publish_telemetry` (transport layer).
-  Lifecycle/session helpers raise :exc:`NotImplementedError` until a future
-  SDK release wires them through the same transport path.
+    Only :meth:`publish` is available from the twin side; it sends an ad-hoc
+    payload on ``cyberwave/twin/{uuid}/telemetry``.  Lifecycle helpers
+    (session start/end, driver info) are intended for edge drivers — use
+    :class:`~cyberwave.driver.base.BaseDriver` or the MQTT client directly
+    from driver code.
     """
 
     def __init__(self, twin: Twin) -> None:
@@ -33,25 +26,39 @@ class TwinTelemetry:
 
     @property
     def is_connected(self) -> bool:
-        raise NotImplementedError(_NOT_IMPL)
+        raise NotImplementedError(
+            "twin.telemetry.is_connected is not yet implemented."
+        )
 
     def set_connected(self, connected: bool, **extra: Any) -> None:
-        raise NotImplementedError(_NOT_IMPL)
+        raise NotImplementedError(
+            "twin.telemetry.set_connected() is not yet implemented."
+        )
 
     def session_start(self, **extra: Any) -> None:
-        raise NotImplementedError(_NOT_IMPL)
+        raise NotImplementedError(
+            "twin.telemetry.session_start() is not yet implemented."
+        )
 
     def session_end(self, **extra: Any) -> None:
-        raise NotImplementedError(_NOT_IMPL)
+        raise NotImplementedError(
+            "twin.telemetry.session_end() is not yet implemented."
+        )
 
     def driver_info(self, info: dict[str, Any] | None = None, **kwargs: Any) -> None:
-        raise NotImplementedError(_NOT_IMPL)
+        raise NotImplementedError(
+            "twin.telemetry.driver_info() is not yet implemented."
+        )
 
     def update_snapshot(self, **fields: Any) -> None:
-        raise NotImplementedError(_NOT_IMPL)
+        raise NotImplementedError(
+            "twin.telemetry.update_snapshot() is not yet implemented."
+        )
 
     def flush_snapshot(self, event_type: str = "driver_info") -> None:
-        raise NotImplementedError(_NOT_IMPL)
+        raise NotImplementedError(
+            "twin.telemetry.flush_snapshot() is not yet implemented."
+        )
 
     @staticmethod
     def standard_driver_info(**fields: Any) -> dict[str, Any]:

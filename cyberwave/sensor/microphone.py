@@ -100,12 +100,12 @@ DEFAULT_STREAM_SOURCE = "live"
 DEFAULT_STREAM_INSTANCE_ID = "default"
 
 # Shared WebRTC routing key for mic + speaker legs (``sensor`` field in offers).
-# Must match ``DEFAULT_AUDIO_SENSOR_ID`` in media-service ``audio_sensor.rs``.
+# Must match the corresponding sensor id used server-side.
 DEFAULT_AUDIO_SENSOR_ID = "audio"
 DEFAULT_MIC_NAME = DEFAULT_AUDIO_SENSOR_ID
 
 # Active microphone twin sensor *types* — edge producers only.
-# Keep in sync with ``MICROPHONE_SENSOR_TYPES`` in ``audio_sensor.rs``.
+# Keep in sync with the corresponding sensor type list on the server side.
 MICROPHONE_SENSOR_TYPES = frozenset(
     {"mic", "microphone", "audio_in", "audio", "audio_mono", "audio_stereo"}
 )
@@ -343,7 +343,7 @@ class BaseAudioTrack(AudioStreamTrack):
     poller to detect liveness — concrete subclasses are responsible for
     bumping it once per emitted frame.  Without that, an audio twin
     would always look stale on the dashboard even when the track is
-    happily streaming over WebRTC (the pre-CYB-2005 bug).
+    happily streaming over WebRTC.
     """
 
     def __init__(self) -> None:
@@ -540,7 +540,7 @@ class BaseAudioStreamer:
         self._run_task: asyncio.Task | None = None
         self._run_stop_event: asyncio.Event | None = None
 
-        # ``edge_health`` plumbing — pre-CYB-2005 ``BaseAudioStreamer``
+        # ``edge_health`` plumbing — ``BaseAudioStreamer`` previously
         # didn't publish a heartbeat at all, which made paired
         # microphone twins always show "Edge service not running" in
         # the dashboard even when audio was streaming fine over WebRTC.
@@ -552,7 +552,7 @@ class BaseAudioStreamer:
         self._last_frame_count: int = 0
 
         # Serialize offer/answer so monitor + run-loop cannot publish duplicate
-        # offers that make media-service tear down the active producer session.
+        # offers that make the server tear down the active producer session.
         self._webrtc_negotiation_lock: asyncio.Lock | None = None
         self._reconnect_in_progress: bool = False
 
@@ -1146,7 +1146,7 @@ class BaseAudioStreamer:
         publisher so ``is_stale`` reacts to real liveness rather than
         a static "we're connected" flag.
 
-        Pre-CYB-2005, ``BaseAudioStreamer`` skipped this entirely and
+        Previously, ``BaseAudioStreamer`` skipped this entirely and
         paired microphone twins always rendered "Edge service not
         running" in the dashboard even when audio was streaming fine
         over WebRTC.

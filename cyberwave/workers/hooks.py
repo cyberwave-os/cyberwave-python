@@ -40,6 +40,29 @@ so authors don't have to know the sensor name for single-sensor twins.
 """
 
 
+MANUAL_TRIGGER_SUBTOPIC = "run"
+"""Subtopic segment a manual "run now" command lands on, under the
+workflow-scoped base (see :func:`manual_trigger_topic`)."""
+
+
+def manual_trigger_topic(workflow_uuid: str) -> str:
+    """Full (env-prefix-less) topic a manual "run now" command is published to.
+
+    ``cyberwave/workflow/<workflow_uuid>/run`` — the inbound command
+    sibling of the outbound ``cyberwave/workflow/<workflow_uuid>/execution/*``
+    telemetry the worker already publishes. Keeping both under the one
+    workflow-scoped base means the workflow's entire runtime conversation
+    lives in a single namespace and resolves to a single broker ACL
+    resource (``resource_type=workflow``), regardless of which twin the
+    worker is compiled for.
+
+    Shared contract between the backend dispatcher (which publishes the
+    command) and :meth:`HookRegistry.on_manual_trigger` (which subscribes),
+    so keep both sides in sync via this single helper.
+    """
+    return f"cyberwave/workflow/{workflow_uuid}/{MANUAL_TRIGGER_SUBTOPIC}"
+
+
 @dataclass(frozen=True)
 class HookRegistration:
     """One registered hook binding a callback to a channel on a twin.
@@ -351,6 +374,56 @@ class HookRegistry:
             twin_uuid,
             subtopic=normalized,
             qos=qos,
+        )
+
+    def on_manual_trigger(
+        self,
+        twin_uuid: str,
+        *,
+        workflow_uuid: str,
+        qos: int = 1,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Fire a callback when a manual "run now" targets this workflow.
+
+        Workflow-scoped sibling of :meth:`on_mqtt`. It registers with the
+        same ``hook_type == "mqtt"`` shape — so it reuses the worker
+        runtime's MQTT subscribe/dispatch/lifecycle/stats machinery and
+        the same ``fn(payload, topic, ctx)`` signature — but subscribes
+        under the *workflow* base ``cyberwave/workflow/<workflow_uuid>/run``
+        (see :func:`manual_trigger_topic`) rather than the twin base.
+
+        The backend publishes there when a user clicks "Run now" on a
+        ``trigger/manual`` node of an edge workflow, so the compiled
+        worker's manual entrypoint runs on the edge instead of the cloud.
+        ``payload`` is the run *envelope*: ``{"request_id", "execution_uuid",
+        "inputs", "requested_at", "requested_by_uuid"}``. The caller-supplied
+        inputs live at ``payload["inputs"]``.
+
+        ``twin_uuid`` is still required — a manual-trigger workflow always
+        compiles for exactly one twin, and it's carried on the
+        :class:`HookContext` for the callback — but it is deliberately
+        absent from the topic, which is keyed on the workflow alone.
+
+        Defaults to ``qos=1`` (at-least-once): a manual command should
+        arrive even if it means a possible duplicate delivery. Manual
+        re-runs are intentional, so callbacks must not assume exactly-once.
+        """
+        if not isinstance(workflow_uuid, str) or not workflow_uuid.strip():
+            raise ValueError(
+                "on_manual_trigger requires a non-empty workflow_uuid"
+            )
+        if isinstance(qos, bool) or not isinstance(qos, int) or qos not in {0, 1, 2}:
+            raise ValueError("on_manual_trigger qos must be one of 0, 1, or 2")
+        wf_uuid = workflow_uuid.strip()
+        channel = f"mqtt/workflow/{wf_uuid}/{MANUAL_TRIGGER_SUBTOPIC}"
+        return self._make_decorator(
+            channel,
+            "mqtt",
+            twin_uuid,
+            subtopic=MANUAL_TRIGGER_SUBTOPIC,
+            qos=qos,
+            scope="workflow",
+            workflow_uuid=wf_uuid,
         )
 
     def on_temperature(

@@ -12,6 +12,7 @@ from .transport import DEFAULT_BURST_DURATION_S, DEFAULT_BURST_RATE_HZ
 if TYPE_CHECKING:
     from .base import Twin
     from .commands import TwinCommandsHandle
+    from .simulation_support import SimLevel
 
 _CAPABILITY_PROPERTIES: tuple[str, ...] = (
     "locomotion",
@@ -191,6 +192,41 @@ def command_routing_entry(
     return {"via": via, "continuous": continuous}
 
 
+def _catalog_command_sim_level(twin: Twin, command: str) -> "SimLevel":
+    """Resolve the preflight simulation level for a catalog-dispatched command.
+
+    Two independent signals can grant ``PLAYGROUND``:
+
+    1. **Capability delegate.** Catalog commands (``twin.commands.<name>()``)
+       route to whatever capability handle declares a same-named method
+       (locomotion, flight, gripper, joints); that handle's own
+       ``@simulation_level`` annotation is authoritative, so e.g. a locomotion
+       command inherits ``LocomotionHandle.move_forward``'s ``PLAYGROUND`` level.
+    2. **Controller policy binding.** The twin's attached controller policy may
+       expose *this* command with a ``playground`` keyboard binding (see
+       ``seed_controllers.py``'s ``generate_locomotion_controller_from_asset`` /
+       ``_drone_runtime_metadata``) — the same data the frontend's
+       ``PlaygroundLocomotionCommandDrivers`` reads to render it. That makes the
+       command playground-safe for this specific asset even if it has no
+       capability delegate at all (a raw MQTT passthrough command that only the
+       controller policy, not the SDK, knows is drivable in the playground).
+
+    A command with neither signal stays ``UNSUPPORTED`` in simulation mode,
+    unchanged from prior behavior.
+    """
+    from .simulation_support import SimLevel
+
+    policy_handle = getattr(twin, "policy", None)
+    if policy_handle is not None and command in policy_handle.playground_actuations():
+        return SimLevel.PLAYGROUND
+
+    delegate_info = resolve_command_delegate(twin, command)
+    if delegate_info is None:
+        return SimLevel.UNSUPPORTED
+    _, delegate_fn = delegate_info
+    return getattr(delegate_fn, "__cw_sim_level__", SimLevel.UNSUPPORTED)
+
+
 def _make_catalog_command_method(command: str) -> Callable[..., None]:
     """Build a bound catalog method (continuous burst, delegate, or single publish)."""
 
@@ -202,6 +238,21 @@ def _make_catalog_command_method(command: str) -> Callable[..., None]:
         **kwargs: Any,
     ) -> None:
         twin = self._twin
+
+        # Resolve the preflight level only in simulation mode: unlike the
+        # decorator-only path this once was, `_catalog_command_sim_level` can now
+        # make a network call (attached controller policy lookup), and this
+        # argument is evaluated eagerly regardless of what
+        # `_ensure_simulation_support` does with it. Computing it unconditionally
+        # would add a blocking HTTP round trip to every live-mode command
+        # dispatch — including from async callers, where it can stall the event
+        # loop and starve concurrent MQTT/WebRTC coroutines.
+        from .runtime_state import RUNTIME_MODE_SIMULATION, active_runtime_mode
+
+        if active_runtime_mode(twin.client) == RUNTIME_MODE_SIMULATION:
+            twin._ensure_simulation_support(
+                _catalog_command_sim_level(twin, command), method=f"commands.{command}"
+            )
         schema = twin.driver.get_mqtt_schema()
         spec = command_spec(schema, command)
         payload = _build_arg_payload(spec, data, kwargs)

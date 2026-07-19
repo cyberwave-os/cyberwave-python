@@ -1,4 +1,4 @@
-"""Shared helpers for the ``cyberwave.twin`` package (PR0 split)."""
+"""Shared helpers for the ``cyberwave.twin`` package."""
 
 import asyncio
 from copy import deepcopy
@@ -265,8 +265,8 @@ def _emit_controller_policy_alert(
 def _build_controller_assignment_metadata(twin_data: Any, policy: Any | None) -> dict:
     """Build metadata for assign (``policy`` set) or unassign (``policy`` is None).
 
-    Mirrors the frontend's ``buildTwinControllerUpdatePayload`` logic so the UI
-    can immediately reflect the assignment without a full page refresh.
+    Matches the metadata shape the platform UI expects so it can immediately
+    reflect the assignment without a full page refresh.
     """
     base = _get_twin_metadata(twin_data)
     if policy is None:

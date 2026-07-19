@@ -14,9 +14,9 @@ enough to run on a per-frame basis on edge workers:
   clean mosaic without any skeleton overlay, call :func:`blank_persons`
   directly.
 - :func:`annotate_detections` draws bounding boxes and ``label conf``
-  captions — the numpy-frame analogue of the cloud-side ``annotate``
-  workflow node, used by the edge-filter worker template when
-  ``annotate`` is wired into a ``camera_frame`` chain.
+  captions — the numpy-frame analogue of the platform's ``annotate``
+  workflow node, used when ``annotate`` is chained after ``camera_frame``
+  in a worker's processing pipeline.
 """
 
 from cyberwave.vision.annotate import (

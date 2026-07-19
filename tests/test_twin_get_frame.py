@@ -52,9 +52,10 @@ def test_get_frame_local_never_calls_rest() -> None:
     )
     twin = _camera_twin(client)
     fake = np.zeros((4, 4, 3), dtype=np.uint8)
+    cam = twin.camera[0]
 
-    with patch.object(twin.camera, "_capture_local_array", return_value=fake):
-        result = twin.camera.get_frame("numpy", source="local")
+    with patch.object(cam, "_capture_local_array", return_value=fake):
+        result = cam.get_frame("numpy", source="local")
 
     assert result.shape == (4, 4, 3)
     client.twins.get_latest_frame.assert_not_called()

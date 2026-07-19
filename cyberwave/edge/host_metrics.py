@@ -1,24 +1,13 @@
-"""Host-level system metric readers shared by Cyberwave edge components.
+"""Host-level system metric readers for Cyberwave edge devices.
 
 This module centralises the parsing of ``/proc/meminfo`` and the Linux
-``/sys/class/thermal`` sysfs.  Three components in the monorepo previously
-duplicated this logic and drifted apart:
-
-- ``cyberwave-edge-core`` (orchestrator runtime monitoring),
-- ``cyberwave-clis/cyberwave-python-cli/.../bench.py`` (``cyberwave edge bench``
-  device fingerprinting), and
-- ``cyberwave-clis/cyberwave-python-cli/.../monitor.py`` (``cyberwave monitor``
-  thermal/power TUI).
-
-Living in the SDK keeps the readers in one place — both edge-core and the
-CLI already depend on the ``cyberwave`` SDK, so consolidating here adds no
-new package edges.
+``/sys/class/thermal`` sysfs so callers get consistent host memory and
+CPU temperature readings across platforms.
 
 Design notes:
 - The dataclasses returned here are **raw** data carriers; they do not
-  encode threshold/severity semantics.  Callers that care about thresholds
-  (e.g. ``cyberwave_edge_core.resource_monitor``) wrap them with their own
-  severity logic.
+  encode threshold/severity semantics.  Callers that care about
+  thresholds wrap them with their own severity logic.
 - The *dynamic* readers (:func:`read_host_memory`,
   :func:`read_host_cpu_temperature`) are Linux-only — they parse procfs
   and sysfs.  Callers should treat absence as "metric unknown", not as an
@@ -86,10 +75,10 @@ class HostFacts:
     """Static host-level facts about the edge device.
 
     These properties change rarely (RAM never, CPU model never, kernel only
-    on upgrade) so they belong on the REST identity record
-    (``Edge.metadata['host_facts']``) rather than on every ~5 s MQTT
-    heartbeat.  The companion dynamic readers (:func:`read_host_memory`,
-    :func:`read_host_cpu_temperature`) carry the values that actually move.
+    on upgrade) so they belong on the device's persistent identity record
+    rather than on every ~5 s MQTT heartbeat.  The companion dynamic
+    readers (:func:`read_host_memory`, :func:`read_host_cpu_temperature`)
+    carry the values that actually move.
 
     Optional fields may be ``None`` when the underlying source is
     unavailable on the current platform.  Coverage matrix:
@@ -483,11 +472,10 @@ def _read_software_versions() -> tuple[Optional[str], Optional[str]]:
 def _read_darwin_facts() -> tuple[Optional[float], Optional[str], Optional[int]]:
     """Read static facts on macOS via ``sysctl``.
 
-    Returns ``(memory_total_mb, cpu_model, cpu_count)``.  ``cyberwave
-    worker monitor`` already shells out to ``sysctl`` for its Darwin
-    readings; we use the same pattern for the *static* slice of that
-    information so the dashboard can render an Apple-Silicon edge with
-    proper "Apple M2 Pro" / "48 GB" labels instead of "unknown".
+    Returns ``(memory_total_mb, cpu_model, cpu_count)``.  We shell out to
+    ``sysctl`` for the *static* slice of this information so the
+    dashboard can render an Apple-Silicon edge with proper "Apple M2
+    Pro" / "48 GB" labels instead of "unknown".
 
     ``memory_total_mb`` is rounded to one decimal place to match the
     Linux side (:func:`read_host_memory` rounds to ``round(total_mb,
@@ -530,7 +518,8 @@ def read_host_facts(
     thermal_base: Optional[Path] = None,
     watchdog_device: Optional[Path] = None,
 ) -> HostFacts:
-    """Collect static host facts for upload to ``Edge.metadata['host_facts']``.
+    """Collect static host facts for upload to the edge device's persistent
+    identity record.
 
     Designed to be called once at edge-core startup.  All readers degrade
     silently on missing sources: ``platform.platform()`` always returns

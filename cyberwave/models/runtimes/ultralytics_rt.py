@@ -81,8 +81,8 @@ class UltralyticsRuntime(ModelRuntime):
             raise FileNotFoundError(
                 f"UltralyticsRuntime.load() received a directory at "
                 f"{p}, not a weight file. This is usually an orphan "
-                f"staging directory left by a previously failed Edge "
-                f"Core download. Resolve it via "
+                f"staging directory left by a previously failed model "
+                f"download. Resolve it via "
                 f"``ModelManager.load(model_id)`` (the SDK manager "
                 f"handles this case) or manually remove the directory "
                 f"if it only contains stale partial-download cruft. "
@@ -124,6 +124,17 @@ class UltralyticsRuntime(ModelRuntime):
                 model.to(device)
             except TypeError:
                 pass
+            else:
+                # ``model.to(device)`` only moves the weights. Ultralytics
+                # builds its ``Predictor`` lazily on the *first* inference
+                # call and resolves its own device from that call's
+                # ``overrides`` dict, defaulting to ``None`` (which falls
+                # back to auto-detection, not "wherever the weights are").
+                # Without stashing the device here and re-passing it on
+                # every ``predict()`` call below, a GPU-loaded model would
+                # silently run its first (and predictor-caching) inference
+                # on CPU. See ``predict()`` for the other half of this fix.
+                model._cw_device = device  # type: ignore[assignment]
         return model
 
     @staticmethod
@@ -179,21 +190,21 @@ class UltralyticsRuntime(ModelRuntime):
         Failure modes:
 
         - Handle lacks ``set_classes`` / ``get_text_pe`` (closed-set
-          YOLOv8 / classifier nets): silently skip. The backend
-          compile-time gate (``text_prompt_unsupported``) already
-          rejects this case at workflow sync time, so reaching here
+          YOLOv8 / classifier nets): silently skip. Callers that
+          configure a prompt through the normal validation path never
+          reach this branch for an unsupported model, so getting here
           means a hand-crafted API caller — nothing to do.
         - ``clip`` (or another optional dep) is not importable in the
           worker image: ``ultralytics.nn.text_model`` does a lazy
           ``import clip`` inside ``get_text_pe``, so the failure
           surfaces here as ``ModuleNotFoundError`` rather than at
-          ``load`` time. Edge worker images are supposed to bundle
-          ``ultralytics/CLIP`` (see ``edge-ml-worker/Dockerfile``);
-          this branch only fires on stripped-down or hand-built
-          worker images where that bake step was skipped. Log a
-          warning with the missing module name and keep the previous
-          class set so the worker keeps emitting detections instead
-          of crashing the predict loop on every frame.
+          ``load`` time. Deployments that want open-vocab prompting
+          need the ``ultralytics/CLIP`` fork bundled in the runtime
+          image; this branch only fires when that dependency was
+          skipped. Log a warning with the missing module name and
+          keep the previous class set so the worker keeps emitting
+          detections instead of crashing the predict loop on every
+          frame.
         - The Ultralytics call itself raises (bad tokenizer state,
           OOM during text encoding, GPU disconnect): log a **warning**
           and continue. The previous class set stays active so the
@@ -211,6 +222,20 @@ class UltralyticsRuntime(ModelRuntime):
             return
         key = tuple(prompts)
         if getattr(model_handle, "_cw_active_prompt", None) == key:
+            return
+        if UltralyticsRuntime._is_prompt_free_yoloe(model_handle):
+            _logger.warning(
+                "Skipping YOLOE text prompt %s: this is a prompt-free "
+                "checkpoint (e.g. yoloe-26*-seg-pf) whose open-vocabulary "
+                "classifier is baked into the head and cannot be re-targeted "
+                "with set_classes. Clear the prompt in the workflow editor, "
+                "or switch this node to a prompt-driven YOLOE variant "
+                "(yoloe-26*-seg, yoloe-26*) for text-prompt support. "
+                "Detections will continue using the checkpoint's built-in "
+                "class vocabulary.",
+                prompts,
+            )
+            model_handle._cw_active_prompt = key
             return
         # ``get_text_pe`` triggers Ultralytics' lazy MobileCLIP download
         # which writes to a bare filename → CWD. Sandbox it to the dir
@@ -243,7 +268,11 @@ class UltralyticsRuntime(ModelRuntime):
                 getattr(model_handle, "_cw_active_prompt", None),
             )
             return
-        except (AttributeError, RuntimeError) as exc:
+        except (AttributeError, RuntimeError, AssertionError) as exc:
+            # ``AssertionError`` is the defensive fallback when
+            # ``_is_prompt_free_yoloe`` misses a variant Ultralytics still
+            # asserts ``lrpc`` against — degrades a per-frame crash to one
+            # warning.
             _logger.warning(
                 "Failed to apply YOLOE text prompt %s; previous class set "
                 "(%s) remains active. Underlying error: %s",
@@ -253,6 +282,25 @@ class UltralyticsRuntime(ModelRuntime):
             )
             return
         model_handle._cw_active_prompt = key
+
+    @staticmethod
+    def _is_prompt_free_yoloe(model_handle: Any) -> bool:
+        """Return ``True`` for prompt-free YOLOE checkpoints (``*-seg-pf``).
+
+        Prompt-free variants attach an ``lrpc`` marker to their final head
+        layer; Ultralytics' ``set_classes`` asserts on it and raises
+        ``AssertionError`` even though the method is still exposed.
+        Detecting it here lets the caller skip with one warning instead
+        of crashing on every frame.
+        """
+        try:
+            inner = getattr(model_handle, "model", None)
+            if inner is None:
+                return False
+            last_layer = inner[-1]
+        except (TypeError, IndexError, AttributeError, KeyError):
+            return False
+        return hasattr(last_layer, "lrpc")
 
     @staticmethod
     def _writable_model_dir(model_path: Path) -> Path:
@@ -288,6 +336,7 @@ class UltralyticsRuntime(ModelRuntime):
         confidence: float = 0.5,
         classes: list[str] | None = None,
         prompt: str | list[str] | tuple[str, ...] | None = None,
+        device: str | None = None,
         **kwargs: Any,
     ) -> PredictionResult:
         # Open-vocab YOLO heads (YOLOE / YOLO-World) are steered by a text
@@ -305,7 +354,16 @@ class UltralyticsRuntime(ModelRuntime):
         # uses the same prompts — the common case for an edge worker
         # chewing through 10–30 frames per second.
         self._apply_text_prompt(model_handle, prompt)
-        results = model_handle(input_data, conf=confidence, verbose=False)
+        # Re-assert the device on every call: Ultralytics' lazily-built
+        # ``Predictor`` reads ``device`` from these per-call overrides, not
+        # from wherever ``model.to(device)`` moved the weights at load()
+        # time. Falls back to the device stashed on the handle in
+        # ``load()``; an explicit ``device=`` kwarg here still wins.
+        effective_device = device or getattr(model_handle, "_cw_device", None)
+        call_kwargs: dict[str, Any] = {"conf": confidence, "verbose": False}
+        if effective_device:
+            call_kwargs["device"] = effective_device
+        results = model_handle(input_data, **call_kwargs)
         detections: list[Detection] = []
         class_result: ClassificationResult | None = None
         # Resolved during the loop; last result wins (all frames share one task).

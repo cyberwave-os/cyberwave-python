@@ -4,15 +4,25 @@ from __future__ import annotations
 
 import copy
 import threading
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
+from ...consumers.callback_hub import CallbackHub, StateSubscription
+from ...consumers.mqtt_live_view import LiveMappingView
 from ...manifest.driver_config import resolve_inbound_topics
-from ...mqtt.state import attach_topic_listener, wait_for_first_message
+from ...mqtt.state import attach_topic_listener
+from ..simulation_support import SimLevel, simulation_level
 
 if TYPE_CHECKING:
     from ..base import Twin
 
-__all__ = ["ImuSensorHandle", "_is_imu_type", "normalize_imu_payload"]
+__all__ = [
+    "ImuSensorHandle",
+    "IMU_HANDLE_PUBLIC_METHODS",
+    "_is_imu_type",
+    "normalize_imu_payload",
+]
+
+IMU_HANDLE_PUBLIC_METHODS: tuple[str, ...] = ("metadata", "get", "get_sample", "on_update")
 
 
 def _is_imu_type(sensor_type: str) -> bool:
@@ -48,16 +58,14 @@ class ImuSensorHandle:
         self._imu_listeners_attached = False
         self._imu_ready = threading.Event()
         self._imu_lock = threading.Lock()
+        self._imu_hub = CallbackHub(label="imu")
+        self._imu_view: LiveMappingView | None = None
 
     def __repr__(self) -> str:
-        from ..namespaces.imu import IMU_HANDLE_PUBLIC_METHODS
-
         methods = ", ".join(IMU_HANDLE_PUBLIC_METHODS)
         return f"{type(self).__name__}(sensor_id={self.sensor_id!r}; {methods})"
 
     def __dir__(self) -> list[str]:
-        from ..namespaces.imu import IMU_HANDLE_PUBLIC_METHODS
-
         names = {n for n in object.__dir__(self) if not n.startswith("_")}
         names.update(IMU_HANDLE_PUBLIC_METHODS)
         return sorted(names)
@@ -73,6 +81,7 @@ class ImuSensorHandle:
         with self._imu_lock:
             self._curr_imu = normalize_imu_payload(payload)
             self._imu_ready.set()
+        self._imu_hub.notify(self._imu_snapshot)
 
     def _ensure_imu_listeners(self) -> None:
         if self._imu_listeners_attached:
@@ -102,26 +111,39 @@ class ImuSensorHandle:
                 return dict(entry)
         return {}
 
-    def get(self, *, timeout: float = 3.0) -> dict[str, Any]:
-        """Return the latest IMU sample from MQTT (``cyberwave/twin/{uuid}/imu``)."""
-        self._ensure_imu_listeners()
-        wait_for_first_message(
-            self._imu_ready,
-            timeout=timeout if self._curr_imu is None else 0.0,
-            twin_uuid=self._twin.uuid,
-            stream="imu",
-        )
+    def _safe_ensure_imu_listeners(self) -> None:
+        from ...exceptions import TwinStateUnavailableError
+
+        try:
+            self._ensure_imu_listeners()
+        except TwinStateUnavailableError:
+            pass
+
+    def _imu_snapshot(self) -> dict[str, Any]:
         with self._imu_lock:
-            if self._curr_imu is None:
-                from ...exceptions import TwinStateTimeoutError
+            return copy.deepcopy(self._curr_imu) if self._curr_imu is not None else {}
 
-                raise TwinStateTimeoutError(
-                    f"No MQTT IMU update within {timeout}s for twin {self._twin.uuid}"
-                )
-            return copy.deepcopy(self._curr_imu)
+    @simulation_level(SimLevel.UNSUPPORTED)
+    def get(self, *, timeout: float = 3.0) -> LiveMappingView:
+        """Return a **live** IMU view (``cyberwave/twin/{uuid}/imu``).
 
-    def get_sample(self, *, timeout: Optional[float] = None) -> dict[str, Any]:
-        """Alias for :meth:`get` (same payload shape)."""
-        if timeout is None:
-            return self.get()
-        return self.get(timeout=timeout)
+        The view refreshes in place on every inbound sample and is empty (``{}``)
+        until the first sample arrives. If empty, waits up to *timeout* for the
+        first sample before returning. The same view is returned on later calls.
+        """
+        self._safe_ensure_imu_listeners()
+        if self._curr_imu is None:
+            self._imu_ready.wait(timeout=timeout)
+        if self._imu_view is None:
+            self._imu_view = LiveMappingView(self._imu_hub, self._imu_snapshot)
+        return self._imu_view
+
+    def get_sample(self, *, timeout: Optional[float] = None) -> LiveMappingView:
+        """Alias for :meth:`get`."""
+        return self.get() if timeout is None else self.get(timeout=timeout)
+
+    def on_update(
+        self, callback: "Callable[[dict[str, Any]], None]"
+    ) -> StateSubscription:
+        self._safe_ensure_imu_listeners()
+        return self._imu_hub.subscribe(callback)

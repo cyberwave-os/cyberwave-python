@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import copy
-import logging
 import math
 import threading
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence
 
+from ...consumers.callback_hub import CallbackHub, StateSubscription
+from ...consumers.mqtt_live_view import LiveMappingView
 from ...constants import EDGE_STATE_SOURCE_TYPES
 from ...exceptions import TwinStateUnavailableError
 from ...data.state_representation import parse_joint_mqtt_payload
@@ -31,8 +32,6 @@ if TYPE_CHECKING:
     from cyberwave.rest.models.twin_joint_calibration_schema import (
         TwinJointCalibrationSchema,
     )
-
-logger = logging.getLogger(__name__)
 
 _JOINT_DATA_KINDS = frozenset({"position", "velocity", "acceleration", "effort"})
 _CONTROLLABLE_JOINT_TYPES = frozenset({"revolute", "prismatic", "continuous"})
@@ -144,29 +143,8 @@ class JointsCalibrationHandle:
         self._twin.client.twins.delete_calibration(self._twin.uuid, robot_type=robot_type)
 
 
-class _JointUpdateSubscription:
-    """Handle returned by :meth:`JointsHandle.on_update`; ``cancel()`` unsubscribes."""
-
-    def __init__(self, handle: "JointsHandle", key: int) -> None:
-        self._handle = handle
-        self._key = key
-        self._active = True
-
-    def cancel(self) -> None:
-        if self._active:
-            self._handle._remove_callback(self._key)
-            self._active = False
-
-
-class JointStateView(dict):
-    """Live dict of joint state that refreshes in-place on every MQTT update.
-
-    A real :class:`dict` subclass, so ``json.dumps(view)``, ``view.copy()``,
-    ``isinstance(view, dict)``, and item assignment all work as expected.
-    The contents are refreshed automatically via a background subscription;
-    call :meth:`stop` to cancel subscriptions and freeze the dict at its
-    last-known values.
-    """
+class JointStateView(LiveMappingView):
+    """Live dict of joint state; refreshes in place on every MQTT update."""
 
     def __init__(
         self,
@@ -175,12 +153,10 @@ class JointStateView(dict):
         what_joints: Optional[Sequence[str]],
         kinds: Sequence[str],
     ) -> None:
-        super().__init__()
         self._handle = handle
         self._what_joints = what_joints
         self._kinds = list(kinds)
-        self._subscriptions: List[_JointUpdateSubscription] = []
-        self._refresh()
+        super().__init__(handle._joint_hub, self._compute_data)
 
     def _compute_data(self) -> Dict[str, Any]:
         handle = self._handle
@@ -199,21 +175,6 @@ class JointStateView(dict):
             result[kind] = {name: curr.get(name, {}).get(kind, 0.0) for name in names}
         return result
 
-    def _refresh(self, _snapshot: Any = None) -> None:
-        """Replace dict contents with the current joint state."""
-        data = self._compute_data()
-        dict.clear(self)
-        dict.update(self, data)
-
-    def _attach(self, sub: _JointUpdateSubscription) -> None:
-        self._subscriptions.append(sub)
-
-    def stop(self) -> None:
-        """Cancel all subscriptions and freeze the dict at its current values."""
-        for sub in self._subscriptions:
-            sub.cancel()
-        self._subscriptions.clear()
-
     def __repr__(self) -> str:
         return f"JointStateView({dict.__repr__(self)})"
 
@@ -230,33 +191,20 @@ class JointsHandle:
         object.__setattr__(self, "_joint_lock", threading.Lock())
         object.__setattr__(self, "_calibration", JointsCalibrationHandle(twin))
         object.__setattr__(self, "_controllable_names_cache", None)
-        object.__setattr__(self, "_update_callbacks", {})
-        object.__setattr__(self, "_callback_seq", 0)
+        object.__setattr__(self, "_joint_hub", CallbackHub(label="joints"))
         self._start_listening()
 
     @property
     def calibration(self) -> JointsCalibrationHandle:
         return self._calibration
 
-    def on_update(self, callback: Any) -> _JointUpdateSubscription:
+    def on_update(self, callback: Any) -> StateSubscription:
         """Register *callback* to run on every inbound joint update.
 
-        *callback* receives a snapshot ``{joint_name: position}`` dict (a copy it
-        may freely keep or mutate). It fires on the MQTT listener thread, outside
-        the internal lock. Exceptions are logged, never propagated, so a faulty
-        callback can't kill the listener. Returns a subscription whose
-        :meth:`~_JointUpdateSubscription.cancel` stops further delivery.
+        *callback* receives a ``{joint_name: position}`` snapshot dict.
         """
         self._start_listening()
-        with self._joint_lock:
-            key = self._callback_seq
-            object.__setattr__(self, "_callback_seq", key + 1)
-            self._update_callbacks[key] = callback
-        return _JointUpdateSubscription(self, key)
-
-    def _remove_callback(self, key: int) -> None:
-        with self._joint_lock:
-            self._update_callbacks.pop(key, None)
+        return self._joint_hub.subscribe(callback)
 
     def list(self) -> List[str]:
         return self._names()
@@ -345,12 +293,7 @@ class JointsHandle:
             self._merge_list_joints_into(curr)
             self._received_mqtt_by_mode[mode].set()
             snapshot = {name: vals.get("position", 0.0) for name, vals in curr.items()}
-            callbacks = list(self._update_callbacks.values())
-        for cb in callbacks:
-            try:
-                cb(dict(snapshot))
-            except Exception:
-                logger.exception("joints.on_update callback raised; ignoring")
+        self._joint_hub.notify(lambda s=snapshot: dict(s))
 
     def _joint_update_topic(self) -> str:
         """MQTT topic for joint state — always ``cyberwave/joint/{uuid}/update``."""
@@ -436,17 +379,17 @@ class JointsHandle:
         self._start_listening()
         self._await_initial_joint_state(timeout=timeout)
         view = JointStateView(self, what_joints=what_joints, kinds=kinds)
-        view._attach(self.on_update(view._refresh))
         if after_update_callback is not None:
             view._attach(self.on_update(after_update_callback))
         return view
 
     def set(
         self,
-        values: Mapping[str, float] | float | str,
+        values: Mapping[str, float] | float | str | None = None,
         position: Optional[float] = None,
         *,
         joint: Optional[str] = None,
+        joint_name: Optional[str] = None,
         what_joints: Optional[Sequence[str]] = None,
         what_data: str = "position",
         degrees: bool = False,
@@ -459,7 +402,31 @@ class JointsHandle:
         *what_data* is one of ``position``, ``velocity``, ``acceleration``, or
         ``effort`` (effort/torque). Twin shortcuts :meth:`~cyberwave.twin.mixins.JointsCapableMixin.set_joints`
         / :meth:`~cyberwave.twin.mixins.JointsCapableMixin.set_pose` delegate here.
+        ``joint_name`` is accepted as a backwards-compatible alias for ``joint``.
         """
+        if joint is not None and joint_name is not None and joint != joint_name:
+            raise ValueError(
+                f"Received conflicting joint names: joint={joint!r}, joint_name={joint_name!r}"
+            )
+        if joint_name is not None:
+            warnings.warn(
+                "joints.set(..., joint_name=...) is deprecated; use joint=... instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+        if joint is None:
+            joint = joint_name
+
+        if values is None:
+            if joint is None or position is None:
+                raise TypeError(
+                    "joints.set() requires either values mapping, "
+                    "joints.set(joint_name, value), or "
+                    "joints.set(joint_name='...', position=value)"
+                )
+            values = float(position)
+            position = None
+
         if isinstance(values, str):
             if position is None:
                 raise TypeError(
@@ -610,8 +577,7 @@ class JointsHandle:
             "_joint_lock",
             "_calibration",
             "_controllable_names_cache",
-            "_update_callbacks",
-            "_callback_seq",
+            "_joint_hub",
         ):
             super().__setattr__(name, value)
         else:

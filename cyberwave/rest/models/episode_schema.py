@@ -38,7 +38,8 @@ class EpisodeSchema(BaseModel):
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "task_name", "twins", "started_at", "finished_at", "metadata", "created_at", "updated_at", "created_by", "updated_by"]
+    audio: Optional[List[Optional[Dict[str, Any]]]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "task_name", "twins", "started_at", "finished_at", "metadata", "created_at", "updated_at", "created_by", "updated_by", "audio"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -110,7 +111,8 @@ class EpisodeSchema(BaseModel):
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),
-            "updated_by": obj.get("updated_by")
+            "updated_by": obj.get("updated_by"),
+            "audio": obj.get("audio")
         })
         return _obj
 

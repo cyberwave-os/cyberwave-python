@@ -223,3 +223,50 @@ class TestPublishRaw:
 
         assert sample is not None
         assert sample.payload == payload
+
+
+# ── permissive decode + twin_uuid override on latest ─────────────────
+
+
+class TestPermissiveDecode:
+    def test_latest_decodes_publish_raw_json(self, bus: DataBus):
+        bus.publish_raw(
+            "detections/ultralytics",
+            b'{"detections":[{"label":"person","confidence":0.9}]}',
+        )
+        assert bus.latest("detections/ultralytics", timeout_s=1.0) == {
+            "detections": [{"label": "person", "confidence": 0.9}]
+        }
+
+    def test_latest_non_json_raw_falls_through_to_bytes(self, bus: DataBus):
+        raw = b"\x00\x01\x02\x03not_json"
+        bus.publish_raw("binary_topic", raw)
+        assert bus.latest("binary_topic", timeout_s=1.0) == raw
+
+    def test_subscribe_receives_raw_json_as_dict(self, bus: DataBus):
+        received: list[Any] = []
+        event = threading.Event()
+
+        def on_data(data):
+            received.append(data)
+            event.set()
+
+        sub = bus.subscribe("detections/ultralytics", on_data, policy="latest")
+        try:
+            time.sleep(0.05)
+            bus.publish_raw("detections/ultralytics", b'{"label":"cat"}')
+            assert event.wait(timeout=2.0), "Callback was not invoked"
+            assert received[0] == {"label": "cat"}
+        finally:
+            sub.close()
+
+
+def test_latest_twin_uuid_override(backend):
+    default_bus = DataBus(backend, "00000000-0000-0000-0000-000000000001")
+    workflow_bus = DataBus(backend, "00000000-0000-0000-0000-000000000002")
+    workflow_bus.publish("depth", {"value": 42})
+
+    assert default_bus.latest("depth", timeout_s=0.1) is None
+    assert default_bus.latest(
+        "depth", timeout_s=1.0, twin_uuid=workflow_bus.twin_uuid
+    ) == {"value": 42}

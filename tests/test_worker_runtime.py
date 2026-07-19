@@ -630,6 +630,63 @@ def test_runtime_subscribes_mqtt_hook_via_client_mqtt():
         runtime.stop()
 
 
+def test_runtime_subscribes_manual_trigger_hook_on_workflow_topic():
+    """``@cw.on_manual_trigger`` subscribes under the workflow base topic.
+
+    It reuses the same ``client.mqtt`` subscribe path as ``on_mqtt`` but,
+    thanks to its ``scope="workflow"`` option, the runtime resolves the
+    topic to ``cyberwave/workflow/<workflow_uuid>/run`` (no twin segment)
+    — the inbound-command sibling of the ``execution/*`` telemetry.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    received = []
+
+    def handler(payload, topic, ctx):
+        received.append((payload, topic, ctx))
+
+    fake_cw._hook_registry.on_manual_trigger(
+        TEST_TWIN_UUID, workflow_uuid="wf-123"
+    )(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        assert len(fake_mqtt.subscriptions) == 1
+        topic, registered_handler, qos = fake_mqtt.subscriptions[0]
+        # Workflow-scoped: keyed on the workflow, not the twin.
+        assert topic == "localcyberwave/workflow/wf-123/run"
+        assert qos == 1
+
+        registered_handler({"inputs": {"speed": 0.5}})
+        assert len(received) == 1
+        payload, recv_topic, ctx = received[0]
+        assert payload == {"inputs": {"speed": 0.5}}
+        assert recv_topic == topic
+        assert ctx.channel == "mqtt/workflow/wf-123/run"
+        # twin_uuid is still carried on the context for the callback...
+        assert ctx.twin_uuid == TEST_TWIN_UUID
+        # ...even though it is absent from the topic itself.
+        assert ctx.twin_uuid not in topic
+    finally:
+        runtime.stop()
+
+
 def test_runtime_start_warms_up_before_subscribing_hooks(tmp_path):
     fake_cw = FakeCw()
     (tmp_path / "worker.py").write_text(

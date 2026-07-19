@@ -33,13 +33,14 @@ class OnlineControllerSessionSchema(BaseModel):
     twin_uuid: StrictStr
     controller_policy_uuid: StrictStr
     workload_uuid: Optional[StrictStr] = None
+    instance_uuid: Optional[StrictStr] = None
     phase: StrictStr
     stop_reason: Optional[StrictStr] = ''
     failure_detail: Optional[StrictStr] = None
     last_heartbeat_at: Optional[StrictStr] = None
     created_at: StrictStr
     updated_at: StrictStr
-    __properties: ClassVar[List[str]] = ["uuid", "session_id", "environment_uuid", "twin_uuid", "controller_policy_uuid", "workload_uuid", "phase", "stop_reason", "failure_detail", "last_heartbeat_at", "created_at", "updated_at"]
+    __properties: ClassVar[List[str]] = ["uuid", "session_id", "environment_uuid", "twin_uuid", "controller_policy_uuid", "workload_uuid", "instance_uuid", "phase", "stop_reason", "failure_detail", "last_heartbeat_at", "created_at", "updated_at"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -85,6 +86,11 @@ class OnlineControllerSessionSchema(BaseModel):
         if self.workload_uuid is None and "workload_uuid" in self.model_fields_set:
             _dict['workload_uuid'] = None
 
+        # set to None if instance_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.instance_uuid is None and "instance_uuid" in self.model_fields_set:
+            _dict['instance_uuid'] = None
+
         # set to None if failure_detail (nullable) is None
         # and model_fields_set contains the field
         if self.failure_detail is None and "failure_detail" in self.model_fields_set:
@@ -113,6 +119,7 @@ class OnlineControllerSessionSchema(BaseModel):
             "twin_uuid": obj.get("twin_uuid"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "workload_uuid": obj.get("workload_uuid"),
+            "instance_uuid": obj.get("instance_uuid"),
             "phase": obj.get("phase"),
             "stop_reason": obj.get("stop_reason") if obj.get("stop_reason") is not None else '',
             "failure_detail": obj.get("failure_detail"),

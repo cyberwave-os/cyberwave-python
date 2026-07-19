@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.rl_task_initial_source_file_schema import RLTaskInitialSourceFileSchema
 from typing import Optional, Set
@@ -47,8 +47,12 @@ class RLTaskCreateSchema(BaseModel):
     action_spec: Optional[Dict[str, Any]] = None
     observation_spec: Optional[Dict[str, Any]] = None
     rl_config_spec: Optional[Dict[str, Any]] = None
+    training_command_spec: Optional[Dict[str, Any]] = None
+    inference_command_spec: Optional[Dict[str, Any]] = None
+    training_command_setup_enabled: Optional[StrictBool] = None
+    inference_command_setup_enabled: Optional[StrictBool] = None
     initial_source_files: Optional[List[RLTaskInitialSourceFileSchema]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "environment_uuid", "workspace_uuid", "project_uuid", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "action_spec", "observation_spec", "rl_config_spec", "initial_source_files"]
+    __properties: ClassVar[List[str]] = ["name", "description", "environment_uuid", "workspace_uuid", "project_uuid", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "action_spec", "observation_spec", "rl_config_spec", "training_command_spec", "inference_command_spec", "training_command_setup_enabled", "inference_command_setup_enabled", "initial_source_files"]
 
     @field_validator('runtime_target')
     def runtime_target_validate_enum(cls, value):
@@ -196,6 +200,26 @@ class RLTaskCreateSchema(BaseModel):
         if self.rl_config_spec is None and "rl_config_spec" in self.model_fields_set:
             _dict['rl_config_spec'] = None
 
+        # set to None if training_command_spec (nullable) is None
+        # and model_fields_set contains the field
+        if self.training_command_spec is None and "training_command_spec" in self.model_fields_set:
+            _dict['training_command_spec'] = None
+
+        # set to None if inference_command_spec (nullable) is None
+        # and model_fields_set contains the field
+        if self.inference_command_spec is None and "inference_command_spec" in self.model_fields_set:
+            _dict['inference_command_spec'] = None
+
+        # set to None if training_command_setup_enabled (nullable) is None
+        # and model_fields_set contains the field
+        if self.training_command_setup_enabled is None and "training_command_setup_enabled" in self.model_fields_set:
+            _dict['training_command_setup_enabled'] = None
+
+        # set to None if inference_command_setup_enabled (nullable) is None
+        # and model_fields_set contains the field
+        if self.inference_command_setup_enabled is None and "inference_command_setup_enabled" in self.model_fields_set:
+            _dict['inference_command_setup_enabled'] = None
+
         # set to None if initial_source_files (nullable) is None
         # and model_fields_set contains the field
         if self.initial_source_files is None and "initial_source_files" in self.model_fields_set:
@@ -232,6 +256,10 @@ class RLTaskCreateSchema(BaseModel):
             "action_spec": obj.get("action_spec"),
             "observation_spec": obj.get("observation_spec"),
             "rl_config_spec": obj.get("rl_config_spec"),
+            "training_command_spec": obj.get("training_command_spec"),
+            "inference_command_spec": obj.get("inference_command_spec"),
+            "training_command_setup_enabled": obj.get("training_command_setup_enabled"),
+            "inference_command_setup_enabled": obj.get("inference_command_setup_enabled"),
             "initial_source_files": [RLTaskInitialSourceFileSchema.from_dict(_item) for _item in obj["initial_source_files"]] if obj.get("initial_source_files") is not None else None
         })
         return _obj

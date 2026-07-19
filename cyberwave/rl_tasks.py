@@ -34,7 +34,8 @@ from __future__ import annotations
 import json as _json
 import os
 import shutil
-from dataclasses import dataclass
+import zipfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -52,6 +53,45 @@ class TaskSpecExport:
     content: str
     schema_version: int
     entity_count: int
+
+
+@dataclass(frozen=True)
+class ControllerBundle:
+    """A downloaded, ready-to-run controller (task export + weights).
+
+    Produced by :meth:`RLTaskClient.download_controller_bundle`. This is the
+    handle the *offline* runner consumes: it points at the extracted task
+    export tree and the local checkpoint file, and carries the export's
+    runtime contract (from ``cyberwave_export.json``).
+
+    ``bundle_dir`` is the directory the export was extracted into — it holds a
+    single ``<task_id>/`` package (the shape ``cyberwave-rl``'s ``tasks/``
+    loader expects). ``task_package_dir`` is ``bundle_dir / task_id``.
+
+    Timing (``decimation`` / ``physics_dt``) is deliberately *not* surfaced
+    here: per the controller/plant parity contract the trained env config is
+    the single timing authority, and the runtime derives policy rate from it
+    at load time. Exposing it on the handle would invite a second, drifting
+    source of truth.
+    """
+
+    task_id: str
+    bundle_dir: Path
+    task_package_dir: Path
+    checkpoint_path: Path
+    manifest: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def runtime(self) -> dict[str, Any]:
+        """The export's ``runtime`` block (target / accelerator / versions / policy_interface)."""
+        rt = self.manifest.get("runtime")
+        return dict(rt) if isinstance(rt, dict) else {}
+
+    @property
+    def policy_interface(self) -> dict[str, Any]:
+        """The opaque policy IO contract used to validate the checkpoint."""
+        pi = self.runtime.get("policy_interface")
+        return dict(pi) if isinstance(pi, dict) else {}
 
 
 class RLTaskClient:
@@ -279,6 +319,44 @@ class RLTaskClient:
             payload["sensors"] = sensors
         return self.create_scene_entity(task_uuid, payload=payload)
 
+    def assign_rigid_primitive_entity(
+        self,
+        task_uuid: str,
+        *,
+        environment_object_external_id: str,
+        name: str,
+        base_type: str = "fixed",
+        initial_state: dict[str, Any] | None = None,
+        sensors: list[dict[str, Any]] | None = None,
+        include_contacts: bool = False,
+        entity_cfg: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Assign a procedural-primitive environment object as a rigid-object entity.
+
+        Unlike :meth:`assign_rigid_entity` (which binds a twin), this binds an
+        environment object — a procedural primitive such as a cylinder, addressed
+        by its stable ``external_id``. The primitive's geom is baked into the
+        merged scene at export and exposed as the named mjlab entity, so the task
+        runtime can read ``env.scene[<name>]`` exactly as for a twin-backed body.
+        Renders as the authored primitive (e.g. a cylinder) in the editor.
+        """
+
+        payload: dict[str, Any] = {
+            "name": name,
+            "environment_object_external_id": environment_object_external_id,
+            "entity_kind": "rigid_object",
+            "base_type": base_type,
+            "include_actuators": False,
+            "include_contacts": include_contacts,
+        }
+        if entity_cfg:
+            payload["entity_cfg"] = entity_cfg
+        if initial_state:
+            payload["initial_state"] = initial_state
+        if sensors:
+            payload["sensors"] = sensors
+        return self.create_scene_entity(task_uuid, payload=payload)
+
     # ------------------------------------------------------------------
     # SceneCfg regeneration
     # ------------------------------------------------------------------
@@ -293,7 +371,7 @@ class RLTaskClient:
         """Trigger a server-side regenerate of ``scene_cfg.py``.
 
         After scene-entity changes you should call this once so the
-        Cyberwave-owned source tree reflects the new entities.
+        Cyberwave-generated source tree reflects the new entities.
         """
         return self._post(
             f"/api/v1/rl-tasks/{task_uuid}/regenerate-scene-cfg",
@@ -608,6 +686,169 @@ class RLTaskClient:
         name = (checkpoint.get("name") or "checkpoint").strip() or "checkpoint"
         return f"{name}.pt"
 
+    # ------------------------------------------------------------------
+    # Runnable-artifact download (export bundle + offline run)
+    # ------------------------------------------------------------------
+
+    def download_export(
+        self,
+        task_uuid: str,
+        dest_dir: str | os.PathLike[str],
+        *,
+        extract: bool = True,
+        chunk_size: int = 1024 * 1024,
+    ) -> Path:
+        """Download the RL task's runnable export bundle (``export.zip``).
+
+        Streams ``GET /api/v1/rl-tasks/{uuid}/export.zip`` — the packaged,
+        runnable task/env/scene definition (generated ``scene_cfg.py`` /
+        ``env_cfg.py`` / ``rl_cfg.py``, the ``task_export`` runtime adapter, the
+        merged MuJoCo scene, and the ``cyberwave_export.json`` manifest). The
+        bundle does **not** contain trained weights — those are a separate
+        checkpoint artifact (see :meth:`download_checkpoint`).
+
+        With ``extract=True`` (default) the zip is unpacked into ``dest_dir``
+        and ``dest_dir`` is returned; the extracted tree contains a single
+        ``<task_id>/`` package (the shape ``cyberwave-rl``'s ``tasks/`` loader
+        expects). With ``extract=False`` the raw ``.zip`` path is returned.
+
+        This is the one step that requires backend connectivity; the resulting
+        bundle can then be run fully offline via
+        :meth:`download_controller_bundle` + ``cyberwave.controller``.
+        """
+
+        target_dir = Path(os.fspath(dest_dir))
+        target_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = target_dir / f"{task_uuid}.zip"
+
+        url = self._url(f"/api/v1/rl-tasks/{task_uuid}/export.zip")
+        resp = self._http.request(
+            "GET",
+            url,
+            headers=self._headers(json_body=False),
+            preload_content=False,
+            timeout=self._timeout,
+        )
+        try:
+            self._raise_for(resp, f"GET /api/v1/rl-tasks/{task_uuid}/export.zip")
+            with zip_path.open("wb") as out:
+                for chunk in resp.stream(chunk_size):
+                    if chunk:
+                        out.write(chunk)
+        finally:
+            resp.release_conn()
+
+        if not extract:
+            return zip_path
+
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(target_dir)
+        zip_path.unlink(missing_ok=True)
+        return target_dir
+
+    def download_controller_bundle(
+        self,
+        task_uuid: str,
+        checkpoint_uuid: str,
+        dest_dir: str | os.PathLike[str],
+    ) -> ControllerBundle:
+        """Download a runnable controller (task export + weights) into one folder.
+
+        Convenience over :meth:`download_export` + :meth:`download_checkpoint`:
+        extracts the export into ``dest_dir``, downloads the checkpoint next to
+        it, reads ``cyberwave_export.json``, and returns a :class:`ControllerBundle`
+        handle. This is the *only* online step in the export-and-run-locally
+        flow — hand the returned handle to ``cyberwave.controller.run_offline``
+        (or ``cw.rl.run_controller_offline``) to run it against a local driver
+        with no further backend calls.
+        """
+
+        target_dir = Path(os.fspath(dest_dir))
+        self.download_export(task_uuid, target_dir, extract=True)
+
+        manifest, task_package_dir = self._read_bundle_manifest(target_dir)
+        task_id = str(manifest.get("task_id") or task_package_dir.name)
+
+        checkpoint_path = self.download_checkpoint(
+            task_uuid,
+            checkpoint_uuid,
+            destination=target_dir / "checkpoint.pt",
+        )
+
+        return ControllerBundle(
+            task_id=task_id,
+            bundle_dir=target_dir,
+            task_package_dir=task_package_dir,
+            checkpoint_path=checkpoint_path,
+            manifest=manifest,
+        )
+
+    @staticmethod
+    def _read_bundle_manifest(bundle_dir: Path) -> tuple[dict[str, Any], Path]:
+        """Locate + parse ``cyberwave_export.json`` in an extracted export tree.
+
+        The export nests everything under a single ``<task_id>/`` directory, so
+        the manifest lives at ``<bundle_dir>/<task_id>/cyberwave_export.json``.
+        Returns ``(manifest, task_package_dir)``. Raises if the manifest is
+        absent — a bundle without it is not runnable and we refuse to guess.
+        """
+
+        candidates = sorted(bundle_dir.glob("*/cyberwave_export.json"))
+        if not candidates:
+            # Some callers may point straight at the task package dir.
+            direct = bundle_dir / "cyberwave_export.json"
+            if direct.is_file():
+                candidates = [direct]
+        if not candidates:
+            raise FileNotFoundError(
+                f"No cyberwave_export.json found under {bundle_dir}. The export "
+                "zip must contain a '<task_id>/cyberwave_export.json' manifest; "
+                "re-download via download_export()."
+            )
+        manifest_path = candidates[0]
+        manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        return manifest, manifest_path.parent
+
+    def run_controller_offline(
+        self,
+        bundle: "ControllerBundle | str | os.PathLike[str]",
+        *,
+        twin_uuid: str,
+        mqtt: dict[str, Any] | None = None,
+        object_pose: dict[str, Any] | list[float] | None = None,
+        base_link_pose: dict[str, Any] | None = None,
+        camera_source: str = "wire",
+        device: str = "cpu",
+        max_steps: int | None = None,
+        extra_params: dict[str, Any] | None = None,
+    ) -> int:
+        """Run a downloaded controller locally against your own driver (offline).
+
+        Thin, ergonomic front door over :func:`cyberwave.controller.run_offline`.
+        It requires the optional controller runtime (``pip install
+        cyberwave[controller]``); the heavy inference dependencies
+        (``controller-sim-adapter`` + ``cyberwave-rl`` + torch/mujoco) are not
+        part of the base SDK. See that function for the full parameter contract.
+
+        The controller always publishes commanded setpoints as
+        ``target_positions``; the wire field shape is not configurable (a command
+        is never relabelled as measured ``positions``).
+        """
+
+        from cyberwave.controller import run_offline
+
+        return run_offline(
+            bundle,
+            twin_uuid=twin_uuid,
+            mqtt=mqtt,
+            object_pose=object_pose,
+            base_link_pose=base_link_pose,
+            camera_source=camera_source,
+            device=device,
+            max_steps=max_steps,
+            extra_params=extra_params,
+        )
+
     @staticmethod
     def prepare_checkpoint_for_play(
         *,
@@ -781,6 +1022,126 @@ class RLTaskClient:
         return self._put(
             f"/api/v1/rl-tasks/{task_uuid}/rl-config",
             json={"rl_config_spec": dict(rl_config_spec)},
+        )
+
+    def set_training_command_spec(
+        self,
+        task_uuid: str,
+        training_command_spec: dict[str, Any],
+        *,
+        enabled: bool | None = None,
+    ) -> dict[str, Any]:
+        """Replace the persisted (optional) *training* command contract.
+
+        Training commands are part of the MDP: sampled goals, curricula,
+        randomized targets, waypoint generation from simulated state. They
+        drive mjlab's ``CommandManager`` (via ``cfg.commands``) in training /
+        play. Opt-in (most tasks have none and fall back to mjlab's
+        ``NullCommandManager``); mirrors the canonical persisted shape
+        ``{"schema_version": 1, "commands": [{"name": ..., "type": "custom",
+        "module": ..., "symbol": ..., "resampling_time_range": [...],
+        "kwargs": {...}}, ...]}``. An empty ``{}`` clears it.
+
+        ``enabled`` is the explicit lifecycle switch (ADR 0004). When omitted
+        the backend derives it from spec presence (a non-empty spec enables the
+        lifecycle, an empty one disables it). Pass ``enabled=False`` to disable
+        the lifecycle and clear the spec in one call, or ``enabled=True`` to
+        keep it enabled even with an empty (not-yet-authored) spec.
+
+        Unlike the action / observation / RL-config specs there is no
+        dedicated sub-resource — the command specs live on the task itself,
+        so this writes through the RL task update endpoint. The backend
+        validates and normalizes the payload before persisting; the returned
+        RL task carries the normalized ``training_command_spec``.
+        """
+
+        payload: dict[str, Any] = {"training_command_spec": dict(training_command_spec)}
+        if enabled is not None:
+            payload["training_command_setup_enabled"] = bool(enabled)
+        return self._put(f"/api/v1/rl-tasks/{task_uuid}", json=payload)
+
+    def set_inference_command_spec(
+        self,
+        task_uuid: str,
+        inference_command_spec: dict[str, Any],
+        *,
+        enabled: bool | None = None,
+    ) -> dict[str, Any]:
+        """Replace the persisted (optional) *inference* command contract.
+
+        Inference commands are part of the control surface: externally
+        supplied targets, real object poses, MQTT / HTTP / twin-drag inputs.
+        They drive Cyberwave's ``InferenceCommandManager`` in inference / live
+        envs (never the training ``CommandManager``). Opt-in; mirrors the
+        canonical persisted shape ``{"schema_version": 1, "commands":
+        [{"name": ..., "type": "custom", "module": ..., "symbol": ...,
+        "payload_schema": {...}, "source": {...}, "kwargs": {...}}, ...]}``.
+        An empty ``{}`` clears it.
+
+        ``enabled`` is the explicit lifecycle switch (ADR 0004); see
+        :meth:`set_training_command_spec` for its semantics. Like that method
+        this writes through the RL task update endpoint; the returned RL task
+        carries the normalized ``inference_command_spec``.
+        """
+
+        payload: dict[str, Any] = {
+            "inference_command_spec": dict(inference_command_spec)
+        }
+        if enabled is not None:
+            payload["inference_command_setup_enabled"] = bool(enabled)
+        return self._put(f"/api/v1/rl-tasks/{task_uuid}", json=payload)
+
+    # ----- task-local source files -------------------------------------
+    #
+    # Command terms (like custom observation terms) are code-backed: their
+    # ``CommandTermCfg`` implementation lives in a task-local source file
+    # (``commands/<name>.py``, imported as ``commands.<name>``) uploaded
+    # alongside the term metadata in the command specs. These helpers cover
+    # the user-written source-file surface so the whole term workflow — upload
+    # the code, then register the term via ``set_*_command_spec`` — is doable
+    # from the SDK without dropping to raw HTTP.
+
+    def list_source_files(self, task_uuid: str) -> list[dict[str, Any]]:
+        """List the task's source files (path + ownership metadata, no content)."""
+
+        return self._get(f"/api/v1/rl-tasks/{task_uuid}/source-files")
+
+    def get_source_file(self, task_uuid: str, path: str) -> dict[str, Any]:
+        """Return a single source file including its ``content``."""
+
+        from urllib.parse import quote
+
+        return self._get(
+            f"/api/v1/rl-tasks/{task_uuid}/source-files/content?path={quote(path)}"
+        )
+
+    def upsert_source_file(
+        self,
+        task_uuid: str,
+        path: str,
+        content: str,
+        *,
+        is_entrypoint: bool = False,
+    ) -> dict[str, Any]:
+        """Create or replace a user-written task source file.
+
+        Writes through ``PUT /api/v1/rl-tasks/{uuid}/source-files``. The path
+        must be a safe relative POSIX path (subdirectories allowed, e.g.
+        ``commands/viewpoint.py``); the backend normalizes it, refuses
+        Cyberwave-generated paths, and compile-checks ``.py`` content.
+
+        This is how a code-backed command term's implementation is uploaded:
+        write ``commands/<name>.py`` here, then register the term with
+        :meth:`set_training_command_spec` / :meth:`set_inference_command_spec`
+        using ``module="commands.<name>"`` and ``symbol="<CfgClass>"``.
+        """
+
+        payload: dict[str, Any] = {"path": path, "content": content}
+        if is_entrypoint:
+            payload["is_entrypoint"] = True
+        return self._put(
+            f"/api/v1/rl-tasks/{task_uuid}/source-files",
+            json=payload,
         )
 
 
@@ -957,13 +1318,32 @@ def make_action_term(
     offset: str | float | dict[str, float] | None = None,
     use_default_offset: bool | None = None,
     baseline_delta: float | dict[str, float] | None = None,
+    module: str | None = None,
+    symbol: str | None = None,
+    kind: str | None = None,
+    kwargs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one entry of ``ACTION_SPEC["actions"]``.
 
     Mirrors the editor's Actions tab: ``action_type`` is one of
-    ``position_delta`` / ``position`` / ``velocity`` / ``effort``.
+    ``position_delta`` / ``smoothed_position_delta`` / ``position`` /
+    ``velocity`` / ``effort`` / ``custom``. ``smoothed_position_delta``
+    is a delta action like ``position_delta`` but the runtime
+    distributes each per-policy-step delta linearly across
+    ``decimation`` physics steps for a smooth target rate.
     ``target_names_expr`` lists the concrete joint names the policy
     drives (regex patterns are still accepted for legacy import).
+
+    ``custom`` is the escape hatch for a user-owned action class: pass
+    ``module`` (dotted path to an uploaded task-local source file) +
+    ``symbol`` (the ``ActionTermCfg`` subclass or factory) + optional
+    ``kind`` (``"class"`` default, or ``"function"`` for a factory) +
+    optional ``kwargs`` forwarded to it. The standard fields
+    (``entity`` / ``target_names_expr`` / ``scale`` / ``baseline_delta``)
+    are still carried so the class can be built from the term dict.
+    The referenced code is uploaded separately with
+    :meth:`RLTaskClient.upsert_source_file`, then wired at runtime via
+    the ``custom_terms`` registry on the generated ``make_actions()``.
 
     Numeric parameters accept either a uniform scalar applied to
     every selected joint or a ``{joint_name: value}`` mapping for
@@ -980,7 +1360,7 @@ def make_action_term(
     * ``baseline_delta``: constant per-step delta added to the
       current joint position before the policy contribution
       (``target = q_now + baseline_delta + action * scale``). Only
-      meaningful for ``position_delta`` actions.
+      meaningful for the delta action types and ``custom``.
 
     ``use_default_offset=True`` makes ``position`` / ``velocity``
     actions reference the joint home (``default_joint_pos`` /
@@ -1010,15 +1390,24 @@ def make_action_term(
     if use_default_offset is not None:
         term["use_default_offset"] = bool(use_default_offset)
     if baseline_delta is not None:
-        if action_type != "position_delta":
+        if action_type not in ("position_delta", "smoothed_position_delta", "custom"):
             raise ValueError(
-                "baseline_delta is only supported on position_delta actions"
+                "baseline_delta is only supported on position_delta / "
+                "smoothed_position_delta / custom actions"
             )
         coerced_baseline = _coerce_action_scalar_or_map(
             baseline_delta, field_name="baseline_delta"
         )
         if coerced_baseline is not None:
             term["baseline_delta"] = coerced_baseline
+    if action_type == "custom":
+        if not module or not symbol:
+            raise ValueError("custom action terms require both `module` and `symbol`")
+        term["module"] = module
+        term["symbol"] = symbol
+        term["kind"] = kind or "class"
+        if kwargs:
+            term["kwargs"] = dict(kwargs)
     return term
 
 
@@ -1040,6 +1429,7 @@ def make_observation_term(
     frame: str | None = None,
     sensor: str | None = None,
     data_type: str | None = None,
+    grayscale: bool = False,
     module: str | None = None,
     symbol: str | None = None,
     kind: str | None = None,
@@ -1060,7 +1450,9 @@ def make_observation_term(
       ``source="pose"`` and ``x|y|z|rx|ry|rz`` under ``source="twist"``;
       ``quat`` stays as a single 4-channel token.
     * ``previous_action`` carries no extra fields.
-    * ``camera`` requires ``sensor`` + ``data_type``.
+    * ``camera`` requires ``sensor`` + ``data_type``. Pass
+      ``grayscale=True`` on an ``rgb`` camera term to reduce the three
+      color channels to a single luminance channel (color-invariant input).
     * ``custom`` requires ``module`` + ``symbol`` + ``kind``.
     """
 
@@ -1087,6 +1479,8 @@ def make_observation_term(
         term["sensor"] = sensor
     if data_type is not None:
         term["data_type"] = data_type
+    if grayscale:
+        term["grayscale"] = True
     if module is not None:
         term["module"] = module
     if symbol is not None:
@@ -1181,8 +1575,9 @@ def make_position_delta_action(
     """Editor preset: a single ``position_delta`` action term.
 
     Mirrors the "Joint delta-position" preset on the Actions tab,
-    which is the recommended action shape for SDC-style manipulation
-    demos (the demo's :data:`DEMO_ACTION_SCALE` is 0.04).
+    which is the recommended action shape for joint-space manipulation
+    demos (a default scale of 0.04 keeps per-step position deltas small
+    enough for stable training).
 
     ``scale`` and ``baseline_delta`` accept either a uniform scalar
     or a ``{joint_name: value}`` mapping for per-joint authoring.
@@ -1252,14 +1647,24 @@ def make_camera_observation(
     *,
     sensor: str,
     data_type: str = "depth",
+    grayscale: bool = False,
 ) -> dict[str, Any]:
-    """Editor preset: a camera observation term (defaults to depth)."""
+    """Editor preset: a camera observation term (defaults to depth).
+
+    ``data_type`` is one of ``"depth"`` / ``"rgb"`` (the camera/sensor
+    stream). ``grayscale=True`` is only valid with ``data_type="rgb"`` and
+    changes how the observation processes the color frame: the three RGB
+    channels are collapsed to a single luminance channel, making the policy
+    invariant to object color and letting it share the depth stream's
+    single-channel CNN head.
+    """
 
     return make_observation_term(
         name,
         term_type="camera",
         sensor=sensor,
         data_type=data_type,
+        grayscale=grayscale,
     )
 
 
@@ -1321,10 +1726,9 @@ def make_default_ppo_rlmodule_config(
 ) -> dict[str, Any]:
     """Editor preset: PPO + rlmodule shared-MLP network.
 
-    Mirrors the editor's "PPO defaults" with the same hidden geometry
-    the demo had baked into ``DEFAULT_NETWORK_SPEC`` before runtime
-    spec consumption. Useful as the seed for any setup script that
-    wants the same defaults the editor would.
+    Mirrors the editor's "PPO defaults" hidden-layer geometry. Useful
+    as the seed for any setup script that wants the same defaults the
+    editor would.
     """
 
     layers = list(hidden_layers) if hidden_layers is not None else [256, 256, 128]
@@ -1390,6 +1794,7 @@ def make_default_ppo_rlmodule_config(
 
 
 __all__ = [
+    "ControllerBundle",
     "RLTaskClient",
     "TaskSpecExport",
     "make_action_spec",

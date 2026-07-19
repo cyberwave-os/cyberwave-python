@@ -27,11 +27,10 @@ def get_runtime(name: str) -> ModelRuntime:
         hint = ""
         if name == "faster_whisper":
             hint = (
-                " Rebuild or pull a current cyberwaveos/edge-ml-worker image "
-                "(SDK wheel must include faster_whisper_rt and "
-                "pip extra [ml-stt-faster]). On dev hosts: build "
-                "Dockerfile.local, tag cyberwaveos/edge-ml-worker:local, set "
-                "CYBERWAVE_WORKER_IMAGE, restart edge-core."
+                " Make sure the deployed SDK build includes "
+                "faster_whisper_rt and the 'ml-stt-faster' extra "
+                "(pip install cyberwave[ml-stt-faster]), then restart "
+                "the process so the new runtime is registered."
             )
         raise ValueError(
             f"Unknown model runtime '{name}'. Available: {available}. "
@@ -94,3 +93,7 @@ register_runtime(WhisperCppRuntime)
 from cyberwave.models.runtimes.hailo_rt import HailoRuntime  # noqa: E402
 
 register_runtime(HailoRuntime)
+
+from cyberwave.models.runtimes.vda_rt import VideoDepthAnythingRuntime  # noqa: E402
+
+register_runtime(VideoDepthAnythingRuntime)

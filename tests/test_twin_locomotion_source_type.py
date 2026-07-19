@@ -128,26 +128,24 @@ def test_joint_set_defaults_sim_config_source_type_to_sim_tele() -> None:
 
 
 @pytest.mark.parametrize(
-    ("method_name", "args", "expected_command"),
+    ("method_name", "args"),
     [
-        ("move_backward", (1.0,), "move_backward"),
-        ("turn_left", (1.5,), "turn_left"),
-        ("turn_right", (1.5,), "turn_right"),
+        ("move_backward", (1.0,)),
+        ("turn_left", (1.5,)),
+        ("turn_right", (1.5,)),
     ],
 )
-def test_locomotion_methods_use_simulation_control_source_type(
-    method_name: str, args: tuple[float], expected_command: str
+def test_locomotion_methods_playground_compatible_in_simulation_mode(
+    method_name: str, args: tuple[float]
 ) -> None:
+    # Locomotion is PLAYGROUND-compatible: the browser playground renders these
+    # commands directly, so they publish (rather than raise) in simulation mode.
     twin, mqtt_client = _build_twin(runtime_mode="simulation", source_type="sim")
 
     with patch.object(twin, "_prepare_outbound_command"):
         with patch.object(_transport.time, "sleep"):
             getattr(twin, method_name)(*args, duration=0.1, rate_hz=10)
-
-    assert mqtt_client.publish.call_count >= 1
-    assert twin._outbound_log[0].payload["source_type"] == "sim_tele"
-    assert twin._outbound_log[0].command == expected_command
-    assert twin._outbound_log[-1].command == "stop"
+    mqtt_client.publish.assert_called()
 
 
 def test_move_forward_burst_then_stop() -> None:

@@ -92,6 +92,28 @@ def test_navigation_relative_move_payload_sets_meter_units() -> None:
     assert body["metadata"]["units"] == "meters"
 
 
+def test_follow_path_forwards_reference_frame() -> None:
+    nav, api_client = _build_twin_nav(source_type="sim")
+
+    nav.follow_path(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        reference_frame="base_link",
+    )
+
+    body = api_client.param_serialize.call_args.kwargs["body"]
+    assert body["command"] == "path"
+    assert body["reference_frame"] == "base_link"
+
+
+def test_follow_path_omits_reference_frame_when_unset() -> None:
+    nav, api_client = _build_twin_nav(source_type="sim")
+
+    nav.follow_path([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+
+    body = api_client.param_serialize.call_args.kwargs["body"]
+    assert "reference_frame" not in body
+
+
 def test_navigation_omits_source_type_when_config_has_none() -> None:
     nav, api_client = _build_twin_nav(source_type=None)
 

@@ -21,7 +21,7 @@ class PolicyCapableMixin:
     _policy_handle: Optional[Any] = None
 
     def _prepare_outbound_command(self) -> None:
-        """Gate outbound MQTT commands (policy attach in PR1; publish in PR2)."""
+        """Gate outbound MQTT commands behind controller-policy attachment."""
         self.policy.ensure_attached()
 
     @property
@@ -183,8 +183,11 @@ class JointsCapableMixin:
 class SpatialPoseCapableMixin:
     """Cartesian pose for locomoting twins (MQTT get/set — not REST editor)."""
 
-    def get_pose(self) -> Dict[str, Dict[str, float]]:
-        """MQTT pose read — same canonical cache as :attr:`pose`."""
+    def get_pose(self) -> Optional[Dict[str, Dict[str, float]]]:
+        """MQTT pose read — same canonical cache as :attr:`pose`.
+
+        Returns ``None`` before any pose has arrived (see ``PoseView``).
+        """
         return self.pose.get().to_legacy_pose()  # type: ignore[attr-defined]
 
     def set_pose(
@@ -201,7 +204,7 @@ class SpatialPoseCapableMixin:
         ry: Optional[float] = None,
         rz: Optional[float] = None,
     ) -> None:
-        """MQTT pose write (delegates to :attr:`pose` — stub in PR3)."""
+        """MQTT pose write (delegates to :attr:`pose`)."""
         return self.pose.set(  # type: ignore[attr-defined]
             x=x,
             y=y,
@@ -249,11 +252,11 @@ class PowerCapableMixin:
 
 
 class CameraCapableMixin:
-    """Imaging — ``twin.camera`` (one sensor) or ``twin.cameras`` (several).
+    """Imaging — ``twin.camera`` is an indexable family of camera sensors.
 
     ``camera`` is injected on :class:`~cyberwave.twin.base.Twin` via ``__getattr__``
-    (not a class property) so multi-sensor twins do not advertise ``.camera`` in
-    ``dir()`` / tab completion.
+    (not a class property). ``twin.camera.get_frame()`` uses the first sensor;
+    ``twin.camera['depth_camera']`` / ``twin.camera[1]`` select a specific one.
     """
 
     def stream(

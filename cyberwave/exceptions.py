@@ -243,6 +243,39 @@ class CyberwaveError(Exception):
             setattr(self, key, value)
 
 
+class NoOngoingVideoStreamAvailable(CyberwaveError):
+    """Raised by ``twin.camera.get_video()`` when the streaming SFU reports
+    no producer (reply ``type == "wait"``) or a hard error (reply
+    ``type == "error"``) for the requested stream. Distinct from ``TimeoutError``,
+    which is raised when the SFU sends no reply at all within the timeout."""
+
+
+class NotSimulatedError(CyberwaveError):
+    """Raised in simulation runtime mode for a feature no simulation backend
+    produces yet — sensor reads (IMU, GPS, compass) and live/driver-only control
+    surfaces (twin.commands.*, twin.locomote.*, twin.flying.*).
+
+    In live runtime mode, ``twin.commands.*`` / ``twin.locomote.*`` /
+    ``twin.flying.*`` and ``imu.get`` behave normally; only simulation mode
+    raises. ``gps.get_fix`` / ``compass.get_heading`` are WIP and currently
+    raise ``NotImplementedError`` in live mode too — see the driver README."""
+
+
+class SimulationNotRunningError(CyberwaveError):
+    """Raised when a MuJoCo-level method is called in simulation runtime mode
+    with no simulation running (or one that hasn't finished starting yet) for
+    the twin's environment.
+
+    Getters never auto-start a simulation; start one explicitly with
+    ``cw.environments.simulations.start(...)`` or select a MuJoCo profile via
+    ``cw.affect("sim")``, which does auto-start (and waits for) one."""
+
+
+class SimulationLevelError(CyberwaveError):
+    """Raised when a MuJoCo-level method is called against a running simulation
+    whose backend cannot serve it (e.g. a ``playground`` backend)."""
+
+
 class CyberwaveAPIError(CyberwaveError):
     """
     Exception raised when an API request fails.
@@ -353,3 +386,22 @@ class TwinStateTimeoutError(CyberwaveMQTTError):
 
 class TwinStateUnavailableError(CyberwaveMQTTError):
     """Raised when MQTT is required for state read but cannot connect."""
+
+
+class DepthTransportNotMQTTError(CyberwaveMQTTError):
+    """Raised when ``on_update`` is called on a depth handle whose transport
+    resolved to REST (cloud).
+
+    ``on_update`` requires a live MQTT stream.  When the depth handle is
+    operating over REST, use a polling loop around ``get_frame()`` instead::
+
+        import time
+        while True:
+            frame = twin.camera["depth_camera"].get_frame(source="cloud")
+            process(frame)
+            time.sleep(interval)
+
+    To force MQTT transport (bypassing REST), pass ``source="mqtt"`` to
+    ``get_frame`` first, or call ``on_update`` before any ``get_frame`` call
+    so that the transport has not yet been pinned to REST.
+    """

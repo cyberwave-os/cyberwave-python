@@ -30,7 +30,22 @@ import tempfile
 import time
 import uuid as uuid_lib
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Literal, NoReturn, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    NoReturn,
+    Optional,
+    Tuple,
+    Union,
+)
+
+if TYPE_CHECKING:
+    from cyberwave.managers.simulations import SimulationManager
+    from cyberwave.managers.recordings import RecordingManager
 
 from typing_extensions import NotRequired, Required, TypedDict
 
@@ -379,6 +394,28 @@ class ProjectManager(BaseResourceManager):
 class EnvironmentManager(BaseResourceManager):
     """Manager for environment operations"""
 
+    @property
+    def simulations(self) -> "SimulationManager":
+        """Simulation lifecycle for environments (start/list/get_active/stop)."""
+        mgr = getattr(self, "_simulations", None)
+        if mgr is None:
+            from cyberwave.managers.simulations import SimulationManager
+
+            mgr = SimulationManager(self.api)
+            self._simulations = mgr
+        return mgr
+
+    @property
+    def recordings(self) -> "RecordingManager":
+        """Recording listing/fetching for environments."""
+        mgr = getattr(self, "_recordings", None)
+        if mgr is None:
+            from cyberwave.managers.recordings import RecordingManager
+
+            mgr = RecordingManager(self.api)
+            self._recordings = mgr
+        return mgr
+
     def list(self, project_id: Optional[str] = None) -> List[EnvironmentSchema]:
         """List all environments, optionally filtered by project.
 
@@ -391,8 +428,10 @@ class EnvironmentManager(BaseResourceManager):
             offset = 0
             while True:
                 if project_id:
-                    page = self.api.src_app_api_environments_list_environments_for_project(
-                        project_id, limit=_page_size, offset=offset
+                    page = (
+                        self.api.src_app_api_environments_list_environments_for_project(
+                            project_id, limit=_page_size, offset=offset
+                        )
                     )
                 else:
                     page = self.api.src_app_api_environments_list_all_environments(
@@ -1621,7 +1660,8 @@ class AssetManager(BaseResourceManager):
         ``registry_id_alias`` fields on the server side.  This is the correct
         way to look up an asset by a registry identifier that may contain a
         slash (e.g. ``"vendor/model"``), since embedding such a value directly
-        in a URL path segment would break Django's URL routing.
+        as a URL path segment would be ambiguous with the path's own segment
+        boundaries.
         """
         try:
             _param = self.api.api_client.param_serialize(
@@ -1649,11 +1689,11 @@ class AssetManager(BaseResourceManager):
         """Get asset by canonical registry ID or registry ID alias.
 
         When the identifier contains a slash (e.g. ``"vendor/model"``), a
-        direct ``GET /assets/{registry_id}`` call would break Django's URL
-        routing because the slash is interpreted as a path separator.  For
-        that reason this method uses the ``?registry_id=`` query-parameter
-        route, which does an exact server-side match against both
-        ``registry_id`` and ``registry_id_alias``.
+        direct ``GET /assets/{registry_id}`` call would be ambiguous because
+        the slash would be interpreted as a path separator.  For that reason
+        this method uses the ``?registry_id=`` query-parameter route, which
+        does an exact server-side match against both ``registry_id`` and
+        ``registry_id_alias``.
 
         For plain aliases (no slash) the direct ``GET /assets/{alias}``
         shortcut is tried first so that the common case remains efficient.
@@ -1902,6 +1942,51 @@ class EdgeManager(BaseResourceManager):
             raise
 
 
+def _extract_frame_generation(response_data: Any) -> Optional[int]:
+    """Pull the ``X-Frame-Generation`` producer heartbeat from a frame response.
+
+    Reads the header case-insensitively across the header shapes the generated
+    HTTP client can expose (``getheaders()`` mapping, ``getheader(name)``, or a
+    ``.headers`` mapping). Returns ``None`` when the header is absent or not a
+    valid integer — callers then fall back to byte-comparison, so a missing
+    header is never an error.
+    """
+    header_name = "x-frame-generation"
+
+    def _from_mapping(mapping: Any) -> Optional[str]:
+        try:
+            items = mapping.items()
+        except AttributeError:
+            return None
+        for key, value in items:
+            if isinstance(key, str) and key.lower() == header_name:
+                return value
+        return None
+
+    raw: Any = None
+    getheaders = getattr(response_data, "getheaders", None)
+    if callable(getheaders):
+        try:
+            raw = _from_mapping(getheaders())
+        except Exception:  # noqa: BLE001
+            raw = None
+    if raw is None:
+        getheader = getattr(response_data, "getheader", None)
+        if callable(getheader):
+            try:
+                raw = getheader("X-Frame-Generation")
+            except Exception:  # noqa: BLE001
+                raw = None
+    if raw is None:
+        raw = _from_mapping(getattr(response_data, "headers", None))
+    if raw is None:
+        return None
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 class TwinManager(BaseResourceManager):
     """Manager for digital twin operations"""
 
@@ -2000,7 +2085,9 @@ class TwinManager(BaseResourceManager):
         mock: bool = False,
         source_type: Optional[str] = None,
         frame_bucket: Optional[str] = None,
-    ) -> bytes:
+        _request_timeout: Union[None, float, Tuple[float, float]] = None,
+        return_headers: bool = False,
+    ) -> Union[bytes, Tuple[bytes, Dict[str, Any]]]:
         """Get the latest JPEG frame for a twin.
 
         Args:
@@ -2010,11 +2097,36 @@ class TwinManager(BaseResourceManager):
             source_type: Optional source selector (``"sim"`` or ``"tele"``).
                 Use ``"sim"`` to request a virtual camera frame from simulation.
             frame_bucket: ``"policy_depth"`` to fetch the policy-resolution
-                depth frame rendered at the trained observation size. Falls back
-                to the regular frame when unavailable.
+                depth frame rendered at the trained observation size. This is a
+                parity-critical surface: when no policy-depth frame is available
+                the backend returns HTTP 404 and this call raises
+                :class:`CyberwaveAPIError` (``status_code=404``) — it never falls
+                back to a regular RGB frame, which would feed the policy
+                out-of-distribution observations. Callers wanting an RGB frame on
+                miss must catch the 404 and re-request without ``frame_bucket``.
+            _request_timeout: Optional per-request timeout, in seconds, forwarded
+                to the underlying HTTP client. Either a single total timeout or a
+                ``(connect, read)`` tuple. Polling callers (e.g. a background
+                camera fetch loop) MUST set this so a single stalled socket cannot
+                block the thread forever; without it urllib3 waits indefinitely.
+            return_headers: When ``True``, return ``(bytes, meta)`` instead of
+                bare bytes, where ``meta`` currently carries
+                ``{"generation": int | None}``. ``generation`` is the sim's
+                per-render heartbeat from the ``X-Frame-Generation`` response
+                header — it advances on every render even when the pixels are
+                byte-identical (a static scene) and freezes only when the
+                producer stops, letting a polling consumer tell a legitimately
+                still scene from a dead producer. ``None`` when the backend
+                served no header (live/real camera, or an older sim).
 
         Returns:
-            Image bytes (JPEG or PNG depending on bucket).
+            Image bytes (JPEG or PNG depending on bucket) when
+            ``return_headers`` is ``False``; otherwise a ``(bytes, meta)`` tuple.
+
+        Raises:
+            CyberwaveAPIError: with ``status_code=404`` when ``frame_bucket``
+                is ``"policy_depth"`` and no policy-resolution depth frame is
+                being rendered (no RGB fallback).
         """
         try:
             query_params = []
@@ -2043,23 +2155,34 @@ class TwinManager(BaseResourceManager):
                 query_params=query_params,
                 auth_settings=["CustomTokenAuthentication"],
             )
-            response_data = self.api.api_client.call_api(*_param)
+            response_data = self.api.api_client.call_api(
+                *_param, _request_timeout=_request_timeout
+            )
             response_data.read()
 
             payload = getattr(response_data, "data", None)
+            frame_bytes: Optional[bytes] = None
             if isinstance(payload, (bytes, bytearray)):
-                return bytes(payload)
-            if isinstance(payload, str):
-                return payload.encode("utf-8")
+                frame_bytes = bytes(payload)
+            elif isinstance(payload, str):
+                frame_bytes = payload.encode("utf-8")
+            else:
+                # Fallback used by some urllib3 response wrappers.
+                raw_payload = getattr(response_data, "raw_data", None)
+                if isinstance(raw_payload, (bytes, bytearray)):
+                    frame_bytes = bytes(raw_payload)
 
-            # Fallback used by some urllib3 response wrappers.
-            raw_payload = getattr(response_data, "raw_data", None)
-            if isinstance(raw_payload, (bytes, bytearray)):
-                return bytes(raw_payload)
+            if frame_bytes is None:
+                raise CyberwaveAPIError(
+                    "Failed to get latest frame: unexpected response payload format"
+                )
 
-            raise CyberwaveAPIError(
-                "Failed to get latest frame: unexpected response payload format"
-            )
+            if return_headers:
+                meta: Dict[str, Any] = {
+                    "generation": _extract_frame_generation(response_data)
+                }
+                return frame_bytes, meta
+            return frame_bytes
         except Exception as e:
             self._handle_error(e, f"get latest frame for twin {twin_id}")
             raise
