@@ -1,4 +1,12 @@
-"""Namespace derivation: singular vs plural vs absent per sensor family."""
+"""Namespace derivation: indexable sensor families, singular-only, per family.
+
+The twin exposes each available sensor family as a single indexable
+``twin.<family>`` (a :class:`SensorFamily`) whether one or many sensors of that
+family exist. There is one handle per sensor, reached by index or id
+(``twin.camera[0]``, ``twin.camera['cam_main']``); bare attribute access proxies
+to sensor ``[0]``. The old plural namespaces (``twin.cameras`` …) were removed and
+now raise a directed :class:`AttributeError` pointing at the singular family.
+"""
 
 from __future__ import annotations
 
@@ -8,16 +16,9 @@ import pytest
 
 from cyberwave.twin.base import Twin
 from cyberwave.twin.classes import LocomoteTwin
-from cyberwave.twin.namespaces import (
-    CompassesNamespace,
-    FlashlightsNamespace,
-    GpssNamespace,
-    ImusNamespace,
-    LidarsNamespace,
-)
-from cyberwave.twin.namespaces.camera import CamerasNamespace
+from cyberwave.twin.sensors.family import SensorFamily
 
-# (handler_key, singular attr, plural attr, single-sensor entry, second entry for multi)
+# (handler_key, singular attr, removed-plural attr, single-sensor entry, second entry for multi)
 _SENSOR_FAMILY_CASES: tuple[
     tuple[str, str, str, dict[str, str], dict[str, str]],
     ...,
@@ -66,15 +67,6 @@ _SENSOR_FAMILY_CASES: tuple[
     ),
 )
 
-_PLURAL_NAMESPACE_TYPES: dict[str, type] = {
-    "lidars": LidarsNamespace,
-    "gpss": GpssNamespace,
-    "compasses": CompassesNamespace,
-    "imus": ImusNamespace,
-    "cameras": CamerasNamespace,
-    "flashlights": FlashlightsNamespace,
-}
-
 
 def _twin(*, sensors: list[dict[str, str]] | None = None) -> Twin:
     caps: dict = {"can_locomote": True}
@@ -91,7 +83,7 @@ def _twin(*, sensors: list[dict[str, str]] | None = None) -> Twin:
     _SENSOR_FAMILY_CASES,
     ids=[c[0] for c in _SENSOR_FAMILY_CASES],
 )
-def test_single_sensor_exposes_singular_not_plural(
+def test_single_sensor_exposes_indexable_family(
     handler: str,
     singular: str,
     plural: str,
@@ -99,18 +91,25 @@ def test_single_sensor_exposes_singular_not_plural(
     _multi_extra: dict[str, str],
 ) -> None:
     twin = _twin(sensors=[single_entry])
-    assert twin.resolve_handler_from_capabilities(handler).available
-    assert not twin.resolve_handler_from_capabilities(handler).multi_sensor
+    resolution = twin.resolve_handler_from_capabilities(handler)
+    assert resolution.available
+    assert not resolution.multi_sensor
 
-    handle = getattr(twin, singular)
-    assert handle is not None
-    if handler == "camera":
-        assert handle._sensor_id == single_entry["id"]
-    else:
-        assert handle.sensor_id == single_entry["id"]
+    family = getattr(twin, singular)
+    assert isinstance(family, SensorFamily)
+    assert family.keys() == [single_entry["id"]]
+    assert len(family) == 1
+
+    # One handle, reachable by index and by id; both carry the sensor id.
+    assert family[0].sensor_id == single_entry["id"]
+    assert family[single_entry["id"]].sensor_id == single_entry["id"]
+
+    # Bare attribute access proxies to sensor [0].
+    assert family.sensor_id == single_entry["id"]
     if handler == "flashlight":
-        assert hasattr(handle, "set")
+        assert hasattr(family, "set")
 
+    # The old plural attribute was removed → directed AttributeError.
     with pytest.raises(AttributeError, match=f"no attribute '{plural}'"):
         getattr(twin, plural)
 
@@ -123,7 +122,7 @@ def test_single_sensor_exposes_singular_not_plural(
     _SENSOR_FAMILY_CASES,
     ids=[c[0] for c in _SENSOR_FAMILY_CASES],
 )
-def test_multiple_sensors_expose_plural_not_singular(
+def test_multiple_sensors_expose_indexable_family(
     handler: str,
     singular: str,
     plural: str,
@@ -136,15 +135,44 @@ def test_multiple_sensors_expose_plural_not_singular(
     assert resolution.multi_sensor
     assert resolution.sensor_ids == (single_entry["id"], multi_extra["id"])
 
-    ns = getattr(twin, plural)
-    assert isinstance(ns, _PLURAL_NAMESPACE_TYPES[plural])
-    assert ns.keys() == [single_entry["id"], multi_extra["id"]]
+    # Still the singular family attribute, now spanning both sensors.
+    family = getattr(twin, singular)
+    assert isinstance(family, SensorFamily)
+    assert family.keys() == [single_entry["id"], multi_extra["id"]]
+    assert len(family) == 2
 
-    with pytest.raises(AttributeError, match=f"no attribute '{singular}'"):
-        getattr(twin, singular)
+    # Each sensor reachable by position and by id.
+    assert family[0].sensor_id == single_entry["id"]
+    assert family[1].sensor_id == multi_extra["id"]
+    assert family[single_entry["id"]].sensor_id == single_entry["id"]
+    assert family[multi_extra["id"]].sensor_id == multi_extra["id"]
 
-    assert plural in dir(twin)
-    assert singular not in dir(twin)
+    # The old plural attribute was removed → directed AttributeError.
+    with pytest.raises(AttributeError, match=f"no attribute '{plural}'"):
+        getattr(twin, plural)
+
+    assert singular in dir(twin)
+    assert plural not in dir(twin)
+
+
+@pytest.mark.parametrize(
+    "handler,singular,plural,single_entry,_multi_extra",
+    _SENSOR_FAMILY_CASES,
+    ids=[c[0] for c in _SENSOR_FAMILY_CASES],
+)
+def test_removed_plural_error_points_at_singular_family(
+    handler: str,
+    singular: str,
+    plural: str,
+    single_entry: dict[str, str],
+    _multi_extra: dict[str, str],
+) -> None:
+    twin = _twin(sensors=[single_entry, _multi_extra])
+    with pytest.raises(AttributeError) as excinfo:
+        getattr(twin, plural)
+    message = str(excinfo.value)
+    assert "plural sensor namespaces were removed" in message
+    assert f"twin.{singular}" in message
 
 
 @pytest.mark.parametrize(

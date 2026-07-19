@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytest.importorskip("aiortc", reason="aiortc not installed (install with extras: camera)")
+
 from cyberwave.exceptions import SimulationNotRunningError
 from cyberwave.twin.base import Twin
 from cyberwave.twin.sensors.camera import TwinCameraHandle
