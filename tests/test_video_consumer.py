@@ -4,6 +4,9 @@ import numpy as np
 import pytest
 
 from cyberwave.exceptions import CyberwaveError, NoOngoingVideoStreamAvailable
+
+pytest.importorskip("aiortc", reason="aiortc not installed (install with extras: camera)")
+
 from cyberwave.consumers.video import IncomingVideoStream
 
 

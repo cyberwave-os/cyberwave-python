@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("aiortc", reason="aiortc not installed (install with extras: camera)")
+
 from cyberwave.sensor.base_video import _strip_vp8_video
 
 
