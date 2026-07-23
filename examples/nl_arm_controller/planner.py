@@ -33,6 +33,7 @@ import re
 from dataclasses import dataclass
 
 from motion import MotionPlan, validate_plan
+from planner_config import get_openrouter_model
 from agents import Agent, ModelSettings, Runner, function_tool, set_tracing_disabled
 from agents.extensions.models.any_llm_model import AnyLLMModel
 
@@ -183,7 +184,7 @@ def plan_from_utterance(
 
 
 def _openrouter_model_name(model: str | None) -> str:
-    chosen = model or os.environ.get("OPENROUTER_MODEL", "openai/gpt-5.4-mini")
+    chosen = model or get_openrouter_model()
     return chosen if chosen.startswith("openrouter/") else f"openrouter/{chosen}"
 
 

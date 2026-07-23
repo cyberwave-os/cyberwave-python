@@ -36,6 +36,7 @@ import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
+from planner_config import get_openrouter_model
 
 load_dotenv(Path(__file__).parent / ".env", override=False)
 load_dotenv(override=False)
@@ -47,7 +48,6 @@ load_dotenv(override=False)
 CYBERWAVE_API_KEY = os.environ.get("CYBERWAVE_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite-preview-07-15:free")
 MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")
 
 CW_MODE = os.environ.get("CW_MODE", "live")
@@ -87,7 +87,7 @@ def _check_secret_any(*names: str) -> tuple[str, bool]:
 def _active_planner_label() -> str:
     """Which LLM/provider `planner.py` will actually use, for banner/self-check display."""
     if OPENROUTER_API_KEY:
-        return f"{OPENROUTER_MODEL} (via OpenRouter / agents SDK)"
+        return f"{get_openrouter_model()} (via OpenRouter / agents SDK)"
     if ANTHROPIC_API_KEY:
         return f"{ANTHROPIC_MODEL} (via Anthropic)"
     return "(no ANTHROPIC_API_KEY or OPENROUTER_API_KEY set)"
@@ -113,7 +113,7 @@ def run_self_check() -> int:
     print(f"  CYBERWAVE_TWIN_ID        = {CW_TWIN_ID or '(unset)'}")
     print(f"  CYBERWAVE_ENVIRONMENT_ID = {CW_ENV_ID or '(unset)'}")
     print(f"  ANTHROPIC_MODEL          = {ANTHROPIC_MODEL}")
-    print(f"  OPENROUTER_MODEL         = {OPENROUTER_MODEL}")
+    print(f"  OPENROUTER_MODEL         = {get_openrouter_model()}")
     print(f"  MISTRAL_STT_MODEL        = {MISTRAL_STT_MODEL}")
     print(f"  VOICE_ENABLED            = {VOICE_ENABLED}")
 
