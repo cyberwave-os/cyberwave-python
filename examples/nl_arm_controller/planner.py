@@ -26,12 +26,18 @@ error message; the agent loop in Phase 5 will turn that into a spoken
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 from dataclasses import dataclass
 
 from motion import MotionPlan, validate_plan
+from planner_config import get_openrouter_model
+from agents import Agent, ModelSettings, Runner, function_tool, set_tracing_disabled
+from agents.extensions.models.any_llm_model import AnyLLMModel
+
+set_tracing_disabled(disabled=True)
 
 
 SYSTEM_PROMPT = """You are the motion planner for an SO-101 6-axis robot arm.
@@ -148,10 +154,68 @@ def plan_from_utterance(
     max_tokens: int = 400,
     temperature: float = 0.2,
 ) -> PlanResult:
-    """Call Claude with `utterance` and return a `PlanResult`.
+    """Plan from text.
 
-    Picks up `ANTHROPIC_API_KEY` from the environment via the SDK default.
+    Prefers OpenRouter (via the OpenAI Agents SDK's `AnyLLMModel`) when
+    `OPENROUTER_API_KEY` is set; otherwise falls back to calling Claude
+    directly with `ANTHROPIC_API_KEY`.
     """
+    if os.environ.get("OPENROUTER_API_KEY"):
+        chosen_model = _openrouter_model_name(model)
+        raw = _run_any_llm_agent(
+            utterance,
+            system_prompt=SYSTEM_PROMPT,
+            model=chosen_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        plan, err = parse_plan_json(raw)
+        return PlanResult(plan=plan, raw_response=raw, error=err, model=chosen_model)
+
+    raw, chosen_model = _call_anthropic(
+        utterance,
+        system_prompt=SYSTEM_PROMPT,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    plan, err = parse_plan_json(raw)
+    return PlanResult(plan=plan, raw_response=raw, error=err, model=chosen_model)
+
+
+def _openrouter_model_name(model: str | None) -> str:
+    chosen = model or get_openrouter_model()
+    return chosen if chosen.startswith("openrouter/") else f"openrouter/{chosen}"
+
+
+def _run_any_llm_agent(
+    utterance: str,
+    *,
+    system_prompt: str,
+    model: str,
+    max_tokens: int,
+    temperature: float,
+) -> str:
+    """Run a single-turn agent via `AnyLLMModel` (OpenAI Agents SDK) and return its raw text."""
+    agent = Agent(
+        name="MotionPlanner",
+        instructions=system_prompt,
+        model=AnyLLMModel(model=model, api_key=os.environ["OPENROUTER_API_KEY"]),
+        model_settings=ModelSettings(max_tokens=max_tokens, temperature=temperature),
+    )
+    result = asyncio.run(Runner.run(agent, utterance))
+    return str(result.final_output or "")
+
+
+def _call_anthropic(
+    utterance: str,
+    *,
+    system_prompt: str,
+    model: str | None,
+    max_tokens: int,
+    temperature: float,
+) -> tuple[str, str]:
+    """Call Claude directly with `utterance`, picking up `ANTHROPIC_API_KEY` via the SDK default."""
     import anthropic
 
     client = anthropic.Anthropic()
@@ -169,9 +233,7 @@ def plan_from_utterance(
         getattr(block, "text", "") for block in response.content
         if getattr(block, "type", None) == "text"
     )
-
-    plan, err = parse_plan_json(raw)
-    return PlanResult(plan=plan, raw_response=raw, error=err, model=chosen_model)
+    return raw, chosen_model
 
 
 # ---------------------------------------------------------------------------
@@ -261,11 +323,13 @@ def plan_from_utterance_with_image(
 ) -> PlanResult:
     """Call Claude Vision with `utterance` + the image, return a `PlanResult`.
 
-    If `frame_b64_jpeg` is None (no fresh frame available), this falls back to
-    the text-only planner so the agent stays usable when the camera publisher
-    is down.
+    Vision uses Claude's multimodal API directly (`ANTHROPIC_API_KEY`), since
+    that's the format wired up here. If no fresh frame is available, or only
+    `OPENROUTER_API_KEY` is configured (no vision path for it yet), this
+    falls back to the text-only planner via `plan_from_utterance` so the
+    agent stays usable.
     """
-    if frame_b64_jpeg is None:
+    if frame_b64_jpeg is None or not os.environ.get("ANTHROPIC_API_KEY"):
         return plan_from_utterance(utterance, model=model, max_tokens=max_tokens, temperature=temperature)
 
     import anthropic
