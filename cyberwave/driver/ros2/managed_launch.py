@@ -50,7 +50,7 @@ class ManagedRosLaunch:
         # An empty package means launch_file is a standalone path (or filename
         # on the launch search path): ``ros2 launch <file>`` rather than
         # ``ros2 launch <package> <file>``. Used by drivers that ship their own
-        # launch file outside any ROS package (e.g. the namespaced Piper launch).
+        # launch file outside any ROS package.
         if self._spec.package:
             launch = (
                 f"ros2 launch {shlex.quote(self._spec.package)} "

@@ -13,7 +13,6 @@ from ..interface.registry import resolve_topic_path, _PublisherEntry
 from ..interface.args import mqtt_spec, zenoh_spec
 from .message_payload import (
     joint_positions_from_transport_payload,
-    ros_joint_state_to_transport_payload,
     ros_message_to_transport_payload,
 )
 from .topic_discovery import RosTopicDiscoveryError, resolve_ros_message_class
@@ -71,22 +70,26 @@ def wire_ros_publishers(driver: BaseROS2Driver) -> None:
 
         user_cb = entry.callbacks.callback
         if user_cb is None and _is_joint_state_type(type_string):
-            transform = ros_joint_state_to_transport_payload
+            converter = driver.convert_joints_to_payload
         else:
-            transform = user_cb
-        rx_count = 0
-        last_rx_log_at = 0.0
+            converter = user_cb
         ros_topic = ros_spec.topic
+        topic_rate_hz = entry.topic.rate_hz
 
         def make_handler(
             pub_entry: _PublisherEntry = entry,
-            transform: Any = transform,
+            converter: Any = converter,
+            ros_topic: str = ros_topic,
+            topic_rate_hz: float | None = topic_rate_hz,
         ) -> None:
+            rx_count = 0
+            last_rx_log_at = 0.0
+
             def _on_ros_message(msg: Any) -> None:
                 nonlocal rx_count, last_rx_log_at
                 try:
-                    if transform is not None:
-                        payload = transform(msg)
+                    if converter is not None:
+                        payload = converter(msg)
                         if payload is None:
                             return
                         if not isinstance(payload, dict):
@@ -104,7 +107,9 @@ def wire_ros_publishers(driver: BaseROS2Driver) -> None:
                     return
 
                 acquire_slot = getattr(driver, "acquire_ros_stream_publish_slot", None)
-                if callable(acquire_slot) and not acquire_slot(ros_topic):
+                if callable(acquire_slot) and not acquire_slot(
+                    ros_topic, max_hz=topic_rate_hz
+                ):
                     return
 
                 rx_count += 1

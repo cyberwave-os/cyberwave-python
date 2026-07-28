@@ -19,7 +19,7 @@ Integration tests (skipped unless env vars are set, ~50 s total):
           visible in the Cyberwave frontend.
 
     Required env vars:
-        CYBERWAVE_API_KEY    – API key (https://app.cyberwave.com/profile)
+        CYBERWAVE_API_KEY    – API key (https://cyberwave.com/profile)
         CYBERWAVE_TWIN_UUID  – UUID of the twin to animate
 
     Run:

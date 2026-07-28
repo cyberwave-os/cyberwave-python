@@ -77,6 +77,7 @@ catalog. Some examples need optional extras (e.g. `cyberwave[camera]`, `cyberwav
 | [zenoh_triad.py](zenoh_triad.py) | Zenoh pub/sub triad |
 | [zenoh_fanout.py](zenoh_fanout.py) | Zenoh fan-out |
 | [zenoh_bench.py](zenoh_bench.py) | Zenoh throughput benchmark |
+| [zenoh_shm_zerocopy.py](zenoh_shm_zerocopy.py) | Shared-memory zero-copy latency vs copy (needs `--ipc=host` + `--ulimit memlock=-1`) |
 | [zenoh_data_fusion.py](zenoh_data_fusion.py) | Time-aware multi-sensor fusion |
 | [zenoh_data_recording.py](zenoh_data_recording.py) | Record Zenoh channels to disk |
 | [inference_bench.py](inference_bench.py) | Inference throughput benchmark |

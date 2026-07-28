@@ -91,6 +91,7 @@ def test_environment_manager_create_waypoint_posts_single_waypoint_payload():
                 "position": {"x": 1.0, "y": 2.0, "z": 0.0},
                 "rotation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
                 "metadata": {"priority": "high"},
+                "frame": None,
             }
         ]
     }

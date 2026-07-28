@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -38,7 +38,9 @@ class AttachmentSchema(BaseModel):
     updated_by: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     file_url: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "asset_uuid", "twin_uuid", "organization_uuid", "created_at", "updated_at", "created_by", "updated_by", "metadata", "file_url"]
+    sha256: Optional[StrictStr] = None
+    size_bytes: Optional[StrictInt] = None
+    __properties: ClassVar[List[str]] = ["uuid", "asset_uuid", "twin_uuid", "organization_uuid", "created_at", "updated_at", "created_by", "updated_by", "metadata", "file_url", "sha256", "size_bytes"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -114,6 +116,16 @@ class AttachmentSchema(BaseModel):
         if self.file_url is None and "file_url" in self.model_fields_set:
             _dict['file_url'] = None
 
+        # set to None if sha256 (nullable) is None
+        # and model_fields_set contains the field
+        if self.sha256 is None and "sha256" in self.model_fields_set:
+            _dict['sha256'] = None
+
+        # set to None if size_bytes (nullable) is None
+        # and model_fields_set contains the field
+        if self.size_bytes is None and "size_bytes" in self.model_fields_set:
+            _dict['size_bytes'] = None
+
         return _dict
 
     @classmethod
@@ -135,7 +147,9 @@ class AttachmentSchema(BaseModel):
             "created_by": obj.get("created_by"),
             "updated_by": obj.get("updated_by"),
             "metadata": obj.get("metadata"),
-            "file_url": obj.get("file_url")
+            "file_url": obj.get("file_url"),
+            "sha256": obj.get("sha256"),
+            "size_bytes": obj.get("size_bytes")
         })
         return _obj
 

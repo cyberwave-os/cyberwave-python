@@ -37,6 +37,7 @@ class TwinSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     glb_file: Optional[StrictStr]
+    splat_file: Optional[StrictStr]
     urdf_file: Optional[StrictStr]
     position_x: Union[StrictFloat, StrictInt]
     position_y: Union[StrictFloat, StrictInt]
@@ -71,7 +72,7 @@ class TwinSchema(BaseModel):
     export_warnings: Optional[List[Dict[str, StrictStr]]] = None
     mqtt_command_schema: Optional[Dict[str, Any]] = None
     controllable_joint_names: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "universal_schema", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "universal_schema", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -121,6 +122,11 @@ class TwinSchema(BaseModel):
         # and model_fields_set contains the field
         if self.glb_file is None and "glb_file" in self.model_fields_set:
             _dict['glb_file'] = None
+
+        # set to None if splat_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.splat_file is None and "splat_file" in self.model_fields_set:
+            _dict['splat_file'] = None
 
         # set to None if urdf_file (nullable) is None
         # and model_fields_set contains the field
@@ -188,6 +194,7 @@ class TwinSchema(BaseModel):
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "glb_file": obj.get("glb_file"),
+            "splat_file": obj.get("splat_file"),
             "urdf_file": obj.get("urdf_file"),
             "position_x": obj.get("position_x"),
             "position_y": obj.get("position_y"),

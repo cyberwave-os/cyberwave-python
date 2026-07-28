@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.navigation_waypoint_action_schema import NavigationWaypointActionSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema
 from cyberwave.rest.models.relative_translation import RelativeTranslation
 from typing import Optional, Set
@@ -34,6 +35,7 @@ class TwinNavigationCommandSchema(BaseModel):
     rotation: Optional[List[Union[StrictFloat, StrictInt]]] = None
     yaw: Optional[Union[StrictFloat, StrictInt]] = None
     waypoints: Optional[List[NavigationWaypointSchema]] = None
+    actions: Optional[List[NavigationWaypointActionSchema]] = None
     relative_translation: Optional[RelativeTranslation] = None
     frame: Optional[StrictStr] = None
     controller_policy_uuid: Optional[StrictStr] = None
@@ -42,7 +44,8 @@ class TwinNavigationCommandSchema(BaseModel):
     source_type: Optional[StrictStr] = None
     constraints: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "yaw", "waypoints", "relative_translation", "frame", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata"]
+    skip_nav_anchor_transform: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "yaw", "waypoints", "actions", "relative_translation", "frame", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata", "skip_nav_anchor_transform"]
 
     @field_validator('command')
     def command_validate_enum(cls, value):
@@ -97,6 +100,13 @@ class TwinNavigationCommandSchema(BaseModel):
                 if _item_waypoints:
                     _items.append(_item_waypoints.to_dict())
             _dict['waypoints'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in actions (list)
+        _items = []
+        if self.actions:
+            for _item_actions in self.actions:
+                if _item_actions:
+                    _items.append(_item_actions.to_dict())
+            _dict['actions'] = _items
         # override the default output from pydantic by calling `to_dict()` of relative_translation
         if self.relative_translation:
             _dict['relative_translation'] = self.relative_translation.to_dict()
@@ -119,6 +129,11 @@ class TwinNavigationCommandSchema(BaseModel):
         # and model_fields_set contains the field
         if self.waypoints is None and "waypoints" in self.model_fields_set:
             _dict['waypoints'] = None
+
+        # set to None if actions (nullable) is None
+        # and model_fields_set contains the field
+        if self.actions is None and "actions" in self.model_fields_set:
+            _dict['actions'] = None
 
         # set to None if relative_translation (nullable) is None
         # and model_fields_set contains the field
@@ -177,6 +192,7 @@ class TwinNavigationCommandSchema(BaseModel):
             "rotation": obj.get("rotation"),
             "yaw": obj.get("yaw"),
             "waypoints": [NavigationWaypointSchema.from_dict(_item) for _item in obj["waypoints"]] if obj.get("waypoints") is not None else None,
+            "actions": [NavigationWaypointActionSchema.from_dict(_item) for _item in obj["actions"]] if obj.get("actions") is not None else None,
             "relative_translation": RelativeTranslation.from_dict(obj["relative_translation"]) if obj.get("relative_translation") is not None else None,
             "frame": obj.get("frame"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
@@ -184,7 +200,8 @@ class TwinNavigationCommandSchema(BaseModel):
             "environment_uuid": obj.get("environment_uuid"),
             "source_type": obj.get("source_type"),
             "constraints": obj.get("constraints"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "skip_nav_anchor_transform": obj.get("skip_nav_anchor_transform") if obj.get("skip_nav_anchor_transform") is not None else False
         })
         return _obj
 

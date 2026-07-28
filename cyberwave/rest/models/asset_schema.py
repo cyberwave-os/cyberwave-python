@@ -39,6 +39,7 @@ class AssetSchema(BaseModel):
     registry_id_alias: Optional[StrictStr] = None
     slug: Optional[StrictStr] = None
     glb_file: Optional[StrictStr] = None
+    splat_file: Optional[StrictStr] = None
     urdf_file: Optional[StrictStr] = None
     zip_file: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
@@ -54,7 +55,7 @@ class AssetSchema(BaseModel):
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -124,6 +125,11 @@ class AssetSchema(BaseModel):
         # and model_fields_set contains the field
         if self.glb_file is None and "glb_file" in self.model_fields_set:
             _dict['glb_file'] = None
+
+        # set to None if splat_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.splat_file is None and "splat_file" in self.model_fields_set:
+            _dict['splat_file'] = None
 
         # set to None if urdf_file (nullable) is None
         # and model_fields_set contains the field
@@ -198,6 +204,7 @@ class AssetSchema(BaseModel):
             "registry_id_alias": obj.get("registry_id_alias"),
             "slug": obj.get("slug"),
             "glb_file": obj.get("glb_file"),
+            "splat_file": obj.get("splat_file"),
             "urdf_file": obj.get("urdf_file"),
             "zip_file": obj.get("zip_file"),
             "workspace_uuid": obj.get("workspace_uuid"),

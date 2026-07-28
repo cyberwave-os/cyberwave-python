@@ -436,6 +436,7 @@ class DriverInterfaceRegistry:
                 or cmd.rate_hz is not None
                 or cmd.default_duration_s is not None
                 or cmd.args
+                or cmd.description
             ):
                 item: dict[str, Any] = {"name": cmd.name}
                 if cmd.continuous:
@@ -449,6 +450,8 @@ class DriverInterfaceRegistry:
                         {"name": a.name, "default": a.default, "unit": a.unit}
                         for a in cmd.args
                     ]
+                if cmd.description:
+                    item["description"] = cmd.description
                 commands_supported.append(item)
             else:
                 commands_supported.append(cmd.name)
@@ -498,12 +501,17 @@ def default_management_commands(
     on_stop: CallbackGroup | None = None,
     catalog_hidden: bool = False,
 ) -> None:
-    """Register SO101-style management commands on ``twin/command``.
+    """Register driver management commands on ``twin/command``.
 
-    ``catalog_hidden`` keeps the listeners functional but omits these management
-    commands from the exported catalog (``commands.supported``) — useful for
-    drivers (e.g. Piper) that should not advertise controller-changed /
-    teleoperate / remoteoperate / stop as robot capabilities.
+    ``controller-changed``, ``teleoperate``, and ``remoteoperate`` are internal
+    plumbing — never real robot capabilities — so they are always omitted from
+    the exported catalog (``commands.supported``) and never bound as
+    ``twin.commands.<name>()`` methods, regardless of ``catalog_hidden``. All
+    three still register and dispatch normally on the wire.
+
+    ``catalog_hidden`` only controls ``stop``'s catalog visibility — useful for
+    drivers that expose their own domain-specific stop/home commands and don't
+    want the generic ``stop`` advertised alongside them.
     """
     cmd_topic = TopicSpec(
         namespace="twin",
@@ -515,23 +523,21 @@ def default_management_commands(
     registry.add_listener(
         cmd_topic,
         on_controller_changed,
-        command=CommandArgs(
-            name="controller-changed", event_only=True, catalog_hidden=catalog_hidden
-        ),
+        command=CommandArgs(name="controller-changed", event_only=True, catalog_hidden=True),
         operation_modes=all_modes,
     )
     if on_teleoperate is not None:
         registry.add_listener(
             cmd_topic,
             on_teleoperate,
-            command=CommandArgs(name="teleoperate", catalog_hidden=catalog_hidden),
+            command=CommandArgs(name="teleoperate", catalog_hidden=True),
             operation_modes=all_modes,
         )
     if on_remoteoperate is not None:
         registry.add_listener(
             cmd_topic,
             on_remoteoperate,
-            command=CommandArgs(name="remoteoperate", catalog_hidden=catalog_hidden),
+            command=CommandArgs(name="remoteoperate", catalog_hidden=True),
             operation_modes=all_modes,
         )
     if on_stop is not None:

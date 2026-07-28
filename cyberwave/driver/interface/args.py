@@ -41,10 +41,20 @@ class TopicSpec:
     zenoh_channel: str | None = None
     wire_format: WireFormat = "json"
     watchdog_ms: int = 0
+    rate_hz: float | None = None
+    """Per-publisher outbound Cyber publish cap (Hz). Overrides manifest
+    ``mqtt_max_hz`` and the ``STREAM_PUBLISH_MAX_HZ`` class default. Applied by
+    the ``from_ros`` forwarder; None → inherit the resolved default. Must be
+    positive when set (0 does NOT mean "off" — it would disable throttling)."""
 
     def __post_init__(self) -> None:
         if not self.enable_mqtt and not self.enable_zenoh:
             raise ValueError("TopicSpec requires enable_mqtt and/or enable_zenoh")
+        if self.rate_hz is not None and self.rate_hz <= 0:
+            raise ValueError(
+                f"TopicSpec.rate_hz must be positive when set (got {self.rate_hz!r}); "
+                "omit it to inherit the resolved default cap"
+            )
         if self.enable_mqtt:
             has_ns_leaf = self.namespace is not None and self.leaf is not None
             has_slug = self.topic_slug is not None
@@ -140,6 +150,9 @@ class CommandArgs:
     # is not advertised as a robot capability. Used for internal management
     # commands (controller-changed, teleoperate, …).
     catalog_hidden: bool = False
+    # Human-readable summary of what the command does, surfaced to agents/MCP via
+    # the compiled catalog (``commands.specs[name].description``). Defaults to "".
+    description: str = ""
     args: tuple[CommandArg, ...] = ()
 
 

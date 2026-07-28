@@ -25,6 +25,10 @@ def test_command_args_defaults_to_empty_tuple() -> None:
     assert CommandArgs(name="grab").args == ()
 
 
+def test_command_args_description_defaults_to_empty_string() -> None:
+    assert CommandArgs(name="grab").description == ""
+
+
 from cyberwave.driver import CallbackGroup, TopicSpec
 from cyberwave.driver.interface.registry import DriverInterfaceRegistry
 
@@ -74,3 +78,28 @@ def test_command_args_reads_specs_args() -> None:
     args = command_args(bundle, "ee_move")
     assert [a["name"] for a in args] == ["forward", "frame"]
     assert command_args(bundle, "unknown") == []
+
+
+def test_cw_driver_emits_command_description() -> None:
+    reg = DriverInterfaceRegistry()
+    reg.add_listener(
+        _command_topic(),
+        CallbackGroup(callback=lambda payload: None),
+        command=CommandArgs(name="grip", description="Close the gripper."),
+    )
+    root = reg.to_cw_driver_dict(registry_id="agilex/piper", driver_family="ros_python")
+    supported = root["mqtt"]["commands"]["supported"]
+    entry = next(e for e in supported if isinstance(e, dict) and e["name"] == "grip")
+    assert entry["description"] == "Close the gripper."
+
+
+def test_cw_driver_omits_description_key_when_empty() -> None:
+    reg = DriverInterfaceRegistry()
+    reg.add_listener(
+        _command_topic(),
+        CallbackGroup(callback=lambda payload: None),
+        command=CommandArgs(name="stop"),
+    )
+    root = reg.to_cw_driver_dict(registry_id="agilex/piper", driver_family="ros_python")
+    supported = root["mqtt"]["commands"]["supported"]
+    assert "stop" in supported

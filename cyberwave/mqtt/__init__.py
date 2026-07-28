@@ -29,6 +29,26 @@ SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
 # an explicit ``subscriber_key=None`` (remove only the default slot).
 _UNSET = object()
 
+# ---------------------------------------------------------------------------
+# Recording-boundary marker for ``telemetry_end`` / ``telemetry_start``
+#
+# ``telemetry_end`` is overloaded. Its original meaning is "the publisher that
+# owns this twin's telemetry session is going away", and consumers act on it
+# accordingly — the media-service SFU treats it exactly like a DTLS close or
+# ICE disconnect and drops the twin's whole mediasoup room (producers,
+# consumers, router).
+#
+# ``publish_telemetry_cut`` reuses the same topic for a completely different
+# intent: bounding a *recording window* inside a session it does not own, while
+# the WebRTC peer stays connected. These fields let a consumer tell the two
+# apart. Consumers MUST key on ``RECORDING_BOUNDARY_KEY``; ``sender`` and
+# ``source_subtype`` are free-form attribution for logs and must never drive
+# behavior.
+# ---------------------------------------------------------------------------
+RECORDING_BOUNDARY_KEY = "recording_boundary"
+TELEMETRY_CUT_SENDER = "workflow"
+TELEMETRY_CUT_SOURCE_SUBTYPE = "node_recorder"
+
 
 def _replace_non_finite(value: Any) -> Any:
     """Recursively replace non-finite floats (``NaN`` / ``inf``) with ``None``.
@@ -800,6 +820,77 @@ class CyberwaveMQTTClient:
         if stream_instance_id:
             message["stream_instance_id"] = stream_instance_id
         self.publish(topic, message)
+
+    def publish_telemetry_cut(
+        self,
+        twin_uuid: str,
+        source_type: Optional[str] = None,
+        sender: str = TELEMETRY_CUT_SENDER,
+        source_subtype: str = TELEMETRY_CUT_SOURCE_SUBTYPE,
+    ) -> None:
+        """Publish a recording-session *hard cut* on the twin's telemetry topic.
+
+        Emits a ``telemetry_end`` immediately followed by a ``telemetry_start``
+        (same wall-clock, the start nudged +1ms so it sorts after the end),
+        both unconditionally — the SDK's per-client telemetry-start tracking is
+        intentionally bypassed.
+
+        This is for a publisher that does NOT own the twin's telemetry session
+        (e.g. a workflow recorder node cutting a bounded window into a stream a
+        driver is continuously producing):
+
+        * The ``telemetry_end`` closes the currently-open recording window
+          precisely. A lone ``telemetry_start`` would instead be dropped by the
+          backend's duplicate-start grace when it lands within that window, so
+          no cut would be recorded for a short window.
+        * The trailing ``telemetry_start`` reopens the session immediately so
+          the owning publisher's ongoing samples keep being recorded — never an
+          end without a start after it.
+
+        Idempotent-per-client helpers (``publish_telemetry_start`` /
+        ``publish_telemetry_end``) are unsuitable here: this client never sent
+        the owning ``telemetry_start``, so ``publish_telemetry_end`` would no-op.
+
+        Both messages carry ``recording_boundary: True`` plus ``sender`` /
+        ``source_subtype`` attribution, so a consumer can tell this window cut
+        apart from a genuine end of telemetry. This matters because the peer
+        here is still live: without the marker, media-service's
+        ``handle_telemetry_message`` would treat the ``telemetry_end`` as a
+        disconnect and drop the twin's producers and consumers, killing the very
+        stream being recorded. Recording for that flow is controlled by the
+        ``webrtc-command`` ``start_recording`` / ``stop_recording`` pair
+        instead. See ``RECORDING_BOUNDARY_KEY``.
+        """
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+        now = time.time()
+        marker: Dict[str, Any] = {
+            "sender": sender,
+            "source_subtype": source_subtype,
+            RECORDING_BOUNDARY_KEY: True,
+        }
+        end_message: Dict[str, Any] = {
+            "type": "telemetry_end",
+            "timestamp": now,
+            **marker,
+        }
+        start_message: Dict[str, Any] = {
+            "type": "telemetry_start",
+            "timestamp": now + 0.001,
+            **marker,
+        }
+        if source_type:
+            end_message["source_type"] = source_type
+            start_message["source_type"] = source_type
+        logger.info(
+            "Publishing telemetry cut (end+start) for twin %s "
+            "(source_type=%s, sender=%s, source_subtype=%s)",
+            twin_uuid,
+            source_type,
+            sender,
+            source_subtype,
+        )
+        self.publish(topic, end_message)
+        self.publish(topic, start_message)
 
     def publish_connected(self, twin_uuid: str):
         """Publish connected message via MQTT.

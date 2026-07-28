@@ -10,7 +10,7 @@ from typing import Callable, Optional, Dict, Any
 
 from .config import CyberwaveConfig, DEFAULT_MQTT_PORT
 from .mqtt import CyberwaveMQTTClient as BaseMQTTClient
-from .mqtt import _UNSET
+from .mqtt import TELEMETRY_CUT_SENDER, TELEMETRY_CUT_SOURCE_SUBTYPE, _UNSET
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +252,29 @@ class CyberwaveMQTTClient:
             sensor=sensor,
             stream_source=stream_source,
             stream_instance_id=stream_instance_id,
+        )
+
+    def publish_telemetry_cut(
+        self,
+        twin_uuid: str,
+        source_type: Optional[str] = None,
+        sender: str = TELEMETRY_CUT_SENDER,
+        source_subtype: str = TELEMETRY_CUT_SOURCE_SUBTYPE,
+    ) -> None:
+        """Publish a recording-session hard cut (telemetry_end + telemetry_start).
+
+        For a publisher that does not own the twin's telemetry session (e.g. a
+        workflow recorder node bounding a window in a driver's continuous
+        stream). Both messages are marked ``recording_boundary: True`` so
+        consumers do not mistake the cut for a peer disconnect and tear down a
+        live WebRTC stream. See ``MQTTClient.publish_telemetry_cut`` for the
+        full rationale.
+        """
+        return self._client.publish_telemetry_cut(
+            twin_uuid,
+            source_type=source_type,
+            sender=sender,
+            source_subtype=source_subtype,
         )
 
     def update_joint_state(

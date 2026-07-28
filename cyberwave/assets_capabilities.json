@@ -568,23 +568,23 @@
           "parent_link": "radar",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
-            "update_rate": 10,
-            "fov_horizontal": 360,
-            "fov_vertical": 90,
+            "update_rate": 10.0,
+            "fov_horizontal": 360.0,
+            "fov_vertical": 90.0,
             "min_range": 0.05,
-            "max_range": 30,
+            "max_range": 30.0,
             "points_per_second": 21600,
             "velocity_sensing": true
           }
@@ -598,9 +598,9 @@
           "parent_link": "front_camera",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
               "w": 0.5,
@@ -612,11 +612,8 @@
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 88.5072,
-            "fovy": 88.5072,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 88.5072
           }
         }
       ]
@@ -795,7 +792,7 @@
           "name": "head_camera",
           "type": "rgb",
           "model": "Intel RealSense D455",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "H2",
           "offset": {
             "position": {
@@ -813,11 +810,8 @@
           "parameters": {
             "width": 1280,
             "height": 800,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 58.0
           }
         },
         {
@@ -825,7 +819,7 @@
           "name": "head_depth_camera",
           "type": "depth",
           "model": "Intel RealSense D455",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "H2",
           "offset": {
             "position": {
@@ -843,13 +837,10 @@
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.4,
-            "max_depth": 20
+            "max_depth": 20.0
           }
         }
       ]
@@ -1059,13 +1050,13 @@
           "parent_link": "base_link",
           "offset": {
             "position": {
-              "x": 0,
+              "x": 0.0,
               "y": -0.03,
               "z": 0.0225
             },
             "rotation": {
-              "w": 0,
-              "x": 0,
+              "w": 0.0,
+              "x": 0.0,
               "y": 0.8724633834801769,
               "z": 0.48867949055216325
             }
@@ -1073,11 +1064,8 @@
           "parameters": {
             "width": 640,
             "height": 480,
-            "update_rate": 30,
-            "fov_degrees": 41.41,
-            "fovy": 41.41,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 41.41
           }
         }
       ]
@@ -1967,18 +1955,15 @@
             "rotation": {
               "w": 0.43589807987318724,
               "x": -0.8999960355261952,
-              "y": 0,
-              "z": 0
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1920,
             "height": 1080,
-            "update_rate": 30,
-            "fov_degrees": 42.5,
-            "fovy": 42.5,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 42.5
           }
         },
         {
@@ -1986,7 +1971,7 @@
           "name": "head_depth_camera",
           "type": "depth",
           "model": "Intel RealSense D435i",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "d435_left_imager_link",
           "offset": {
             "position": {
@@ -1997,20 +1982,17 @@
             "rotation": {
               "w": 0.43589807987318724,
               "x": -0.8999960355261952,
-              "y": 0,
-              "z": 0
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.2,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         }
       ]
@@ -2044,13 +2026,13 @@
           "name": "head_camera",
           "type": "depth",
           "model": "Intel RealSense",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "camera_link",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
               "w": 0.5,
@@ -2062,13 +2044,10 @@
           "parameters": {
             "width": 640,
             "height": 480,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.1,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         },
         {
@@ -2076,11 +2055,11 @@
           "name": "chest_camera",
           "type": "rgb",
           "model": "Intel RealSense",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "chest_camera_link",
           "offset": {
             "position": {
-              "x": 0,
+              "x": 0.0,
               "y": -0.005,
               "z": -0.005
             },
@@ -2094,11 +2073,8 @@
           "parameters": {
             "width": 640,
             "height": 480,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 58.0
           }
         }
       ]
@@ -2252,13 +2228,13 @@
           "name": "Color camera",
           "type": "rgb",
           "model": "Intel RealSense R200",
-          "fov_degrees": 43,
+          "fov_degrees": 43.0,
           "parent_link": "__namespace_camera_rgb_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
               "w": 0.5,
@@ -2270,11 +2246,8 @@
           "parameters": {
             "width": 1920,
             "height": 1080,
-            "update_rate": 30,
-            "fov_degrees": 43,
-            "fovy": 43,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 43.0
           }
         },
         {
@@ -2282,13 +2255,13 @@
           "name": "Depth Camera",
           "type": "depth",
           "model": "Intel RealSense R200",
-          "fov_degrees": 46,
+          "fov_degrees": 46.0,
           "parent_link": "__namespace_camera_depth_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
               "w": 0.5,
@@ -2300,13 +2273,10 @@
           "parameters": {
             "width": 640,
             "height": 480,
-            "update_rate": 30,
-            "fov_degrees": 46,
-            "fovy": 46,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 46.0,
             "min_depth": 0.5,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         }
       ]
@@ -2481,9 +2451,14 @@
       "has_legs": true,
       "has_wheels": false,
       "locomotion_mode": "legged",
+      "locomotion_config": {
+        "dof": 12,
+        "max_linear_velocity": 3.0,
+        "max_angular_velocity": 3.0
+      },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0,
+      "payload_capacity_kg": 0.0,
       "power_source": "battery",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "fully_autonomous",
@@ -2496,13 +2471,13 @@
           "name": "head_front_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "head_camera_1_link",
           "offset": {
             "position": {
-              "x": 0,
+              "x": 0.0,
               "y": 0.005,
-              "z": 0
+              "z": 0.0
             },
             "rotation": {
               "w": 0.5,
@@ -2514,13 +2489,10 @@
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.2,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         },
         {
@@ -2528,31 +2500,28 @@
           "name": "head_chin_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "head_camera_2_link",
           "offset": {
             "position": {
               "x": -0.004,
               "y": 0.004,
-              "z": 0
+              "z": 0.0
             },
             "rotation": {
               "w": 0.7071,
-              "x": 0,
-              "y": 0,
+              "x": 0.0,
+              "y": 0.0,
               "z": -0.7071
             }
           },
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.2,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         },
         {
@@ -2560,31 +2529,28 @@
           "name": "left_side_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "left_side_camera_link",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
               "w": 0.7071,
               "x": 0.7071,
-              "y": 0,
-              "z": 0
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.2,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         },
         {
@@ -2592,13 +2558,13 @@
           "name": "right_side_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "right_side_camera_link",
           "offset": {
             "position": {
               "x": -0.01,
-              "y": 0,
-              "z": 0
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
               "w": 0.00967,
@@ -2610,13 +2576,10 @@
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.2,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         },
         {
@@ -2624,12 +2587,12 @@
           "name": "tail_depth",
           "type": "depth",
           "model": "Intel RealSense D430",
-          "fov_degrees": 58,
+          "fov_degrees": 58.0,
           "parent_link": "tail_camera_link",
           "offset": {
             "position": {
               "x": -0.005,
-              "y": 0,
+              "y": 0.0,
               "z": -0.004
             },
             "rotation": {
@@ -2642,13 +2605,10 @@
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 58,
-            "fovy": 58,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 58.0,
             "min_depth": 0.2,
-            "max_depth": 10
+            "max_depth": 10.0
           }
         }
       ]
@@ -3002,7 +2962,7 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 60.0,
+          "fov_degrees": 65.0,
           "parent_link": "realsense_d455_link",
           "offset": {
             "position": {
@@ -3021,7 +2981,7 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fovy": 60.0
+            "fovy": 65.0
           }
         },
         {
@@ -3029,7 +2989,7 @@
           "name": "depth_camera",
           "type": "depth",
           "model": null,
-          "fov_degrees": 60.0,
+          "fov_degrees": 57.0,
           "parent_link": "realsense_d455_link",
           "offset": {
             "position": {
@@ -3048,7 +3008,7 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 60.0,
+            "fovy": 57.0,
             "min_depth": 0.4,
             "max_depth": 20.0,
             "color_mode": "grayscale"
@@ -3186,9 +3146,14 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0,
+      "payload_capacity_kg": 0.0,
       "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
@@ -3201,29 +3166,26 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 41,
+          "fov_degrees": 41.0,
           "parent_link": "pi_camerav3_link",
           "offset": {
             "position": {
-              "x": 0,
-              "y": -3.100013732910143e-05,
-              "z": 0.009579999828338626
+              "x": 0.0,
+              "y": 0.0,
+              "z": -0.005
             },
             "rotation": {
-              "w": 0,
-              "x": -1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": -1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1920,
             "height": 1080,
-            "update_rate": 50,
-            "fov_degrees": 41,
-            "fovy": 41,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 50.0,
+            "fovy": 41.0
           }
         }
       ]
@@ -3242,11 +3204,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -3262,13 +3219,13 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 58.7155,
+          "fov_degrees": 58.72,
           "parent_link": "generic_camera_link",
           "offset": {
             "position": {
-              "x": 0.03,
+              "x": 0.034,
               "y": 0.0,
-              "z": 0.01
+              "z": 0.018
             },
             "rotation": {
               "w": -0.5,
@@ -3281,7 +3238,7 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.7155
+            "fovy": 58.72
           }
         }
       ]
@@ -3300,11 +3257,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
@@ -3320,13 +3272,13 @@
           "name": "color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 58.7155,
+          "fov_degrees": 58.72,
           "parent_link": "generic_camera_link",
           "offset": {
             "position": {
-              "x": 0.03,
+              "x": 0.034,
               "y": 0.0,
-              "z": 0.01
+              "z": 0.018
             },
             "rotation": {
               "w": -0.5,
@@ -3339,7 +3291,7 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.7155
+            "fovy": 58.72
           }
         }
       ]
@@ -3767,12 +3719,12 @@
       },
       "can_grip": true,
       "manipulator_count": 1,
-      "payload_capacity_kg": 10,
+      "payload_capacity_kg": 0.0,
       "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
-      "maximum_frequency_hz": 0,
+      "maximum_frequency_hz": 30,
       "minimum_frequency_hz": 0,
       "sensors": []
     },
@@ -3790,28 +3742,33 @@
       "has_legs": false,
       "has_wheels": true,
       "locomotion_mode": "wheeled",
+      "locomotion_config": {
+        "dof": 2,
+        "max_linear_velocity": 0.35,
+        "max_angular_velocity": 2.0
+      },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0,
+      "payload_capacity_kg": 0.0,
       "power_source": "battery",
-      "power_capacity_wh": 67,
+      "power_capacity_wh": 67.0,
       "navigation_autonomy_level": "semi_autonomous",
       "navigation_obstacle_avoidance": true,
       "maximum_frequency_hz": 10,
       "minimum_frequency_hz": 0,
       "sensors": [
         {
-          "id": "default",
-          "name": "default",
+          "id": "front_camera",
+          "name": "front_camera",
           "type": "rgb",
           "model": null,
           "fov_degrees": 153.5398,
-          "parent_link": "base_link",
+          "parent_link": "camera_link",
           "offset": {
             "position": {
-              "x": 0.059,
-              "y": -0.0023,
-              "z": 0.2023049285888672
+              "x": -0.0583,
+              "y": 0.0,
+              "z": -0.01
             },
             "rotation": {
               "w": 0.5,
@@ -3823,11 +3780,8 @@
           "parameters": {
             "width": 640,
             "height": 480,
-            "update_rate": 15,
-            "fov_degrees": 153.5398,
-            "fovy": 153.5398,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 15.0,
+            "fovy": 153.5398
           }
         }
       ]
@@ -4004,7 +3958,7 @@
     "registry_id": "cyberwave/warehouse",
     "registry_id_alias": null
   },
-  "up/mir-250": {
+  "mir/mir-250": {
     "uuid": "7280ed31-308c-4312-b90d-0b9bbce6b127",
     "name": "MiR250",
     "capabilities": {
@@ -4078,7 +4032,7 @@
         }
       ]
     },
-    "registry_id": "up/mir-250",
+    "registry_id": "mir/mir-250",
     "registry_id_alias": null
   },
   "agile-x-robotics/tracer-20": {
@@ -4117,14 +4071,19 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": true,
       "manipulator_count": 2,
-      "payload_capacity_kg": 4,
+      "payload_capacity_kg": 4.1,
       "power_source": "tethered",
       "power_capacity_wh": -1,
-      "navigation_autonomy_level": null,
+      "navigation_autonomy_level": "none",
       "navigation_obstacle_avoidance": false,
-      "maximum_frequency_hz": 30,
+      "maximum_frequency_hz": 100,
       "minimum_frequency_hz": 0,
       "sensors": []
     },
@@ -4168,7 +4127,7 @@
             "position": {
               "x": 0.03,
               "y": 0.0,
-              "z": 0.01
+              "z": 0.017
             },
             "rotation": {
               "w": -0.5,
@@ -4793,13 +4752,13 @@
           "name": "head_camera",
           "type": "rgb",
           "model": "Wide-angle RGB",
-          "fov_degrees": 70,
+          "fov_degrees": 70.0,
           "parent_link": "camera",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
               "w": 0.5,
@@ -4811,11 +4770,8 @@
           "parameters": {
             "width": 640,
             "height": 480,
-            "update_rate": 30,
-            "fov_degrees": 70,
-            "fovy": 70,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 70.0
           }
         }
       ]
@@ -5267,9 +5223,14 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": true,
       "manipulator_count": 1,
-      "payload_capacity_kg": 4,
+      "payload_capacity_kg": 4.0,
       "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
@@ -5282,29 +5243,26 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69,
+          "fov_degrees": 69.0,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1920,
             "height": 1080,
-            "update_rate": 30,
-            "fov_degrees": 69,
-            "fovy": 69,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 69.0
           }
         },
         {
@@ -5312,31 +5270,29 @@
           "name": "wrist_depth_camera",
           "type": "depth",
           "model": null,
-          "fov_degrees": 65,
+          "fov_degrees": 40.0,
           "parent_link": "camera_depth_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 65,
-            "fovy": 65,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 40.0,
             "min_depth": 0.2,
-            "max_depth": 6
+            "max_depth": 6.0,
+            "color_mode": "grayscale"
           }
         }
       ]
@@ -5355,9 +5311,14 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": false,
       "manipulator_count": 1,
-      "payload_capacity_kg": 4,
+      "payload_capacity_kg": 4.0,
       "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
@@ -5370,29 +5331,26 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69,
+          "fov_degrees": 69.0,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1920,
             "height": 1080,
-            "update_rate": 30,
-            "fov_degrees": 69,
-            "fovy": 69,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 69.0
           }
         },
         {
@@ -5400,31 +5358,29 @@
           "name": "wrist_depth_camera",
           "type": "depth",
           "model": null,
-          "fov_degrees": 65,
+          "fov_degrees": 40.0,
           "parent_link": "camera_depth_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 65,
-            "fovy": 65,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 40.0,
             "min_depth": 0.2,
-            "max_depth": 6
+            "max_depth": 6.0,
+            "color_mode": "grayscale"
           }
         }
       ]
@@ -5443,9 +5399,14 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": false,
       "manipulator_count": 1,
-      "payload_capacity_kg": 4,
+      "payload_capacity_kg": 4.0,
       "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
@@ -5458,29 +5419,26 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69,
+          "fov_degrees": 69.0,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1920,
             "height": 1080,
-            "update_rate": 30,
-            "fov_degrees": 69,
-            "fovy": 69,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 69.0
           }
         },
         {
@@ -5488,31 +5446,29 @@
           "name": "wrist_depth_camera",
           "type": "depth",
           "model": null,
-          "fov_degrees": 65,
+          "fov_degrees": 40.0,
           "parent_link": "camera_depth_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 65,
-            "fovy": 65,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 40.0,
             "min_depth": 0.2,
-            "max_depth": 6
+            "max_depth": 6.0,
+            "color_mode": "grayscale"
           }
         }
       ]
@@ -5531,9 +5487,14 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": true,
       "manipulator_count": 1,
-      "payload_capacity_kg": 4,
+      "payload_capacity_kg": 4.0,
       "power_source": "tethered",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "none",
@@ -5546,29 +5507,26 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69,
+          "fov_degrees": 69.0,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1920,
             "height": 1080,
-            "update_rate": 30,
-            "fov_degrees": 69,
-            "fovy": 69,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "update_rate": 30.0,
+            "fovy": 69.0
           }
         },
         {
@@ -5576,31 +5534,29 @@
           "name": "wrist_depth_camera",
           "type": "depth",
           "model": null,
-          "fov_degrees": 65,
+          "fov_degrees": 40.0,
           "parent_link": "camera_depth_frame",
           "offset": {
             "position": {
-              "x": 5.812467261931779e-16,
-              "y": 6.48325114805867e-05,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.01
             },
             "rotation": {
-              "w": 0,
-              "x": 1,
-              "y": 0,
-              "z": 0
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
             "width": 1280,
             "height": 720,
-            "update_rate": 30,
-            "fov_degrees": 65,
-            "fovy": 65,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "update_rate": 30.0,
+            "fovy": 40.0,
             "min_depth": 0.2,
-            "max_depth": 6
+            "max_depth": 6.0,
+            "color_mode": "grayscale"
           }
         }
       ]
@@ -5759,6 +5715,439 @@
     "name": "Doosan A0509S",
     "capabilities": {},
     "registry_id": "cyberwave/doosan-a0509s-4",
+    "registry_id_alias": null
+  },
+  "modalai/starling-max": {
+    "uuid": "a6ccf9fb-ceaf-4084-87f6-f8e9f5c8d5b7",
+    "name": "ModalAI Starling 2 Max",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "hires_color_front",
+          "name": "hires_color_front",
+          "type": "rgb",
+          "model": "imx412",
+          "fov_degrees": 79.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": -0.32,
+              "z": 0.041
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 0.0,
+              "y": 0.707,
+              "z": 0.707
+            }
+          },
+          "parameters": {
+            "width": 4056,
+            "height": 3040,
+            "update_rate": 30.0,
+            "fov_degrees": 79.0
+          }
+        },
+        {
+          "id": "hires_color_bottom",
+          "name": "hires_color_bottom",
+          "type": "rgb",
+          "model": "imx412",
+          "fov_degrees": 79.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0.0092,
+              "y": 0.28,
+              "z": -0.01
+            },
+            "rotation": {
+              "w": -1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 4056,
+            "height": 3040,
+            "update_rate": 30.0,
+            "fov_degrees": 79.0
+          }
+        },
+        {
+          "id": "tracking_color_front",
+          "name": "tracking_color_front",
+          "type": "rgb",
+          "model": "ar0144",
+          "fov_degrees": 150.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -1e-05,
+              "y": -0.32,
+              "z": 0.128
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 0.0,
+              "y": 0.707,
+              "z": 0.707
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 800,
+            "update_rate": 30.0,
+            "fov_degrees": 150.0
+          }
+        },
+        {
+          "id": "thermal_lepton",
+          "name": "thermal_lepton",
+          "type": "rgb",
+          "model": "flir_lepton",
+          "fov_degrees": 57.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -1e-05,
+              "y": 0.23,
+              "z": -0.02
+            },
+            "rotation": {
+              "w": -1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 160,
+            "height": 120,
+            "update_rate": 30.0,
+            "fov_degrees": 57.0
+          }
+        },
+        {
+          "id": "tracking_cv_bottom",
+          "name": "tracking_cv_bottom",
+          "type": "rgb",
+          "model": "ar0144",
+          "fov_degrees": 150.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -0.01,
+              "y": 0.28,
+              "z": -0.01
+            },
+            "rotation": {
+              "w": -1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 800,
+            "update_rate": 30.0,
+            "fov_degrees": 150.0
+          }
+        }
+      ]
+    },
+    "registry_id": "modalai/starling-max",
+    "registry_id_alias": "starling-max"
+  },
+  "starling-max": {
+    "uuid": "a6ccf9fb-ceaf-4084-87f6-f8e9f5c8d5b7",
+    "name": "ModalAI Starling 2 Max",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "hires_color_front",
+          "name": "hires_color_front",
+          "type": "rgb",
+          "model": "imx412",
+          "fov_degrees": 79.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": -0.32,
+              "z": 0.041
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 0.0,
+              "y": 0.707,
+              "z": 0.707
+            }
+          },
+          "parameters": {
+            "width": 4056,
+            "height": 3040,
+            "update_rate": 30.0,
+            "fov_degrees": 79.0
+          }
+        },
+        {
+          "id": "hires_color_bottom",
+          "name": "hires_color_bottom",
+          "type": "rgb",
+          "model": "imx412",
+          "fov_degrees": 79.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0.0092,
+              "y": 0.28,
+              "z": -0.01
+            },
+            "rotation": {
+              "w": -1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 4056,
+            "height": 3040,
+            "update_rate": 30.0,
+            "fov_degrees": 79.0
+          }
+        },
+        {
+          "id": "tracking_color_front",
+          "name": "tracking_color_front",
+          "type": "rgb",
+          "model": "ar0144",
+          "fov_degrees": 150.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -1e-05,
+              "y": -0.32,
+              "z": 0.128
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 0.0,
+              "y": 0.707,
+              "z": 0.707
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 800,
+            "update_rate": 30.0,
+            "fov_degrees": 150.0
+          }
+        },
+        {
+          "id": "thermal_lepton",
+          "name": "thermal_lepton",
+          "type": "rgb",
+          "model": "flir_lepton",
+          "fov_degrees": 57.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -1e-05,
+              "y": 0.23,
+              "z": -0.02
+            },
+            "rotation": {
+              "w": -1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 160,
+            "height": 120,
+            "update_rate": 30.0,
+            "fov_degrees": 57.0
+          }
+        },
+        {
+          "id": "tracking_cv_bottom",
+          "name": "tracking_cv_bottom",
+          "type": "rgb",
+          "model": "ar0144",
+          "fov_degrees": 150.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -0.01,
+              "y": 0.28,
+              "z": -0.01
+            },
+            "rotation": {
+              "w": -1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 800,
+            "update_rate": 30.0,
+            "fov_degrees": 150.0
+          }
+        }
+      ]
+    },
+    "registry_id": "modalai/starling-max",
+    "registry_id_alias": "starling-max"
+  },
+  "movishs-workspace/g1-cyberwave": {
+    "uuid": "822d95e5-a83b-4f3b-be38-61c46df51f33",
+    "name": "g1-cyberwave",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "movishs-workspace/g1-cyberwave",
+    "registry_id_alias": null
+  },
+  "coesia/mir250-coesia": {
+    "uuid": "44836d95-a29e-40a2-9f42-133d91a5f669",
+    "name": "MIR-250_Coesia2",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": true,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": true,
+      "locomotion_mode": "wheeled",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 250,
+      "power_source": "battery",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "front_laser_link",
+          "name": "front_laser_link",
+          "type": "lidar_3d",
+          "model": null,
+          "fov_degrees": 60,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "update_rate": 10,
+            "fov_degrees": 60,
+            "fov_horizontal": 360,
+            "fov_vertical": 30,
+            "min_range": 0.1,
+            "max_range": 100,
+            "points_per_second": 10000
+          }
+        },
+        {
+          "id": "back_laser_link",
+          "name": "back_laser_link",
+          "type": "lidar_3d",
+          "model": null,
+          "fov_degrees": 60,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "update_rate": 10,
+            "fov_degrees": 60,
+            "fov_horizontal": 360,
+            "fov_vertical": 30,
+            "min_range": 0.1,
+            "max_range": 100,
+            "points_per_second": 10000
+          }
+        }
+      ]
+    },
+    "registry_id": "coesia/mir250-coesia",
     "registry_id_alias": null
   }
 }

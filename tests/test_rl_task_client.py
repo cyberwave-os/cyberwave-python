@@ -954,6 +954,36 @@ def test_make_action_term_only_sets_provided_optional_fields() -> None:
     assert "baseline_delta" not in term
 
 
+def test_make_action_term_custom_allows_omitting_joints() -> None:
+    """Custom actions don't select joints — the user-owned ActionTermCfg
+    class/factory defines its own joint targeting — so ``target_names_expr``
+    is optional and defaults to ``[]``."""
+
+    term = make_action_term(
+        "arm_control",
+        action_type="custom",
+        entity="robot",
+        module="smoothed_blocking",
+        symbol="SmoothedBlockingDeltaPositionActionCfg",
+    )
+    assert term["type"] == "custom"
+    assert term["target_names_expr"] == []
+    assert term["module"] == "smoothed_blocking"
+    assert term["symbol"] == "SmoothedBlockingDeltaPositionActionCfg"
+    assert term["kind"] == "class"
+
+
+def test_make_action_term_typed_requires_joints() -> None:
+    """Every non-custom action type still needs at least one joint."""
+
+    with pytest.raises(ValueError, match="target_names_expr"):
+        make_action_term(
+            "joint_pos",
+            action_type="position",
+            entity="robot",
+        )
+
+
 def test_make_action_term_accepts_per_joint_scale_and_offset() -> None:
     """Per-joint maps round-trip into the persisted shape so users can
     author per-joint values from setup scripts."""

@@ -13,6 +13,9 @@ from .manifest import (
     node_manifest_to_dict,
     resolve_node_manifest,
 )
+from .entrypoint import run_driver_main, stub_rclpy_for_manifest_export
+from .joint_feedback import Ros2JointFeedbackMixin
+from .joint_names import JointNameMap
 from .message_payload import (
     joint_positions_from_transport_payload,
     ros_joint_state_to_transport_payload,
@@ -23,6 +26,8 @@ from .topic_spec import Ros2TopicSpec
 
 __all__ = [
     "BaseROS2Driver",
+    "JointNameMap",
+    "Ros2JointFeedbackMixin",
     "Ros2TopicSpec",
     "RosTopicDiscoveryError",
     "resolve_ros_message_class",
@@ -42,6 +47,8 @@ __all__ = [
     "merge_combined_driver_manifest",
     "node_manifest_to_dict",
     "resolve_node_manifest",
+    "run_driver_main",
+    "stub_rclpy_for_manifest_export",
 ]
 
 

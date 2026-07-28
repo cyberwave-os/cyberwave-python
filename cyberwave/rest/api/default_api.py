@@ -107,6 +107,7 @@ from cyberwave.rest.models.environment_snapshot_schema import EnvironmentSnapsho
 from cyberwave.rest.models.environment_universal_schema_patch_schema import EnvironmentUniversalSchemaPatchSchema
 from cyberwave.rest.models.environment_visual_observation_schema import EnvironmentVisualObservationSchema
 from cyberwave.rest.models.environment_waypoint_bulk_create_schema import EnvironmentWaypointBulkCreateSchema
+from cyberwave.rest.models.environment_waypoint_position_update_schema import EnvironmentWaypointPositionUpdateSchema
 from cyberwave.rest.models.environment_waypoint_schema import EnvironmentWaypointSchema
 from cyberwave.rest.models.environment_workflow_replay_event_schema import EnvironmentWorkflowReplayEventSchema
 from cyberwave.rest.models.episode_create_schema import EpisodeCreateSchema
@@ -126,6 +127,7 @@ from cyberwave.rest.models.image_bytes import ImageBytes
 from cyberwave.rest.models.import_result_schema import ImportResultSchema
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema
+from cyberwave.rest.models.invitation_response_schema import InvitationResponseSchema
 from cyberwave.rest.models.joint_schema import JointSchema
 from cyberwave.rest.models.joint_state_schema import JointStateSchema
 from cyberwave.rest.models.joint_state_update_schema import JointStateUpdateSchema
@@ -224,6 +226,7 @@ from cyberwave.rest.models.recording_list_response import RecordingListResponse
 from cyberwave.rest.models.recording_sources_envelope_schema import RecordingSourcesEnvelopeSchema
 from cyberwave.rest.models.redeem_coupon_request_schema import RedeemCouponRequestSchema
 from cyberwave.rest.models.redeem_coupon_response_schema import RedeemCouponResponseSchema
+from cyberwave.rest.models.redeem_link_schema import RedeemLinkSchema
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse
 from cyberwave.rest.models.replay_timeline_events_response_schema import ReplayTimelineEventsResponseSchema
@@ -13427,6 +13430,295 @@ class DefaultApi:
 
 
     @validate_call
+    def src_app_api_assets_set_splat_from_attachment(
+        self,
+        uuid: StrictStr,
+        asset_glb_from_attachment_schema: AssetGLBFromAttachmentSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> AssetSchema:
+        """Set Splat From Attachment
+
+        Set an asset's Gaussian splat file from an existing attachment. Used by the large-upload path, where the splat is first uploaded as an attachment.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param asset_glb_from_attachment_schema: (required)
+        :type asset_glb_from_attachment_schema: AssetGLBFromAttachmentSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_assets_set_splat_from_attachment_serialize(
+            uuid=uuid,
+            asset_glb_from_attachment_schema=asset_glb_from_attachment_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AssetSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_assets_set_splat_from_attachment_with_http_info(
+        self,
+        uuid: StrictStr,
+        asset_glb_from_attachment_schema: AssetGLBFromAttachmentSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[AssetSchema]:
+        """Set Splat From Attachment
+
+        Set an asset's Gaussian splat file from an existing attachment. Used by the large-upload path, where the splat is first uploaded as an attachment.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param asset_glb_from_attachment_schema: (required)
+        :type asset_glb_from_attachment_schema: AssetGLBFromAttachmentSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_assets_set_splat_from_attachment_serialize(
+            uuid=uuid,
+            asset_glb_from_attachment_schema=asset_glb_from_attachment_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AssetSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_assets_set_splat_from_attachment_without_preload_content(
+        self,
+        uuid: StrictStr,
+        asset_glb_from_attachment_schema: AssetGLBFromAttachmentSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Set Splat From Attachment
+
+        Set an asset's Gaussian splat file from an existing attachment. Used by the large-upload path, where the splat is first uploaded as an attachment.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param asset_glb_from_attachment_schema: (required)
+        :type asset_glb_from_attachment_schema: AssetGLBFromAttachmentSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_assets_set_splat_from_attachment_serialize(
+            uuid=uuid,
+            asset_glb_from_attachment_schema=asset_glb_from_attachment_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AssetSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_assets_set_splat_from_attachment_serialize(
+        self,
+        uuid,
+        asset_glb_from_attachment_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if asset_glb_from_attachment_schema is not None:
+            _body_params = asset_glb_from_attachment_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/assets/{uuid}/splat-from-attachment',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
     def src_app_api_assets_sync_simulation_backends(
         self,
         uuid: StrictStr,
@@ -14552,6 +14844,295 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='POST',
             resource_path='/api/v1/assets/{uuid}/glb-file',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_assets_upload_splat(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> AssetSchema:
+        """Upload Splat
+
+        Upload a Gaussian splatting file (.ply/.splat/.spz/.ksplat) as the asset's primary visualization. Larger files use the attachment large-upload flow followed by ``/splat-from-attachment``.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytes
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_assets_upload_splat_serialize(
+            uuid=uuid,
+            file=file,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AssetSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_assets_upload_splat_with_http_info(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[AssetSchema]:
+        """Upload Splat
+
+        Upload a Gaussian splatting file (.ply/.splat/.spz/.ksplat) as the asset's primary visualization. Larger files use the attachment large-upload flow followed by ``/splat-from-attachment``.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytes
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_assets_upload_splat_serialize(
+            uuid=uuid,
+            file=file,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AssetSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_assets_upload_splat_without_preload_content(
+        self,
+        uuid: StrictStr,
+        file: Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Upload Splat
+
+        Upload a Gaussian splatting file (.ply/.splat/.spz/.ksplat) as the asset's primary visualization. Larger files use the attachment large-upload flow followed by ``/splat-from-attachment``.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param file: (required)
+        :type file: bytes
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_assets_upload_splat_serialize(
+            uuid=uuid,
+            file=file,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AssetSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_assets_upload_splat_serialize(
+        self,
+        uuid,
+        file,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        if file is not None:
+            _files['file'] = file
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'multipart/form-data'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/assets/{uuid}/splat-file',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -46907,10 +47488,10 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> Dict[str, object]:
+    ) -> InvitationResponseSchema:
         """Invite User To Environment
 
-        Invite a non-existent user to an environment
+        Invite a user (existing-but-out-of-org, or brand new) to an environment.
 
         :param uuid: (required)
         :type uuid: str
@@ -46945,7 +47526,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Dict[str, object]",
+            '200': "InvitationResponseSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -46974,10 +47555,10 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[Dict[str, object]]:
+    ) -> ApiResponse[InvitationResponseSchema]:
         """Invite User To Environment
 
-        Invite a non-existent user to an environment
+        Invite a user (existing-but-out-of-org, or brand new) to an environment.
 
         :param uuid: (required)
         :type uuid: str
@@ -47012,7 +47593,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Dict[str, object]",
+            '200': "InvitationResponseSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -47044,7 +47625,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Invite User To Environment
 
-        Invite a non-existent user to an environment
+        Invite a user (existing-but-out-of-org, or brand new) to an environment.
 
         :param uuid: (required)
         :type uuid: str
@@ -47079,7 +47660,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Dict[str, object]",
+            '200': "InvitationResponseSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -47137,6 +47718,295 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='POST',
             resource_path='/api/v1/environments/{uuid}/invite',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_environments_sharing_redeem_environment_link(
+        self,
+        uuid: StrictStr,
+        redeem_link_schema: RedeemLinkSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> Dict[str, object]:
+        """Redeem Environment Link
+
+        Redeem a share link: grant the current user the link's role on the env.  Requires authentication (global Ninja auth). \"Anyone with the link\" model (like Colab): any signed-in user holding a valid token may redeem it, regardless of their organization. Redemption creates an object-scoped ACL grant on this environment only (cascading to its twins/telemetry/streams via ``Twin.highest_role_for``) — the recipient is NOT added to the env's org/workspace. Feature-level access is still gated by the granted role. Returns 401 (unauthenticated) or 404 (bad/expired/revoked/mismatched token).
+
+        :param uuid: (required)
+        :type uuid: str
+        :param redeem_link_schema: (required)
+        :type redeem_link_schema: RedeemLinkSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_sharing_redeem_environment_link_serialize(
+            uuid=uuid,
+            redeem_link_schema=redeem_link_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, object]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_environments_sharing_redeem_environment_link_with_http_info(
+        self,
+        uuid: StrictStr,
+        redeem_link_schema: RedeemLinkSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[Dict[str, object]]:
+        """Redeem Environment Link
+
+        Redeem a share link: grant the current user the link's role on the env.  Requires authentication (global Ninja auth). \"Anyone with the link\" model (like Colab): any signed-in user holding a valid token may redeem it, regardless of their organization. Redemption creates an object-scoped ACL grant on this environment only (cascading to its twins/telemetry/streams via ``Twin.highest_role_for``) — the recipient is NOT added to the env's org/workspace. Feature-level access is still gated by the granted role. Returns 401 (unauthenticated) or 404 (bad/expired/revoked/mismatched token).
+
+        :param uuid: (required)
+        :type uuid: str
+        :param redeem_link_schema: (required)
+        :type redeem_link_schema: RedeemLinkSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_sharing_redeem_environment_link_serialize(
+            uuid=uuid,
+            redeem_link_schema=redeem_link_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, object]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_environments_sharing_redeem_environment_link_without_preload_content(
+        self,
+        uuid: StrictStr,
+        redeem_link_schema: RedeemLinkSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Redeem Environment Link
+
+        Redeem a share link: grant the current user the link's role on the env.  Requires authentication (global Ninja auth). \"Anyone with the link\" model (like Colab): any signed-in user holding a valid token may redeem it, regardless of their organization. Redemption creates an object-scoped ACL grant on this environment only (cascading to its twins/telemetry/streams via ``Twin.highest_role_for``) — the recipient is NOT added to the env's org/workspace. Feature-level access is still gated by the granted role. Returns 401 (unauthenticated) or 404 (bad/expired/revoked/mismatched token).
+
+        :param uuid: (required)
+        :type uuid: str
+        :param redeem_link_schema: (required)
+        :type redeem_link_schema: RedeemLinkSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_sharing_redeem_environment_link_serialize(
+            uuid=uuid,
+            redeem_link_schema=redeem_link_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "Dict[str, object]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_environments_sharing_redeem_environment_link_serialize(
+        self,
+        uuid,
+        redeem_link_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if redeem_link_schema is not None:
+            _body_params = redeem_link_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/environments/{uuid}/redeem-link',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -47708,7 +48578,7 @@ class DefaultApi:
     ) -> Dict[str, object]:
         """Share Environment With User
 
-        Share environment with a user by email
+        Share environment with a user by email.
 
         :param uuid: (required)
         :type uuid: str
@@ -47775,7 +48645,7 @@ class DefaultApi:
     ) -> ApiResponse[Dict[str, object]]:
         """Share Environment With User
 
-        Share environment with a user by email
+        Share environment with a user by email.
 
         :param uuid: (required)
         :type uuid: str
@@ -47842,7 +48712,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Share Environment With User
 
-        Share environment with a user by email
+        Share environment with a user by email.
 
         :param uuid: (required)
         :type uuid: str
@@ -52689,6 +53559,310 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='PATCH',
             resource_path='/api/v1/environments/{uuid}/procedural-primitives/{primitive_id}',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_environments_update_environment_waypoint_position(
+        self,
+        uuid: StrictStr,
+        waypoint_id: StrictStr,
+        environment_waypoint_position_update_schema: EnvironmentWaypointPositionUpdateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> EnvironmentWaypointSchema:
+        """Update Environment Waypoint Position
+
+        Update a single waypoint's stored position/rotation offset.  Deliberately narrower than the bulk replace path: only ``position``/ ``rotation`` can be changed here, never ``frame`` — re-anchoring what a waypoint is relative to is an authoring-time decision made in the environment editor, not a workflow action (see ``move_waypoint`` workflow node).
+
+        :param uuid: (required)
+        :type uuid: str
+        :param waypoint_id: (required)
+        :type waypoint_id: str
+        :param environment_waypoint_position_update_schema: (required)
+        :type environment_waypoint_position_update_schema: EnvironmentWaypointPositionUpdateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_update_environment_waypoint_position_serialize(
+            uuid=uuid,
+            waypoint_id=waypoint_id,
+            environment_waypoint_position_update_schema=environment_waypoint_position_update_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentWaypointSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_environments_update_environment_waypoint_position_with_http_info(
+        self,
+        uuid: StrictStr,
+        waypoint_id: StrictStr,
+        environment_waypoint_position_update_schema: EnvironmentWaypointPositionUpdateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[EnvironmentWaypointSchema]:
+        """Update Environment Waypoint Position
+
+        Update a single waypoint's stored position/rotation offset.  Deliberately narrower than the bulk replace path: only ``position``/ ``rotation`` can be changed here, never ``frame`` — re-anchoring what a waypoint is relative to is an authoring-time decision made in the environment editor, not a workflow action (see ``move_waypoint`` workflow node).
+
+        :param uuid: (required)
+        :type uuid: str
+        :param waypoint_id: (required)
+        :type waypoint_id: str
+        :param environment_waypoint_position_update_schema: (required)
+        :type environment_waypoint_position_update_schema: EnvironmentWaypointPositionUpdateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_update_environment_waypoint_position_serialize(
+            uuid=uuid,
+            waypoint_id=waypoint_id,
+            environment_waypoint_position_update_schema=environment_waypoint_position_update_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentWaypointSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_environments_update_environment_waypoint_position_without_preload_content(
+        self,
+        uuid: StrictStr,
+        waypoint_id: StrictStr,
+        environment_waypoint_position_update_schema: EnvironmentWaypointPositionUpdateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Update Environment Waypoint Position
+
+        Update a single waypoint's stored position/rotation offset.  Deliberately narrower than the bulk replace path: only ``position``/ ``rotation`` can be changed here, never ``frame`` — re-anchoring what a waypoint is relative to is an authoring-time decision made in the environment editor, not a workflow action (see ``move_waypoint`` workflow node).
+
+        :param uuid: (required)
+        :type uuid: str
+        :param waypoint_id: (required)
+        :type waypoint_id: str
+        :param environment_waypoint_position_update_schema: (required)
+        :type environment_waypoint_position_update_schema: EnvironmentWaypointPositionUpdateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_update_environment_waypoint_position_serialize(
+            uuid=uuid,
+            waypoint_id=waypoint_id,
+            environment_waypoint_position_update_schema=environment_waypoint_position_update_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentWaypointSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_environments_update_environment_waypoint_position_serialize(
+        self,
+        uuid,
+        waypoint_id,
+        environment_waypoint_position_update_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        if waypoint_id is not None:
+            _path_params['waypoint_id'] = waypoint_id
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if environment_waypoint_position_update_schema is not None:
+            _body_params = environment_waypoint_position_update_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='PATCH',
+            resource_path='/api/v1/environments/{uuid}/waypoints/{waypoint_id}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -83473,7 +84647,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> Dict[str, object]:
+    ) -> InvitationResponseSchema:
         """Invite User To Project
 
         Invite a non-existent user to a project.
@@ -83511,7 +84685,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Dict[str, object]",
+            '200': "InvitationResponseSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -83540,7 +84714,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[Dict[str, object]]:
+    ) -> ApiResponse[InvitationResponseSchema]:
         """Invite User To Project
 
         Invite a non-existent user to a project.
@@ -83578,7 +84752,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Dict[str, object]",
+            '200': "InvitationResponseSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -83645,7 +84819,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Dict[str, object]",
+            '200': "InvitationResponseSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -117698,7 +118872,7 @@ class DefaultApi:
     ) -> WorkflowConnectionSchema:
         """Create Workflow Connection
 
-        Create a new connection between nodes.
+        Create a new connection between nodes.  The editor can retry this request (double click, optimistic retry, slow network), so treat duplicate create payloads as idempotent and return the existing edge instead of surfacing a DB unique-constraint 500.
 
         :param uuid: (required)
         :type uuid: str
@@ -117769,7 +118943,7 @@ class DefaultApi:
     ) -> ApiResponse[WorkflowConnectionSchema]:
         """Create Workflow Connection
 
-        Create a new connection between nodes.
+        Create a new connection between nodes.  The editor can retry this request (double click, optimistic retry, slow network), so treat duplicate create payloads as idempotent and return the existing edge instead of surfacing a DB unique-constraint 500.
 
         :param uuid: (required)
         :type uuid: str
@@ -117840,7 +119014,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Create Workflow Connection
 
-        Create a new connection between nodes.
+        Create a new connection between nodes.  The editor can retry this request (double click, optimistic retry, slow network), so treat duplicate create payloads as idempotent and return the existing edge instead of surfacing a DB unique-constraint 500.
 
         :param uuid: (required)
         :type uuid: str

@@ -40,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 ListenerHandler = Callable[[dict[str, Any]], None | Awaitable[None]]
 
+# Auto-resolve delay (seconds) for the default controller_assigned/removed
+# twin notices — transient state-change notices self-clear instead of piling up.
+_CONTROLLER_ALERT_AUTO_RESOLVE_S = 5.0
+
 
 class InterfaceRegistryMixin:
     """Registry build, manifest export, and runtime MQTT + optional Zenoh wiring.
@@ -52,10 +56,11 @@ class InterfaceRegistryMixin:
     REGISTRY_ID: str = ""
     driver_family: str = "python"
     auto_register_interface: bool = True
-    TELEMETRY_PUBLISH_RATE_HZ: float = 2.0
-    # When True, the built-in management commands (controller-changed, teleoperate,
-    # remoteoperate, stop) stay functional but are omitted from the exported
-    # catalog. Drivers that don't expose them as robot capabilities opt in.
+    TELEMETRY_PUBLISH_RATE_HZ: float = 1.0
+    # controller-changed/teleoperate/remoteoperate stay functional but are always
+    # omitted from the exported catalog (internal plumbing, never robot
+    # capabilities). When True, this additionally hides the built-in `stop`
+    # management command for drivers that expose their own stop/home verbs.
     HIDE_DEFAULT_MANAGEMENT_COMMANDS_FROM_CATALOG: bool = False
 
     _interface: DriverInterfaceRegistry
@@ -294,12 +299,52 @@ class InterfaceRegistryMixin:
             await self.on_controller_assigned(ctype, policy_uuid)
 
     async def on_controller_assigned(self, ctype: str, policy_uuid: str | None) -> None:
-        """Called when a controller is assigned. Override to add driver-specific alerts."""
+        """Default reactivity: home the robot and post a standard twin notice.
+
+        Override to add hardware-specific steps (call ``super()`` to keep the
+        home + alert behavior).
+
+        Runs on the driver asyncio loop, so the ``request_home`` seam MUST be
+        non-blocking (queue the home for the next tick — as
+        ``JointCommandBufferMixin.request_home`` does — rather than doing
+        blocking device I/O here, which would stall the tick/monitor loops).
+        """
         logger.info("Controller assigned (type=%r, uuid=%r)", ctype, policy_uuid)
+        request_home = getattr(self, "request_home", None)
+        if callable(request_home):
+            request_home()
+        create_alert = getattr(self, "create_twin_alert", None)
+        if callable(create_alert):
+            create_alert(
+                "controller_assigned",
+                description=f"Controller assigned ({ctype}) — robot is now reactive to commands.",
+                alert_type="controller_assigned",
+                severity="info",
+                auto_resolve_after=_CONTROLLER_ALERT_AUTO_RESOLVE_S,
+            )
 
     async def on_controller_removed(self) -> None:
-        """Called when the controller is removed. Override to add driver-specific alerts."""
+        """Default reactivity: home the robot and post a standard twin notice.
+
+        Override to add hardware-specific steps (call ``super()`` to keep the
+        home + alert behavior).
+        """
         logger.info("Controller removed — awaiting new controller assignment")
+        request_home = getattr(self, "request_home", None)
+        if callable(request_home):
+            request_home()
+        create_alert = getattr(self, "create_twin_alert", None)
+        if callable(create_alert):
+            create_alert(
+                "controller_removed",
+                description=(
+                    "No controller assigned — robot will not react to commands "
+                    "until a controller policy is associated."
+                ),
+                alert_type="controller_removed",
+                severity="warning",
+                auto_resolve_after=_CONTROLLER_ALERT_AUTO_RESOLVE_S,
+            )
 
     async def _on_teleoperate_cmd(self, envelope: dict[str, Any]) -> None:
         if envelope.get("command") == "status":

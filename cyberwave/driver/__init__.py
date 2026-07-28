@@ -13,6 +13,27 @@ Install the ``cyberwave`` package from PyPI; import from ``cyberwave.driver`` or
 # transports/, sensors/, support/). Deep imports like ``cyberwave.driver.cloud.alerts``
 # also work, but ``from cyberwave.driver import X`` is the supported surface.
 from .base import BaseDriver
+from .control import (
+    ArmCapabilityMixin,
+    DualArmConfig,
+    DualArmMixin,
+    EECartesianPoseMixin,
+    EEPose,
+    HomePositionNotDefinedError,
+    JointCommand,
+    JointCommandBufferMixin,
+    JointController,
+    JointControllerConfig,
+    JointControllerMixin,
+    MotionRequest,
+    TrajectoryPlan,
+    TrajectoryWaypoint,
+    resolve_command_vector,
+    resolve_effort_vector,
+    trapezoidal_motion,
+)
+from .ros2.joint_names import JointNameMap
+from .kinematics import ArmKinematicsConfig, GripperConfig
 from .status import DriverLifecycleState
 from .cloud import (
     AlertCode,
@@ -69,7 +90,27 @@ from .transports import CommandContext, ZenohPublisherMixin, ZenohSubscriberMixi
 __all__ = [
     # Driver base
     "BaseDriver",
+    "ArmCapabilityMixin",
+    "EECartesianPoseMixin",
+    "EEPose",
+    "DualArmConfig",
+    "DualArmMixin",
+    "ArmKinematicsConfig",
+    "GripperConfig",
+    "JointCommandBufferMixin",
+    "HomePositionNotDefinedError",
+    "JointCommand",
+    "JointController",
+    "JointControllerConfig",
+    "JointControllerMixin",
+    "JointNameMap",
+    "MotionRequest",
+    "TrajectoryPlan",
+    "TrajectoryWaypoint",
+    "trapezoidal_motion",
     "DriverLifecycleState",
+    "resolve_command_vector",
+    "resolve_effort_vector",
     "DriverOperationMode",
     "InterfaceRegistryMixin",
     "DriverInterfaceRegistry",

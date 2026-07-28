@@ -1233,6 +1233,19 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             return self._data.get("capabilities", {})
         return {}
 
+    @property
+    def sensors(self) -> List[Dict[str, Any]]:
+        """Get the twin's sensor descriptors (``capabilities.sensors``).
+
+        Returns the list of sensor dicts declared in the twin's capabilities
+        (each typically has ``id``, ``type``, and modality-specific config such
+        as resolution/fps for cameras). Empty list when the twin has none.
+        This is the canonical accessor — prefer ``twin.sensors`` over reaching
+        into ``twin.capabilities["sensors"]`` directly.
+        """
+        sensors = self.capabilities.get("sensors", [])
+        return sensors if isinstance(sensors, list) else []
+
     def has_capability(self, capability: str) -> bool:
         """Check if the twin has a specific capability."""
         return bool(self.capabilities.get(capability, False))

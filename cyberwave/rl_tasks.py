@@ -1313,7 +1313,7 @@ def make_action_term(
     *,
     action_type: str,
     entity: str,
-    target_names_expr: list[str],
+    target_names_expr: list[str] | None = None,
     scale: float | dict[str, float] = 1.0,
     offset: str | float | dict[str, float] | None = None,
     use_default_offset: bool | None = None,
@@ -1338,12 +1338,14 @@ def make_action_term(
     ``module`` (dotted path to an uploaded task-local source file) +
     ``symbol`` (the ``ActionTermCfg`` subclass or factory) + optional
     ``kind`` (``"class"`` default, or ``"function"`` for a factory) +
-    optional ``kwargs`` forwarded to it. The standard fields
-    (``entity`` / ``target_names_expr`` / ``scale`` / ``baseline_delta``)
-    are still carried so the class can be built from the term dict.
-    The referenced code is uploaded separately with
-    :meth:`RLTaskClient.upsert_source_file`, then wired at runtime via
-    the ``custom_terms`` registry on the generated ``make_actions()``.
+    optional ``kwargs`` forwarded to it. A custom action class defines
+    its own joint targeting, so ``target_names_expr`` is **optional** for
+    ``custom`` terms (it defaults to ``[]``); ``scale`` / ``baseline_delta``
+    are still carried and forwarded to the class. The referenced code is
+    uploaded separately with :meth:`RLTaskClient.upsert_source_file`, then
+    wired at runtime via the ``custom_terms`` registry on the generated
+    ``make_actions()``. Every non-``custom`` action type requires a
+    non-empty ``target_names_expr``.
 
     Numeric parameters accept either a uniform scalar applied to
     every selected joint or a ``{joint_name: value}`` mapping for
@@ -1371,11 +1373,19 @@ def make_action_term(
     persisted payload stays minimal.
     """
 
+    # ``custom`` action terms don't select joints — the user-owned
+    # ``ActionTermCfg`` class/factory defines its own joint targeting — so
+    # ``target_names_expr`` is optional for them and defaults to ``[]``. Every
+    # built-in typed action still requires at least one joint.
+    if action_type != "custom" and not target_names_expr:
+        raise ValueError(
+            f"{action_type} action terms require a non-empty `target_names_expr`"
+        )
     term: dict[str, Any] = {
         "name": name,
         "type": action_type,
         "entity": entity,
-        "target_names_expr": list(target_names_expr),
+        "target_names_expr": list(target_names_expr or []),
     }
     coerced_scale = _coerce_action_scalar_or_map(scale, field_name="scale")
     if coerced_scale is not None:

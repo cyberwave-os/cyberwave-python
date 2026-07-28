@@ -71,6 +71,20 @@ class HostCpuTemperature:
 
 
 @dataclass(frozen=True)
+class HostPowerDraw:
+    """Instantaneous board power draw in milliwatts.
+
+    ``source`` names the sysfs strategy that produced the value (e.g.
+    ``"ina3221x:in_power0"`` for a Jetson VDD_IN rail vs
+    ``"hwmon:power1_input x2"`` for a summed multi-rail reading) so
+    operators can tell aggregate draw from a partial per-rail reading.
+    """
+
+    milliwatts: float
+    source: str
+
+
+@dataclass(frozen=True)
 class HostFacts:
     """Static host-level facts about the edge device.
 
@@ -304,6 +318,70 @@ def read_host_cpu_temperature(
 
     celsius, source = max(candidates, key=lambda item: item[0])
     return HostCpuTemperature(celsius=round(celsius, 1), source=source)
+
+
+# ---------------------------------------------------------------------------
+# Power draw
+# ---------------------------------------------------------------------------
+
+#: Ordered ``(glob, µW→mW divisor, source_label)`` strategies for
+#: :func:`read_host_power_draw`.  The Jetson ``ina3221x`` VDD_IN rail
+#: already reports milliwatts (divisor 1); the ``hwmon`` and
+#: ``power_supply`` fallbacks report microwatts.  Ordering picks
+#: total-board sensors over per-cell battery gauges.
+_POWER_PROBE_STRATEGIES: tuple[tuple[str, float, str], ...] = (
+    (
+        "bus/i2c/drivers/ina3221x/*/iio:device*/in_power0_input",
+        1.0,
+        "ina3221x:in_power0",
+    ),
+    ("class/hwmon/hwmon*/power1_input", 1000.0, "hwmon:power1_input"),
+    ("class/power_supply/BAT*/power_now", 1000.0, "power_supply:power_now"),
+)
+
+
+def read_host_power_draw(
+    power_sysfs_base: Optional[Path] = None,
+) -> Optional[HostPowerDraw]:
+    """Return the instantaneous board power draw, or ``None`` if unavailable.
+
+    Probes :data:`_POWER_PROBE_STRATEGIES` in order; the first strategy
+    with at least one readable value wins.  Within a strategy, matching
+    paths are summed so multi-rail hosts report total draw.
+    ``power_sysfs_base`` is a test seam (defaults to ``/sys``).
+    """
+    if platform.system() != "Linux":
+        return None
+
+    base = power_sysfs_base if power_sysfs_base is not None else Path("/sys")
+    if not base.exists():
+        return None
+
+    for glob_pattern, divisor, source_label in _POWER_PROBE_STRATEGIES:
+        matches = sorted(base.glob(glob_pattern))
+        if not matches:
+            continue
+
+        total_mw = 0.0
+        readable_count = 0
+        for path in matches:
+            try:
+                raw = path.read_text().strip()
+                value = float(raw) / divisor
+            except (OSError, ValueError):
+                continue
+            total_mw += value
+            readable_count += 1
+
+        if readable_count == 0:
+            continue
+
+        source = (
+            source_label if readable_count == 1 else f"{source_label} x{readable_count}"
+        )
+        return HostPowerDraw(milliwatts=round(total_mw, 1), source=source)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -600,9 +678,11 @@ __all__ = [
     "HostCpuTemperature",
     "HostFacts",
     "HostMemoryInfo",
+    "HostPowerDraw",
     "discover_cpu_thermal_zones",
     "read_host_cpu_temperature",
     "read_host_facts",
     "read_host_memory",
+    "read_host_power_draw",
     "read_thermal_zone_celsius",
 ]

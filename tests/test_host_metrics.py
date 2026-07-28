@@ -13,10 +13,12 @@ from cyberwave.edge.host_metrics import (
     HostCpuTemperature,
     HostFacts,
     HostMemoryInfo,
+    HostPowerDraw,
     discover_cpu_thermal_zones,
     read_host_cpu_temperature,
     read_host_facts,
     read_host_memory,
+    read_host_power_draw,
     read_thermal_zone_celsius,
 )
 
@@ -253,6 +255,108 @@ def test_constants() -> None:
 
 
 # ---------------------------------------------------------------------------
+# read_host_power_draw
+# ---------------------------------------------------------------------------
+
+
+def _write_sysfs_file(path: Path, contents: str) -> None:
+    """Materialise a fake sysfs file, creating parents as needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents)
+
+
+class TestReadHostPowerDraw:
+    def test_returns_none_on_non_linux(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        assert read_host_power_draw() is None
+
+    def test_returns_none_when_no_strategy_matches(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        assert read_host_power_draw(power_sysfs_base=tmp_path) is None
+        assert read_host_power_draw(power_sysfs_base=tmp_path / "missing") is None
+
+    def test_reads_jetson_ina3221x_in_milliwatts(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """INA3221 ``in_power0_input`` reports mW already (divisor=1)."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        _write_sysfs_file(
+            tmp_path / "bus/i2c/drivers/ina3221x/1-0040/iio:device0/in_power0_input",
+            "8500",
+        )
+        result = read_host_power_draw(power_sysfs_base=tmp_path)
+        assert isinstance(result, HostPowerDraw)
+        assert result.milliwatts == pytest.approx(8500.0)
+        assert result.source == "ina3221x:in_power0"
+
+    def test_reads_hwmon_and_converts_microwatts(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """hwmon and power_supply are in µW; must be divided by 1000."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        _write_sysfs_file(tmp_path / "class/hwmon/hwmon0/power1_input", "8500000")
+        result = read_host_power_draw(power_sysfs_base=tmp_path)
+        assert result is not None
+        assert result.milliwatts == pytest.approx(8500.0)
+        assert result.source == "hwmon:power1_input"
+
+    def test_reads_power_supply_fallback(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """power_supply is the last-resort strategy; label reflects it."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        _write_sysfs_file(tmp_path / "class/power_supply/BAT0/power_now", "12500000")
+        result = read_host_power_draw(power_sysfs_base=tmp_path)
+        assert result is not None
+        assert result.milliwatts == pytest.approx(12500.0)
+        assert result.source == "power_supply:power_now"
+
+    def test_probe_order_ina3221_beats_hwmon(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Total-board sensors are preferred over generic fallbacks."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        _write_sysfs_file(
+            tmp_path / "bus/i2c/drivers/ina3221x/1-0040/iio:device0/in_power0_input",
+            "8500",
+        )
+        _write_sysfs_file(tmp_path / "class/hwmon/hwmon0/power1_input", "999000000")
+        result = read_host_power_draw(power_sysfs_base=tmp_path)
+        assert result is not None
+        assert result.source == "ina3221x:in_power0"
+        assert result.milliwatts == pytest.approx(8500.0)
+
+    def test_sums_multiple_hwmon_rails(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Multi-rail SBCs: matches within one strategy are summed."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        _write_sysfs_file(tmp_path / "class/hwmon/hwmon0/power1_input", "3000000")
+        _write_sysfs_file(tmp_path / "class/hwmon/hwmon1/power1_input", "5000000")
+        result = read_host_power_draw(power_sysfs_base=tmp_path)
+        assert result is not None
+        assert result.milliwatts == pytest.approx(8000.0)
+        assert result.source == "hwmon:power1_input x2"
+
+    def test_falls_through_when_strategy_files_unreadable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Garbage in a matching path must fall through, not return None."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        _write_sysfs_file(
+            tmp_path / "bus/i2c/drivers/ina3221x/1-0040/iio:device0/in_power0_input",
+            "not-a-number",
+        )
+        _write_sysfs_file(tmp_path / "class/hwmon/hwmon0/power1_input", "7500000")
+        result = read_host_power_draw(power_sysfs_base=tmp_path)
+        assert result is not None
+        assert result.source == "hwmon:power1_input"
+        assert result.milliwatts == pytest.approx(7500.0)
+
+
+# ---------------------------------------------------------------------------
 # read_host_facts
 # ---------------------------------------------------------------------------
 
@@ -373,9 +477,7 @@ class TestSoftwareVersions:
         def fake(name: str) -> str:
             raise PackageNotFoundError(name)
 
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics._pkg_version", fake
-        )
+        monkeypatch.setattr("cyberwave.edge.host_metrics._pkg_version", fake)
         from cyberwave.edge.host_metrics import _read_software_versions
 
         assert _read_software_versions() == ("0.4.7", None)
@@ -395,9 +497,7 @@ class TestSoftwareVersions:
         def fake(name: str) -> str:
             raise RuntimeError("malformed metadata for " + name)
 
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics._pkg_version", fake
-        )
+        monkeypatch.setattr("cyberwave.edge.host_metrics._pkg_version", fake)
         from cyberwave.edge.host_metrics import _read_software_versions
 
         assert _read_software_versions() == (None, None)
@@ -451,14 +551,12 @@ class TestReadHostFacts:
         def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
             assert cmd[0] == "sysctl" and cmd[1] == "-n"
             value = sysctl_values.get(cmd[2], "")
-            return subprocess.CompletedProcess(cmd, 0 if value else 1, stdout=value, stderr="")
+            return subprocess.CompletedProcess(
+                cmd, 0 if value else 1, stdout=value, stderr=""
+            )
 
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.shutil.which", fake_which
-        )
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.subprocess.run", fake_run
-        )
+        monkeypatch.setattr("cyberwave.edge.host_metrics.shutil.which", fake_which)
+        monkeypatch.setattr("cyberwave.edge.host_metrics.subprocess.run", fake_run)
 
         watchdog_dev = tmp_path / "watchdog-not-on-darwin"
 
@@ -494,14 +592,12 @@ class TestReadHostFacts:
 
         def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
             value = sysctl_values.get(cmd[2], "")
-            return subprocess.CompletedProcess(cmd, 0 if value else 1, stdout=value, stderr="")
+            return subprocess.CompletedProcess(
+                cmd, 0 if value else 1, stdout=value, stderr=""
+            )
 
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.shutil.which", fake_which
-        )
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.subprocess.run", fake_run
-        )
+        monkeypatch.setattr("cyberwave.edge.host_metrics.shutil.which", fake_which)
+        monkeypatch.setattr("cyberwave.edge.host_metrics.subprocess.run", fake_run)
 
         facts = read_host_facts(watchdog_device=tmp_path / "absent")
 
@@ -522,15 +618,13 @@ class TestReadHostFacts:
 
         def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
             if cmd[2] == "hw.memsize":
-                return subprocess.CompletedProcess(cmd, 0, stdout=str(odd_bytes), stderr="")
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=str(odd_bytes), stderr=""
+                )
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
 
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.shutil.which", fake_which
-        )
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.subprocess.run", fake_run
-        )
+        monkeypatch.setattr("cyberwave.edge.host_metrics.shutil.which", fake_which)
+        monkeypatch.setattr("cyberwave.edge.host_metrics.subprocess.run", fake_run)
 
         facts = read_host_facts(watchdog_device=tmp_path / "absent")
 
@@ -554,19 +648,17 @@ class TestReadHostFacts:
 
         def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
             if cmd[2] == "hw.memsize":
-                return subprocess.CompletedProcess(cmd, 0, stdout="not-an-int", stderr="")
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout="not-an-int", stderr=""
+                )
             if cmd[2] == "machdep.cpu.brand_string":
                 return subprocess.CompletedProcess(cmd, 0, stdout="Apple M3", stderr="")
             if cmd[2] in ("hw.logicalcpu", "hw.ncpu"):
                 return subprocess.CompletedProcess(cmd, 0, stdout="garbage", stderr="")
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
 
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.shutil.which", fake_which
-        )
-        monkeypatch.setattr(
-            "cyberwave.edge.host_metrics.subprocess.run", fake_run
-        )
+        monkeypatch.setattr("cyberwave.edge.host_metrics.shutil.which", fake_which)
+        monkeypatch.setattr("cyberwave.edge.host_metrics.subprocess.run", fake_run)
 
         facts = read_host_facts(watchdog_device=tmp_path / "absent")
 
@@ -587,8 +679,7 @@ class TestReadHostFacts:
         # /proc/meminfo
         meminfo_path = tmp_path / "meminfo"
         meminfo_path.write_text(
-            "MemTotal:        3906292 kB\n"
-            "MemAvailable:    2000000 kB\n"
+            "MemTotal:        3906292 kB\nMemAvailable:    2000000 kB\n"
         )
         # /proc/cpuinfo
         cpuinfo_path = tmp_path / "cpuinfo"
@@ -617,15 +708,11 @@ class TestReadHostFacts:
 
         monkeypatch.setattr("builtins.open", fake_open)
 
-        thermal_base = _build_thermal_sysfs(
-            tmp_path, [("cpu-thermal", 55_000)]
-        )
+        thermal_base = _build_thermal_sysfs(tmp_path, [("cpu-thermal", 55_000)])
         watchdog_dev = tmp_path / "watchdog"
         watchdog_dev.write_text("")  # presence-only check
 
-        facts = read_host_facts(
-            thermal_base=thermal_base, watchdog_device=watchdog_dev
-        )
+        facts = read_host_facts(thermal_base=thermal_base, watchdog_device=watchdog_dev)
 
         assert facts.memory_total_mb == pytest.approx(3906292 / 1024, abs=1)
         assert facts.cpu_model == "Cortex-A72"
@@ -640,10 +727,7 @@ class TestReadHostFacts:
         """Older Raspberry Pi kernels emit ``Hardware:`` instead of ``model name``."""
         monkeypatch.setattr(platform, "system", lambda: "Linux")
         cpuinfo_path = tmp_path / "cpuinfo"
-        cpuinfo_path.write_text(
-            "processor\t: 0\n"
-            "Hardware\t: BCM2835\n"
-        )
+        cpuinfo_path.write_text("processor\t: 0\nHardware\t: BCM2835\n")
         original_open = open
 
         def fake_open(path, *args, **kwargs):

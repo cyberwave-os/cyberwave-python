@@ -45,6 +45,7 @@ from typing import Any
 
 from typing_extensions import Self
 
+from ..edge.health import EdgeHealthCheck
 from .cloud.alert_api import DriverAlertsMixin
 from .cloud.alerts import AlertManager
 from .cloud.connection import CloudConnectionMixin
@@ -129,9 +130,21 @@ class BaseDriver(
     - Twin bind: reuse ``twin=`` + ``twin.client``, or fetch with :attr:`registry_id` + :attr:`twin_uuid`
     - :class:`~cyberwave.driver.alerts.AlertManager` — local + backend alerts after connect
     - Telemetry session: ``telemetry_start``, ``connected``, ``telemetry_end``, ``disconnected``
-    - :class:`~cyberwave.telemetry.base.BaseTelemetry` — debounced ``driver_info`` on ``twin/telemetry``
+    - :class:`~cyberwave.telemetry.base.BaseTelemetry` — debounced ``driver_info`` on
+      ``twin/telemetry``, capped at ``TELEMETRY_PUBLISH_RATE_HZ`` (default 1 Hz)
+    - :class:`~cyberwave.edge.health.EdgeHealthCheck` — ``edge_health`` twin liveness heartbeat,
+      started after MQTT wiring and stopped on shutdown; override :meth:`edge_health_extras` /
+      :meth:`edge_health_streams` to add driver-specific fields/streams
     - Default management commands in :meth:`~cyberwave.driver.interface.registry_mixin.InterfaceRegistryMixin.define_interface_defaults`
       (``stop``, ``teleoperate``, ``remoteoperate``, ``controller-changed``)
+    - Stream/interface publish-rate governance: :meth:`stream_publish_max_hz` resolves
+      per-publisher ``TopicSpec.rate_hz`` → manifest ``mqtt_max_hz`` → :attr:`STREAM_PUBLISH_MAX_HZ`
+      (default 30 Hz)
+    - :meth:`controller_policy_snapshot` — the twin's attached controller policy, or ``{}``
+    - Default controller reactivity: :meth:`~cyberwave.driver.interface.registry_mixin.InterfaceRegistryMixin.on_controller_assigned` /
+      :meth:`~cyberwave.driver.interface.registry_mixin.InterfaceRegistryMixin.on_controller_removed`
+      home the robot (when a ``request_home`` seam is present) and post a standard twin alert;
+      override and call ``super()`` to add hardware-specific steps
 
     **Transports (interface registry)**:
 
@@ -206,6 +219,10 @@ class BaseDriver(
         self._last_tick_duration_ms: float = 0.0
         self._lifecycle_twin_pending_notice: bool = False
         self._stream_publish_rate = StreamPublishRateLimiter()
+        # Manifest-level publish-rate default (``mqtt_max_hz``); None → class attr.
+        # Set by BaseROS2Driver.configure() from the node manifest.
+        self._mqtt_max_hz: float | None = None
+        self._edge_health: EdgeHealthCheck | None = None
         self._init_interface_registry(auto_register_interface=auto_register_interface)
 
     # Lifecycle state + transition alerts → LifecycleAlertsMixin (lifecycle.py)
@@ -306,6 +323,75 @@ class BaseDriver(
             raise RuntimeError("env_uuid accessed before twin was fetched")
         return self._twin.environment_id
 
+    def controller_policy_snapshot(self) -> dict[str, Any]:
+        """The twin's currently-attached controller policy, or ``{}`` before bind.
+
+        Generic helper for telemetry / logging: returns
+        ``{"controller_policy_uuid": ..., "controller_type": ...}``.
+        """
+        twin = self._twin
+        if twin is None:
+            return {}
+        policy_uuid, ctype = resolve_twin_attached_controller(twin)
+        return {
+            "controller_policy_uuid": policy_uuid,
+            "controller_type": ctype,
+        }
+
+    # ── Edge health (twin liveness heartbeat) ────────────────────────────────
+
+    def edge_health_extras(self) -> dict[str, Any]:
+        """Driver-specific fields merged into the ``edge_health`` payload. Override to add.
+
+        TODO: this reuses :class:`~cyberwave.edge.health.EdgeHealthCheck`'s
+        ``host_metrics_provider`` seam — documented as host-only (edge-core sees
+        real host ``/proc``; a driver container only sees its own) — as a stopgap
+        per-driver extras hook. Replace with a dedicated per-driver telemetry
+        channel instead of overloading that parameter.
+        """
+        return {}
+
+    def edge_health_streams(self) -> list[tuple[str, dict[str, Any]]]:
+        """``(stream_id, stream_config)`` pairs registered on the edge_health publisher.
+
+        Override to advertise driver-specific streams, e.g.
+        ``[("arm-joints", {"kind": "imu", "source": "joint_states", "rate_hz": 10})]``.
+        """
+        return []
+
+    def _start_edge_health(self) -> None:
+        if getattr(self, "_edge_health", None) is not None:
+            return
+        twin_uuid = self.twin_uuid
+        mqtt = self._require_client().mqtt
+        self._edge_health = EdgeHealthCheck(
+            mqtt_client=mqtt,
+            twin_uuids=[twin_uuid],
+            edge_id=twin_uuid,
+            interval=type(self).EDGE_HEALTH_INTERVAL_S,
+            host_metrics_provider=self.edge_health_extras,
+        )
+        for stream_id, config in self.edge_health_streams():
+            self._edge_health.register_stream_config(stream_id, config)
+        self._edge_health.start()
+        logger.info(
+            "Edge health publisher started for twin %s (cyberwave/twin/.../edge_health)",
+            twin_uuid,
+        )
+
+    def _stop_edge_health(self) -> None:
+        edge_health = getattr(self, "_edge_health", None)
+        if edge_health is None:
+            return
+        edge_health.stop()
+        self._edge_health = None
+
+    def _touch_edge_health(self) -> None:
+        """Mark the edge_health stream alive (call from a data-received callback)."""
+        edge_health = getattr(self, "_edge_health", None)
+        if edge_health is not None:
+            edge_health.mark_alive()
+
     # ── Abstract hooks ───────────────────────────────────────────────────────
 
     @abstractmethod
@@ -368,13 +454,17 @@ class BaseDriver(
             TICK_RATE_HZ = 50.0  # 50 Hz control loop
     """
 
-    STREAM_PUBLISH_MAX_HZ: float = 50.0
-    """Default cap for high-frequency streams forwarded to Cyber MQTT/Zenoh.
+    STREAM_PUBLISH_MAX_HZ: float = 30.0
+    """Default cap for streams forwarded to Cyber MQTT/Zenoh (Hz).
 
-    ROS sensor topics (e.g. ``joint_states``) often arrive at 100–200 Hz; edge
-    drivers should throttle outbound Cyber publishes with
-    :meth:`acquire_stream_publish_slot` so broker load stays in the ~50–60 Hz range.
+    Resolution order for the effective cap (highest wins): per-publisher
+    ``TopicSpec.rate_hz`` (applied by the forwarder) → manifest ``mqtt_max_hz``
+    (``self._mqtt_max_hz``) → this class default. ROS sensor topics often arrive
+    at 100–200 Hz; the forwarder throttles outbound Cyber publishes to this cap.
     """
+
+    EDGE_HEALTH_INTERVAL_S: int = 5
+    """``edge_health`` MQTT heartbeat interval in seconds (:class:`~cyberwave.edge.health.EdgeHealthCheck`)."""
 
     RECONNECT_MAX_ATTEMPTS: int = 5
     """Maximum number of reconnection attempts before the driver enters ERROR state.
@@ -392,7 +482,14 @@ class BaseDriver(
     """Upper bound for the exponential back-off delay in seconds."""
 
     def stream_publish_max_hz(self, stream_key: str) -> float:
-        """Return the max publish rate for *stream_key* (override per stream)."""
+        """Return the max publish rate for *stream_key*.
+
+        Manifest ``mqtt_max_hz`` (``self._mqtt_max_hz``) overrides the class
+        default; a per-publisher ``TopicSpec.rate_hz`` overrides both at the
+        forwarder call site.
+        """
+        if self._mqtt_max_hz is not None:
+            return self._mqtt_max_hz
         return type(self).STREAM_PUBLISH_MAX_HZ
 
     def acquire_stream_publish_slot(
@@ -528,6 +625,7 @@ class BaseDriver(
             self._transition_to(DriverLifecycleState.INACTIVE)
             await self.on_register_callbacks()
             await self._wire_interface_from_registry()
+            self._start_edge_health()
             await self.on_activate()
             await self._activate_registry_zenoh()
 
@@ -561,6 +659,7 @@ class BaseDriver(
             if self._lifecycle_state != DriverLifecycleState.ERROR:
                 self._transition_to(DriverLifecycleState.DEACTIVATING)
             await self._unwire_interface_from_registry()
+            self._stop_edge_health()
             self._end_driver_telemetry_session()
             await self.on_shutdown()
             try:

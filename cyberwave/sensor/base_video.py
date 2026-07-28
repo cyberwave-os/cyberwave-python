@@ -22,6 +22,8 @@ from aiortc import (
     VideoStreamTrack,
 )
 
+from .hw_encoder import apply_h264_hw_patch
+
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
     from ..utils import TimeReference
@@ -331,6 +333,7 @@ class BaseVideoStreamer(abc.ABC):
         self.stream_source: Optional[str] = stream_source
         self.stream_instance_id: Optional[str] = stream_instance_id
         self.frontend_type: Optional[str] = frontend_type
+        self._video_encoder_name: Optional[str] = None
         self.auto_reconnect = auto_reconnect
         # Use explicit None check so empty list [] disables TURN servers
         self.turn_servers = (
@@ -501,6 +504,15 @@ class BaseVideoStreamer(abc.ABC):
             )
 
         logger.info(f"Starting camera stream for twin {self.twin_uuid}")
+
+        try:
+            selection = apply_h264_hw_patch()
+            self._video_encoder_name = selection.codec_name
+        except Exception:
+            logger.exception(
+                "H264 hardware encoder setup failed; using aiortc default"
+            )
+            self._video_encoder_name = None
 
         self._subscribe_to_answer()
         await asyncio.sleep(2.5)
@@ -696,6 +708,11 @@ class BaseVideoStreamer(abc.ABC):
         stream_attributes = {}
         if self.streamer:
             stream_attributes = self.streamer.get_stream_attributes()
+        if self._video_encoder_name:
+            stream_attributes = {
+                **stream_attributes,
+                "video_encoder": self._video_encoder_name,
+            }
 
         offer_payload = {
             "target": "backend",

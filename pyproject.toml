@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.6.0"
+version = "0.6.1"
 description = "Python SDK for Cyberwave"
 authors = [
     "Simone Di Somma <sdisomma@cyberwave.com>",
@@ -62,6 +62,11 @@ rapidfuzz = { version = ">=3.0.0", optional = true }
 # Apache-2.0; prebuilt wheels for manylinux x86_64 / aarch64 / musllinux /
 # macOS / Windows. Lightweight enough for Raspberry Pi (~few MB native + numpy).
 zxing-cpp = { version = "3.0.0", optional = true }
+# Optional robot-arm kinematics (FK/IK) via pinocchio. Pulls numpy>=2.2
+# transitively for Python 3.10+ (cmeel-boost requirement).
+pin = { version = ">=3.0.0", optional = true }
+# Optional trapezoidal motion generation for JointController (driver/control).
+scipy = { version = ">=1.10", optional = true }
 
 [tool.poetry.extras]
 image = ["pillow"]
@@ -87,6 +92,9 @@ fuzzy-match = ["rapidfuzz"]
 # licensed (Apache-2.0); wheels are prebuilt for Pi-class hardware so this
 # adds a few MB to the image without a system package or build toolchain.
 barcode = ["zxing-cpp"]
+# Robot-arm kinematics (BaseKinematics / ArmCapabilityMixin). pinocchio + numpy.
+# scipy powers the default trapezoidal JointController motion generator.
+drivers = ["pin", "scipy"]
 # Hailo HEF support runs on the worker container; the ``hailo_platform`` wheel
 # ships out-of-band with HailoRT (the .deb installs it into the system
 # site-packages alongside the kernel-matched driver), so this extra is an

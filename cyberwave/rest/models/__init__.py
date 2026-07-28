@@ -219,6 +219,8 @@ from cyberwave.rest.models.environment_universal_schema_patch_schema import Envi
 from cyberwave.rest.models.environment_visual_observation_schema import EnvironmentVisualObservationSchema
 from cyberwave.rest.models.environment_waypoint_bulk_create_schema import EnvironmentWaypointBulkCreateSchema
 from cyberwave.rest.models.environment_waypoint_create_schema import EnvironmentWaypointCreateSchema
+from cyberwave.rest.models.environment_waypoint_frame_schema import EnvironmentWaypointFrameSchema
+from cyberwave.rest.models.environment_waypoint_position_update_schema import EnvironmentWaypointPositionUpdateSchema
 from cyberwave.rest.models.environment_waypoint_schema import EnvironmentWaypointSchema
 from cyberwave.rest.models.environment_workflow_replay_event_schema import EnvironmentWorkflowReplayEventSchema
 from cyberwave.rest.models.episode_create_schema import EpisodeCreateSchema
@@ -249,6 +251,7 @@ from cyberwave.rest.models.image_bytes1 import ImageBytes1
 from cyberwave.rest.models.import_result_schema import ImportResultSchema
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema
+from cyberwave.rest.models.invitation_response_schema import InvitationResponseSchema
 from cyberwave.rest.models.joint_calibration_schema import JointCalibrationSchema
 from cyberwave.rest.models.joint_schema import JointSchema
 from cyberwave.rest.models.joint_state_schema import JointStateSchema
@@ -306,6 +309,7 @@ from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponse
 from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema
 from cyberwave.rest.models.navigation_waypoint_action_schema import NavigationWaypointActionSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema
+from cyberwave.rest.models.near import Near
 from cyberwave.rest.models.notification_settings_schema import NotificationSettingsSchema
 from cyberwave.rest.models.notification_settings_update_schema import NotificationSettingsUpdateSchema
 from cyberwave.rest.models.occupancy_map_create_schema import OccupancyMapCreateSchema
@@ -397,6 +401,7 @@ from cyberwave.rest.models.recording_sources_envelope_schema import RecordingSou
 from cyberwave.rest.models.recording_sources_schema import RecordingSourcesSchema
 from cyberwave.rest.models.redeem_coupon_request_schema import RedeemCouponRequestSchema
 from cyberwave.rest.models.redeem_coupon_response_schema import RedeemCouponResponseSchema
+from cyberwave.rest.models.redeem_link_schema import RedeemLinkSchema
 from cyberwave.rest.models.relative_translation import RelativeTranslation
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse

@@ -85,6 +85,7 @@ from .manifest import (
     merge_combined_driver_manifest,
     resolve_node_manifest,
 )
+from .message_payload import ros_joint_state_to_transport_payload
 from .ros_publishers import unwire_ros_publishers, wire_ros_publishers
 from .ros_setup_env import apply_ros_setup_environment, collect_ros_setup_scripts
 from .topic_discovery import resolve_ros_message_class
@@ -217,6 +218,7 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
         )
 
         self._manifest: NodeManifest = pre_manifest
+        self._ros_namespace: str = namespace or ""
         self._tick_timer: Optional[rclpy.timer.Timer] = None
         self._interface_state_pub = None
         self._param_cb_handle = None
@@ -350,6 +352,7 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
             self._transition_to(DriverLifecycleState.INACTIVE)
             await _BaseDriverAsyncHooks.on_register_callbacks(self)
             await self._wire_interface_from_registry()
+            self._start_edge_health()
             await _BaseDriverAsyncHooks.on_activate(self)
             await self._activate_registry_zenoh()
 
@@ -385,6 +388,7 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
                 self._transition_to(DriverLifecycleState.DEACTIVATING)
             unwire_ros_publishers(self)
             await self._unwire_interface_from_registry()
+            self._stop_edge_health()
             self._end_driver_telemetry_session()
             await _BaseDriverAsyncHooks.on_shutdown(self)
             try:
@@ -409,6 +413,34 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
             pub = self.create_publisher(msg_type, topic, qos_depth)
             self._ros_out_publishers[key] = pub
         pub.publish(msg)
+
+    def namespaced(self, name: str) -> str:
+        """Absolute ROS name under the per-twin namespace (global when unset).
+
+        The ros2 CLI (e.g. for service calls) runs outside the node namespace,
+        so use this to build the fully-qualified path.
+        """
+        leaf = name.lstrip("/")
+        ns = self._ros_namespace.rstrip("/")
+        return f"{ns}/{leaf}" if ns else f"/{leaf}"
+
+    def read_string_param(self, name: str, default: str) -> str:
+        """Read a string parameter, falling back to *default* on any error."""
+        try:
+            value = (
+                self.get_parameter(name).get_parameter_value().string_value.strip()
+            )
+            return value or default
+        except Exception:
+            return default
+
+    def destroy_ros_publishers_for_topic(self, topic: str) -> None:
+        """Destroy every cached ``ros_publish`` publisher on *topic*."""
+        keys = [k for k in list(self._ros_out_publishers) if k[0] == topic]
+        for key in keys:
+            pub = self._ros_out_publishers.pop(key, None)
+            if pub is not None:
+                self.destroy_publisher(pub)
 
     # -------------------------------------------------------------------------
     # rclpy lifecycle callbacks — final, do not override in concrete drivers
@@ -502,6 +534,10 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
         Initialize non-hardware state here (config parsing, buffer allocation).
         Do NOT open device connections — that belongs in connect_to_device().
         """
+        # Manifest-level publish-rate default; overrides the class attr but is
+        # itself overridden by a per-publisher TopicSpec.rate_hz.
+        if self._manifest.mqtt_max_hz is not None:
+            self._mqtt_max_hz = self._manifest.mqtt_max_hz
         if self._manifest.managed_launch is not None:
             from .managed_launch import ManagedRosLaunch
 
@@ -791,22 +827,15 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
     # ROS stream → Cyber publish rate limiting
     # -------------------------------------------------------------------------
 
-    ROS_STREAM_PUBLISH_MAX_HZ: float = 50.0
-    """Cap for ROS subscription streams forwarded to Cyber MQTT/Zenoh.
-
-    Sensor topics commonly exceed 100 Hz; use :meth:`acquire_ros_stream_publish_slot`
-    in ROS callbacks (or rely on the registry ``from_ros`` forwarder) to stay near
-    50–60 Hz on the wire.
-    """
-
     @staticmethod
     def ros_stream_key(ros_topic: str) -> str:
         """Stable throttle key for a ROS topic name."""
         return f"ros:{ros_topic.lstrip('/')}"
 
     def ros_stream_publish_max_hz(self, ros_topic: str) -> float:
-        """Max Cyber publish rate for *ros_topic* (override per topic in subclasses)."""
-        return type(self).ROS_STREAM_PUBLISH_MAX_HZ
+        """Max Cyber publish rate for *ros_topic* — inherits the BaseDriver
+        resolution (manifest ``mqtt_max_hz`` → ``STREAM_PUBLISH_MAX_HZ``)."""
+        return self.stream_publish_max_hz(self.ros_stream_key(ros_topic))
 
     def acquire_ros_stream_publish_slot(
         self, ros_topic: str, *, max_hz: float | None = None
@@ -877,6 +906,16 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
     def publish_interface_state(self) -> None:
         """Publish a fresh ~/interface_state snapshot."""
         self._publish_interface_state()
+
+    def convert_joints_to_payload(self, msg: Any) -> dict[str, Any] | None:
+        """Convert a JointState message to a joint ``/update`` transport payload.
+
+        Default returns the full joint list (positions, plus velocities/efforts
+        when present). Override to reshape the payload — e.g. snap a gripper joint
+        to a binary open/closed value — before the ``from_ros`` forwarder publishes
+        it to Cyberwave. Return ``None`` to skip publishing this message.
+        """
+        return ros_joint_state_to_transport_payload(msg)
 
     # -------------------------------------------------------------------------
     # Internals

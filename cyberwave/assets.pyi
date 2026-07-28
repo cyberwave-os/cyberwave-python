@@ -934,10 +934,10 @@ class CyberwavewarehouseTwin(Twin):
     """
     pass
 
-class Upmir250Twin(Twin):
+class Mirmir250Twin(Twin):
     """
     Digital twin for MiR250
-    Registry ID: up/mir-250
+    Registry ID: mir/mir-250
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
         """Move the twin to a new position"""
@@ -1291,6 +1291,42 @@ class CyberwavedoosanA0509s4Twin(Twin):
     """
     pass
 
+class ModalaistarlingMaxTwin(Twin):
+    """
+    Digital twin for ModalAI Starling 2 Max
+    Registry ID: modalai/starling-max
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class MovishsWorkspaceg1CyberwaveTwin(Twin):
+    """
+    Digital twin for g1-cyberwave
+    Registry ID: movishs-workspace/g1-cyberwave
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Coesiamir250CoesiaTwin(Twin):
+    """
+    Digital twin for MIR-250_Coesia2
+    Registry ID: coesia/mir250-coesia
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1371,7 +1407,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "agilox/agilox-ofl": AgiloxagiloxOflTwin,
     "otto-motors/otto-1500": OttoMotorsotto1500Twin,
     "cyberwave/warehouse": CyberwavewarehouseTwin,
-    "up/mir-250": Upmir250Twin,
+    "mir/mir-250": Mirmir250Twin,
     "agile-x-robotics/tracer-20": AgileXRoboticstracer20Twin,
     "enactic/openarm": EnacticopenarmTwin,
     "cyberwave/rgb-camera-with-depth-estimation": CyberwavergbCameraWithDepthEstimationTwin,
@@ -1413,4 +1449,8 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave/doosan-a0509s-2": CyberwavedoosanA0509s2Twin,
     "cyberwave/doosan-a0509s-3": CyberwavedoosanA0509s3Twin,
     "cyberwave/doosan-a0509s-4": CyberwavedoosanA0509s4Twin,
+    "modalai/starling-max": ModalaistarlingMaxTwin,
+    "starling-max": ModalaistarlingMaxTwin,
+    "movishs-workspace/g1-cyberwave": MovishsWorkspaceg1CyberwaveTwin,
+    "coesia/mir250-coesia": Coesiamir250CoesiaTwin,
 }

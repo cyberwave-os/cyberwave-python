@@ -67,6 +67,30 @@ def test_default_management_commands() -> None:
     assert "teleoperate" in table
 
 
+def test_default_management_commands_always_hides_teleop_controller_from_catalog() -> None:
+    """controller-changed/teleoperate/remoteoperate are internal plumbing, never
+    advertised as robot capabilities — even when catalog_hidden defaults to False.
+    ``stop`` is unaffected and stays visible (existing behavior)."""
+    registry = DriverInterfaceRegistry()
+    default_management_commands(
+        registry,
+        on_controller_changed=CallbackGroup(lambda _e: None),
+        on_teleoperate=CallbackGroup(lambda _e: None),
+        on_remoteoperate=CallbackGroup(lambda _e: None),
+        on_stop=CallbackGroup(lambda _e: None),
+    )
+    raw = registry.to_cw_driver_dict(registry_id="acme/test")
+    commands = raw["mqtt"].get("commands", {})
+    supported = commands.get("supported", [])
+    names = {e["name"] if isinstance(e, dict) else e for e in supported}
+    assert names.isdisjoint({"controller-changed", "teleoperate", "remoteoperate"})
+    assert "stop" in names
+    # All four still dispatch.
+    table = registry.command_dispatch_table(DriverOperationMode.NO_OP)
+    for cmd_name in ("controller-changed", "teleoperate", "remoteoperate", "stop"):
+        assert cmd_name in table
+
+
 def test_catalog_hidden_command_dispatches_but_is_not_advertised() -> None:
     registry = DriverInterfaceRegistry()
     cmd = TopicSpec(

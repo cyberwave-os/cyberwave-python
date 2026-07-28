@@ -632,7 +632,10 @@ class TwinNavigationHandle:
         environment_uuid: Optional[str] = None,
         source_type: Optional[str] = None,
         constraints: Optional[Dict[str, Any]] = None,
+        reference_frame: Optional[str] = None,
+        skip_nav_anchor_transform: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Navigate the twin to a specific position.
@@ -645,7 +648,19 @@ class TwinNavigationHandle:
             environment_uuid: Environment context
             source_type: Source type for tracking
             constraints: Navigation constraints
+            reference_frame: Coordinate frame ``position`` is expressed in
+                (e.g. ``map``, ``odom``, or a robot link name like
+                ``base_link`` for an arm's own end-effector frame). Defaults
+                to ``map`` server-side when omitted.
+            skip_nav_anchor_transform: Set when ``position`` is already an
+                offset from ``reference_frame`` (e.g. a robot link) rather
+                than an environment-absolute pose — tells the server not to
+                apply its environment->map nav-anchor transform to it.
             metadata: Additional metadata
+            actions: Top-level ``{"plugin": ..., "params": {...}}`` entries to
+                run on arrival — the ``goto`` equivalent of a waypoint's
+                per-point ``actions`` in :class:`~cyberwave.navigation.NavigationPlan`
+                (there's no waypoints list here to attach one to).
 
         Returns:
             Response from the navigation endpoint
@@ -669,8 +684,14 @@ class TwinNavigationHandle:
             payload["source_type"] = source_type
         if constraints:
             payload["constraints"] = constraints
+        if reference_frame:
+            payload["reference_frame"] = reference_frame
+        if skip_nav_anchor_transform:
+            payload["skip_nav_anchor_transform"] = True
         if metadata:
             payload["metadata"] = metadata
+        if actions:
+            payload["actions"] = list(actions)
 
         # Subscribe to navigate/status before firing the REST call
         # so a fast ``completed`` (e.g. sim_tele) cannot arrive before
@@ -753,6 +774,7 @@ class TwinNavigationHandle:
         source_type: Optional[str] = None,
         constraints: Optional[Dict[str, Any]] = None,
         reference_frame: Optional[str] = None,
+        skip_nav_anchor_transform: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
@@ -770,6 +792,10 @@ class TwinNavigationHandle:
             reference_frame: Coordinate frame the waypoints are expressed in
                 (e.g. ``map``, ``odom``, ``base_link``). Defaults to ``map``
                 server-side when omitted.
+            skip_nav_anchor_transform: Set when the waypoints are already
+                offsets from ``reference_frame`` (e.g. a robot link) rather
+                than environment-absolute poses. Skips the nav-anchor
+                (environment->map) transform server-side. Mirrors ``goto``.
             metadata: Additional metadata
 
         Returns:
@@ -790,6 +816,8 @@ class TwinNavigationHandle:
             payload["constraints"] = constraints
         if reference_frame:
             payload["reference_frame"] = reference_frame
+        if skip_nav_anchor_transform:
+            payload["skip_nav_anchor_transform"] = True
 
         nav_metadata = dict(metadata or {})
         if wait_s > 0:

@@ -72,6 +72,33 @@ _RECONNECT_BACKOFF_BASE_S = 1.0
 _RECONNECT_BACKOFF_MAX_S = 30.0
 _RECONNECT_MAX_ATTEMPTS = 20
 
+# SHM publish defaults. Pool size is capped by the container's RLIMIT_MEMLOCK
+# (default 8 MB) — lift it with ``ulimits: memlock: -1``.
+_DEFAULT_SHM_POOL_BYTES = 64 * 1024 * 1024
+"""Default SHM pool size. Env: ``ZENOH_SHM_POOL_BYTES``."""
+
+_DEFAULT_SHM_MIN_BYTES = 4096
+"""Payloads below this size take the copy path (zero-copy isn't worth it for
+small messages). Env: ``ZENOH_SHM_MIN_BYTES``."""
+
+_SHM_GC_INTERVAL = 8
+"""Reclaim released pool buffers every N publishes (a full GC + defragment also
+runs on any alloc failure). Cheaper than collecting every frame."""
+
+_SHM_DEGRADE_WARN_INTERVAL_S = 30.0
+"""Minimum seconds between repeated SHM-degradation warnings."""
+
+_SHM_RECOVERY_CONFIRM_FRAMES = 30
+"""Consecutive successes before declaring recovery. One success is not enough —
+a flapping pool would then log a pair every other frame."""
+
+SHM_EXHAUSTION_POLICIES = ("copy", "drop")
+"""Backpressure policy when the SHM pool can't take a frame. ``"copy"`` falls
+back to a copy publish (guaranteed delivery, latency grows under overload);
+``"drop"`` skips the frame (lossy, latency stays flat — for live video)."""
+
+_DEFAULT_SHM_ON_EXHAUSTION = "copy"
+
 
 def extract_sample_key_expr(zenoh_sample: Any) -> str | None:
     """Return the publishing key of a Zenoh sample as a string, or ``None``.
@@ -112,8 +139,17 @@ class ZenohBackend(DataBackend):
         listen: Zenoh listener endpoints (e.g. ``["tcp/0.0.0.0:7447"]``).
             Binds a TCP listener so external peers can connect without
             multicast discovery.
-        shared_memory: Enable Zenoh shared-memory transport for same-host
-            zero-copy delivery.
+        shared_memory: Enable same-host zero-copy delivery. :meth:`publish`
+            then allocates each frame from a POSIX SHM pool so only a descriptor
+            crosses the transport. The pool is used per frame regardless of
+            whether a subscriber can use zero-copy, so enable this only when a
+            same-host SHM-capable consumer exists.
+        shm_pool_bytes: SHM pool size (ignored unless ``shared_memory``). Must
+            exceed ``max_frame_bytes × in_flight_depth``.
+        shm_min_bytes: Payloads smaller than this use the copy path.
+        shm_on_exhaustion: Backpressure policy when the pool is full —
+            ``"copy"`` (default, guaranteed delivery) or ``"drop"`` (lossy but
+            low-latency). See :data:`SHM_EXHAUSTION_POLICIES`.
     """
 
     def __init__(
@@ -122,6 +158,9 @@ class ZenohBackend(DataBackend):
         connect: list[str] | None = None,
         listen: list[str] | None = None,
         shared_memory: bool = False,
+        shm_pool_bytes: int = _DEFAULT_SHM_POOL_BYTES,
+        shm_min_bytes: int = _DEFAULT_SHM_MIN_BYTES,
+        shm_on_exhaustion: str = _DEFAULT_SHM_ON_EXHAUSTION,
     ) -> None:
         if not _has_zenoh:
             raise BackendUnavailableError(
@@ -129,12 +168,36 @@ class ZenohBackend(DataBackend):
                 "Install it with:  pip install 'cyberwave[zenoh]'  "
                 "or:  pip install eclipse-zenoh"
             )
+        if shm_on_exhaustion not in SHM_EXHAUSTION_POLICIES:
+            raise ValueError(
+                f"Invalid shm_on_exhaustion '{shm_on_exhaustion}'. "
+                f"Must be one of: {', '.join(SHM_EXHAUSTION_POLICIES)}."
+            )
 
         self._connect = connect
         self._listen = listen
         self._shared_memory = shared_memory
+        self._shm_pool_bytes = shm_pool_bytes
+        self._shm_min_bytes = shm_min_bytes
+        self._shm_on_exhaustion = shm_on_exhaustion
 
         self._session: Any = self._open_session()
+
+        # Shared-memory pool (created only when shared_memory is on).  The
+        # provider is session-independent, so it survives reconnects untouched.
+        self._shm_mod: Any = None
+        self._shm_provider: Any = None
+        self._shm_lock = threading.Lock()
+        self._shm_frames = 0
+        self._copy_frames = 0
+        self._dropped_frames = 0
+        self._shm_alloc_count = 0
+        self._shm_degraded = False
+        self._shm_last_warn = 0.0
+        self._shm_last_error = ""
+        self._shm_fallbacks_since_warn = 0
+        self._shm_consecutive_ok = 0
+        self._init_shm_provider()
 
         self._subscriptions: list[ZenohSubscription] = []
         self._lock = threading.Lock()
@@ -192,6 +255,54 @@ class ZenohBackend(DataBackend):
             raise BackendUnavailableError(
                 f"Failed to open Zenoh session: {exc}"
             ) from exc
+
+    def _init_shm_provider(self) -> None:
+        """Create the SHM allocation pool, if SHM is enabled.
+
+        Non-fatal on failure: logs a warning and leaves ``_shm_provider`` as
+        ``None`` so :meth:`publish` falls back to copy. On containers the cause
+        is usually one of two independent caps — ``RLIMIT_MEMLOCK``
+        (``ulimits: memlock: -1``) or a ``/dev/shm`` smaller than the pool.
+        ``ipc: host`` covers the latter by inheriting the host's ``/dev/shm``;
+        without it Docker defaults to a private 64 MB one.
+        """
+        if not self._shared_memory:
+            return
+        try:
+            import zenoh.shm as _shm
+
+            self._shm_mod = _shm
+            self._shm_provider = _shm.ShmProvider.default_backend(
+                _shm.MemoryLayout(self._shm_pool_bytes)
+            )
+            logger.info(
+                "Zenoh SHM zero-copy publish enabled (pool=%d bytes, min=%d bytes)",
+                self._shm_pool_bytes,
+                self._shm_min_bytes,
+            )
+        except Exception as exc:
+            self._shm_mod = None
+            self._shm_provider = None
+            logger.warning(
+                "Zenoh SHM pool unavailable (%s) — publishing falls back to copy. "
+                "On Linux containers this needs `ipc: host`, `ulimits: memlock: -1`, "
+                "and a /dev/shm at least as large as the pool (%d bytes). Docker "
+                "defaults /dev/shm to 64 MB unless `ipc: host` (which inherits the "
+                "host's) or an explicit `shm_size` is set.",
+                exc,
+                self._shm_pool_bytes,
+            )
+
+    @property
+    def shm_enabled(self) -> bool:
+        """Whether this session can *publish* from an SHM pool — not a statement
+        about delivery. The pool creates fine even when no peer can map it (e.g.
+        containers without ``ipc: host`` each get a private ``/dev/shm``), so
+        this stays ``True`` and ``shm_frames`` climbs while consumers silently
+        get wire copies. Only the receiver's ``payload.as_shm()`` proves a
+        zero-copy hop.
+        """
+        return self._shm_provider is not None
 
     @property
     def is_connected(self) -> bool:
@@ -294,10 +405,29 @@ class ZenohBackend(DataBackend):
         *,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        try:
-            self._session.put(channel, payload)
-        except Exception as exc:
-            raise PublishError(f"Zenoh publish to '{channel}' failed: {exc}") from exc
+        tried_shm = (
+            self._shm_provider is not None and len(payload) >= self._shm_min_bytes
+        )
+        used_shm = self._publish_shm(channel, payload) if tried_shm else False
+
+        if used_shm:
+            self._shm_frames += 1
+            self._note_shm_recovered()
+        else:
+            # A fallback (wanted SHM but the pool couldn't take it) is
+            # noteworthy; a sub-threshold small message copying is normal.
+            if tried_shm:
+                self._note_shm_degraded()
+                if self._shm_on_exhaustion == "drop":
+                    self._dropped_frames += 1
+                    return  # lossy backpressure — skip this frame entirely
+            try:
+                self._session.put(channel, payload)
+            except Exception as exc:
+                raise PublishError(
+                    f"Zenoh publish to '{channel}' failed: {exc}"
+                ) from exc
+            self._copy_frames += 1
 
         self._publish_counts[channel] += 1
         self._publish_bytes[channel] += len(payload)
@@ -309,6 +439,96 @@ class ZenohBackend(DataBackend):
                 metadata=metadata,
             )
         self._ensure_queryable(channel)
+
+    def _publish_shm(self, channel: str, payload: bytes) -> bool:
+        """Publish *payload* as a zero-copy SHM buffer.
+
+        Returns ``True`` on success, ``False`` to let the caller fall back to a
+        copy ``put``. Only the descriptor crosses the transport. ``ZShmMut`` has
+        no buffer protocol, so the payload is written via slice assignment.
+
+        Concurrency invariant — do not break: allocate a *fresh* buffer per
+        publish and never reuse, mutate, or stash it after ``put()``. zenoh's
+        allocator is cross-process refcounted and reclaims a segment only once
+        no consumer holds it, so fresh-alloc-per-frame is what makes reads safe
+        without a lock. ``_shm_lock`` only serializes provider state
+        (GC/alloc/defragment); the write and ``put`` need no lock.
+        """
+        n = len(payload)
+        try:
+            layout = self._shm_mod.MemoryLayout(n)
+            provider = self._shm_provider
+            with self._shm_lock:
+                self._shm_alloc_count += 1
+                # Cadence GC keeps the steady-state path cheap; a failed alloc
+                # below escalates to a full GC + defragment.
+                if self._shm_alloc_count % _SHM_GC_INTERVAL == 0:
+                    provider.garbage_collect()
+                try:
+                    buf = provider.alloc(layout)
+                except zenoh.ZError:
+                    provider.garbage_collect()
+                    provider.defragment()
+                    buf = provider.alloc(layout)
+            buf[0:n] = payload
+            self._session.put(channel, buf)
+            return True
+        except zenoh.ZError as exc:
+            # ZError = expected operational failure (pool exhausted/oversized,
+            # bad layout, transport error mid-reconnect) → fall back to copy.
+            # Anything else (e.g. a non-bytes-like payload) is a real defect and
+            # is left to propagate rather than masked as backpressure.
+            self._shm_last_error = str(exc)
+            logger.debug(
+                "SHM publish to '%s' failed (%s) — falling back to copy",
+                channel,
+                exc,
+                exc_info=True,
+            )
+            return False
+
+    def _note_shm_degraded(self) -> None:
+        """Warn that SHM fell back to copy, at most once per
+        :data:`_SHM_DEGRADE_WARN_INTERVAL_S`, with the count folded in.
+
+        Gated on elapsed time alone: also gating on the ok->degraded transition
+        would defeat the limit exactly when it matters, since a flapping pool
+        re-enters the "first occurrence" branch every other frame.
+        """
+        self._shm_consecutive_ok = 0
+        self._shm_fallbacks_since_warn += 1
+        now = time.time()
+        if (now - self._shm_last_warn) < _SHM_DEGRADE_WARN_INTERVAL_S:
+            return
+        logger.warning(
+            "Zenoh SHM publish falling back to copy (%d occurrence(s) since the "
+            "last report; %s) — pool may be exhausted (slow/stalled consumer) or "
+            "the payload may exceed the pool size. Raise ZENOH_SHM_POOL_BYTES or "
+            "check consumers.",
+            self._shm_fallbacks_since_warn,
+            self._shm_last_error or "unknown",
+        )
+        self._shm_last_warn = now
+        self._shm_fallbacks_since_warn = 0
+        self._shm_degraded = True
+
+    def _note_shm_recovered(self) -> None:
+        """Log once SHM has resumed for :data:`_SHM_RECOVERY_CONFIRM_FRAMES`
+        consecutive frames. ``_shm_last_warn`` is left untouched so the next
+        degradation still respects the warning interval.
+        """
+        if not self._shm_degraded:
+            return
+        self._shm_consecutive_ok += 1
+        if self._shm_consecutive_ok < _SHM_RECOVERY_CONFIRM_FRAMES:
+            return
+        logger.info(
+            "Zenoh SHM zero-copy publish recovered (%d consecutive frames)",
+            self._shm_consecutive_ok,
+        )
+        self._shm_degraded = False
+        self._shm_consecutive_ok = 0
+        self._shm_fallbacks_since_warn = 0
 
     def subscribe(
         self,
@@ -447,8 +667,19 @@ class ZenohBackend(DataBackend):
                 "publish_bytes": {"channel_key": total_bytes, ...},
                 "recv": {"channel_key": count, ...},
                 "recv_bytes": {"channel_key": total_bytes, ...},
+                "shm_frames": int,
+                "copy_frames": int,
+                "dropped_frames": int,
                 "uptime_s": float,
             }
+
+        ``publish_bytes`` is logical payload volume, not wire bytes (SHM sends
+        only a descriptor). ``shm_frames`` counts frames published *as an SHM
+        buffer* — publish-side intent, not a delivery guarantee, since a non-SHM
+        or remote subscriber still gets a wire copy. Only the receiver's
+        ``payload.as_shm()`` confirms an end-to-end zero-copy hop.
+        ``dropped_frames`` counts frames skipped by the ``"drop"`` exhaustion
+        policy (never published).
         """
         with self._stats_lock:
             return {
@@ -456,6 +687,9 @@ class ZenohBackend(DataBackend):
                 "publish_bytes": dict(self._publish_bytes),
                 "recv": dict(self._recv_counts),
                 "recv_bytes": dict(self._recv_bytes),
+                "shm_frames": self._shm_frames,
+                "copy_frames": self._copy_frames,
+                "dropped_frames": self._dropped_frames,
                 "uptime_s": time.time() - self._stats_start_time,
             }
 
@@ -472,12 +706,18 @@ class ZenohBackend(DataBackend):
                 "publish_bytes": dict(self._publish_bytes),
                 "recv": dict(self._recv_counts),
                 "recv_bytes": dict(self._recv_bytes),
+                "shm_frames": self._shm_frames,
+                "copy_frames": self._copy_frames,
+                "dropped_frames": self._dropped_frames,
                 "elapsed_s": now - self._stats_start_time,
             }
             self._publish_counts = collections.defaultdict(int)
             self._publish_bytes = collections.defaultdict(int)
             self._recv_counts = collections.defaultdict(int)
             self._recv_bytes = collections.defaultdict(int)
+            self._shm_frames = 0
+            self._copy_frames = 0
+            self._dropped_frames = 0
             self._stats_start_time = now
         return snapshot
 

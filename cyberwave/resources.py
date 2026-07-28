@@ -783,6 +783,48 @@ class EnvironmentManager(BaseResourceManager):
 
         return self.create_waypoints(environment_id, [waypoint])
 
+    def update_waypoint(
+        self,
+        environment_id: str,
+        waypoint_id: str,
+        *,
+        position: Optional[Dict[str, Any]] = None,
+        rotation: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Update a waypoint's stored position/rotation offset.
+
+        Calls ``PATCH /api/v1/environments/{uuid}/waypoints/{waypoint_id}``.
+        Only ``position``/``rotation`` can be changed — never the
+        waypoint's reference frame. Fields left as ``None`` are untouched
+        server-side (a true partial update), so e.g. passing only
+        ``position`` leaves the current rotation as-is.
+
+        Returns the updated, normalized waypoint dict.
+        """
+        update_fields: Dict[str, Any] = {}
+        if position is not None:
+            update_fields["position"] = position
+        if rotation is not None:
+            update_fields["rotation"] = rotation
+        if not update_fields:
+            raise ValueError("update_waypoint requires position and/or rotation")
+
+        try:
+            # Lazy import: schema may be absent from a generated rest client that
+            # predates the endpoint (prod self-containment build), so a top-level
+            # import would break the whole SDK.
+            from cyberwave.rest import EnvironmentWaypointPositionUpdateSchema
+
+            payload = EnvironmentWaypointPositionUpdateSchema.from_dict(update_fields)
+            return self.api.src_app_api_environments_update_environment_waypoint_position(
+                environment_id, waypoint_id, payload
+            )
+        except Exception as e:
+            self._handle_error(
+                e, f"update waypoint {waypoint_id} in environment {environment_id}"
+            )
+            raise
+
     def delete_waypoint(
         self, environment_id: str, waypoint_id: str
     ) -> List[Dict[str, Any]]:

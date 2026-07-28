@@ -187,3 +187,32 @@ def test_gripper_joint_twin_has_gripper_and_joints() -> None:
     assert hasattr(twin, "gripper")
     assert hasattr(twin, "joints")
     assert not hasattr(twin, "locomotion")
+
+
+def test_twin_sensors_property_returns_capability_sensors() -> None:
+    """twin.sensors is the canonical accessor for capabilities['sensors']."""
+    sensors = [
+        {"id": "color_camera", "type": "rgb", "name": "color_camera"},
+        {"id": "depth_camera", "type": "depth"},
+    ]
+    twin = CameraTwin(
+        SimpleNamespace(twins=SimpleNamespace()),
+        SimpleNamespace(uuid="cam", name="Webcam", capabilities={"sensors": sensors}),
+    )
+    assert twin.sensors == sensors
+    assert twin.sensors == twin.capabilities.get("sensors")
+
+
+def test_twin_sensors_property_empty_when_absent() -> None:
+    """twin.sensors returns an empty list (never None) when unset or malformed."""
+    twin = CameraTwin(
+        SimpleNamespace(twins=SimpleNamespace()),
+        SimpleNamespace(uuid="cam", name="Webcam", capabilities={}),
+    )
+    assert twin.sensors == []
+    # Malformed (non-list) sensors degrade to [] rather than propagating.
+    twin_bad = CameraTwin(
+        SimpleNamespace(twins=SimpleNamespace()),
+        SimpleNamespace(uuid="cam", name="Webcam", capabilities={"sensors": "oops"}),
+    )
+    assert twin_bad.sensors == []

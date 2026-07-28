@@ -246,6 +246,8 @@ __all__ = [
     "EnvironmentVisualObservationSchema",
     "EnvironmentWaypointBulkCreateSchema",
     "EnvironmentWaypointCreateSchema",
+    "EnvironmentWaypointFrameSchema",
+    "EnvironmentWaypointPositionUpdateSchema",
     "EnvironmentWaypointSchema",
     "EnvironmentWorkflowReplayEventSchema",
     "EpisodeCreateSchema",
@@ -276,6 +278,7 @@ __all__ = [
     "ImportResultSchema",
     "InitiateLargeUploadResponse",
     "InitiateLargeUploadSchema",
+    "InvitationResponseSchema",
     "JointCalibrationSchema",
     "JointSchema",
     "JointStateSchema",
@@ -333,6 +336,7 @@ __all__ = [
     "NavigationRotationSchema",
     "NavigationWaypointActionSchema",
     "NavigationWaypointSchema",
+    "Near",
     "NotificationSettingsSchema",
     "NotificationSettingsUpdateSchema",
     "OccupancyMapCreateSchema",
@@ -424,6 +428,7 @@ __all__ = [
     "RecordingSourcesSchema",
     "RedeemCouponRequestSchema",
     "RedeemCouponResponseSchema",
+    "RedeemLinkSchema",
     "RelativeTranslation",
     "ReloadCapabilitiesBulkSchema",
     "RemoveMemberResponse",
@@ -791,6 +796,8 @@ from cyberwave.rest.models.environment_universal_schema_patch_schema import Envi
 from cyberwave.rest.models.environment_visual_observation_schema import EnvironmentVisualObservationSchema as EnvironmentVisualObservationSchema
 from cyberwave.rest.models.environment_waypoint_bulk_create_schema import EnvironmentWaypointBulkCreateSchema as EnvironmentWaypointBulkCreateSchema
 from cyberwave.rest.models.environment_waypoint_create_schema import EnvironmentWaypointCreateSchema as EnvironmentWaypointCreateSchema
+from cyberwave.rest.models.environment_waypoint_frame_schema import EnvironmentWaypointFrameSchema as EnvironmentWaypointFrameSchema
+from cyberwave.rest.models.environment_waypoint_position_update_schema import EnvironmentWaypointPositionUpdateSchema as EnvironmentWaypointPositionUpdateSchema
 from cyberwave.rest.models.environment_waypoint_schema import EnvironmentWaypointSchema as EnvironmentWaypointSchema
 from cyberwave.rest.models.environment_workflow_replay_event_schema import EnvironmentWorkflowReplayEventSchema as EnvironmentWorkflowReplayEventSchema
 from cyberwave.rest.models.episode_create_schema import EpisodeCreateSchema as EpisodeCreateSchema
@@ -821,6 +828,7 @@ from cyberwave.rest.models.image_bytes1 import ImageBytes1 as ImageBytes1
 from cyberwave.rest.models.import_result_schema import ImportResultSchema as ImportResultSchema
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse as InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema as InitiateLargeUploadSchema
+from cyberwave.rest.models.invitation_response_schema import InvitationResponseSchema as InvitationResponseSchema
 from cyberwave.rest.models.joint_calibration_schema import JointCalibrationSchema as JointCalibrationSchema
 from cyberwave.rest.models.joint_schema import JointSchema as JointSchema
 from cyberwave.rest.models.joint_state_schema import JointStateSchema as JointStateSchema
@@ -878,6 +886,7 @@ from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponse
 from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema as NavigationRotationSchema
 from cyberwave.rest.models.navigation_waypoint_action_schema import NavigationWaypointActionSchema as NavigationWaypointActionSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema as NavigationWaypointSchema
+from cyberwave.rest.models.near import Near as Near
 from cyberwave.rest.models.notification_settings_schema import NotificationSettingsSchema as NotificationSettingsSchema
 from cyberwave.rest.models.notification_settings_update_schema import NotificationSettingsUpdateSchema as NotificationSettingsUpdateSchema
 from cyberwave.rest.models.occupancy_map_create_schema import OccupancyMapCreateSchema as OccupancyMapCreateSchema
@@ -969,6 +978,7 @@ from cyberwave.rest.models.recording_sources_envelope_schema import RecordingSou
 from cyberwave.rest.models.recording_sources_schema import RecordingSourcesSchema as RecordingSourcesSchema
 from cyberwave.rest.models.redeem_coupon_request_schema import RedeemCouponRequestSchema as RedeemCouponRequestSchema
 from cyberwave.rest.models.redeem_coupon_response_schema import RedeemCouponResponseSchema as RedeemCouponResponseSchema
+from cyberwave.rest.models.redeem_link_schema import RedeemLinkSchema as RedeemLinkSchema
 from cyberwave.rest.models.relative_translation import RelativeTranslation as RelativeTranslation
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema as ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse as RemoveMemberResponse

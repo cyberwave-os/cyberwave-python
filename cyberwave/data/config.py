@@ -15,12 +15,23 @@ from .exceptions import BackendConfigError
 
 SUPPORTED_BACKENDS = ("zenoh", "filesystem")
 PUBLISH_MODES = ("dual", "zenoh_only", "mqtt_only")
+SHM_EXHAUSTION_POLICIES = ("copy", "drop")
 
 
 def _parse_bool_env(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_int_env(value: str | None) -> int | None:
+    """Parse an int env var, returning ``None`` for unset/blank/invalid."""
+    if value is None or not value.strip():
+        return None
+    try:
+        return int(value.strip())
+    except ValueError:
+        return None
 
 
 @dataclass
@@ -50,6 +61,22 @@ class BackendConfig:
     Pass ``True`` or ``False`` to override the env var.  Leave ``None`` to
     read ``ZENOH_SHARED_MEMORY`` at construction time.
     """
+
+    zenoh_shm_pool_bytes: int | None = None
+    """Size of the SHM allocation pool.  Env: ``ZENOH_SHM_POOL_BYTES``.
+
+    Only used when ``zenoh_shared_memory`` is on.  Leave ``None`` to read the
+    env var (falling back to the backend default)."""
+
+    zenoh_shm_min_bytes: int | None = None
+    """Minimum payload size for zero-copy publish.  Env: ``ZENOH_SHM_MIN_BYTES``.
+
+    Payloads smaller than this use the plain copy path.  Leave ``None`` to read
+    the env var (falling back to the backend default)."""
+
+    zenoh_shm_on_exhaustion: str = ""
+    """Backpressure policy when the SHM pool is full.  Env:
+    ``ZENOH_SHM_ON_EXHAUSTION``.  ``"copy"`` (default) or ``"drop"``."""
 
     filesystem_base_dir: str | None = None
     """Root for filesystem backend.  Env: ``CYBERWAVE_DATA_DIR``."""
@@ -93,6 +120,29 @@ class BackendConfig:
                 os.environ.get("ZENOH_SHARED_MEMORY"),
             )
 
+        if self.zenoh_shm_pool_bytes is None:
+            self.zenoh_shm_pool_bytes = _parse_int_env(
+                os.environ.get("ZENOH_SHM_POOL_BYTES")
+            )
+
+        if self.zenoh_shm_min_bytes is None:
+            self.zenoh_shm_min_bytes = _parse_int_env(
+                os.environ.get("ZENOH_SHM_MIN_BYTES")
+            )
+
+        if not self.zenoh_shm_on_exhaustion:
+            raw = os.environ.get("ZENOH_SHM_ON_EXHAUSTION", "copy").strip().lower()
+            if raw not in SHM_EXHAUSTION_POLICIES:
+                import warnings
+
+                warnings.warn(
+                    f"Unknown ZENOH_SHM_ON_EXHAUSTION '{raw}'; falling back to "
+                    f"'copy'. Valid values: {', '.join(SHM_EXHAUSTION_POLICIES)}.",
+                    stacklevel=2,
+                )
+                raw = "copy"
+            self.zenoh_shm_on_exhaustion = raw
+
         if not self.filesystem_base_dir:
             self.filesystem_base_dir = os.environ.get("CYBERWAVE_DATA_DIR")
 
@@ -133,12 +183,23 @@ def get_backend(config: BackendConfig | None = None) -> DataBackend:
     cfg = config or BackendConfig()
 
     if cfg.backend == "zenoh":
-        from .zenoh_backend import ZenohBackend
+        from .zenoh_backend import (
+            _DEFAULT_SHM_MIN_BYTES,
+            _DEFAULT_SHM_POOL_BYTES,
+            ZenohBackend,
+        )
 
         return ZenohBackend(
             connect=cfg.zenoh_connect or None,
             listen=cfg.zenoh_listen or None,
             shared_memory=bool(cfg.zenoh_shared_memory),
+            shm_pool_bytes=cfg.zenoh_shm_pool_bytes or _DEFAULT_SHM_POOL_BYTES,
+            shm_min_bytes=(
+                cfg.zenoh_shm_min_bytes
+                if cfg.zenoh_shm_min_bytes is not None
+                else _DEFAULT_SHM_MIN_BYTES
+            ),
+            shm_on_exhaustion=cfg.zenoh_shm_on_exhaustion or "copy",
         )
 
     if cfg.backend == "filesystem":

@@ -16,7 +16,7 @@ This test demonstrates the complete SDK workflow by making real API calls:
 
 Prerequisites:
 - User must be authenticated (set CYBERWAVE_API_KEY env var)
-- Get your API key from https://app.cyberwave.com/profile
+- Get your API key from https://cyberwave.com/profile
 
 To run this test:
     cd cyberwave-sdks/cyberwave-python
@@ -40,13 +40,13 @@ def cyberwave_client():
     Create a Cyberwave client connected to the Cyberwave API.
 
     Requires environment variable:
-    - CYBERWAVE_API_KEY: Your API key from https://app.cyberwave.com/profile
+    - CYBERWAVE_API_KEY: Your API key from https://cyberwave.com/profile
     """
     api_key = os.getenv("CYBERWAVE_API_KEY")
 
     if not api_key:
         pytest.skip(
-            "CYBERWAVE_API_KEY environment variable not set. Get your API key from https://app.cyberwave.com/profile"
+            "CYBERWAVE_API_KEY environment variable not set. Get your API key from https://cyberwave.com/profile"
         )
 
     client = Cyberwave(api_key=api_key)

@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.near import Near
 from cyberwave.rest.models.position import Position
 from cyberwave.rest.models.rotation import Rotation
 from typing import Optional, Set
@@ -42,7 +43,9 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     visible: Optional[StrictBool] = True
     locked: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["id", "primitive_id", "template_key", "template_version", "primitive_type", "name", "parameters", "pose", "position", "rotation", "metadata", "visible", "locked"]
+    auto_place: Optional[StrictBool] = False
+    near: Optional[Near] = None
+    __properties: ClassVar[List[str]] = ["id", "primitive_id", "template_key", "template_version", "primitive_type", "name", "parameters", "pose", "position", "rotation", "metadata", "visible", "locked", "auto_place", "near"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -89,6 +92,9 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of rotation
         if self.rotation:
             _dict['rotation'] = self.rotation.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of near
+        if self.near:
+            _dict['near'] = self.near.to_dict()
         # set to None if id (nullable) is None
         # and model_fields_set contains the field
         if self.id is None and "id" in self.model_fields_set:
@@ -139,6 +145,11 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if near (nullable) is None
+        # and model_fields_set contains the field
+        if self.near is None and "near" in self.model_fields_set:
+            _dict['near'] = None
+
         return _dict
 
     @classmethod
@@ -163,7 +174,9 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
             "rotation": Rotation.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
             "metadata": obj.get("metadata"),
             "visible": obj.get("visible") if obj.get("visible") is not None else True,
-            "locked": obj.get("locked") if obj.get("locked") is not None else False
+            "locked": obj.get("locked") if obj.get("locked") is not None else False,
+            "auto_place": obj.get("auto_place") if obj.get("auto_place") is not None else False,
+            "near": Near.from_dict(obj["near"]) if obj.get("near") is not None else None
         })
         return _obj
 

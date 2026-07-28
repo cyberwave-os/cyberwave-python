@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.environment_waypoint_frame_schema import EnvironmentWaypointFrameSchema
 from cyberwave.rest.models.quaternion_schema import QuaternionSchema
 from cyberwave.rest.models.vector3_schema import Vector3Schema
 from typing import Optional, Set
@@ -35,7 +36,8 @@ class EnvironmentWaypointCreateSchema(BaseModel):
     position: Optional[Vector3Schema] = None
     rotation: Optional[QuaternionSchema] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "name", "collection", "position", "rotation", "metadata"]
+    frame: Optional[EnvironmentWaypointFrameSchema] = None
+    __properties: ClassVar[List[str]] = ["id", "name", "collection", "position", "rotation", "metadata", "frame"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -82,6 +84,9 @@ class EnvironmentWaypointCreateSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of rotation
         if self.rotation:
             _dict['rotation'] = self.rotation.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of frame
+        if self.frame:
+            _dict['frame'] = self.frame.to_dict()
         # set to None if id (nullable) is None
         # and model_fields_set contains the field
         if self.id is None and "id" in self.model_fields_set:
@@ -102,6 +107,11 @@ class EnvironmentWaypointCreateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if frame (nullable) is None
+        # and model_fields_set contains the field
+        if self.frame is None and "frame" in self.model_fields_set:
+            _dict['frame'] = None
+
         return _dict
 
     @classmethod
@@ -119,7 +129,8 @@ class EnvironmentWaypointCreateSchema(BaseModel):
             "collection": obj.get("collection"),
             "position": Vector3Schema.from_dict(obj["position"]) if obj.get("position") is not None else None,
             "rotation": QuaternionSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "frame": EnvironmentWaypointFrameSchema.from_dict(obj["frame"]) if obj.get("frame") is not None else None
         })
         return _obj
 

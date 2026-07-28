@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from cyberwave.data.config import BackendConfig, get_backend
+from cyberwave.data.config import BackendConfig, _parse_int_env, get_backend
 from cyberwave.data.exceptions import BackendConfigError, BackendUnavailableError
 from cyberwave.data.filesystem_backend import FilesystemBackend
 
@@ -30,7 +30,9 @@ class TestBackendConfig:
             assert cfg.backend == "filesystem"
 
     def test_zenoh_connect_from_env(self):
-        with patch.dict(os.environ, {"ZENOH_CONNECT": "tcp/localhost:7447, tcp/10.0.0.1:7447"}):
+        with patch.dict(
+            os.environ, {"ZENOH_CONNECT": "tcp/localhost:7447, tcp/10.0.0.1:7447"}
+        ):
             cfg = BackendConfig()
             assert cfg.zenoh_connect == ["tcp/localhost:7447", "tcp/10.0.0.1:7447"]
 
@@ -63,6 +65,68 @@ class TestBackendConfig:
     def test_key_prefix_default(self):
         cfg = BackendConfig()
         assert cfg.key_prefix == "cw"
+
+
+class TestParseIntEnv:
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("42", 42),
+            ("  7 ", 7),
+            ("0", 0),
+            ("-5", -5),
+            (None, None),
+            ("", None),
+            ("   ", None),
+            ("notanint", None),
+            ("1.5", None),
+        ],
+    )
+    def test_parse(self, value, expected):
+        assert _parse_int_env(value) == expected
+
+
+class TestShmConfig:
+    def test_pool_bytes_from_env(self):
+        with patch.dict(os.environ, {"ZENOH_SHM_POOL_BYTES": "134217728"}):
+            assert BackendConfig().zenoh_shm_pool_bytes == 134217728
+
+    def test_pool_bytes_invalid_is_none(self):
+        with patch.dict(os.environ, {"ZENOH_SHM_POOL_BYTES": "huge"}):
+            assert BackendConfig().zenoh_shm_pool_bytes is None
+
+    def test_pool_bytes_unset_is_none(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert BackendConfig().zenoh_shm_pool_bytes is None
+
+    def test_min_bytes_from_env(self):
+        with patch.dict(os.environ, {"ZENOH_SHM_MIN_BYTES": "8192"}):
+            assert BackendConfig().zenoh_shm_min_bytes == 8192
+
+    def test_on_exhaustion_from_env(self):
+        with patch.dict(os.environ, {"ZENOH_SHM_ON_EXHAUSTION": "drop"}):
+            assert BackendConfig().zenoh_shm_on_exhaustion == "drop"
+
+    def test_on_exhaustion_defaults_to_copy(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert BackendConfig().zenoh_shm_on_exhaustion == "copy"
+
+    def test_on_exhaustion_invalid_warns_and_defaults(self):
+        with patch.dict(os.environ, {"ZENOH_SHM_ON_EXHAUSTION": "bogus"}):
+            with pytest.warns(UserWarning, match="ZENOH_SHM_ON_EXHAUSTION"):
+                cfg = BackendConfig()
+            assert cfg.zenoh_shm_on_exhaustion == "copy"
+
+    def test_explicit_values_override_env(self):
+        with patch.dict(
+            os.environ,
+            {"ZENOH_SHM_ON_EXHAUSTION": "drop", "ZENOH_SHM_POOL_BYTES": "999"},
+        ):
+            cfg = BackendConfig(
+                zenoh_shm_on_exhaustion="copy", zenoh_shm_pool_bytes=123
+            )
+            assert cfg.zenoh_shm_on_exhaustion == "copy"
+            assert cfg.zenoh_shm_pool_bytes == 123
 
 
 class TestGetBackendFactory:

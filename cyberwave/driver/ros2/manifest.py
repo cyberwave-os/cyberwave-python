@@ -86,6 +86,7 @@ class NodeManifest:
     topics: list[ManifestTopic] = field(default_factory=list)
     services: list[ManifestService] = field(default_factory=list)
     managed_launch: ManifestManagedLaunch | None = None
+    mqtt_max_hz: float | None = None
 
 
 def default_node_manifest(node_name: str = "cyberwave_ros2_driver") -> NodeManifest:
@@ -118,9 +119,19 @@ def default_node_manifest(node_name: str = "cyberwave_ros2_driver") -> NodeManif
 
 
 def _parse_manifest_root(root: dict[str, Any]) -> NodeManifest:
+    raw_max_hz = root.get("mqtt_max_hz")
+    mqtt_max_hz = float(raw_max_hz) if raw_max_hz is not None else None
+    if mqtt_max_hz is not None and mqtt_max_hz <= 0:
+        # 0 does NOT mean "off": the rate limiter treats max_hz <= 0 as unlimited,
+        # so a manifest value of 0 would silently uncap the outbound firehose.
+        raise ValueError(
+            f"manifest mqtt_max_hz must be positive when set (got {mqtt_max_hz!r}); "
+            "omit it to inherit the STREAM_PUBLISH_MAX_HZ default"
+        )
     m = NodeManifest(
         node_name=root.get("node_name", ""),
         description=root.get("description", ""),
+        mqtt_max_hz=mqtt_max_hz,
     )
 
     for item in root.get("parameters", []):

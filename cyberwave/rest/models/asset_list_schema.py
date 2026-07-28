@@ -42,6 +42,7 @@ class AssetListSchema(BaseModel):
     thumbnail: Optional[StrictStr] = None
     urdf_file: Optional[StrictStr] = None
     glb_file: Optional[StrictStr] = None
+    splat_file: Optional[StrictStr] = None
     has_universal_schema: Optional[StrictBool] = False
     fixed_base: Optional[StrictBool] = False
     supported_simulation_backends: Optional[List[StrictStr]] = None
@@ -49,7 +50,7 @@ class AssetListSchema(BaseModel):
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "registry_id", "registry_id_alias", "slug", "metadata", "capabilities", "thumbnail", "urdf_file", "glb_file", "has_universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "registry_id", "registry_id_alias", "slug", "metadata", "capabilities", "thumbnail", "urdf_file", "glb_file", "splat_file", "has_universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -135,6 +136,11 @@ class AssetListSchema(BaseModel):
         if self.glb_file is None and "glb_file" in self.model_fields_set:
             _dict['glb_file'] = None
 
+        # set to None if splat_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.splat_file is None and "splat_file" in self.model_fields_set:
+            _dict['splat_file'] = None
+
         # set to None if purchase_price (nullable) is None
         # and model_fields_set contains the field
         if self.purchase_price is None and "purchase_price" in self.model_fields_set:
@@ -171,6 +177,7 @@ class AssetListSchema(BaseModel):
             "thumbnail": obj.get("thumbnail"),
             "urdf_file": obj.get("urdf_file"),
             "glb_file": obj.get("glb_file"),
+            "splat_file": obj.get("splat_file"),
             "has_universal_schema": obj.get("has_universal_schema") if obj.get("has_universal_schema") is not None else False,
             "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False,
             "supported_simulation_backends": obj.get("supported_simulation_backends"),

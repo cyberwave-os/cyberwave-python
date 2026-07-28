@@ -29,24 +29,26 @@ def resolve_ros_message_class(
         type_string = _type_string_for_class(msg_type)
         return msg_type, type_string
 
+    resolved_topic = _resolve_topic_name(node, topic)
     deadline = time.monotonic() + max(0.0, timeout_s)
     poll = max(0.05, poll_interval_s)
     msg_type_string: str | None = None
     last_wait_log_at = 0.0
 
     while time.monotonic() < deadline:
-        msg_type_string = _lookup_topic_type(node, topic)
+        msg_type_string = _lookup_topic_type(node, resolved_topic)
         if msg_type_string:
-            logger.info("Resolved ROS topic %s -> %s", topic, msg_type_string)
+            logger.info("Resolved ROS topic %s -> %s", resolved_topic, msg_type_string)
             break
         now = time.monotonic()
         if now - last_wait_log_at >= 2.0:
             last_wait_log_at = now
             known = _summarize_joint_topics(node)
             logger.info(
-                "Waiting for ROS topic %r on the graph (%.1fs left). "
+                "Waiting for ROS topic %r (resolved %r) on the graph (%.1fs left). "
                 "Known joint-related topics: %s",
                 topic,
+                resolved_topic,
                 max(0.0, deadline - now),
                 known or "(none)",
             )
@@ -55,8 +57,9 @@ def resolve_ros_message_class(
     if not msg_type_string:
         known = _summarize_joint_topics(node)
         raise RosTopicDiscoveryError(
-            f"ROS topic {topic!r} not found within {timeout_s}s — is it publishing? "
-            f"Known joint-related topics: {known or '(none)'}"
+            f"ROS topic {topic!r} (resolved {resolved_topic!r}) not found within "
+            f"{timeout_s}s — is it publishing? Known joint-related topics: "
+            f"{known or '(none)'}"
         )
 
     try:
@@ -83,7 +86,34 @@ def _summarize_joint_topics(node: LifecycleNode) -> list[str]:
     )[:12]
 
 
-def _lookup_topic_type(node: LifecycleNode, topic: str) -> str | None:
+def _resolve_topic_name(node: LifecycleNode, topic: str) -> str:
+    """Fully-qualify *topic* under the node's namespace, mirroring ``create_subscription``.
+
+    ``get_topic_names_and_types()`` always returns fully-qualified names (e.g.
+    ``/CW_<uuid>/joint_states_single``); comparing that against an unresolved
+    relative topic name (``joint_states_single``) never matches even though the
+    topic is actually publishing under the node's namespace — the discovery scan
+    would report "not found" forever. ``rclpy.node.Node.resolve_topic_name``
+    applies the same namespace/remap resolution rclpy uses internally for
+    ``create_subscription``, so a relative ``Ros2TopicSpec(topic=...)`` resolves
+    to the same name the vendor node's own subscription would.
+
+    Falls back to the raw *topic* when the node exposes no resolver or it
+    misbehaves (e.g. a minimal test double), preserving prior behavior for
+    already-absolute topics.
+    """
+    resolver = getattr(node, "resolve_topic_name", None)
+    if not callable(resolver):
+        return topic
+    try:
+        resolved = resolver(topic)
+    except Exception:
+        logger.debug("resolve_topic_name failed for %r", topic, exc_info=True)
+        return topic
+    return resolved if isinstance(resolved, str) and resolved else topic
+
+
+def _lookup_topic_type(node: LifecycleNode, resolved_topic: str) -> str | None:
     try:
         names_and_types = node.get_topic_names_and_types()
     except Exception:
@@ -91,14 +121,14 @@ def _lookup_topic_type(node: LifecycleNode, topic: str) -> str | None:
         return None
 
     for name, types in names_and_types:
-        if name != topic:
+        if name != resolved_topic:
             continue
         if not types:
             return None
         if len(types) > 1:
             logger.warning(
                 "ROS topic %s has multiple types %s; using %s",
-                topic,
+                resolved_topic,
                 types,
                 types[0],
             )
