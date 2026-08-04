@@ -972,6 +972,29 @@ class AttachmentManager(BaseResourceManager):
             self._handle_error(e, f"get attachment {attachment_id}")
             raise
 
+    def create(
+        self,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        asset_uuid: Optional[str] = None,
+        twin_uuid: Optional[str] = None,
+        environment_uuid: Optional[str] = None,
+        workspace_uuid: Optional[str] = None,
+    ) -> AttachmentSchema:
+        """Create a new attachment anchored to a twin/asset/environment/workspace."""
+        payload = AttachmentCreateSchema(
+            asset_uuid=asset_uuid,
+            twin_uuid=twin_uuid,
+            environment_uuid=environment_uuid,
+            workspace_uuid=workspace_uuid,
+            metadata=metadata or {},
+        )
+        try:
+            return self.api.src_app_api_attachments_create_attachment(payload)
+        except Exception as e:
+            self._handle_error(e, "create attachment")
+            raise
+
     def update(
         self,
         attachment_id: str,

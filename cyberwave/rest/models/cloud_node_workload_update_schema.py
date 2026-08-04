@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -25,11 +25,17 @@ from pydantic_core import to_jsonable_python
 
 class CloudNodeWorkloadUpdateSchema(BaseModel):
     """
-    Request schema for updating a Cloud Node workload.
+    Request schema for updating a Cloud Node workload.  The diagnostic fields mirror what a cloud node attaches to a terminal update over MQTT. They are declared here so the HTTP path behaves identically: without them ``payload.dict()`` drops them, and the same report that requeues a busy-host rejection over MQTT would terminally fail the workload over HTTP.
     """ # noqa: E501
     status: Optional[StrictStr] = None
     instance_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["status", "instance_uuid"]
+    error: Optional[StrictStr] = None
+    failure_detail: Optional[StrictStr] = None
+    stderr: Optional[StrictStr] = None
+    exit_code: Optional[StrictInt] = None
+    rejection_reason: Optional[StrictStr] = None
+    rejecting_instance_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -80,6 +86,36 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
         if self.instance_uuid is None and "instance_uuid" in self.model_fields_set:
             _dict['instance_uuid'] = None
 
+        # set to None if error (nullable) is None
+        # and model_fields_set contains the field
+        if self.error is None and "error" in self.model_fields_set:
+            _dict['error'] = None
+
+        # set to None if failure_detail (nullable) is None
+        # and model_fields_set contains the field
+        if self.failure_detail is None and "failure_detail" in self.model_fields_set:
+            _dict['failure_detail'] = None
+
+        # set to None if stderr (nullable) is None
+        # and model_fields_set contains the field
+        if self.stderr is None and "stderr" in self.model_fields_set:
+            _dict['stderr'] = None
+
+        # set to None if exit_code (nullable) is None
+        # and model_fields_set contains the field
+        if self.exit_code is None and "exit_code" in self.model_fields_set:
+            _dict['exit_code'] = None
+
+        # set to None if rejection_reason (nullable) is None
+        # and model_fields_set contains the field
+        if self.rejection_reason is None and "rejection_reason" in self.model_fields_set:
+            _dict['rejection_reason'] = None
+
+        # set to None if rejecting_instance_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.rejecting_instance_uuid is None and "rejecting_instance_uuid" in self.model_fields_set:
+            _dict['rejecting_instance_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -93,7 +129,13 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "status": obj.get("status"),
-            "instance_uuid": obj.get("instance_uuid")
+            "instance_uuid": obj.get("instance_uuid"),
+            "error": obj.get("error"),
+            "failure_detail": obj.get("failure_detail"),
+            "stderr": obj.get("stderr"),
+            "exit_code": obj.get("exit_code"),
+            "rejection_reason": obj.get("rejection_reason"),
+            "rejecting_instance_uuid": obj.get("rejecting_instance_uuid")
         })
         return _obj
 

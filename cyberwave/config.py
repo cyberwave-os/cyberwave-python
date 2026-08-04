@@ -125,7 +125,11 @@ class CyberwaveConfig:
             )
 
         if not self.environment_id:
-            self.environment_id = os.getenv("CYBERWAVE_ENVIRONMENT_ID")
+            # Edge workers/drivers set CYBERWAVE_ENVIRONMENT_UUID; accept it as
+            # an alias so the environment binding is populated consistently.
+            self.environment_id = os.getenv("CYBERWAVE_ENVIRONMENT_ID") or os.getenv(
+                "CYBERWAVE_ENVIRONMENT_UUID"
+            )
 
         if not self.workspace_id:
             self.workspace_id = os.getenv("CYBERWAVE_WORKSPACE_ID")

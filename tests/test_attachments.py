@@ -24,6 +24,28 @@ def test_attachment_manager_get_calls_attachment_endpoint():
     )
 
 
+def test_attachment_manager_create_posts_schema_payload():
+    manager, mock_api = _make_manager()
+    expected = SimpleNamespace(uuid="attachment-1")
+    mock_api.src_app_api_attachments_create_attachment.return_value = expected
+
+    result = manager.create(
+        metadata={"capture_type": "bobbin_detection"},
+        twin_uuid="twin-1",
+    )
+
+    assert result is expected
+    (payload,) = mock_api.src_app_api_attachments_create_attachment.call_args.args
+    assert isinstance(payload, AttachmentCreateSchema)
+    assert payload.to_dict() == {
+        "asset_uuid": None,
+        "twin_uuid": "twin-1",
+        "environment_uuid": None,
+        "workspace_uuid": None,
+        "metadata": {"capture_type": "bobbin_detection"},
+    }
+
+
 def test_attachment_manager_update_posts_schema_payload():
     manager, mock_api = _make_manager()
     expected = SimpleNamespace(uuid="attachment-1")

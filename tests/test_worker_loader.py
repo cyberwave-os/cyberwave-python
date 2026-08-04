@@ -53,6 +53,74 @@ def test_load_workers_missing_dir(tmp_path):
     assert count == 0
 
 
+class _RecordingClient:
+    """Minimal cw stub that records publish_alert calls."""
+
+    def __init__(self):
+        self.alerts = []
+
+    def publish_alert(self, twin_uuid, name, **kwargs):
+        self.alerts.append({"twin_uuid": twin_uuid, "name": name, **kwargs})
+
+
+def test_load_failure_publishes_twin_scoped_alert(tmp_path):
+    """A worker that fails to import surfaces a twin-scoped alert (CYB-2812)."""
+    client = _RecordingClient()
+    (tmp_path / "wf_broken.py").write_text(
+        'TWIN_UUID = "twin-123"\n'
+        'WORKFLOW_UUID = "wf-456"\n'
+        "raise RuntimeError('boom at import')\n"
+    )
+
+    count = load_workers(tmp_path, cw_instance=client)
+
+    assert count == 0
+    assert len(client.alerts) == 1
+    alert = client.alerts[0]
+    assert alert["twin_uuid"] == "twin-123"
+    assert alert["workflow_uuid"] == "wf-456"
+    assert alert["alert_type"] == "worker_load_error"
+    assert alert["severity"] == "error"
+
+
+def test_load_failure_extracts_identity_from_source_on_syntax_error(tmp_path):
+    """Even a worker that won't parse still attributes its alert to the twin —
+    identity is scanned from the source text, not the module namespace."""
+    client = _RecordingClient()
+    (tmp_path / "wf_syntax.py").write_text(
+        'TWIN_UUID = "twin-789"\n'
+        'WORKFLOW_UUID = "wf-000"\n'
+        "def broken(:\n"  # syntax error
+    )
+
+    count = load_workers(tmp_path, cw_instance=client)
+
+    assert count == 0
+    assert len(client.alerts) == 1
+    assert client.alerts[0]["twin_uuid"] == "twin-789"
+
+
+def test_load_failure_without_twin_skips_alert(tmp_path):
+    """No twin identity → nothing to attach the alert to; don't crash."""
+    client = _RecordingClient()
+    (tmp_path / "wf_no_twin.py").write_text("raise RuntimeError('boom')\n")
+
+    count = load_workers(tmp_path, cw_instance=client)
+
+    assert count == 0
+    assert client.alerts == []
+
+
+def test_load_failure_tolerates_client_without_publish_alert(tmp_path):
+    """A cw stub lacking publish_alert must not turn a load failure into a
+    crash — the loader stays best-effort."""
+    (tmp_path / "wf_broken.py").write_text(
+        'TWIN_UUID = "t"\nraise RuntimeError("boom")\n'
+    )
+    count = load_workers(tmp_path, cw_instance="fake_cw")
+    assert count == 0
+
+
 def test_cw_injected_as_builtin(tmp_path):
     sentinel = object()
     (tmp_path / "check_cw.py").write_text(

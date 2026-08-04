@@ -22,7 +22,10 @@ from typing_extensions import Annotated
 from cyberwave.rest.models.ai_metrics_schema import AIMetricsSchema
 from cyberwave.rest.models.add_member_by_email_request import AddMemberByEmailRequest
 from cyberwave.rest.models.add_member_by_email_response import AddMemberByEmailResponse
+from cyberwave.rest.models.admin_camera_recordings_response_schema import AdminCameraRecordingsResponseSchema
 from cyberwave.rest.models.admin_lab_overview_schema import AdminLabOverviewSchema
+from cyberwave.rest.models.admin_recording_environment_schema import AdminRecordingEnvironmentSchema
+from cyberwave.rest.models.admin_twin_sessions_response_schema import AdminTwinSessionsResponseSchema
 from cyberwave.rest.models.alert_schema import AlertSchema
 from cyberwave.rest.models.asset_control_profile_patch_schema import AssetControlProfilePatchSchema
 from cyberwave.rest.models.asset_control_profile_schema import AssetControlProfileSchema
@@ -146,6 +149,8 @@ from cyberwave.rest.models.ml_model_artifact_complete_schema import MLModelArtif
 from cyberwave.rest.models.ml_model_artifact_upload_init_response_schema import MLModelArtifactUploadInitResponseSchema
 from cyberwave.rest.models.ml_model_artifact_upload_init_schema import MLModelArtifactUploadInitSchema
 from cyberwave.rest.models.ml_model_create_schema import MLModelCreateSchema
+from cyberwave.rest.models.ml_model_credential_set_schema import MLModelCredentialSetSchema
+from cyberwave.rest.models.ml_model_credential_status_schema import MLModelCredentialStatusSchema
 from cyberwave.rest.models.ml_model_edge_runtime_list_schema import MLModelEdgeRuntimeListSchema
 from cyberwave.rest.models.ml_model_evaluate_schema import MLModelEvaluateSchema
 from cyberwave.rest.models.ml_model_execution_detail_schema import MLModelExecutionDetailSchema
@@ -154,6 +159,8 @@ from cyberwave.rest.models.ml_model_run_queued_schema import MLModelRunQueuedSch
 from cyberwave.rest.models.ml_model_run_result_schema import MLModelRunResultSchema
 from cyberwave.rest.models.ml_model_run_schema import MLModelRunSchema
 from cyberwave.rest.models.ml_model_schema import MLModelSchema
+from cyberwave.rest.models.ml_model_test_call_result_schema import MLModelTestCallResultSchema
+from cyberwave.rest.models.ml_model_test_call_schema import MLModelTestCallSchema
 from cyberwave.rest.models.ml_model_update_schema import MLModelUpdateSchema
 from cyberwave.rest.models.ml_training_create_schema import MLTrainingCreateSchema
 from cyberwave.rest.models.ml_training_deploy_schema import MLTrainingDeploySchema
@@ -223,6 +230,7 @@ from cyberwave.rest.models.rl_task_update_schema import RLTaskUpdateSchema
 from cyberwave.rest.models.recording_detail_schema import RecordingDetailSchema
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema
 from cyberwave.rest.models.recording_list_response import RecordingListResponse
+from cyberwave.rest.models.recording_preflight_schema import RecordingPreflightSchema
 from cyberwave.rest.models.recording_sources_envelope_schema import RecordingSourcesEnvelopeSchema
 from cyberwave.rest.models.redeem_coupon_request_schema import RedeemCouponRequestSchema
 from cyberwave.rest.models.redeem_coupon_response_schema import RedeemCouponResponseSchema
@@ -256,6 +264,10 @@ from cyberwave.rest.models.topup_intent_request_schema import TopupIntentRequest
 from cyberwave.rest.models.topup_intent_response_schema import TopupIntentResponseSchema
 from cyberwave.rest.models.trajectory_from_action_request_schema import TrajectoryFromActionRequestSchema
 from cyberwave.rest.models.transaction_invoice_schema import TransactionInvoiceSchema
+from cyberwave.rest.models.trigger_camera_finalization_request_schema import TriggerCameraFinalizationRequestSchema
+from cyberwave.rest.models.trigger_camera_finalization_response_schema import TriggerCameraFinalizationResponseSchema
+from cyberwave.rest.models.trigger_recording_request_schema import TriggerRecordingRequestSchema
+from cyberwave.rest.models.trigger_recording_response_schema import TriggerRecordingResponseSchema
 from cyberwave.rest.models.twin_action_request_schema import TwinActionRequestSchema
 from cyberwave.rest.models.twin_action_response_schema import TwinActionResponseSchema
 from cyberwave.rest.models.twin_action_status_schema import TwinActionStatusSchema
@@ -2519,6 +2531,1789 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='PATCH',
             resource_path='/api/v1/assets/{uuid}/control-profile/{option_id}/settings',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_list_twin_camera_recordings(
+        self,
+        twin_uuid: StrictStr,
+        limit: Optional[StrictInt] = None,
+        scope: Optional[StrictStr] = None,
+        start_timestamp_us: Optional[StrictInt] = None,
+        end_timestamp_us: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> AdminCameraRecordingsResponseSchema:
+        """List Twin Camera Recordings
+
+        Group stored camera segments by ``recording_id`` and report finalization.  Deliberately grouped the same way ``_find_stale_progressive_recording_candidates`` groups them — per recording, not per chunk, audio parts excluded — so what an operator sees here matches what the reconcile beat would act on.  Time filtering is *discovery only*: the window picks which recordings had segment activity in it, and every fact about a chosen recording is then computed from all of its segments. A recording that straddles the boundary would otherwise report a truncated ``last_segment_at``, which is the value staleness and the live-stream deferral check both key on — a window ending an hour ago could make a recording that is still writing segments look stale and safe to finalize. Two queries, each bounded: the first by the window, the second by the handful of ids the first returned.  ``status`` is the actionable summary; ``finalizable`` is what the UI enables a button on. A recording is finalizable when it is not already finalized, no live stream is advancing on it, and it is either stale or has been given up on.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param limit:
+        :type limit: int
+        :param scope:
+        :type scope: str
+        :param start_timestamp_us:
+        :type start_timestamp_us: int
+        :param end_timestamp_us:
+        :type end_timestamp_us: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_list_twin_camera_recordings_serialize(
+            twin_uuid=twin_uuid,
+            limit=limit,
+            scope=scope,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminCameraRecordingsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_list_twin_camera_recordings_with_http_info(
+        self,
+        twin_uuid: StrictStr,
+        limit: Optional[StrictInt] = None,
+        scope: Optional[StrictStr] = None,
+        start_timestamp_us: Optional[StrictInt] = None,
+        end_timestamp_us: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[AdminCameraRecordingsResponseSchema]:
+        """List Twin Camera Recordings
+
+        Group stored camera segments by ``recording_id`` and report finalization.  Deliberately grouped the same way ``_find_stale_progressive_recording_candidates`` groups them — per recording, not per chunk, audio parts excluded — so what an operator sees here matches what the reconcile beat would act on.  Time filtering is *discovery only*: the window picks which recordings had segment activity in it, and every fact about a chosen recording is then computed from all of its segments. A recording that straddles the boundary would otherwise report a truncated ``last_segment_at``, which is the value staleness and the live-stream deferral check both key on — a window ending an hour ago could make a recording that is still writing segments look stale and safe to finalize. Two queries, each bounded: the first by the window, the second by the handful of ids the first returned.  ``status`` is the actionable summary; ``finalizable`` is what the UI enables a button on. A recording is finalizable when it is not already finalized, no live stream is advancing on it, and it is either stale or has been given up on.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param limit:
+        :type limit: int
+        :param scope:
+        :type scope: str
+        :param start_timestamp_us:
+        :type start_timestamp_us: int
+        :param end_timestamp_us:
+        :type end_timestamp_us: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_list_twin_camera_recordings_serialize(
+            twin_uuid=twin_uuid,
+            limit=limit,
+            scope=scope,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminCameraRecordingsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_list_twin_camera_recordings_without_preload_content(
+        self,
+        twin_uuid: StrictStr,
+        limit: Optional[StrictInt] = None,
+        scope: Optional[StrictStr] = None,
+        start_timestamp_us: Optional[StrictInt] = None,
+        end_timestamp_us: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """List Twin Camera Recordings
+
+        Group stored camera segments by ``recording_id`` and report finalization.  Deliberately grouped the same way ``_find_stale_progressive_recording_candidates`` groups them — per recording, not per chunk, audio parts excluded — so what an operator sees here matches what the reconcile beat would act on.  Time filtering is *discovery only*: the window picks which recordings had segment activity in it, and every fact about a chosen recording is then computed from all of its segments. A recording that straddles the boundary would otherwise report a truncated ``last_segment_at``, which is the value staleness and the live-stream deferral check both key on — a window ending an hour ago could make a recording that is still writing segments look stale and safe to finalize. Two queries, each bounded: the first by the window, the second by the handful of ids the first returned.  ``status`` is the actionable summary; ``finalizable`` is what the UI enables a button on. A recording is finalizable when it is not already finalized, no live stream is advancing on it, and it is either stale or has been given up on.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param limit:
+        :type limit: int
+        :param scope:
+        :type scope: str
+        :param start_timestamp_us:
+        :type start_timestamp_us: int
+        :param end_timestamp_us:
+        :type end_timestamp_us: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_list_twin_camera_recordings_serialize(
+            twin_uuid=twin_uuid,
+            limit=limit,
+            scope=scope,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminCameraRecordingsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_admin_task_trigger_list_twin_camera_recordings_serialize(
+        self,
+        twin_uuid,
+        limit,
+        scope,
+        start_timestamp_us,
+        end_timestamp_us,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if twin_uuid is not None:
+            _path_params['twin_uuid'] = twin_uuid
+        # process the query parameters
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
+        if scope is not None:
+            
+            _query_params.append(('scope', scope))
+            
+        if start_timestamp_us is not None:
+            
+            _query_params.append(('start_timestamp_us', start_timestamp_us))
+            
+        if end_timestamp_us is not None:
+            
+            _query_params.append(('end_timestamp_us', end_timestamp_us))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/tasks/admin/twins/{twin_uuid}/camera-recordings',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_list_twin_recording_sessions(
+        self,
+        twin_uuid: StrictStr,
+        limit: Optional[StrictInt] = None,
+        scope: Optional[StrictStr] = None,
+        start_timestamp_us: Optional[StrictInt] = None,
+        end_timestamp_us: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> AdminTwinSessionsResponseSchema:
+        """List Twin Recording Sessions
+
+        List a twin's recording sessions plus the events a range can be built from.  Always time-filtered: an omitted window means the last ``DEFAULT_HISTORY_WINDOW_S`` (one day), never the twin's whole history. The resolved bounds come back as ``window_start_us`` / ``window_end_us`` so the UI shows what was actually queried rather than what was asked for.  Two queries, each with one job:  1. The selected twin's ``TWIN_RECORDING_*`` rows, which are what sessions    are paired and classified from. 2. The range-point rows (``RANGE_POINT_EVENT_TYPES``), scoped to the twin or    to its whole environment per ``scope``.  They are kept separate so that environment scope — where other twins' rows could otherwise crowd out the selected twin's within a shared row cap — never degrades the session list.  ``scope=\"environment\"`` exists because a camera twin has no ``TWIN_RECORDING_START``/``STOP`` of its own: its window is usually defined by the robot twin it was recording alongside, so an operator needs that twin's events as bounds.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param limit:
+        :type limit: int
+        :param scope:
+        :type scope: str
+        :param start_timestamp_us:
+        :type start_timestamp_us: int
+        :param end_timestamp_us:
+        :type end_timestamp_us: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_list_twin_recording_sessions_serialize(
+            twin_uuid=twin_uuid,
+            limit=limit,
+            scope=scope,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminTwinSessionsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_list_twin_recording_sessions_with_http_info(
+        self,
+        twin_uuid: StrictStr,
+        limit: Optional[StrictInt] = None,
+        scope: Optional[StrictStr] = None,
+        start_timestamp_us: Optional[StrictInt] = None,
+        end_timestamp_us: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[AdminTwinSessionsResponseSchema]:
+        """List Twin Recording Sessions
+
+        List a twin's recording sessions plus the events a range can be built from.  Always time-filtered: an omitted window means the last ``DEFAULT_HISTORY_WINDOW_S`` (one day), never the twin's whole history. The resolved bounds come back as ``window_start_us`` / ``window_end_us`` so the UI shows what was actually queried rather than what was asked for.  Two queries, each with one job:  1. The selected twin's ``TWIN_RECORDING_*`` rows, which are what sessions    are paired and classified from. 2. The range-point rows (``RANGE_POINT_EVENT_TYPES``), scoped to the twin or    to its whole environment per ``scope``.  They are kept separate so that environment scope — where other twins' rows could otherwise crowd out the selected twin's within a shared row cap — never degrades the session list.  ``scope=\"environment\"`` exists because a camera twin has no ``TWIN_RECORDING_START``/``STOP`` of its own: its window is usually defined by the robot twin it was recording alongside, so an operator needs that twin's events as bounds.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param limit:
+        :type limit: int
+        :param scope:
+        :type scope: str
+        :param start_timestamp_us:
+        :type start_timestamp_us: int
+        :param end_timestamp_us:
+        :type end_timestamp_us: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_list_twin_recording_sessions_serialize(
+            twin_uuid=twin_uuid,
+            limit=limit,
+            scope=scope,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminTwinSessionsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_list_twin_recording_sessions_without_preload_content(
+        self,
+        twin_uuid: StrictStr,
+        limit: Optional[StrictInt] = None,
+        scope: Optional[StrictStr] = None,
+        start_timestamp_us: Optional[StrictInt] = None,
+        end_timestamp_us: Optional[StrictInt] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """List Twin Recording Sessions
+
+        List a twin's recording sessions plus the events a range can be built from.  Always time-filtered: an omitted window means the last ``DEFAULT_HISTORY_WINDOW_S`` (one day), never the twin's whole history. The resolved bounds come back as ``window_start_us`` / ``window_end_us`` so the UI shows what was actually queried rather than what was asked for.  Two queries, each with one job:  1. The selected twin's ``TWIN_RECORDING_*`` rows, which are what sessions    are paired and classified from. 2. The range-point rows (``RANGE_POINT_EVENT_TYPES``), scoped to the twin or    to its whole environment per ``scope``.  They are kept separate so that environment scope — where other twins' rows could otherwise crowd out the selected twin's within a shared row cap — never degrades the session list.  ``scope=\"environment\"`` exists because a camera twin has no ``TWIN_RECORDING_START``/``STOP`` of its own: its window is usually defined by the robot twin it was recording alongside, so an operator needs that twin's events as bounds.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param limit:
+        :type limit: int
+        :param scope:
+        :type scope: str
+        :param start_timestamp_us:
+        :type start_timestamp_us: int
+        :param end_timestamp_us:
+        :type end_timestamp_us: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_list_twin_recording_sessions_serialize(
+            twin_uuid=twin_uuid,
+            limit=limit,
+            scope=scope,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminTwinSessionsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_admin_task_trigger_list_twin_recording_sessions_serialize(
+        self,
+        twin_uuid,
+        limit,
+        scope,
+        start_timestamp_us,
+        end_timestamp_us,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if twin_uuid is not None:
+            _path_params['twin_uuid'] = twin_uuid
+        # process the query parameters
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
+        if scope is not None:
+            
+            _query_params.append(('scope', scope))
+            
+        if start_timestamp_us is not None:
+            
+            _query_params.append(('start_timestamp_us', start_timestamp_us))
+            
+        if end_timestamp_us is not None:
+            
+            _query_params.append(('end_timestamp_us', end_timestamp_us))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/tasks/admin/twins/{twin_uuid}/recording-sessions',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_preflight_recording_generation(
+        self,
+        twin_uuid: StrictStr,
+        start_timestamp_us: StrictInt,
+        end_timestamp_us: StrictInt,
+        regenerate_cameras: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RecordingPreflightSchema:
+        """Preflight Recording Generation
+
+        Report what a trigger would do, so the UI never promises work it cannot do.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param start_timestamp_us: (required)
+        :type start_timestamp_us: int
+        :param end_timestamp_us: (required)
+        :type end_timestamp_us: int
+        :param regenerate_cameras:
+        :type regenerate_cameras: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_preflight_recording_generation_serialize(
+            twin_uuid=twin_uuid,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            regenerate_cameras=regenerate_cameras,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "RecordingPreflightSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_preflight_recording_generation_with_http_info(
+        self,
+        twin_uuid: StrictStr,
+        start_timestamp_us: StrictInt,
+        end_timestamp_us: StrictInt,
+        regenerate_cameras: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[RecordingPreflightSchema]:
+        """Preflight Recording Generation
+
+        Report what a trigger would do, so the UI never promises work it cannot do.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param start_timestamp_us: (required)
+        :type start_timestamp_us: int
+        :param end_timestamp_us: (required)
+        :type end_timestamp_us: int
+        :param regenerate_cameras:
+        :type regenerate_cameras: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_preflight_recording_generation_serialize(
+            twin_uuid=twin_uuid,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            regenerate_cameras=regenerate_cameras,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "RecordingPreflightSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_preflight_recording_generation_without_preload_content(
+        self,
+        twin_uuid: StrictStr,
+        start_timestamp_us: StrictInt,
+        end_timestamp_us: StrictInt,
+        regenerate_cameras: Optional[StrictBool] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Preflight Recording Generation
+
+        Report what a trigger would do, so the UI never promises work it cannot do.
+
+        :param twin_uuid: (required)
+        :type twin_uuid: str
+        :param start_timestamp_us: (required)
+        :type start_timestamp_us: int
+        :param end_timestamp_us: (required)
+        :type end_timestamp_us: int
+        :param regenerate_cameras:
+        :type regenerate_cameras: bool
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_preflight_recording_generation_serialize(
+            twin_uuid=twin_uuid,
+            start_timestamp_us=start_timestamp_us,
+            end_timestamp_us=end_timestamp_us,
+            regenerate_cameras=regenerate_cameras,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "RecordingPreflightSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_admin_task_trigger_preflight_recording_generation_serialize(
+        self,
+        twin_uuid,
+        start_timestamp_us,
+        end_timestamp_us,
+        regenerate_cameras,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        if twin_uuid is not None:
+            
+            _query_params.append(('twin_uuid', twin_uuid))
+            
+        if start_timestamp_us is not None:
+            
+            _query_params.append(('start_timestamp_us', start_timestamp_us))
+            
+        if end_timestamp_us is not None:
+            
+            _query_params.append(('end_timestamp_us', end_timestamp_us))
+            
+        if regenerate_cameras is not None:
+            
+            _query_params.append(('regenerate_cameras', regenerate_cameras))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/tasks/admin/recording-generation/preflight',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_resolve_recording_environment(
+        self,
+        ref: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> AdminRecordingEnvironmentSchema:
+        """Resolve Recording Environment
+
+        Resolve an environment by slug or UUID and list its recordable twins.
+
+        :param ref: (required)
+        :type ref: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_resolve_recording_environment_serialize(
+            ref=ref,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminRecordingEnvironmentSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_resolve_recording_environment_with_http_info(
+        self,
+        ref: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[AdminRecordingEnvironmentSchema]:
+        """Resolve Recording Environment
+
+        Resolve an environment by slug or UUID and list its recordable twins.
+
+        :param ref: (required)
+        :type ref: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_resolve_recording_environment_serialize(
+            ref=ref,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminRecordingEnvironmentSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_resolve_recording_environment_without_preload_content(
+        self,
+        ref: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Resolve Recording Environment
+
+        Resolve an environment by slug or UUID and list its recordable twins.
+
+        :param ref: (required)
+        :type ref: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_resolve_recording_environment_serialize(
+            ref=ref,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AdminRecordingEnvironmentSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_admin_task_trigger_resolve_recording_environment_serialize(
+        self,
+        ref,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        if ref is not None:
+            
+            _query_params.append(('ref', ref))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/tasks/admin/environment',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_trigger_camera_finalization(
+        self,
+        trigger_camera_finalization_request_schema: TriggerCameraFinalizationRequestSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> TriggerCameraFinalizationResponseSchema:
+        """Trigger Camera Finalization
+
+        Fire ``finalize_progressive_camera_recording_task`` for one recording.  The same dispatch the reconcile beat makes (``_reconcile_one_progressive_recording``), including passing the *last segment's* timestamp rather than \"now\" — the synthesized ``camera_stored`` row is stamped with it.  Refuses rather than dispatching when the recording has no stored segments (a typo would otherwise burn one of the recording's finite reconcile attempts via the ``no_segments`` path), when it is already finalized, and when health plus lifecycle telemetry say a live stream is still advancing on it — finalizing a live recording truncates it and orphans every later segment.
+
+        :param trigger_camera_finalization_request_schema: (required)
+        :type trigger_camera_finalization_request_schema: TriggerCameraFinalizationRequestSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_trigger_camera_finalization_serialize(
+            trigger_camera_finalization_request_schema=trigger_camera_finalization_request_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TriggerCameraFinalizationResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_trigger_camera_finalization_with_http_info(
+        self,
+        trigger_camera_finalization_request_schema: TriggerCameraFinalizationRequestSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[TriggerCameraFinalizationResponseSchema]:
+        """Trigger Camera Finalization
+
+        Fire ``finalize_progressive_camera_recording_task`` for one recording.  The same dispatch the reconcile beat makes (``_reconcile_one_progressive_recording``), including passing the *last segment's* timestamp rather than \"now\" — the synthesized ``camera_stored`` row is stamped with it.  Refuses rather than dispatching when the recording has no stored segments (a typo would otherwise burn one of the recording's finite reconcile attempts via the ``no_segments`` path), when it is already finalized, and when health plus lifecycle telemetry say a live stream is still advancing on it — finalizing a live recording truncates it and orphans every later segment.
+
+        :param trigger_camera_finalization_request_schema: (required)
+        :type trigger_camera_finalization_request_schema: TriggerCameraFinalizationRequestSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_trigger_camera_finalization_serialize(
+            trigger_camera_finalization_request_schema=trigger_camera_finalization_request_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TriggerCameraFinalizationResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_trigger_camera_finalization_without_preload_content(
+        self,
+        trigger_camera_finalization_request_schema: TriggerCameraFinalizationRequestSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Trigger Camera Finalization
+
+        Fire ``finalize_progressive_camera_recording_task`` for one recording.  The same dispatch the reconcile beat makes (``_reconcile_one_progressive_recording``), including passing the *last segment's* timestamp rather than \"now\" — the synthesized ``camera_stored`` row is stamped with it.  Refuses rather than dispatching when the recording has no stored segments (a typo would otherwise burn one of the recording's finite reconcile attempts via the ``no_segments`` path), when it is already finalized, and when health plus lifecycle telemetry say a live stream is still advancing on it — finalizing a live recording truncates it and orphans every later segment.
+
+        :param trigger_camera_finalization_request_schema: (required)
+        :type trigger_camera_finalization_request_schema: TriggerCameraFinalizationRequestSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_trigger_camera_finalization_serialize(
+            trigger_camera_finalization_request_schema=trigger_camera_finalization_request_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TriggerCameraFinalizationResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_admin_task_trigger_trigger_camera_finalization_serialize(
+        self,
+        trigger_camera_finalization_request_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if trigger_camera_finalization_request_schema is not None:
+            _body_params = trigger_camera_finalization_request_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/tasks/admin/camera-finalization',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_trigger_recording_generation(
+        self,
+        trigger_recording_request_schema: TriggerRecordingRequestSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> TriggerRecordingResponseSchema:
+        """Trigger Recording Generation
+
+        Re-fire ``generate_twin_recording_task`` for an explicit twin + window.  Idempotent within ``MANUAL_RECORDING_TRIGGER_LOCK_TTL_S``: the same twin plus an identical window enqueues exactly once, and the second call returns ``status=\"duplicate\"`` with HTTP 200 (the work the caller asked for is in flight — that is not an error).
+
+        :param trigger_recording_request_schema: (required)
+        :type trigger_recording_request_schema: TriggerRecordingRequestSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_trigger_recording_generation_serialize(
+            trigger_recording_request_schema=trigger_recording_request_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TriggerRecordingResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_trigger_recording_generation_with_http_info(
+        self,
+        trigger_recording_request_schema: TriggerRecordingRequestSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[TriggerRecordingResponseSchema]:
+        """Trigger Recording Generation
+
+        Re-fire ``generate_twin_recording_task`` for an explicit twin + window.  Idempotent within ``MANUAL_RECORDING_TRIGGER_LOCK_TTL_S``: the same twin plus an identical window enqueues exactly once, and the second call returns ``status=\"duplicate\"`` with HTTP 200 (the work the caller asked for is in flight — that is not an error).
+
+        :param trigger_recording_request_schema: (required)
+        :type trigger_recording_request_schema: TriggerRecordingRequestSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_trigger_recording_generation_serialize(
+            trigger_recording_request_schema=trigger_recording_request_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TriggerRecordingResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_admin_task_trigger_trigger_recording_generation_without_preload_content(
+        self,
+        trigger_recording_request_schema: TriggerRecordingRequestSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Trigger Recording Generation
+
+        Re-fire ``generate_twin_recording_task`` for an explicit twin + window.  Idempotent within ``MANUAL_RECORDING_TRIGGER_LOCK_TTL_S``: the same twin plus an identical window enqueues exactly once, and the second call returns ``status=\"duplicate\"`` with HTTP 200 (the work the caller asked for is in flight — that is not an error).
+
+        :param trigger_recording_request_schema: (required)
+        :type trigger_recording_request_schema: TriggerRecordingRequestSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_admin_task_trigger_trigger_recording_generation_serialize(
+            trigger_recording_request_schema=trigger_recording_request_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TriggerRecordingResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_admin_task_trigger_trigger_recording_generation_serialize(
+        self,
+        trigger_recording_request_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if trigger_recording_request_schema is not None:
+            _body_params = trigger_recording_request_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/tasks/admin/recording-generation',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -68467,7 +70262,7 @@ class DefaultApi:
     ) -> MLModelSchema:
         """Create Mlmodel
 
-        Create a new ML model (staff administrators only).
+        Create a new ML model.  Staff/admins can create any model (any provider, any visibility). Other authenticated users may create feature-flagged ``custom-api`` / ``custom-hosted`` models scoped to private/workspace visibility and cloud deployment — see ``docs/CUSTOM_MLMODELS_SPEC.md``.
 
         :param ml_model_create_schema: (required)
         :type ml_model_create_schema: MLModelCreateSchema
@@ -68534,7 +70329,7 @@ class DefaultApi:
     ) -> ApiResponse[MLModelSchema]:
         """Create Mlmodel
 
-        Create a new ML model (staff administrators only).
+        Create a new ML model.  Staff/admins can create any model (any provider, any visibility). Other authenticated users may create feature-flagged ``custom-api`` / ``custom-hosted`` models scoped to private/workspace visibility and cloud deployment — see ``docs/CUSTOM_MLMODELS_SPEC.md``.
 
         :param ml_model_create_schema: (required)
         :type ml_model_create_schema: MLModelCreateSchema
@@ -68601,7 +70396,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Create Mlmodel
 
-        Create a new ML model (staff administrators only).
+        Create a new ML model.  Staff/admins can create any model (any provider, any visibility). Other authenticated users may create feature-flagged ``custom-api`` / ``custom-hosted`` models scoped to private/workspace visibility and cloud deployment — see ``docs/CUSTOM_MLMODELS_SPEC.md``.
 
         :param ml_model_create_schema: (required)
         :type ml_model_create_schema: MLModelCreateSchema
@@ -68961,6 +70756,267 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='DELETE',
             resource_path='/api/v1/mlmodels/{uuid}',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_mlmodels_delete_mlmodel_credential(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> MLModelCredentialStatusSchema:
+        """Delete Mlmodel Credential
+
+        Delete a model's stored auth material, if any.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_delete_mlmodel_credential_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelCredentialStatusSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_mlmodels_delete_mlmodel_credential_with_http_info(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[MLModelCredentialStatusSchema]:
+        """Delete Mlmodel Credential
+
+        Delete a model's stored auth material, if any.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_delete_mlmodel_credential_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelCredentialStatusSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_mlmodels_delete_mlmodel_credential_without_preload_content(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Delete Mlmodel Credential
+
+        Delete a model's stored auth material, if any.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_delete_mlmodel_credential_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelCredentialStatusSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_mlmodels_delete_mlmodel_credential_serialize(
+        self,
+        uuid,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='DELETE',
+            resource_path='/api/v1/mlmodels/{uuid}/credential',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -72869,6 +74925,584 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='POST',
             resource_path='/api/v1/mlmodels/{uuid}/playground/run',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_mlmodels_set_mlmodel_credential(
+        self,
+        uuid: StrictStr,
+        ml_model_credential_set_schema: MLModelCredentialSetSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> MLModelCredentialStatusSchema:
+        """Set Mlmodel Credential
+
+        Store (encrypted) auth material for a ``custom-api`` model.  Write-only: the secret is never returned by this or any other endpoint. Callers can only tell a credential exists via ``MLModelSchema.has_credential``.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param ml_model_credential_set_schema: (required)
+        :type ml_model_credential_set_schema: MLModelCredentialSetSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_set_mlmodel_credential_serialize(
+            uuid=uuid,
+            ml_model_credential_set_schema=ml_model_credential_set_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelCredentialStatusSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_mlmodels_set_mlmodel_credential_with_http_info(
+        self,
+        uuid: StrictStr,
+        ml_model_credential_set_schema: MLModelCredentialSetSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[MLModelCredentialStatusSchema]:
+        """Set Mlmodel Credential
+
+        Store (encrypted) auth material for a ``custom-api`` model.  Write-only: the secret is never returned by this or any other endpoint. Callers can only tell a credential exists via ``MLModelSchema.has_credential``.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param ml_model_credential_set_schema: (required)
+        :type ml_model_credential_set_schema: MLModelCredentialSetSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_set_mlmodel_credential_serialize(
+            uuid=uuid,
+            ml_model_credential_set_schema=ml_model_credential_set_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelCredentialStatusSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_mlmodels_set_mlmodel_credential_without_preload_content(
+        self,
+        uuid: StrictStr,
+        ml_model_credential_set_schema: MLModelCredentialSetSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Set Mlmodel Credential
+
+        Store (encrypted) auth material for a ``custom-api`` model.  Write-only: the secret is never returned by this or any other endpoint. Callers can only tell a credential exists via ``MLModelSchema.has_credential``.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param ml_model_credential_set_schema: (required)
+        :type ml_model_credential_set_schema: MLModelCredentialSetSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_set_mlmodel_credential_serialize(
+            uuid=uuid,
+            ml_model_credential_set_schema=ml_model_credential_set_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelCredentialStatusSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_mlmodels_set_mlmodel_credential_serialize(
+        self,
+        uuid,
+        ml_model_credential_set_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if ml_model_credential_set_schema is not None:
+            _body_params = ml_model_credential_set_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/mlmodels/{uuid}/credential',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_mlmodels_test_call_mlmodel(
+        self,
+        uuid: StrictStr,
+        ml_model_test_call_schema: MLModelTestCallSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> MLModelTestCallResultSchema:
+        """Test Call Mlmodel
+
+        Run one real invocation against a ``custom-api`` model's endpoint.  Lets the owner validate endpoint/auth/payload_template configuration before wiring the model into a workflow. This performs a *real* inference, so it is credit-gated and metered exactly like ``POST /{uuid}/run`` — under its own ``mlmodel_test_call`` caller so configuration traffic stays separable in usage dashboards.  Requires ``metadata.endpoint_url``: without it the custom-API handler would silently divert to ``metadata.fallback_provider`` on the platform's own provider credentials, which tests nothing the caller asked about.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param ml_model_test_call_schema: (required)
+        :type ml_model_test_call_schema: MLModelTestCallSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_test_call_mlmodel_serialize(
+            uuid=uuid,
+            ml_model_test_call_schema=ml_model_test_call_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelTestCallResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_mlmodels_test_call_mlmodel_with_http_info(
+        self,
+        uuid: StrictStr,
+        ml_model_test_call_schema: MLModelTestCallSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[MLModelTestCallResultSchema]:
+        """Test Call Mlmodel
+
+        Run one real invocation against a ``custom-api`` model's endpoint.  Lets the owner validate endpoint/auth/payload_template configuration before wiring the model into a workflow. This performs a *real* inference, so it is credit-gated and metered exactly like ``POST /{uuid}/run`` — under its own ``mlmodel_test_call`` caller so configuration traffic stays separable in usage dashboards.  Requires ``metadata.endpoint_url``: without it the custom-API handler would silently divert to ``metadata.fallback_provider`` on the platform's own provider credentials, which tests nothing the caller asked about.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param ml_model_test_call_schema: (required)
+        :type ml_model_test_call_schema: MLModelTestCallSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_test_call_mlmodel_serialize(
+            uuid=uuid,
+            ml_model_test_call_schema=ml_model_test_call_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelTestCallResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_mlmodels_test_call_mlmodel_without_preload_content(
+        self,
+        uuid: StrictStr,
+        ml_model_test_call_schema: MLModelTestCallSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Test Call Mlmodel
+
+        Run one real invocation against a ``custom-api`` model's endpoint.  Lets the owner validate endpoint/auth/payload_template configuration before wiring the model into a workflow. This performs a *real* inference, so it is credit-gated and metered exactly like ``POST /{uuid}/run`` — under its own ``mlmodel_test_call`` caller so configuration traffic stays separable in usage dashboards.  Requires ``metadata.endpoint_url``: without it the custom-API handler would silently divert to ``metadata.fallback_provider`` on the platform's own provider credentials, which tests nothing the caller asked about.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param ml_model_test_call_schema: (required)
+        :type ml_model_test_call_schema: MLModelTestCallSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_mlmodels_test_call_mlmodel_serialize(
+            uuid=uuid,
+            ml_model_test_call_schema=ml_model_test_call_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MLModelTestCallResultSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_mlmodels_test_call_mlmodel_serialize(
+        self,
+        uuid,
+        ml_model_test_call_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if ml_model_test_call_schema is not None:
+            _body_params = ml_model_test_call_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/mlmodels/{uuid}/test-call',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -117525,7 +120159,7 @@ class DefaultApi:
     ) -> WorkflowSchema:
         """Activate Workflow
 
-        Activate a workflow.
+        Activate a workflow.  Decoupled from compilation: it only flips ``is_active`` after the activation validators pass (:func:`_validate_workflow_for_activation`). Compile failures surface later at the edge-sync/run site, not by blocking this state change — a workflow can target several twins/edges and one that can't compile shouldn't veto the rest. Missing mandatory inputs DO block activation. See ``docs/workflow-error-surfacing.md``.
 
         :param uuid: (required)
         :type uuid: str
@@ -117592,7 +120226,7 @@ class DefaultApi:
     ) -> ApiResponse[WorkflowSchema]:
         """Activate Workflow
 
-        Activate a workflow.
+        Activate a workflow.  Decoupled from compilation: it only flips ``is_active`` after the activation validators pass (:func:`_validate_workflow_for_activation`). Compile failures surface later at the edge-sync/run site, not by blocking this state change — a workflow can target several twins/edges and one that can't compile shouldn't veto the rest. Missing mandatory inputs DO block activation. See ``docs/workflow-error-surfacing.md``.
 
         :param uuid: (required)
         :type uuid: str
@@ -117659,7 +120293,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Activate Workflow
 
-        Activate a workflow.
+        Activate a workflow.  Decoupled from compilation: it only flips ``is_active`` after the activation validators pass (:func:`_validate_workflow_for_activation`). Compile failures surface later at the edge-sync/run site, not by blocking this state change — a workflow can target several twins/edges and one that can't compile shouldn't veto the rest. Missing mandatory inputs DO block activation. See ``docs/workflow-error-surfacing.md``.
 
         :param uuid: (required)
         :type uuid: str

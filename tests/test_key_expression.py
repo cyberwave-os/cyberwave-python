@@ -63,7 +63,18 @@ class TestChannelSets:
         )
 
     def test_expected_stream_channels(self) -> None:
-        expected = {"frames", "depth", "audio", "pointcloud", "imu", "force_torque"}
+        expected = {
+            "frames",
+            "depth",
+            "audio",
+            "pointcloud",
+            # Planar range scan (ranges + swept angles). Separate from
+            # ``pointcloud`` because a scan reports its no-return beams and a
+            # hit-only cloud cannot, which is what lets a costmap clear free space.
+            "laserscan",
+            "imu",
+            "force_torque",
+        }
         assert STREAM_CHANNELS == expected
 
     def test_expected_latest_value_channels(self) -> None:

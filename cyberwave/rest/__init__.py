@@ -48,9 +48,18 @@ __all__ = [
     "AddMemberByEmailRequest",
     "AddMemberByEmailResponse",
     "AddMemberUserSchema",
+    "AdminCameraRecordingSchema",
+    "AdminCameraRecordingsResponseSchema",
     "AdminLabInfoSchema",
     "AdminLabOverviewSchema",
+    "AdminRecordingCameraSensorSchema",
+    "AdminRecordingEnvironmentSchema",
+    "AdminRecordingTwinSchema",
+    "AdminSessionEventSchema",
+    "AdminSessionRecordingSchema",
     "AdminSessionSchema",
+    "AdminTwinSessionSchema",
+    "AdminTwinSessionsResponseSchema",
     "AgentApplyWorkflowPlanSchema",
     "AgentControlAction",
     "AgentControlActionSpecSchema",
@@ -273,6 +282,8 @@ __all__ = [
     "HardwareOrderSchema",
     "HardwareOrderStatusUpdateSchema",
     "HistoryTurnSchema",
+    "IOSchemaPortSchema",
+    "IOSchemaSchema",
     "ImageBytes",
     "ImageBytes1",
     "ImportResultSchema",
@@ -302,6 +313,8 @@ __all__ = [
     "MLModelArtifactUploadInitSchema",
     "MLModelArtifactUploadUrlSchema",
     "MLModelCreateSchema",
+    "MLModelCredentialSetSchema",
+    "MLModelCredentialStatusSchema",
     "MLModelEdgeRuntimeListSchema",
     "MLModelEdgeRuntimeOption",
     "MLModelEvaluateSchema",
@@ -312,6 +325,8 @@ __all__ = [
     "MLModelRunResultSchema",
     "MLModelRunSchema",
     "MLModelSchema",
+    "MLModelTestCallResultSchema",
+    "MLModelTestCallSchema",
     "MLModelUpdateSchema",
     "MLTrainingCreateSchema",
     "MLTrainingDeploySchema",
@@ -424,6 +439,7 @@ __all__ = [
     "RecordingGenerationResponseSchema",
     "RecordingListItem",
     "RecordingListResponse",
+    "RecordingPreflightSchema",
     "RecordingSourcesEnvelopeSchema",
     "RecordingSourcesSchema",
     "RedeemCouponRequestSchema",
@@ -486,6 +502,10 @@ __all__ = [
     "TrajectoryRecipeSchema",
     "TransactionInvoiceSchema",
     "TriggerAutogenControllersResponseSchema",
+    "TriggerCameraFinalizationRequestSchema",
+    "TriggerCameraFinalizationResponseSchema",
+    "TriggerRecordingRequestSchema",
+    "TriggerRecordingResponseSchema",
     "TwinActionRequestSchema",
     "TwinActionResponseSchema",
     "TwinActionStatusSchema",
@@ -598,9 +618,18 @@ from cyberwave.rest.models.ai_usage_totals import AIUsageTotals as AIUsageTotals
 from cyberwave.rest.models.add_member_by_email_request import AddMemberByEmailRequest as AddMemberByEmailRequest
 from cyberwave.rest.models.add_member_by_email_response import AddMemberByEmailResponse as AddMemberByEmailResponse
 from cyberwave.rest.models.add_member_user_schema import AddMemberUserSchema as AddMemberUserSchema
+from cyberwave.rest.models.admin_camera_recording_schema import AdminCameraRecordingSchema as AdminCameraRecordingSchema
+from cyberwave.rest.models.admin_camera_recordings_response_schema import AdminCameraRecordingsResponseSchema as AdminCameraRecordingsResponseSchema
 from cyberwave.rest.models.admin_lab_info_schema import AdminLabInfoSchema as AdminLabInfoSchema
 from cyberwave.rest.models.admin_lab_overview_schema import AdminLabOverviewSchema as AdminLabOverviewSchema
+from cyberwave.rest.models.admin_recording_camera_sensor_schema import AdminRecordingCameraSensorSchema as AdminRecordingCameraSensorSchema
+from cyberwave.rest.models.admin_recording_environment_schema import AdminRecordingEnvironmentSchema as AdminRecordingEnvironmentSchema
+from cyberwave.rest.models.admin_recording_twin_schema import AdminRecordingTwinSchema as AdminRecordingTwinSchema
+from cyberwave.rest.models.admin_session_event_schema import AdminSessionEventSchema as AdminSessionEventSchema
+from cyberwave.rest.models.admin_session_recording_schema import AdminSessionRecordingSchema as AdminSessionRecordingSchema
 from cyberwave.rest.models.admin_session_schema import AdminSessionSchema as AdminSessionSchema
+from cyberwave.rest.models.admin_twin_session_schema import AdminTwinSessionSchema as AdminTwinSessionSchema
+from cyberwave.rest.models.admin_twin_sessions_response_schema import AdminTwinSessionsResponseSchema as AdminTwinSessionsResponseSchema
 from cyberwave.rest.models.agent_apply_workflow_plan_schema import AgentApplyWorkflowPlanSchema as AgentApplyWorkflowPlanSchema
 from cyberwave.rest.models.agent_control_action import AgentControlAction as AgentControlAction
 from cyberwave.rest.models.agent_control_action_spec_schema import AgentControlActionSpecSchema as AgentControlActionSpecSchema
@@ -823,6 +852,8 @@ from cyberwave.rest.models.hardware_order_line_item_update_schema import Hardwar
 from cyberwave.rest.models.hardware_order_schema import HardwareOrderSchema as HardwareOrderSchema
 from cyberwave.rest.models.hardware_order_status_update_schema import HardwareOrderStatusUpdateSchema as HardwareOrderStatusUpdateSchema
 from cyberwave.rest.models.history_turn_schema import HistoryTurnSchema as HistoryTurnSchema
+from cyberwave.rest.models.io_schema_port_schema import IOSchemaPortSchema as IOSchemaPortSchema
+from cyberwave.rest.models.io_schema_schema import IOSchemaSchema as IOSchemaSchema
 from cyberwave.rest.models.image_bytes import ImageBytes as ImageBytes
 from cyberwave.rest.models.image_bytes1 import ImageBytes1 as ImageBytes1
 from cyberwave.rest.models.import_result_schema import ImportResultSchema as ImportResultSchema
@@ -852,6 +883,8 @@ from cyberwave.rest.models.ml_model_artifact_upload_init_response_schema import 
 from cyberwave.rest.models.ml_model_artifact_upload_init_schema import MLModelArtifactUploadInitSchema as MLModelArtifactUploadInitSchema
 from cyberwave.rest.models.ml_model_artifact_upload_url_schema import MLModelArtifactUploadUrlSchema as MLModelArtifactUploadUrlSchema
 from cyberwave.rest.models.ml_model_create_schema import MLModelCreateSchema as MLModelCreateSchema
+from cyberwave.rest.models.ml_model_credential_set_schema import MLModelCredentialSetSchema as MLModelCredentialSetSchema
+from cyberwave.rest.models.ml_model_credential_status_schema import MLModelCredentialStatusSchema as MLModelCredentialStatusSchema
 from cyberwave.rest.models.ml_model_edge_runtime_list_schema import MLModelEdgeRuntimeListSchema as MLModelEdgeRuntimeListSchema
 from cyberwave.rest.models.ml_model_edge_runtime_option import MLModelEdgeRuntimeOption as MLModelEdgeRuntimeOption
 from cyberwave.rest.models.ml_model_evaluate_schema import MLModelEvaluateSchema as MLModelEvaluateSchema
@@ -862,6 +895,8 @@ from cyberwave.rest.models.ml_model_run_queued_schema import MLModelRunQueuedSch
 from cyberwave.rest.models.ml_model_run_result_schema import MLModelRunResultSchema as MLModelRunResultSchema
 from cyberwave.rest.models.ml_model_run_schema import MLModelRunSchema as MLModelRunSchema
 from cyberwave.rest.models.ml_model_schema import MLModelSchema as MLModelSchema
+from cyberwave.rest.models.ml_model_test_call_result_schema import MLModelTestCallResultSchema as MLModelTestCallResultSchema
+from cyberwave.rest.models.ml_model_test_call_schema import MLModelTestCallSchema as MLModelTestCallSchema
 from cyberwave.rest.models.ml_model_update_schema import MLModelUpdateSchema as MLModelUpdateSchema
 from cyberwave.rest.models.ml_training_create_schema import MLTrainingCreateSchema as MLTrainingCreateSchema
 from cyberwave.rest.models.ml_training_deploy_schema import MLTrainingDeploySchema as MLTrainingDeploySchema
@@ -974,6 +1009,7 @@ from cyberwave.rest.models.recording_generation_request_schema_by_date import Re
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema as RecordingGenerationResponseSchema
 from cyberwave.rest.models.recording_list_item import RecordingListItem as RecordingListItem
 from cyberwave.rest.models.recording_list_response import RecordingListResponse as RecordingListResponse
+from cyberwave.rest.models.recording_preflight_schema import RecordingPreflightSchema as RecordingPreflightSchema
 from cyberwave.rest.models.recording_sources_envelope_schema import RecordingSourcesEnvelopeSchema as RecordingSourcesEnvelopeSchema
 from cyberwave.rest.models.recording_sources_schema import RecordingSourcesSchema as RecordingSourcesSchema
 from cyberwave.rest.models.redeem_coupon_request_schema import RedeemCouponRequestSchema as RedeemCouponRequestSchema
@@ -1036,6 +1072,10 @@ from cyberwave.rest.models.trajectory_initial_state_schema import TrajectoryInit
 from cyberwave.rest.models.trajectory_recipe_schema import TrajectoryRecipeSchema as TrajectoryRecipeSchema
 from cyberwave.rest.models.transaction_invoice_schema import TransactionInvoiceSchema as TransactionInvoiceSchema
 from cyberwave.rest.models.trigger_autogen_controllers_response_schema import TriggerAutogenControllersResponseSchema as TriggerAutogenControllersResponseSchema
+from cyberwave.rest.models.trigger_camera_finalization_request_schema import TriggerCameraFinalizationRequestSchema as TriggerCameraFinalizationRequestSchema
+from cyberwave.rest.models.trigger_camera_finalization_response_schema import TriggerCameraFinalizationResponseSchema as TriggerCameraFinalizationResponseSchema
+from cyberwave.rest.models.trigger_recording_request_schema import TriggerRecordingRequestSchema as TriggerRecordingRequestSchema
+from cyberwave.rest.models.trigger_recording_response_schema import TriggerRecordingResponseSchema as TriggerRecordingResponseSchema
 from cyberwave.rest.models.twin_action_request_schema import TwinActionRequestSchema as TwinActionRequestSchema
 from cyberwave.rest.models.twin_action_response_schema import TwinActionResponseSchema as TwinActionResponseSchema
 from cyberwave.rest.models.twin_action_status_schema import TwinActionStatusSchema as TwinActionStatusSchema

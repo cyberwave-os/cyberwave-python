@@ -1311,21 +1311,19 @@ class MovishsWorkspaceg1CyberwaveTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class Coesiamir250CoesiaTwin(Twin):
+class VishalKrishnaaRsWorkspacespannerTwin(Twin):
     """
-    Digital twin for MIR-250_Coesia2
-    Registry ID: coesia/mir250-coesia
+    Digital twin for spanner
+    Registry ID: vishal-krishnaa-rs-workspace/spanner
     """
-    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
-        """Move the twin to a new position"""
-        ...
-    def move_to(self, position: list[float]) -> None:
-        """Move to a specific position [x, y, z]"""
-        ...
-    @property
-    def joints(self) -> JointsHandle:
-        """Controller for robot joints"""
-        ...
+    pass
+
+class VishalKrishnaaRsWorkspacescrewdriverTwin(Twin):
+    """
+    Digital twin for screwdriver
+    Registry ID: vishal-krishnaa-rs-workspace/screwdriver
+    """
+    pass
 
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
@@ -1452,5 +1450,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "modalai/starling-max": ModalaistarlingMaxTwin,
     "starling-max": ModalaistarlingMaxTwin,
     "movishs-workspace/g1-cyberwave": MovishsWorkspaceg1CyberwaveTwin,
-    "coesia/mir250-coesia": Coesiamir250CoesiaTwin,
+    "vishal-krishnaa-rs-workspace/spanner": VishalKrishnaaRsWorkspacespannerTwin,
+    "vishal-krishnaa-rs-workspace/screwdriver": VishalKrishnaaRsWorkspacescrewdriverTwin,
 }

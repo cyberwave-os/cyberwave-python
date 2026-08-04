@@ -12,7 +12,10 @@ import pytest
 
 import cyberwave.workers.runtime as worker_runtime
 from cyberwave.workers.hooks import HookRegistry
-from cyberwave.workers.runtime import WorkerRuntime
+from cyberwave.workers.runtime import (
+    WorkerRuntime,
+    _resolve_worker_workflow_uuid,
+)
 
 
 TEST_TWIN_UUID = "00000000-0000-0000-0000-000000000001"
@@ -30,6 +33,26 @@ def _always_due_prev_fire(_cron, local_now):
     return local_now + timedelta(days=1)
 
 
+class FakeWorkflowExecutionManager:
+    """Records ``client.workflow_executions.start(...)`` calls (the
+    manual-trigger execution-start ack) without touching MQTT/HTTP."""
+
+    def __init__(self):
+        self.started: list[dict] = []
+        self._lock = threading.Lock()
+
+    def start(self, *, workflow_uuid, execution_uuid=None, source_type="edge", **_):
+        with self._lock:
+            self.started.append(
+                {
+                    "workflow_uuid": workflow_uuid,
+                    "execution_uuid": execution_uuid,
+                    "source_type": source_type,
+                }
+            )
+        return None
+
+
 class FakeCw:
     """Minimal stub of the Cyberwave client for runtime tests."""
 
@@ -39,6 +62,7 @@ class FakeCw:
         self._data_bus = data_bus
         self.published_alerts: list[dict] = []
         self._publish_alert_lock = threading.Lock()
+        self.workflow_executions = FakeWorkflowExecutionManager()
 
     def publish_alert(
         self,
@@ -49,6 +73,7 @@ class FakeCw:
         alert_type="",
         severity="info",
         category="business",
+        source_type=None,
         force=False,
         metadata=None,
         workflow_uuid=None,
@@ -64,6 +89,10 @@ class FakeCw:
                     "alert_type": alert_type,
                     "severity": severity,
                     "category": category,
+                    "source_type": source_type,
+                    "workflow_uuid": workflow_uuid,
+                    "workflow_node_uuid": workflow_node_uuid,
+                    "metadata": metadata or {},
                 }
             )
 
@@ -687,6 +716,212 @@ def test_runtime_subscribes_manual_trigger_hook_on_workflow_topic():
         runtime.stop()
 
 
+def test_runtime_buffers_mqtt_message_received_during_warm_up():
+    """A "run" command that arrives mid-warm-up is buffered, not dropped.
+
+    Regression test for CYB-2957: previously MQTT hooks (including
+    ``@cw.on_manual_trigger``) only subscribed *after* model warm-up
+    completed, so a manual "run now" published while the worker was
+    still starting up was silently lost (no subscriber existed yet) and
+    the execution stayed ``REQUESTED`` forever. The subscription must
+    now go live before warm-up starts, while dispatch of any message
+    received before warm-up finishes is deferred until it completes (so
+    no hook still runs concurrently with warm-up inference).
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    received = []
+
+    def handler(payload, topic, ctx):
+        received.append(payload)
+
+    fake_cw._hook_registry.on_manual_trigger(
+        TEST_TWIN_UUID, workflow_uuid="wf-123"
+    )(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+
+    warm_up_started = threading.Event()
+    release_warm_up = threading.Event()
+
+    def blocking_warm_up() -> None:
+        warm_up_started.set()
+        release_warm_up.wait(timeout=5)
+
+    runtime._warm_up_models = blocking_warm_up  # type: ignore[method-assign]
+
+    start_thread = threading.Thread(target=runtime.start)
+    start_thread.start()
+    try:
+        assert warm_up_started.wait(timeout=5)
+
+        # The subscription is already live even though warm-up hasn't
+        # finished -- this is the fix: the broker sees a subscriber
+        # immediately instead of only after warm-up completes.
+        assert len(fake_mqtt.subscriptions) == 1
+        _topic, registered_handler, _qos = fake_mqtt.subscriptions[0]
+
+        # A message delivered now must be buffered, not dropped and not
+        # dispatched concurrently with the in-flight warm-up.
+        registered_handler({"inputs": {"speed": 0.5}})
+        assert received == []
+
+        release_warm_up.set()
+        start_thread.join(timeout=5)
+        assert not start_thread.is_alive()
+
+        # Once warm-up finishes, the buffered message is replayed.
+        assert received == [{"inputs": {"speed": 0.5}}]
+    finally:
+        release_warm_up.set()
+        start_thread.join(timeout=5)
+        runtime.stop()
+
+
+def test_duplicate_run_commands_during_warm_up_dispatch_once():
+    """Regression for CYB-2957/CYB-2959: the backend re-publishes the
+    *same* manual-run command (identical ``execution_uuid``) on a
+    (5, 10, 20, 40, 60)s backoff while the execution is stuck REQUESTED
+    (``retry_run_workflow_worker_command``). Because the worker only acks
+    ``execution/started`` lazily -- at the very end of a tick, only if
+    downstream work happened -- the row can still read REQUESTED on every
+    retry, so several copies of the same run command can arrive while a
+    slow-starting worker is warming up. Each copy must dedup down to a
+    single dispatch and a single execution-start ack, not one dispatch per
+    copy.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    received = []
+
+    def handler(payload, topic, ctx):
+        received.append(payload)
+
+    fake_cw._hook_registry.on_manual_trigger(
+        TEST_TWIN_UUID, workflow_uuid="wf-123"
+    )(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+
+    warm_up_started = threading.Event()
+    release_warm_up = threading.Event()
+
+    def blocking_warm_up() -> None:
+        warm_up_started.set()
+        release_warm_up.wait(timeout=5)
+
+    runtime._warm_up_models = blocking_warm_up  # type: ignore[method-assign]
+
+    start_thread = threading.Thread(target=runtime.start)
+    start_thread.start()
+    try:
+        assert warm_up_started.wait(timeout=5)
+        assert len(fake_mqtt.subscriptions) == 1
+        _topic, registered_handler, _qos = fake_mqtt.subscriptions[0]
+
+        run_command = {"execution_uuid": "exec-dup-1", "inputs": {"speed": 0.5}}
+        # Simulate the backend's 5 retry copies (identical execution_uuid)
+        # all landing while the worker is still warming up.
+        for _ in range(5):
+            registered_handler(run_command)
+        assert received == []
+
+        release_warm_up.set()
+        start_thread.join(timeout=5)
+        assert not start_thread.is_alive()
+
+        # Only the first copy is buffered/dispatched -- the rest are
+        # dropped as duplicates of an already-seen execution_uuid.
+        assert received == [run_command]
+        assert fake_cw.workflow_executions.started == [
+            {
+                "workflow_uuid": "wf-123",
+                "execution_uuid": "exec-dup-1",
+                "source_type": "edge",
+            }
+        ]
+    finally:
+        release_warm_up.set()
+        start_thread.join(timeout=5)
+        runtime.stop()
+
+
+def test_duplicate_run_command_after_warm_up_is_dropped():
+    """Same dedup as above, but for a duplicate that arrives once the
+    worker is already warm and steady-state -- e.g. a slow (multi-minute)
+    workflow body re-triggered by the backend's retry schedule with no
+    warm-up involved at all.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    received = []
+
+    def handler(payload, topic, ctx):
+        received.append(payload)
+
+    fake_cw._hook_registry.on_manual_trigger(
+        TEST_TWIN_UUID, workflow_uuid="wf-123"
+    )(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        _topic, registered_handler, _qos = fake_mqtt.subscriptions[0]
+        run_command = {"execution_uuid": "exec-dup-2", "inputs": {}}
+
+        registered_handler(run_command)
+        registered_handler(run_command)
+        registered_handler(run_command)
+
+        assert received == [run_command]
+        assert len(fake_cw.workflow_executions.started) == 1
+    finally:
+        runtime.stop()
+
+
 def test_runtime_start_warms_up_before_subscribing_hooks(tmp_path):
     fake_cw = FakeCw()
     (tmp_path / "worker.py").write_text(
@@ -776,8 +1011,47 @@ def test_runtime_hook_error_sends_alert():
     assert alert["severity"] == "error"
     assert alert["category"] == "technical"
     assert "bad_handler" in alert["name"]
-    assert "RuntimeError" in alert["description"]
-    assert "detection_count" in alert["description"]
+    assert alert["description"] == "Hook 'bad_handler' failed while running."
+    assert "RuntimeError" in alert["metadata"]["technical_detail"]
+    assert "detection_count" in alert["metadata"]["technical_detail"]
+
+
+def test_resolve_workflow_uuid_prefers_options():
+    def cb():
+        pass
+
+    assert (
+        _resolve_worker_workflow_uuid(cb, {"workflow_uuid": "wf-a"}) == "wf-a"
+    )
+
+
+def test_resolve_workflow_uuid_falls_back_to_module_global():
+    """Camera-frame hooks don't carry workflow_uuid in options, so the
+    resolver reads the ``WORKFLOW_UUID`` constant the generated worker
+    module always defines — this is how a runtime node failure gets
+    attributed to its workflow."""
+    import sys
+    import types
+
+    module = types.ModuleType("cyberwave_worker_test_resolve")
+    module.WORKFLOW_UUID = "wf-from-module"
+    sys.modules[module.__name__] = module
+
+    def cb():
+        pass
+
+    cb.__module__ = module.__name__
+    try:
+        assert _resolve_worker_workflow_uuid(cb, None) == "wf-from-module"
+    finally:
+        del sys.modules[module.__name__]
+
+
+def test_resolve_workflow_uuid_none_when_unavailable():
+    def cb():
+        pass
+
+    assert _resolve_worker_workflow_uuid(cb, {}) is None
 
 
 def test_runtime_hook_error_alert_cooldown(monkeypatch):
@@ -898,7 +1172,8 @@ def test_runtime_mqtt_hook_error_sends_alert():
         assert alert["alert_type"] == "worker_runtime_error"
         assert alert["severity"] == "error"
         assert "bad_handler" in alert["name"]
-        assert "RuntimeError" in alert["description"]
+        assert alert["description"] == "Hook 'bad_handler' failed while running."
+        assert "RuntimeError" in alert["metadata"]["technical_detail"]
     finally:
         runtime.stop()
 
@@ -931,6 +1206,7 @@ def test_runtime_scheduled_workflow_error_sends_alert(tmp_path, monkeypatch):
         assert alert["alert_type"] == "worker_runtime_error"
         assert alert["severity"] == "error"
         assert "schedule:fail-node" in alert["name"]
-        assert "RuntimeError" in alert["description"]
+        assert alert["description"] == "Hook 'schedule:fail-node' failed while running."
+        assert "RuntimeError" in alert["metadata"]["technical_detail"]
     finally:
         runtime.stop()

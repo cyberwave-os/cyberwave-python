@@ -52,7 +52,8 @@ class MLModelRunSchema(BaseModel):
     robot_state: Optional[RobotStateSchema] = None
     robot_context: Optional[RobotContextSchema] = None
     image_source: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["prompt", "image_base64", "image_url", "audio_base64", "audio_b64", "audio_url", "language", "task", "structured_task", "twin_uuid", "params", "frames", "depth_base64", "camera_intrinsics", "camera_pose", "history", "robot_state", "robot_context", "image_source"]
+    recording_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["prompt", "image_base64", "image_url", "audio_base64", "audio_b64", "audio_url", "language", "task", "structured_task", "twin_uuid", "params", "frames", "depth_base64", "camera_intrinsics", "camera_pose", "history", "robot_state", "robot_context", "image_source", "recording_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -214,6 +215,11 @@ class MLModelRunSchema(BaseModel):
         if self.image_source is None and "image_source" in self.model_fields_set:
             _dict['image_source'] = None
 
+        # set to None if recording_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.recording_uuid is None and "recording_uuid" in self.model_fields_set:
+            _dict['recording_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -244,7 +250,8 @@ class MLModelRunSchema(BaseModel):
             "history": [HistoryTurnSchema.from_dict(_item) for _item in obj["history"]] if obj.get("history") is not None else None,
             "robot_state": RobotStateSchema.from_dict(obj["robot_state"]) if obj.get("robot_state") is not None else None,
             "robot_context": RobotContextSchema.from_dict(obj["robot_context"]) if obj.get("robot_context") is not None else None,
-            "image_source": obj.get("image_source")
+            "image_source": obj.get("image_source"),
+            "recording_uuid": obj.get("recording_uuid")
         })
         return _obj
 

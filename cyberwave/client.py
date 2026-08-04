@@ -1417,6 +1417,12 @@ class Cyberwave:
         }
         if self.config.workspace_id:
             payload["workspace_uuid"] = self.config.workspace_id
+        # Send the bound environment so the backend can derive the correct
+        # workspace when no workspace_id is configured. Without this, the
+        # alert endpoint falls back to the API-token user's default workspace,
+        # which fails the twin/environment workspace-match check with a 400.
+        if self.config.environment_id:
+            payload["environment_uuid"] = self.config.environment_id
         if workflow_uuid:
             payload["workflow_uuid"] = workflow_uuid
         if force:

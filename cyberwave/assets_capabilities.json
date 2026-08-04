@@ -6064,90 +6064,54 @@
     "registry_id": "movishs-workspace/g1-cyberwave",
     "registry_id_alias": null
   },
-  "coesia/mir250-coesia": {
-    "uuid": "44836d95-a29e-40a2-9f42-133d91a5f669",
-    "name": "MIR-250_Coesia2",
+  "vishal-krishnaa-rs-workspace/spanner": {
+    "uuid": "4544ccbf-c2aa-4592-8f3d-737357da1273",
+    "name": "spanner",
     "capabilities": {
-      "has_joints": true,
+      "has_joints": false,
       "can_actuate": false,
-      "can_locomote": true,
+      "can_locomote": false,
       "can_fly": false,
       "has_legs": false,
-      "has_wheels": true,
-      "locomotion_mode": "wheeled",
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 250,
-      "power_source": "battery",
+      "payload_capacity_kg": 0,
+      "power_source": null,
       "power_capacity_wh": -1,
       "navigation_autonomy_level": null,
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 30,
       "minimum_frequency_hz": 0,
-      "sensors": [
-        {
-          "id": "front_laser_link",
-          "name": "front_laser_link",
-          "type": "lidar_3d",
-          "model": null,
-          "fov_degrees": 60,
-          "parent_link": "base_link",
-          "offset": {
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
-          },
-          "parameters": {
-            "update_rate": 10,
-            "fov_degrees": 60,
-            "fov_horizontal": 360,
-            "fov_vertical": 30,
-            "min_range": 0.1,
-            "max_range": 100,
-            "points_per_second": 10000
-          }
-        },
-        {
-          "id": "back_laser_link",
-          "name": "back_laser_link",
-          "type": "lidar_3d",
-          "model": null,
-          "fov_degrees": 60,
-          "parent_link": "base_link",
-          "offset": {
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
-          },
-          "parameters": {
-            "update_rate": 10,
-            "fov_degrees": 60,
-            "fov_horizontal": 360,
-            "fov_vertical": 30,
-            "min_range": 0.1,
-            "max_range": 100,
-            "points_per_second": 10000
-          }
-        }
-      ]
+      "sensors": []
     },
-    "registry_id": "coesia/mir250-coesia",
+    "registry_id": "vishal-krishnaa-rs-workspace/spanner",
+    "registry_id_alias": null
+  },
+  "vishal-krishnaa-rs-workspace/screwdriver": {
+    "uuid": "a511b7b3-e9d7-43a3-976c-fdbe03e21e91",
+    "name": "screwdriver",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "vishal-krishnaa-rs-workspace/screwdriver",
     "registry_id_alias": null
   }
 }

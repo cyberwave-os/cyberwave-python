@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import socket
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from cyberwave._error_metadata import format_error_metadata
 from cyberwave.data.exceptions import ChannelError
 from cyberwave.data.keys import build_key, build_wildcard, parse_key
 from cyberwave.exceptions import CyberwaveError
@@ -44,6 +46,20 @@ MONITOR_PUBLISH_INTERVAL_S = 2.0
 SCHEDULE_POLL_INTERVAL_S = 1.0
 HOOK_ERROR_ALERT_COOLDOWN_S = 60.0
 
+MANUAL_TRIGGER_DEDUP_CACHE_SIZE = 64
+"""Bounded FIFO cache of ``execution_uuid``s already seen per ``scope="workflow"``
+hook. The backend re-publishes the *same* run command (same execution_uuid) on a
+fixed backoff while the row is stuck ``REQUESTED``
+(``retry_run_workflow_worker_command``), so without this a slow-starting or
+slow-running worker can receive and dispatch the same manual run multiple times."""
+
+PENDING_MQTT_BUFFER_MAX_SIZE = 256
+"""Cap on ``_pending_mqtt_messages`` (messages received before model warm-up
+completes). Applies to every MQTT hook, including a chatty twin-scoped
+``@cw.on_mqtt`` subtopic that has no execution_uuid to dedup on, so the buffer
+can't grow unbounded for the duration of a slow warm-up. Oldest entries are
+dropped first; a message this deep in a warm-up backlog is already very stale."""
+
 
 @dataclass(frozen=True)
 class _ScheduleRegistration:
@@ -54,6 +70,25 @@ class _ScheduleRegistration:
     callback: Any
     callback_style: str
     options: dict[str, Any]
+
+
+def _resolve_worker_workflow_uuid(
+    callback: Any, options: dict[str, Any] | None
+) -> str | None:
+    """Best-effort ``workflow_uuid`` for a hook that raised — from the hook
+    options, else the ``WORKFLOW_UUID`` constant its worker module defines.
+    Lets a runtime node failure alert attach to the workflow, not just the twin.
+    """
+    if options:
+        candidate = options.get("workflow_uuid")
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    module_name = getattr(callback, "__module__", "") or ""
+    module = sys.modules.get(module_name)
+    module_uuid = getattr(module, "WORKFLOW_UUID", None) if module else None
+    if isinstance(module_uuid, str) and module_uuid.strip():
+        return module_uuid.strip()
+    return None
 
 
 def _read_container_hostname() -> str:
@@ -155,6 +190,17 @@ class WorkerRuntime:
         self._stop_event = threading.Event()
         self._worker_modules: list[object] = []
         self._schedule_registrations: list[_ScheduleRegistration] = []
+        # MQTT hooks (including @cw.on_manual_trigger's workflow "run"
+        # command) subscribe before model warm-up so the broker sees a
+        # live subscription as early as possible. A command published
+        # while the worker is still warming up would otherwise be
+        # dropped -- MQTT does not queue messages for a subscription
+        # that doesn't exist yet. Messages that arrive before warm-up
+        # completes are buffered here and replayed once it finishes, so
+        # no hook callback ever runs concurrently with warm-up inference.
+        self._warm_up_complete = threading.Event()
+        self._pending_mqtt_messages: list[Any] = []
+        self._pending_mqtt_lock = threading.Lock()
         self._schedule_thread: threading.Thread | None = None
         self._schedule_lock = threading.Lock()
         # Per-registration last cron tick that successfully fired.
@@ -197,15 +243,37 @@ class WorkerRuntime:
         return loaded
 
     def start(self) -> None:
-        """Warm up loaded models, then wire hooks to data-layer subscriptions.
+        """Wire MQTT hooks, warm up loaded models, then wire data-layer hooks.
 
-        Models are warmed up before any hook can call ``predict()`` so
-        backends that are not thread-safe (e.g. whisper.cpp) never see
-        concurrent inference during worker startup.
+        MQTT hooks (``@cw.on_mqtt`` / ``@cw.on_manual_trigger``) subscribe
+        first, before model warm-up, so an inbound command isn't lost to a
+        subscription that doesn't exist yet. Their dispatch is still held
+        back until warm-up completes (see ``_pending_mqtt_messages``), so
+        no hook callback runs concurrently with warm-up inference — the
+        invariant this ordering exists to protect for backends that are
+        not thread-safe (e.g. whisper.cpp).
         """
-        self._warm_up_models()
+        mqtt_hooks = [h for h in self._registry.hooks if h.hook_type == "mqtt"]
+        other_hooks = [h for h in self._registry.hooks if h.hook_type != "mqtt"]
 
-        for hook in self._registry.hooks:
+        for hook in mqtt_hooks:
+            self._subscribe_hook(hook)
+            logger.info(
+                "Activated hook: @cw.on_%s(%s) -> %s",
+                hook.hook_type,
+                hook.twin_uuid[:8] + "..." if hook.twin_uuid else "<none>",
+                hook.callback.__name__,
+            )
+
+        self._warm_up_models()
+        with self._pending_mqtt_lock:
+            self._warm_up_complete.set()
+            pending = self._pending_mqtt_messages
+            self._pending_mqtt_messages = []
+        for replay in pending:
+            replay()
+
+        for hook in other_hooks:
             self._subscribe_hook(hook)
             logger.info(
                 "Activated hook: @cw.on_%s(%s) -> %s",
@@ -444,6 +512,10 @@ class WorkerRuntime:
                         hook_name=f"schedule:{reg.node_uuid}",
                         channel="schedule",
                         error=exc,
+                        workflow_uuid=_resolve_worker_workflow_uuid(
+                            reg.callback, reg.options
+                        ),
+                        node_uuid=reg.node_uuid,
                     )
                 finally:
                     with self._schedule_lock:
@@ -506,12 +578,15 @@ class WorkerRuntime:
         hook_name: str,
         channel: str,
         error: Exception,
+        workflow_uuid: str | None = None,
+        node_uuid: str | None = None,
     ) -> None:
-        """Send a ``worker_runtime_error`` alert when a hook raises an exception.
+        """Send a ``worker_runtime_error`` alert when a hook raises.
 
-        Rate-limited per hook: at most one alert every
-        :data:`HOOK_ERROR_ALERT_COOLDOWN_S` seconds to avoid flooding the
-        alert feed when a hook fails on every incoming sample.
+        ``workflow_uuid`` attaches the alert to the workflow (not just the
+        twin); ``node_uuid`` is recorded when known. Rate-limited per hook
+        (:data:`HOOK_ERROR_ALERT_COOLDOWN_S`) so a hook that fails every sample
+        doesn't flood the feed.
         """
         if not twin_uuid:
             return
@@ -524,24 +599,28 @@ class WorkerRuntime:
                 return
             self._hook_error_alert_times[alert_key] = now
 
-        error_msg = str(error)[:500]
+        error_code, technical_detail = format_error_metadata(error)
         try:
             self._cw.publish_alert(
                 twin_uuid,
                 f"Worker runtime error in {hook_name}",
-                description=(
-                    f"Hook '{hook_name}' on channel '{channel}' raised "
-                    f"{type(error).__name__}: {error_msg}"
-                ),
+                description=f"Hook '{hook_name}' failed while running.",
                 alert_type="worker_runtime_error",
                 severity="error",
                 category="technical",
+                source_type="edge",
+                workflow_uuid=workflow_uuid,
+                workflow_node_uuid=node_uuid,
+                metadata={
+                    "error_code": error_code,
+                    "technical_detail": technical_detail,
+                },
             )
         except Exception:
-            logger.debug(
+            logger.warning(
                 "Could not send worker_runtime_error alert for hook %s: %s",
                 hook_name,
-                error_msg,
+                technical_detail,
                 exc_info=True,
             )
 
@@ -697,6 +776,10 @@ class WorkerRuntime:
                         hook_name=hook.callback.__name__,
                         channel=hook.channel,
                         error=exc,
+                        workflow_uuid=_resolve_worker_workflow_uuid(
+                            hook.callback, hook.options
+                        ),
+                        node_uuid=hook.options.get("node_uuid"),
                     )
 
         data_bus = self._get_data_bus()
@@ -798,7 +881,42 @@ class WorkerRuntime:
         with self._hook_stats_lock:
             self._hook_stats[hook_name] = {"frames": 0, "drops": 0}
 
-        def on_message(payload: Any) -> None:
+        # FIFO cache of execution_uuids already dispatched for this
+        # "workflow"-scoped (manual-trigger) hook. Closed over per-hook
+        # rather than stored on ``self`` since each ``_subscribe_mqtt_hook``
+        # call owns exactly one topic. Irrelevant (and untouched) for plain
+        # twin-scoped ``@cw.on_mqtt`` hooks, which have no execution_uuid.
+        seen_executions: dict[str, None] = {}
+
+        def _ack_manual_trigger_execution(payload: Any) -> None:
+            # Promote the execution REQUESTED -> RUNNING at pickup time
+            # instead of leaving it to the lazy "publish only if downstream
+            # work happened" reporter in the generated worker body, which
+            # never fires until the whole tick (including a long-running
+            # workflow) has finished. Without this ack, the backend's
+            # retry_run_workflow_worker_command guard (which only stops
+            # once the row leaves REQUESTED) can never observe the run in
+            # progress and keeps re-publishing the same command.
+            execution_uuid = (
+                payload.get("execution_uuid") if isinstance(payload, dict) else None
+            )
+            try:
+                self._cw.workflow_executions.start(
+                    workflow_uuid=workflow_uuid,
+                    execution_uuid=str(execution_uuid) if execution_uuid else None,
+                    source_type="edge",
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to ack manual-trigger execution start "
+                    "(workflow=%s, hook=%s)",
+                    workflow_uuid,
+                    hook_name,
+                )
+
+        def dispatch(payload: Any) -> None:
+            if scope == "workflow":
+                _ack_manual_trigger_execution(payload)
             try:
                 ctx = HookContext(
                     timestamp=time.time(),
@@ -822,7 +940,54 @@ class WorkerRuntime:
                     hook_name=hook_name,
                     channel=f"mqtt/{subtopic}",
                     error=exc,
+                    workflow_uuid=_resolve_worker_workflow_uuid(
+                        hook.callback, hook.options
+                    ),
+                    node_uuid=hook.options.get("node_uuid"),
                 )
+
+        def on_message(payload: Any) -> None:
+            # Subscriptions go live before model warm-up (see ``start()``)
+            # so a message can arrive before it's safe to dispatch. Buffer
+            # it under the lock that also guards ``_warm_up_complete`` so
+            # there's no window where a message is neither buffered nor
+            # dispatched. The same lock also guards the dedup cache below
+            # so a burst of duplicate copies can't race each other into
+            # both being accepted.
+            with self._pending_mqtt_lock:
+                if scope == "workflow" and isinstance(payload, dict):
+                    execution_uuid = payload.get("execution_uuid")
+                    if execution_uuid:
+                        execution_uuid = str(execution_uuid)
+                        if execution_uuid in seen_executions:
+                            logger.info(
+                                "Dropping duplicate manual-trigger command "
+                                "execution=%s for hook '%s' (already seen)",
+                                execution_uuid,
+                                hook_name,
+                            )
+                            return
+                        seen_executions[execution_uuid] = None
+                        if len(seen_executions) > MANUAL_TRIGGER_DEDUP_CACHE_SIZE:
+                            seen_executions.pop(next(iter(seen_executions)))
+                if not self._warm_up_complete.is_set():
+                    logger.info(
+                        "Buffering MQTT message for hook '%s' on topic %s "
+                        "until model warm-up completes",
+                        hook_name,
+                        full_topic,
+                    )
+                    self._pending_mqtt_messages.append(lambda p=payload: dispatch(p))
+                    if len(self._pending_mqtt_messages) > PENDING_MQTT_BUFFER_MAX_SIZE:
+                        dropped = self._pending_mqtt_messages.pop(0)
+                        del dropped
+                        logger.warning(
+                            "Pending MQTT buffer exceeded %d entries during "
+                            "warm-up; dropped the oldest buffered message",
+                            PENDING_MQTT_BUFFER_MAX_SIZE,
+                        )
+                    return
+            dispatch(payload)
 
         try:
             mqtt_client.subscribe(full_topic, on_message, qos=qos)
@@ -903,6 +1068,10 @@ class WorkerRuntime:
                         hook_name=group.callback.__name__,
                         channel=",".join(labels),
                         error=exc,
+                        workflow_uuid=_resolve_worker_workflow_uuid(
+                            group.callback, group.options
+                        ),
+                        node_uuid=group.options.get("node_uuid"),
                     )
 
         def _key_for_sync_channel(ch: str, twin_uuid: str) -> str:

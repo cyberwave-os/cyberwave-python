@@ -70,6 +70,9 @@ __all__ = [
     # Virtual camera implementations
     "VirtualCameraStreamer",
     "VirtualVideoTrack",
+    # Pre-encoded H.264 passthrough (bypasses aiortc's PyAV encode step)
+    "H264PacketCameraStreamer",
+    "H264PacketVideoTrack",
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",
@@ -145,6 +148,8 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "RealSenseStreamer": (".camera_rs", "RealSenseStreamer"),
     "VirtualVideoTrack": (".camera_virtual", "VirtualVideoTrack"),
     "VirtualCameraStreamer": (".camera_virtual", "VirtualCameraStreamer"),
+    "H264PacketVideoTrack": (".camera_h264", "H264PacketVideoTrack"),
+    "H264PacketCameraStreamer": (".camera_h264", "H264PacketCameraStreamer"),
     "CameraStreamManager": (".manager", "CameraStreamManager"),
     "run_streamer_in_background": (".manager", "run_streamer_in_background"),
     "BaseAudioTrack": (".microphone", "BaseAudioTrack"),

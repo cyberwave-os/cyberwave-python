@@ -523,15 +523,6 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["coesia/mir250-coesia"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> LocomoteJointCameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
         asset_key: Literal["arx/arx-roboticsx"],
         environment_id: str | None = None,
         twin_id: str | None = None,

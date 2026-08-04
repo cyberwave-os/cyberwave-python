@@ -18,6 +18,7 @@ from aiortc import (
     RTCConfiguration,
     RTCIceServer,
     RTCPeerConnection,
+    RTCRtpSender,
     RTCSessionDescription,
     VideoStreamTrack,
 )
@@ -345,6 +346,11 @@ class BaseVideoStreamer(abc.ABC):
         # WebRTC state
         self.pc: Optional[RTCPeerConnection] = None
         self.streamer: Optional[BaseVideoTrack] = None
+        # The RTCRtpSender returned by pc.addTrack(), for callers that need live
+        # send-side stats (e.g. RTCP receiver-report loss feedback for bitrate
+        # adaptation) rather than routing everything through this class. Reset on
+        # every (re)connect, since a new pc/addTrack pair means a new sender.
+        self.sender: Optional[RTCRtpSender] = None
 
         # Answer handling state
         self._answer_received = False
@@ -527,6 +533,7 @@ class BaseVideoStreamer(abc.ABC):
             except Exception:
                 pass
             self.pc = None
+            self.sender = None
             if self.streamer is not None:
                 try:
                     self.streamer.close()
@@ -558,6 +565,7 @@ class BaseVideoStreamer(abc.ABC):
                 logger.error(f"Error closing peer connection: {e}")
             finally:
                 self.pc = None
+                self.sender = None
         if self.streamer:
             try:
                 self.streamer.close()
@@ -668,7 +676,7 @@ class BaseVideoStreamer(abc.ABC):
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
 
         self._setup_pc_handlers()
-        self.pc.addTrack(self.streamer)
+        self.sender = self.pc.addTrack(self.streamer)
 
     def _setup_pc_handlers(self):
         """Set up peer connection event handlers."""

@@ -34,6 +34,12 @@ STREAM_CHANNELS: frozenset[str] = frozenset(
         "depth",
         "audio",
         "pointcloud",
+        # Planar range scan: ``ranges`` + angle_min/angle_max/angle_increment,
+        # mirroring ``sensor_msgs/LaserScan``. Distinct from ``pointcloud``
+        # because a scan carries its no-return beams (reported at max range) and
+        # a hit-only cloud cannot express them — a costmap needs those beams to
+        # clear free space, not just to mark obstacles.
+        "laserscan",
         "imu",
         "force_torque",
     }
