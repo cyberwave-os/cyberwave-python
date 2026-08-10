@@ -3963,16 +3963,25 @@
     "name": "MiR250",
     "capabilities": {
       "has_joints": false,
-      "can_actuate": false,
+      "can_actuate": true,
       "can_locomote": true,
       "can_fly": false,
       "has_legs": false,
       "has_wheels": true,
       "locomotion_mode": "wheeled",
       "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
+        "dof": 2,
+        "max_linear_velocity": 1.25,
+        "max_angular_velocity": 1.0,
+        "drive": {
+          "type": "differential",
+          "left_joint": "left_wheel_joint",
+          "right_joint": "right_wheel_joint",
+          "wheel_radius_m": 0.0625,
+          "wheel_separation_m": 0.445208,
+          "max_wheel_velocity_rad_s": 20.0,
+          "max_wheel_acceleration_rad_s2": 8.0
+        }
       },
       "can_grip": false,
       "manipulator_count": 0,
@@ -3987,47 +3996,55 @@
         {
           "id": "front_laser_link",
           "name": "front_laser_link",
-          "type": "lidar_3d",
-          "model": null,
-          "parent_link": "base_link",
+          "type": "lidar_2d",
+          "model": "SICK LMS100",
+          "parent_link": "front_laser_link",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
-            "update_rate": null
+            "update_rate": 12.5,
+            "fov_horizontal": 270.0,
+            "min_range": 0.05,
+            "max_range": 29.0,
+            "points_per_second": 6762
           }
         },
         {
           "id": "back_laser_link",
           "name": "back_laser_link",
-          "type": "lidar_3d",
-          "model": null,
-          "parent_link": "base_link",
+          "type": "lidar_2d",
+          "model": "SICK LMS100",
+          "parent_link": "back_laser_link",
           "offset": {
             "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
-            "update_rate": null
+            "update_rate": 12.5,
+            "fov_horizontal": 270.0,
+            "min_range": 0.05,
+            "max_range": 29.0,
+            "points_per_second": 6762
           }
         }
       ]
@@ -6112,6 +6129,56 @@
       "sensors": []
     },
     "registry_id": "vishal-krishnaa-rs-workspace/screwdriver",
+    "registry_id_alias": null
+  },
+  "srijitos-workspace/chai_glass": {
+    "uuid": "ee666279-414b-4eb2-9159-11d27691d95d",
+    "name": "Chai_glass",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "srijitos-workspace/chai_glass",
+    "registry_id_alias": null
+  },
+  "unitree/d1-t": {
+    "uuid": "fc5591ad-45a1-413e-bd31-15ae669c01bd",
+    "name": "D1 T",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "unitree/d1-t",
     "registry_id_alias": null
   }
 }

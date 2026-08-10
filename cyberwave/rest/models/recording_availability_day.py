@@ -17,23 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
-from cyberwave.rest.models.recording_list_item import RecordingListItem
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class RecordingListResponse(BaseModel):
+class RecordingAvailabilityDay(BaseModel):
     """
-    List of recordings (lean metadata only; full data via /recordings/{uuid}/data).
+    RecordingAvailabilityDay
     """ # noqa: E501
-    items: List[RecordingListItem]
-    next_cursor: Optional[StrictStr] = None
-    has_more: Optional[StrictBool] = False
-    page_size: Optional[StrictInt] = 0
-    facets: Optional[Dict[str, Dict[str, StrictInt]]] = None
-    __properties: ClassVar[List[str]] = ["items", "next_cursor", "has_more", "page_size", "facets"]
+    var_date: StrictStr = Field(alias="date")
+    count: StrictInt
+    __properties: ClassVar[List[str]] = ["date", "count"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -53,7 +49,7 @@ class RecordingListResponse(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of RecordingListResponse from a JSON string"""
+        """Create an instance of RecordingAvailabilityDay from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,23 +70,11 @@ class RecordingListResponse(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in items (list)
-        _items = []
-        if self.items:
-            for _item_items in self.items:
-                if _item_items:
-                    _items.append(_item_items.to_dict())
-            _dict['items'] = _items
-        # set to None if next_cursor (nullable) is None
-        # and model_fields_set contains the field
-        if self.next_cursor is None and "next_cursor" in self.model_fields_set:
-            _dict['next_cursor'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of RecordingListResponse from a dict"""
+        """Create an instance of RecordingAvailabilityDay from a dict"""
         if obj is None:
             return None
 
@@ -98,11 +82,8 @@ class RecordingListResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "items": [RecordingListItem.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
-            "next_cursor": obj.get("next_cursor"),
-            "has_more": obj.get("has_more") if obj.get("has_more") is not None else False,
-            "page_size": obj.get("page_size") if obj.get("page_size") is not None else 0,
-            "facets": obj.get("facets")
+            "date": obj.get("date"),
+            "count": obj.get("count")
         })
         return _obj
 

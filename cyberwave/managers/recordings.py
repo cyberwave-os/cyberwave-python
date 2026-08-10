@@ -20,7 +20,31 @@ from urllib.parse import urlparse
 
 import urllib3
 
+from cyberwave.rest.models.recording_materializing_schema import (
+    RecordingMaterializingSchema,
+)
+
 logger = logging.getLogger(__name__)
+
+DEFAULT_MATERIALIZING_RETRY_SECONDS = 15
+
+
+def _materializing_message(body: RecordingMaterializingSchema) -> str:
+    """Render a 202 body, preserving its reason and retry interval.
+
+    ``retry_after_seconds`` is a top-level field on the 202 body, not a key
+    inside ``playback_readiness``; read both so neither is dropped.
+    """
+    readiness = body.playback_readiness or {}
+    reason = readiness.get("reason") or body.detail or "unknown reason"
+    retry = (
+        body.retry_after_seconds
+        or readiness.get("retry_after_seconds")
+        or DEFAULT_MATERIALIZING_RETRY_SECONDS
+    )
+    return (
+        f"Recording assets are still materializing ({reason}). Retry in ~{retry}s."
+    )
 
 # Process-wide connection pool for artifact downloads, created lazily on first
 # use. Shared (rather than one-per-download) so keep-alive sockets are recycled
@@ -87,25 +111,46 @@ def _require(module: str) -> Any:
 
 
 def _classify(metadata: dict[str, Any]) -> frozenset[RecordingType]:
-    """Derive the set of source types a recording carries from list metadata."""
+    """Derive stream types from list metadata for servers without readiness.
+
+    This fallback must stay in lockstep with the backend's
+    ``src/lib/recordings/streams.py``. Newer servers provide the authoritative
+    stream list in ``playback_readiness`` instead.
+    """
     types: set[RecordingType] = set()
     rec_type = str(metadata.get("recording_type") or "")
-    # Camera: finalized recordings expose "camera*"/mp4_path; active (in-progress)
-    # manifests instead carry a non-empty video_parts list on a
-    # "recording_type": "active" item — classify those as CAMERA too so that
-    # filtering does not silently drop recordings that are still in progress.
-    if rec_type.startswith("camera") or metadata.get("mp4_path") or metadata.get("video_parts"):
+
+    # Camera: modern metadata, camera-prefixed recording types, an active
+    # manifest carrying video parts, or a legacy row identified only by video.
+    if (
+        metadata.get("metadata_type") == "CameraRecordingMetadata"
+        or rec_type.startswith("camera")
+        or metadata.get("video_parts")
+        or (not rec_type and metadata.get("mp4_path"))
+    ):
         types.add(RecordingType.CAMERA)
-    # Robot: finalized robot metadata, or an active manifest carrying robot_parts.
+
+    # `path`/`num_rows` are intentionally not robot evidence: camera rows carry
+    # both too. Legacy robot rows instead carry twin_type or joint_names.
     if (
         metadata.get("metadata_type") == "TwinRecordingMetadata"
         or rec_type == "robot"
         or metadata.get("robot_parts")
+        or (
+            not rec_type
+            and (
+                metadata.get("twin_type") == "robot"
+                or ("joint_names" in metadata and not metadata.get("mp4_path"))
+            )
+        )
     ):
         types.add(RecordingType.ROBOT)
-    if metadata.get("pointcloud"):
+
+    additional = metadata.get("additional_camera_data")
+    legacy = additional if isinstance(additional, dict) else {}
+    if metadata.get("pointcloud") or legacy.get("pointcloud"):
         types.add(RecordingType.DEPTH)
-    if metadata.get("colored_pointcloud"):
+    if metadata.get("colored_pointcloud") or legacy.get("colored_pointcloud"):
         types.add(RecordingType.POINTCLOUD)
     if metadata.get("audio_parts"):
         types.add(RecordingType.AUDIO)
@@ -172,19 +217,44 @@ class RecordingListItem:
     twin_uuid: str | None
     environment_uuid: str
     metadata: dict[str, Any]
+    #: Server-computed playback readiness; absent on servers predating it.
+    readiness: dict[str, Any] | None = None
 
     @property
     def types(self) -> frozenset[RecordingType]:
+        streams = (self.readiness or {}).get("streams")
+        if isinstance(streams, list):
+            resolved: set[RecordingType] = set()
+            for stream in streams:
+                if not isinstance(stream, dict):
+                    continue
+                try:
+                    resolved.add(RecordingType(str(stream.get("type"))))
+                except ValueError:
+                    continue
+            return frozenset(resolved)
         return _classify(self.metadata)
+
+    @property
+    def is_playback_ready(self) -> bool:
+        """Whether the server reports artifacts ready for playback.
+
+        Older servers omit readiness, so retain their historical optimistic
+        behavior rather than treating every recording as unavailable.
+        """
+        state = (self.readiness or {}).get("state")
+        return state is None or state == "ready"
 
     @classmethod
     def _from_rest(cls, obj: Any) -> "RecordingListItem":
         twin_uuid = getattr(obj, "twin_uuid", None)
+        readiness = getattr(obj, "playback_readiness", None)
         return cls(
             uuid=str(obj.uuid),
             twin_uuid=str(twin_uuid) if twin_uuid else None,
             environment_uuid=str(obj.environment_uuid),
             metadata=dict(getattr(obj, "metadata", None) or {}),
+            readiness=dict(readiness) if isinstance(readiness, dict) else None,
         )
 
     def get(self, *, path: str | None = None) -> Any:
@@ -481,12 +551,14 @@ class RecordingManager:
         filter: "Union[RecordingType, str, Iterable[Union[RecordingType, str]], None]" = None,  # noqa: A002
         start: "date | datetime | str | None" = None,
         end: "date | datetime | str | None" = None,
+        include_unready: bool | None = None,
     ) -> RecordingList:
         """List recordings for an environment, optionally filtered by type.
 
         ``start``/``end`` accept a ``date``, a ``datetime``, or an ISO 8601
         string (e.g. ``"2026-07-01"`` or ``"2026-07-01T10:30:00Z"``) and are
-        inclusive calendar-day bounds.
+        inclusive calendar-day bounds. ``include_unready`` overrides the
+        server's default visibility policy for materializing and failed rows.
         """
         from ..exceptions import CyberwaveError
 
@@ -499,7 +571,10 @@ class RecordingManager:
             )
         try:
             resp = self.api.src_app_api_environments_recordings_get_environment_recordings(
-                environment_id, start_date, end_date
+                environment_id,
+                start_date,
+                end_date,
+                include_unready=include_unready,
             )
         except Exception as e:  # noqa: BLE001
             raise CyberwaveError(
@@ -549,13 +624,24 @@ class RecordingManager:
             )
 
         try:
-            envelope = (
-                self.api.src_app_api_environments_recordings_get_recording_data(
-                    env, rec_uuid, return_flatbuffers=False
-                )
+            result = self.api.src_app_api_environments_recordings_get_recording_data(
+                env, rec_uuid, return_flatbuffers=False
             )
         except Exception as e:  # noqa: BLE001
             raise CyberwaveError(f"Failed to fetch recording {rec_uuid}: {e}") from e
+
+        # The endpoint answers 200 with a playback envelope or 202 with a
+        # materializing body, and the two are distinct types. The 200 envelope
+        # carries no readiness field at all, so this must be a type check —
+        # duck-typing on ``playback_readiness`` silently never fires.
+        if isinstance(result, RecordingMaterializingSchema):
+            raise CyberwaveError(_materializing_message(result))
+        if result is None:
+            raise CyberwaveError(
+                "The server returned no playback envelope for this recording. "
+                "Its assets may still be materializing; retry shortly."
+            )
+        envelope = result
 
         sources = self._collect_sources(envelope, twin_uuid=twin_uuid)
         self._warn_pointcloud_pending(envelope, twin_uuid=twin_uuid)
@@ -746,8 +832,14 @@ class TwinRecordingsHandle:
         filter: "Union[RecordingType, str, Iterable[Union[RecordingType, str]], None]" = None,  # noqa: A002
         start: "date | datetime | str | None" = None,
         end: "date | datetime | str | None" = None,
+        include_unready: bool | None = None,
     ) -> RecordingList:
-        all_items = self._manager().list(self._twin.environment_id, start=start, end=end)
+        all_items = self._manager().list(
+            self._twin.environment_id,
+            start=start,
+            end=end,
+            include_unready=include_unready,
+        )
         mine = RecordingList(
             item for item in all_items if item.twin_uuid == str(self._twin.uuid)
         )

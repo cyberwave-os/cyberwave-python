@@ -135,6 +135,27 @@ Full guides and the complete API reference are at **[docs.cyberwave.com](https:/
 ([overview](https://docs.cyberwave.com/overview) ·
 [API reference](https://docs.cyberwave.com/api-reference/overview)).
 
+## Recording readiness
+
+Recording list items expose the server's playback assessment when it is
+available. Use `is_playback_ready` before downloading artifacts, or request
+unready entries explicitly while building a retry UI:
+
+```python
+items = cw.environments.recordings.list(
+    environment_id="acme/envs/floor",
+    include_unready=True,
+)
+
+for item in items:
+    print(item.uuid, item.readiness, item.is_playback_ready)
+```
+
+`item.readiness` is `None` when connected to a server that predates this
+feature. If `get()` receives a materializing response, it raises `CyberwaveError`
+with the server's suggested retry interval instead of returning an empty
+recording.
+
 ## Contributing
 
 Contributions are welcome. Please open an

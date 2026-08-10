@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,7 +30,8 @@ class DatasetUpdateSchema(BaseModel):
     episodes: Optional[List[StrictStr]] = None
     name: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata"]
+    allow_pending_recordings: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata", "allow_pending_recordings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -86,6 +87,11 @@ class DatasetUpdateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if allow_pending_recordings (nullable) is None
+        # and model_fields_set contains the field
+        if self.allow_pending_recordings is None and "allow_pending_recordings" in self.model_fields_set:
+            _dict['allow_pending_recordings'] = None
+
         return _dict
 
     @classmethod
@@ -100,7 +106,8 @@ class DatasetUpdateSchema(BaseModel):
         _obj = cls.model_validate({
             "episodes": obj.get("episodes"),
             "name": obj.get("name"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "allow_pending_recordings": obj.get("allow_pending_recordings")
         })
         return _obj
 

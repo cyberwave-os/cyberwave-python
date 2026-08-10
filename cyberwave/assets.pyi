@@ -945,6 +945,10 @@ class Mirmir250Twin(Twin):
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
         ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
 
 class AgileXRoboticstracer20Twin(Twin):
     """
@@ -1325,6 +1329,23 @@ class VishalKrishnaaRsWorkspacescrewdriverTwin(Twin):
     """
     pass
 
+class SrijitosWorkspacechaiGlassTwin(Twin):
+    """
+    Digital twin for Chai_glass
+    Registry ID: srijitos-workspace/chai_glass
+    """
+    pass
+
+class Unitreed1TTwin(Twin):
+    """
+    Digital twin for D1 T
+    Registry ID: unitree/d1-t
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1452,4 +1473,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "movishs-workspace/g1-cyberwave": MovishsWorkspaceg1CyberwaveTwin,
     "vishal-krishnaa-rs-workspace/spanner": VishalKrishnaaRsWorkspacespannerTwin,
     "vishal-krishnaa-rs-workspace/screwdriver": VishalKrishnaaRsWorkspacescrewdriverTwin,
+    "srijitos-workspace/chai_glass": SrijitosWorkspacechaiGlassTwin,
+    "unitree/d1-t": Unitreed1TTwin,
 }

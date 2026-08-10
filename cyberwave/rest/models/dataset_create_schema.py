@@ -31,7 +31,8 @@ class DatasetCreateSchema(BaseModel):
     name: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     include_audio: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata", "include_audio"]
+    allow_pending_recordings: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata", "include_audio", "allow_pending_recordings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -87,6 +88,11 @@ class DatasetCreateSchema(BaseModel):
         if self.include_audio is None and "include_audio" in self.model_fields_set:
             _dict['include_audio'] = None
 
+        # set to None if allow_pending_recordings (nullable) is None
+        # and model_fields_set contains the field
+        if self.allow_pending_recordings is None and "allow_pending_recordings" in self.model_fields_set:
+            _dict['allow_pending_recordings'] = None
+
         return _dict
 
     @classmethod
@@ -102,7 +108,8 @@ class DatasetCreateSchema(BaseModel):
             "episodes": obj.get("episodes"),
             "name": obj.get("name"),
             "metadata": obj.get("metadata"),
-            "include_audio": obj.get("include_audio")
+            "include_audio": obj.get("include_audio"),
+            "allow_pending_recordings": obj.get("allow_pending_recordings")
         })
         return _obj
 

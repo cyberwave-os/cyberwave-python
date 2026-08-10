@@ -25,13 +25,14 @@ from pydantic_core import to_jsonable_python
 
 class RecordingListItem(BaseModel):
     """
-    Schema for recording list endpoint responses.  The metadata field is a dict that only contains non-null values.
+    Schema for recording list endpoint responses.  The metadata field is a dict that only contains non-null values. ``playback_readiness`` is server-computed (see src/lib/recordings/) and is intentionally NOT inside ``metadata``, which is a producer-metadata passthrough.
     """ # noqa: E501
     uuid: StrictStr
     twin_uuid: Optional[StrictStr]
     environment_uuid: StrictStr
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "metadata"]
+    playback_readiness: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "metadata", "playback_readiness"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,6 +78,11 @@ class RecordingListItem(BaseModel):
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
             _dict['twin_uuid'] = None
 
+        # set to None if playback_readiness (nullable) is None
+        # and model_fields_set contains the field
+        if self.playback_readiness is None and "playback_readiness" in self.model_fields_set:
+            _dict['playback_readiness'] = None
+
         return _dict
 
     @classmethod
@@ -92,7 +98,8 @@ class RecordingListItem(BaseModel):
             "uuid": obj.get("uuid"),
             "twin_uuid": obj.get("twin_uuid"),
             "environment_uuid": obj.get("environment_uuid"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "playback_readiness": obj.get("playback_readiness")
         })
         return _obj
 

@@ -45,6 +45,10 @@ class DatasetSchema(BaseModel):
     processed_episodes: StrictInt
     failed_episodes: StrictInt
     failed_episode_uuids: List[StrictStr]
+    failed_details: Optional[List[Optional[Dict[str, Any]]]] = None
+    skipped_episodes: Optional[StrictInt] = 0
+    skipped_episode_uuids: Optional[List[StrictStr]] = None
+    waiting_on_recordings_episode_uuids: Optional[List[StrictStr]] = None
     cameras: Optional[List[StrictStr]] = None
     fps: Optional[StrictInt] = None
     robot_type: Optional[StrictStr] = None
@@ -54,7 +58,7 @@ class DatasetSchema(BaseModel):
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "episodes", "metadata", "processed_datasets", "processing_status", "is_ready", "is_imported", "source", "source_format", "slug", "visibility", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "cameras", "fps", "robot_type", "action_dim", "state_dim", "created_at", "updated_at", "created_by", "updated_by"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "episodes", "metadata", "processed_datasets", "processing_status", "is_ready", "is_imported", "source", "source_format", "slug", "visibility", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "failed_details", "skipped_episodes", "skipped_episode_uuids", "waiting_on_recordings_episode_uuids", "cameras", "fps", "robot_type", "action_dim", "state_dim", "created_at", "updated_at", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -185,6 +189,10 @@ class DatasetSchema(BaseModel):
             "processed_episodes": obj.get("processed_episodes"),
             "failed_episodes": obj.get("failed_episodes"),
             "failed_episode_uuids": obj.get("failed_episode_uuids"),
+            "failed_details": obj.get("failed_details"),
+            "skipped_episodes": obj.get("skipped_episodes") if obj.get("skipped_episodes") is not None else 0,
+            "skipped_episode_uuids": obj.get("skipped_episode_uuids"),
+            "waiting_on_recordings_episode_uuids": obj.get("waiting_on_recordings_episode_uuids"),
             "cameras": obj.get("cameras"),
             "fps": obj.get("fps"),
             "robot_type": obj.get("robot_type"),

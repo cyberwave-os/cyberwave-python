@@ -227,6 +227,7 @@ from cyberwave.rest.models.rl_task_task_spec_response_schema import RLTaskTaskSp
 from cyberwave.rest.models.rl_task_task_spec_upsert_schema import RLTaskTaskSpecUpsertSchema
 from cyberwave.rest.models.rl_task_task_spec_validate_response_schema import RLTaskTaskSpecValidateResponseSchema
 from cyberwave.rest.models.rl_task_update_schema import RLTaskUpdateSchema
+from cyberwave.rest.models.recording_availability_response import RecordingAvailabilityResponse
 from cyberwave.rest.models.recording_detail_schema import RecordingDetailSchema
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema
 from cyberwave.rest.models.recording_list_response import RecordingListResponse
@@ -237,7 +238,7 @@ from cyberwave.rest.models.redeem_coupon_response_schema import RedeemCouponResp
 from cyberwave.rest.models.redeem_link_schema import RedeemLinkSchema
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse
-from cyberwave.rest.models.replay_timeline_events_response_schema import ReplayTimelineEventsResponseSchema
+from cyberwave.rest.models.replay_timeline_window_events_response_schema import ReplayTimelineWindowEventsResponseSchema
 from cyberwave.rest.models.resource_metrics_schema import ResourceMetricsSchema
 from cyberwave.rest.models.response import Response
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema
@@ -22189,6 +22190,8 @@ class DefaultApi:
         self,
         asset_uuid: Optional[StrictStr] = None,
         workspace_uuid: Optional[StrictStr] = None,
+        limit: Optional[Annotated[int, Field(strict=True, ge=1)]] = None,
+        offset: Optional[Annotated[int, Field(strict=True, ge=0)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -22204,12 +22207,16 @@ class DefaultApi:
     ) -> List[ControllerPolicySchema]:
         """List Controller Policies
 
-        List all controller policies visible to the authenticated user, optionally filtered by asset and workspace.
+        List all controller policies visible to the authenticated user, optionally filtered by asset and workspace.  Supports optional ``offset``/``limit`` pagination. When ``limit`` is omitted the full result set is returned (backward compatible).
 
         :param asset_uuid:
         :type asset_uuid: str
         :param workspace_uuid:
         :type workspace_uuid: str
+        :param limit:
+        :type limit: int
+        :param offset:
+        :type offset: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -22235,6 +22242,8 @@ class DefaultApi:
         _param = self._src_app_api_controller_policies_list_controller_policies_serialize(
             asset_uuid=asset_uuid,
             workspace_uuid=workspace_uuid,
+            limit=limit,
+            offset=offset,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -22260,6 +22269,8 @@ class DefaultApi:
         self,
         asset_uuid: Optional[StrictStr] = None,
         workspace_uuid: Optional[StrictStr] = None,
+        limit: Optional[Annotated[int, Field(strict=True, ge=1)]] = None,
+        offset: Optional[Annotated[int, Field(strict=True, ge=0)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -22275,12 +22286,16 @@ class DefaultApi:
     ) -> ApiResponse[List[ControllerPolicySchema]]:
         """List Controller Policies
 
-        List all controller policies visible to the authenticated user, optionally filtered by asset and workspace.
+        List all controller policies visible to the authenticated user, optionally filtered by asset and workspace.  Supports optional ``offset``/``limit`` pagination. When ``limit`` is omitted the full result set is returned (backward compatible).
 
         :param asset_uuid:
         :type asset_uuid: str
         :param workspace_uuid:
         :type workspace_uuid: str
+        :param limit:
+        :type limit: int
+        :param offset:
+        :type offset: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -22306,6 +22321,8 @@ class DefaultApi:
         _param = self._src_app_api_controller_policies_list_controller_policies_serialize(
             asset_uuid=asset_uuid,
             workspace_uuid=workspace_uuid,
+            limit=limit,
+            offset=offset,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -22331,6 +22348,8 @@ class DefaultApi:
         self,
         asset_uuid: Optional[StrictStr] = None,
         workspace_uuid: Optional[StrictStr] = None,
+        limit: Optional[Annotated[int, Field(strict=True, ge=1)]] = None,
+        offset: Optional[Annotated[int, Field(strict=True, ge=0)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -22346,12 +22365,16 @@ class DefaultApi:
     ) -> RESTResponseType:
         """List Controller Policies
 
-        List all controller policies visible to the authenticated user, optionally filtered by asset and workspace.
+        List all controller policies visible to the authenticated user, optionally filtered by asset and workspace.  Supports optional ``offset``/``limit`` pagination. When ``limit`` is omitted the full result set is returned (backward compatible).
 
         :param asset_uuid:
         :type asset_uuid: str
         :param workspace_uuid:
         :type workspace_uuid: str
+        :param limit:
+        :type limit: int
+        :param offset:
+        :type offset: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -22377,6 +22400,8 @@ class DefaultApi:
         _param = self._src_app_api_controller_policies_list_controller_policies_serialize(
             asset_uuid=asset_uuid,
             workspace_uuid=workspace_uuid,
+            limit=limit,
+            offset=offset,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -22397,6 +22422,8 @@ class DefaultApi:
         self,
         asset_uuid,
         workspace_uuid,
+        limit,
+        offset,
         _request_auth,
         _content_type,
         _headers,
@@ -22426,6 +22453,14 @@ class DefaultApi:
         if workspace_uuid is not None:
             
             _query_params.append(('workspace_uuid', workspace_uuid))
+            
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
+        if offset is not None:
+            
+            _query_params.append(('offset', offset))
             
         # process the header parameters
         # process the form parameters
@@ -25810,7 +25845,7 @@ class DefaultApi:
     ) -> Dict[str, object]:
         """Create Dataset
 
-        Create a new dataset and start async episode parquet generation.
+        Create the dataset row and dispatch async episode parquet generation.  Synchronous work is flat in episode count: request-shape validation, the pending-recordings gate, and the row insert. Telemetry-dependent checks and generation run in ``dispatch_dataset_generation_task``; their failures surface via ``processing_status`` / ``failed_details``.
 
         :param dataset_create_schema: (required)
         :type dataset_create_schema: DatasetCreateSchema
@@ -25877,7 +25912,7 @@ class DefaultApi:
     ) -> ApiResponse[Dict[str, object]]:
         """Create Dataset
 
-        Create a new dataset and start async episode parquet generation.
+        Create the dataset row and dispatch async episode parquet generation.  Synchronous work is flat in episode count: request-shape validation, the pending-recordings gate, and the row insert. Telemetry-dependent checks and generation run in ``dispatch_dataset_generation_task``; their failures surface via ``processing_status`` / ``failed_details``.
 
         :param dataset_create_schema: (required)
         :type dataset_create_schema: DatasetCreateSchema
@@ -25944,7 +25979,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Create Dataset
 
-        Create a new dataset and start async episode parquet generation.
+        Create the dataset row and dispatch async episode parquet generation.  Synchronous work is flat in episode count: request-shape validation, the pending-recordings gate, and the row insert. Telemetry-dependent checks and generation run in ``dispatch_dataset_generation_task``; their failures surface via ``processing_status`` / ``failed_details``.
 
         :param dataset_create_schema: (required)
         :type dataset_create_schema: DatasetCreateSchema
@@ -26331,6 +26366,7 @@ class DefaultApi:
         self,
         uuid: StrictStr,
         format: StrictStr,
+        retry: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -26346,12 +26382,14 @@ class DefaultApi:
     ) -> DatasetDownloadReadySchema:
         """Download Dataset
 
-        Request a download URL for a dataset in a specific format.  This endpoint is **idempotent**: calling it multiple times will not spawn duplicate conversion tasks.  Supported ``format`` values (``DatasetType`` values) ---------------------------------------------------- - ``parquet``   — Cyberwave joined-parquet zip (native datasets only).                   Deprecated alias: ``plain``. - ``lerobot3``  — LeRobot v3 (Forge writer).                   Deprecated alias: ``lerobot``. - ``lerobot21`` — LeRobot v2.1 (Forge writer). - ``rlds``      — RLDS / TF-Record (Open-X-Embodiment style, Forge writer). - ``openvla``   — Cyberwave OpenVLA TFDS bundle (Cyberwave-generated writer). - ``robodm``    — Berkeley .vla format (Forge writer).  Planned / not yet implemented (returns 422): ``mcap``, ``gr00t``, ``hdf5``, ``zarr``, ``rosbag``  Returns ------- HTTP 200 (``DatasetDownloadReadySchema``)     The artifact is ready; ``signed_url`` is valid for 24 h. HTTP 202 (``DatasetDownloadProcessingSchema``)     A conversion task was queued or is already running.     Poll ``poll_url`` (this endpoint) again until you get a 200. HTTP 422     The format is not supported (either invalid or TODO).
+        Request a download URL for a dataset in a specific format.  This endpoint is **idempotent**: calling it multiple times will not spawn duplicate conversion tasks.  Because it is both the initiate and the poll endpoint, a *failed* conversion reports itself as 409 ``conversion_failed`` rather than being replaced with a fresh attempt — otherwise a client polling every few seconds spawns a new conversion task on every tick and never learns that it failed. Pass ``retry=true`` to explicitly start a new attempt.  Supported ``format`` values (``DatasetType`` values) ---------------------------------------------------- - ``parquet``   — Cyberwave joined-parquet zip (native datasets only).                   Deprecated alias: ``plain``. - ``lerobot3``  — LeRobot v3 (Forge writer).                   Deprecated alias: ``lerobot``. - ``lerobot21`` — LeRobot v2.1 (Forge writer). - ``rlds``      — RLDS / TF-Record (Open-X-Embodiment style, Forge writer). - ``openvla``   — Cyberwave OpenVLA TFDS bundle (Cyberwave-generated writer). - ``robodm``    — Berkeley .vla format (Forge writer).  Planned / not yet implemented (returns 422): ``mcap``, ``gr00t``, ``hdf5``, ``zarr``, ``rosbag``  Returns ------- HTTP 200 (``DatasetDownloadReadySchema``)     The artifact is ready; ``signed_url`` is valid for 24 h. HTTP 202 (``DatasetDownloadProcessingSchema``)     A conversion task was queued or is already running.     Poll ``poll_url`` (this endpoint) again until you get a 200. HTTP 409     The dataset cannot be converted (``dataset_not_convertible``), or the     last attempt for this format failed (``conversion_failed``). HTTP 422     The format is not supported (either invalid or TODO).
 
         :param uuid: (required)
         :type uuid: str
         :param format: (required)
         :type format: str
+        :param retry:
+        :type retry: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -26377,6 +26415,7 @@ class DefaultApi:
         _param = self._src_app_api_datasets_download_dataset_serialize(
             uuid=uuid,
             format=format,
+            retry=retry,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -26403,6 +26442,7 @@ class DefaultApi:
         self,
         uuid: StrictStr,
         format: StrictStr,
+        retry: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -26418,12 +26458,14 @@ class DefaultApi:
     ) -> ApiResponse[DatasetDownloadReadySchema]:
         """Download Dataset
 
-        Request a download URL for a dataset in a specific format.  This endpoint is **idempotent**: calling it multiple times will not spawn duplicate conversion tasks.  Supported ``format`` values (``DatasetType`` values) ---------------------------------------------------- - ``parquet``   — Cyberwave joined-parquet zip (native datasets only).                   Deprecated alias: ``plain``. - ``lerobot3``  — LeRobot v3 (Forge writer).                   Deprecated alias: ``lerobot``. - ``lerobot21`` — LeRobot v2.1 (Forge writer). - ``rlds``      — RLDS / TF-Record (Open-X-Embodiment style, Forge writer). - ``openvla``   — Cyberwave OpenVLA TFDS bundle (Cyberwave-generated writer). - ``robodm``    — Berkeley .vla format (Forge writer).  Planned / not yet implemented (returns 422): ``mcap``, ``gr00t``, ``hdf5``, ``zarr``, ``rosbag``  Returns ------- HTTP 200 (``DatasetDownloadReadySchema``)     The artifact is ready; ``signed_url`` is valid for 24 h. HTTP 202 (``DatasetDownloadProcessingSchema``)     A conversion task was queued or is already running.     Poll ``poll_url`` (this endpoint) again until you get a 200. HTTP 422     The format is not supported (either invalid or TODO).
+        Request a download URL for a dataset in a specific format.  This endpoint is **idempotent**: calling it multiple times will not spawn duplicate conversion tasks.  Because it is both the initiate and the poll endpoint, a *failed* conversion reports itself as 409 ``conversion_failed`` rather than being replaced with a fresh attempt — otherwise a client polling every few seconds spawns a new conversion task on every tick and never learns that it failed. Pass ``retry=true`` to explicitly start a new attempt.  Supported ``format`` values (``DatasetType`` values) ---------------------------------------------------- - ``parquet``   — Cyberwave joined-parquet zip (native datasets only).                   Deprecated alias: ``plain``. - ``lerobot3``  — LeRobot v3 (Forge writer).                   Deprecated alias: ``lerobot``. - ``lerobot21`` — LeRobot v2.1 (Forge writer). - ``rlds``      — RLDS / TF-Record (Open-X-Embodiment style, Forge writer). - ``openvla``   — Cyberwave OpenVLA TFDS bundle (Cyberwave-generated writer). - ``robodm``    — Berkeley .vla format (Forge writer).  Planned / not yet implemented (returns 422): ``mcap``, ``gr00t``, ``hdf5``, ``zarr``, ``rosbag``  Returns ------- HTTP 200 (``DatasetDownloadReadySchema``)     The artifact is ready; ``signed_url`` is valid for 24 h. HTTP 202 (``DatasetDownloadProcessingSchema``)     A conversion task was queued or is already running.     Poll ``poll_url`` (this endpoint) again until you get a 200. HTTP 409     The dataset cannot be converted (``dataset_not_convertible``), or the     last attempt for this format failed (``conversion_failed``). HTTP 422     The format is not supported (either invalid or TODO).
 
         :param uuid: (required)
         :type uuid: str
         :param format: (required)
         :type format: str
+        :param retry:
+        :type retry: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -26449,6 +26491,7 @@ class DefaultApi:
         _param = self._src_app_api_datasets_download_dataset_serialize(
             uuid=uuid,
             format=format,
+            retry=retry,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -26475,6 +26518,7 @@ class DefaultApi:
         self,
         uuid: StrictStr,
         format: StrictStr,
+        retry: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -26490,12 +26534,14 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Download Dataset
 
-        Request a download URL for a dataset in a specific format.  This endpoint is **idempotent**: calling it multiple times will not spawn duplicate conversion tasks.  Supported ``format`` values (``DatasetType`` values) ---------------------------------------------------- - ``parquet``   — Cyberwave joined-parquet zip (native datasets only).                   Deprecated alias: ``plain``. - ``lerobot3``  — LeRobot v3 (Forge writer).                   Deprecated alias: ``lerobot``. - ``lerobot21`` — LeRobot v2.1 (Forge writer). - ``rlds``      — RLDS / TF-Record (Open-X-Embodiment style, Forge writer). - ``openvla``   — Cyberwave OpenVLA TFDS bundle (Cyberwave-generated writer). - ``robodm``    — Berkeley .vla format (Forge writer).  Planned / not yet implemented (returns 422): ``mcap``, ``gr00t``, ``hdf5``, ``zarr``, ``rosbag``  Returns ------- HTTP 200 (``DatasetDownloadReadySchema``)     The artifact is ready; ``signed_url`` is valid for 24 h. HTTP 202 (``DatasetDownloadProcessingSchema``)     A conversion task was queued or is already running.     Poll ``poll_url`` (this endpoint) again until you get a 200. HTTP 422     The format is not supported (either invalid or TODO).
+        Request a download URL for a dataset in a specific format.  This endpoint is **idempotent**: calling it multiple times will not spawn duplicate conversion tasks.  Because it is both the initiate and the poll endpoint, a *failed* conversion reports itself as 409 ``conversion_failed`` rather than being replaced with a fresh attempt — otherwise a client polling every few seconds spawns a new conversion task on every tick and never learns that it failed. Pass ``retry=true`` to explicitly start a new attempt.  Supported ``format`` values (``DatasetType`` values) ---------------------------------------------------- - ``parquet``   — Cyberwave joined-parquet zip (native datasets only).                   Deprecated alias: ``plain``. - ``lerobot3``  — LeRobot v3 (Forge writer).                   Deprecated alias: ``lerobot``. - ``lerobot21`` — LeRobot v2.1 (Forge writer). - ``rlds``      — RLDS / TF-Record (Open-X-Embodiment style, Forge writer). - ``openvla``   — Cyberwave OpenVLA TFDS bundle (Cyberwave-generated writer). - ``robodm``    — Berkeley .vla format (Forge writer).  Planned / not yet implemented (returns 422): ``mcap``, ``gr00t``, ``hdf5``, ``zarr``, ``rosbag``  Returns ------- HTTP 200 (``DatasetDownloadReadySchema``)     The artifact is ready; ``signed_url`` is valid for 24 h. HTTP 202 (``DatasetDownloadProcessingSchema``)     A conversion task was queued or is already running.     Poll ``poll_url`` (this endpoint) again until you get a 200. HTTP 409     The dataset cannot be converted (``dataset_not_convertible``), or the     last attempt for this format failed (``conversion_failed``). HTTP 422     The format is not supported (either invalid or TODO).
 
         :param uuid: (required)
         :type uuid: str
         :param format: (required)
         :type format: str
+        :param retry:
+        :type retry: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -26521,6 +26567,7 @@ class DefaultApi:
         _param = self._src_app_api_datasets_download_dataset_serialize(
             uuid=uuid,
             format=format,
+            retry=retry,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -26542,6 +26589,7 @@ class DefaultApi:
         self,
         uuid,
         format,
+        retry,
         _request_auth,
         _content_type,
         _headers,
@@ -26569,6 +26617,10 @@ class DefaultApi:
         if format is not None:
             
             _query_params.append(('format', format))
+            
+        if retry is not None:
+            
+            _query_params.append(('retry', retry))
             
         # process the header parameters
         # process the form parameters
@@ -29389,6 +29441,7 @@ class DefaultApi:
     def src_app_api_datasets_recompute_dataset(
         self,
         uuid: StrictStr,
+        allow_pending_recordings: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -29408,6 +29461,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
+        :param allow_pending_recordings:
+        :type allow_pending_recordings: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -29432,6 +29487,7 @@ class DefaultApi:
 
         _param = self._src_app_api_datasets_recompute_dataset_serialize(
             uuid=uuid,
+            allow_pending_recordings=allow_pending_recordings,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -29456,6 +29512,7 @@ class DefaultApi:
     def src_app_api_datasets_recompute_dataset_with_http_info(
         self,
         uuid: StrictStr,
+        allow_pending_recordings: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -29475,6 +29532,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
+        :param allow_pending_recordings:
+        :type allow_pending_recordings: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -29499,6 +29558,7 @@ class DefaultApi:
 
         _param = self._src_app_api_datasets_recompute_dataset_serialize(
             uuid=uuid,
+            allow_pending_recordings=allow_pending_recordings,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -29523,6 +29583,7 @@ class DefaultApi:
     def src_app_api_datasets_recompute_dataset_without_preload_content(
         self,
         uuid: StrictStr,
+        allow_pending_recordings: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -29542,6 +29603,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
+        :param allow_pending_recordings:
+        :type allow_pending_recordings: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -29566,6 +29629,7 @@ class DefaultApi:
 
         _param = self._src_app_api_datasets_recompute_dataset_serialize(
             uuid=uuid,
+            allow_pending_recordings=allow_pending_recordings,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -29585,6 +29649,7 @@ class DefaultApi:
     def _src_app_api_datasets_recompute_dataset_serialize(
         self,
         uuid,
+        allow_pending_recordings,
         _request_auth,
         _content_type,
         _headers,
@@ -29609,6 +29674,10 @@ class DefaultApi:
         if uuid is not None:
             _path_params['uuid'] = uuid
         # process the query parameters
+        if allow_pending_recordings is not None:
+            
+            _query_params.append(('allow_pending_recordings', allow_pending_recordings))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -29942,7 +30011,7 @@ class DefaultApi:
     ) -> DatasetSchema:
         """Update Dataset
 
-        Update a dataset.
+        Update a dataset.  Synchronous validation is flat in episode count, same as ``create_dataset``. Recording-count homogeneity and generation for newly attached episodes run in ``dispatch_dataset_generation_task``; failures surface via ``processing_status`` / ``failed_details``.
 
         :param uuid: (required)
         :type uuid: str
@@ -30013,7 +30082,7 @@ class DefaultApi:
     ) -> ApiResponse[DatasetSchema]:
         """Update Dataset
 
-        Update a dataset.
+        Update a dataset.  Synchronous validation is flat in episode count, same as ``create_dataset``. Recording-count homogeneity and generation for newly attached episodes run in ``dispatch_dataset_generation_task``; failures surface via ``processing_status`` / ``failed_details``.
 
         :param uuid: (required)
         :type uuid: str
@@ -30084,7 +30153,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Update Dataset
 
-        Update a dataset.
+        Update a dataset.  Synchronous validation is flat in episode count, same as ``create_dataset``. Recording-count homogeneity and generation for newly attached episodes run in ``dispatch_dataset_generation_task``; failures surface via ``processing_status`` / ``failed_details``.
 
         :param uuid: (required)
         :type uuid: str
@@ -45884,6 +45953,14 @@ class DefaultApi:
         uuid: StrictStr,
         start_timestamp: Optional[date] = None,
         end_timestamp: Optional[date] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        include_unready: Optional[StrictBool] = None,
+        limit: Optional[StrictInt] = None,
+        cursor: Optional[StrictStr] = None,
+        twin_uuid: Optional[List[StrictStr]] = None,
+        context: Optional[List[StrictStr]] = None,
+        source_type: Optional[List[StrictStr]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -45899,7 +45976,7 @@ class DefaultApi:
     ) -> RecordingListResponse:
         """Get Environment Recordings
 
-        Get all available recordings for an environment (no pagination). Returns lean recording metadata (heavy internal fields omitted). Full playback data is loaded via GET .../recordings/{recording_uuid}/data.  Query params: - start_timestamp: Inclusive calendar day start (yyyy-mm-dd), optional - end_timestamp: Inclusive calendar day end (yyyy-mm-dd), optional   When both are set, only recordings whose time window overlaps   [start_timestamp 00:00 UTC, end_timestamp+1day 00:00 UTC) are returned.
+        List a stable, filterable recording catalog.  Omitting ``limit`` retains the legacy all-items behavior. Supplying it enables signed, cursor-based pages ordered by ``(effective_start_us, uuid)`` descending. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
 
         :param uuid: (required)
         :type uuid: str
@@ -45907,6 +45984,22 @@ class DefaultApi:
         :type start_timestamp: date
         :param end_timestamp:
         :type end_timestamp: date
+        :param start_date:
+        :type start_date: date
+        :param end_date:
+        :type end_date: date
+        :param include_unready:
+        :type include_unready: bool
+        :param limit:
+        :type limit: int
+        :param cursor:
+        :type cursor: str
+        :param twin_uuid:
+        :type twin_uuid: List[str]
+        :param context:
+        :type context: List[str]
+        :param source_type:
+        :type source_type: List[str]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -45933,6 +46026,14 @@ class DefaultApi:
             uuid=uuid,
             start_timestamp=start_timestamp,
             end_timestamp=end_timestamp,
+            start_date=start_date,
+            end_date=end_date,
+            include_unready=include_unready,
+            limit=limit,
+            cursor=cursor,
+            twin_uuid=twin_uuid,
+            context=context,
+            source_type=source_type,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -45959,6 +46060,14 @@ class DefaultApi:
         uuid: StrictStr,
         start_timestamp: Optional[date] = None,
         end_timestamp: Optional[date] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        include_unready: Optional[StrictBool] = None,
+        limit: Optional[StrictInt] = None,
+        cursor: Optional[StrictStr] = None,
+        twin_uuid: Optional[List[StrictStr]] = None,
+        context: Optional[List[StrictStr]] = None,
+        source_type: Optional[List[StrictStr]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -45974,7 +46083,7 @@ class DefaultApi:
     ) -> ApiResponse[RecordingListResponse]:
         """Get Environment Recordings
 
-        Get all available recordings for an environment (no pagination). Returns lean recording metadata (heavy internal fields omitted). Full playback data is loaded via GET .../recordings/{recording_uuid}/data.  Query params: - start_timestamp: Inclusive calendar day start (yyyy-mm-dd), optional - end_timestamp: Inclusive calendar day end (yyyy-mm-dd), optional   When both are set, only recordings whose time window overlaps   [start_timestamp 00:00 UTC, end_timestamp+1day 00:00 UTC) are returned.
+        List a stable, filterable recording catalog.  Omitting ``limit`` retains the legacy all-items behavior. Supplying it enables signed, cursor-based pages ordered by ``(effective_start_us, uuid)`` descending. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
 
         :param uuid: (required)
         :type uuid: str
@@ -45982,6 +46091,22 @@ class DefaultApi:
         :type start_timestamp: date
         :param end_timestamp:
         :type end_timestamp: date
+        :param start_date:
+        :type start_date: date
+        :param end_date:
+        :type end_date: date
+        :param include_unready:
+        :type include_unready: bool
+        :param limit:
+        :type limit: int
+        :param cursor:
+        :type cursor: str
+        :param twin_uuid:
+        :type twin_uuid: List[str]
+        :param context:
+        :type context: List[str]
+        :param source_type:
+        :type source_type: List[str]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -46008,6 +46133,14 @@ class DefaultApi:
             uuid=uuid,
             start_timestamp=start_timestamp,
             end_timestamp=end_timestamp,
+            start_date=start_date,
+            end_date=end_date,
+            include_unready=include_unready,
+            limit=limit,
+            cursor=cursor,
+            twin_uuid=twin_uuid,
+            context=context,
+            source_type=source_type,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -46034,6 +46167,14 @@ class DefaultApi:
         uuid: StrictStr,
         start_timestamp: Optional[date] = None,
         end_timestamp: Optional[date] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        include_unready: Optional[StrictBool] = None,
+        limit: Optional[StrictInt] = None,
+        cursor: Optional[StrictStr] = None,
+        twin_uuid: Optional[List[StrictStr]] = None,
+        context: Optional[List[StrictStr]] = None,
+        source_type: Optional[List[StrictStr]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -46049,7 +46190,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Get Environment Recordings
 
-        Get all available recordings for an environment (no pagination). Returns lean recording metadata (heavy internal fields omitted). Full playback data is loaded via GET .../recordings/{recording_uuid}/data.  Query params: - start_timestamp: Inclusive calendar day start (yyyy-mm-dd), optional - end_timestamp: Inclusive calendar day end (yyyy-mm-dd), optional   When both are set, only recordings whose time window overlaps   [start_timestamp 00:00 UTC, end_timestamp+1day 00:00 UTC) are returned.
+        List a stable, filterable recording catalog.  Omitting ``limit`` retains the legacy all-items behavior. Supplying it enables signed, cursor-based pages ordered by ``(effective_start_us, uuid)`` descending. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
 
         :param uuid: (required)
         :type uuid: str
@@ -46057,6 +46198,22 @@ class DefaultApi:
         :type start_timestamp: date
         :param end_timestamp:
         :type end_timestamp: date
+        :param start_date:
+        :type start_date: date
+        :param end_date:
+        :type end_date: date
+        :param include_unready:
+        :type include_unready: bool
+        :param limit:
+        :type limit: int
+        :param cursor:
+        :type cursor: str
+        :param twin_uuid:
+        :type twin_uuid: List[str]
+        :param context:
+        :type context: List[str]
+        :param source_type:
+        :type source_type: List[str]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -46083,6 +46240,14 @@ class DefaultApi:
             uuid=uuid,
             start_timestamp=start_timestamp,
             end_timestamp=end_timestamp,
+            start_date=start_date,
+            end_date=end_date,
+            include_unready=include_unready,
+            limit=limit,
+            cursor=cursor,
+            twin_uuid=twin_uuid,
+            context=context,
+            source_type=source_type,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -46104,6 +46269,14 @@ class DefaultApi:
         uuid,
         start_timestamp,
         end_timestamp,
+        start_date,
+        end_date,
+        include_unready,
+        limit,
+        cursor,
+        twin_uuid,
+        context,
+        source_type,
         _request_auth,
         _content_type,
         _headers,
@@ -46113,6 +46286,9 @@ class DefaultApi:
         _host = None
 
         _collection_formats: Dict[str, str] = {
+            'twin_uuid': 'multi',
+            'context': 'multi',
+            'source_type': 'multi',
         }
 
         _path_params: Dict[str, str] = {}
@@ -46154,6 +46330,56 @@ class DefaultApi:
             else:
                 _query_params.append(('end_timestamp', end_timestamp))
             
+        if start_date is not None:
+            if isinstance(start_date, date):
+                _query_params.append(
+                    (
+                        'start_date',
+                        start_date.strftime(
+                            self.api_client.configuration.date_format
+                        )
+                    )
+                )
+            else:
+                _query_params.append(('start_date', start_date))
+            
+        if end_date is not None:
+            if isinstance(end_date, date):
+                _query_params.append(
+                    (
+                        'end_date',
+                        end_date.strftime(
+                            self.api_client.configuration.date_format
+                        )
+                    )
+                )
+            else:
+                _query_params.append(('end_date', end_date))
+            
+        if include_unready is not None:
+            
+            _query_params.append(('include_unready', include_unready))
+            
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
+        if cursor is not None:
+            
+            _query_params.append(('cursor', cursor))
+            
+        if twin_uuid is not None:
+            
+            _query_params.append(('twin_uuid', twin_uuid))
+            
+        if context is not None:
+            
+            _query_params.append(('context', context))
+            
+        if source_type is not None:
+            
+            _query_params.append(('source_type', source_type))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -46176,6 +46402,459 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/api/v1/environments/{uuid}/recordings',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_environments_recordings_get_environment_recordings_availability(
+        self,
+        uuid: StrictStr,
+        start_timestamp: Optional[date] = None,
+        end_timestamp: Optional[date] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        include_unready: Optional[StrictBool] = None,
+        twin_uuid: Optional[List[StrictStr]] = None,
+        context: Optional[List[StrictStr]] = None,
+        source_type: Optional[List[StrictStr]] = None,
+        timezone: Optional[StrictStr] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RecordingAvailabilityResponse:
+        """Get Environment Recordings Availability
+
+        Return UTC/default-timezone recording date availability without media IO.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param start_timestamp:
+        :type start_timestamp: date
+        :param end_timestamp:
+        :type end_timestamp: date
+        :param start_date:
+        :type start_date: date
+        :param end_date:
+        :type end_date: date
+        :param include_unready:
+        :type include_unready: bool
+        :param twin_uuid:
+        :type twin_uuid: List[str]
+        :param context:
+        :type context: List[str]
+        :param source_type:
+        :type source_type: List[str]
+        :param timezone:
+        :type timezone: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_recordings_get_environment_recordings_availability_serialize(
+            uuid=uuid,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            start_date=start_date,
+            end_date=end_date,
+            include_unready=include_unready,
+            twin_uuid=twin_uuid,
+            context=context,
+            source_type=source_type,
+            timezone=timezone,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "RecordingAvailabilityResponse",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_environments_recordings_get_environment_recordings_availability_with_http_info(
+        self,
+        uuid: StrictStr,
+        start_timestamp: Optional[date] = None,
+        end_timestamp: Optional[date] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        include_unready: Optional[StrictBool] = None,
+        twin_uuid: Optional[List[StrictStr]] = None,
+        context: Optional[List[StrictStr]] = None,
+        source_type: Optional[List[StrictStr]] = None,
+        timezone: Optional[StrictStr] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[RecordingAvailabilityResponse]:
+        """Get Environment Recordings Availability
+
+        Return UTC/default-timezone recording date availability without media IO.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param start_timestamp:
+        :type start_timestamp: date
+        :param end_timestamp:
+        :type end_timestamp: date
+        :param start_date:
+        :type start_date: date
+        :param end_date:
+        :type end_date: date
+        :param include_unready:
+        :type include_unready: bool
+        :param twin_uuid:
+        :type twin_uuid: List[str]
+        :param context:
+        :type context: List[str]
+        :param source_type:
+        :type source_type: List[str]
+        :param timezone:
+        :type timezone: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_recordings_get_environment_recordings_availability_serialize(
+            uuid=uuid,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            start_date=start_date,
+            end_date=end_date,
+            include_unready=include_unready,
+            twin_uuid=twin_uuid,
+            context=context,
+            source_type=source_type,
+            timezone=timezone,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "RecordingAvailabilityResponse",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_environments_recordings_get_environment_recordings_availability_without_preload_content(
+        self,
+        uuid: StrictStr,
+        start_timestamp: Optional[date] = None,
+        end_timestamp: Optional[date] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        include_unready: Optional[StrictBool] = None,
+        twin_uuid: Optional[List[StrictStr]] = None,
+        context: Optional[List[StrictStr]] = None,
+        source_type: Optional[List[StrictStr]] = None,
+        timezone: Optional[StrictStr] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Get Environment Recordings Availability
+
+        Return UTC/default-timezone recording date availability without media IO.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param start_timestamp:
+        :type start_timestamp: date
+        :param end_timestamp:
+        :type end_timestamp: date
+        :param start_date:
+        :type start_date: date
+        :param end_date:
+        :type end_date: date
+        :param include_unready:
+        :type include_unready: bool
+        :param twin_uuid:
+        :type twin_uuid: List[str]
+        :param context:
+        :type context: List[str]
+        :param source_type:
+        :type source_type: List[str]
+        :param timezone:
+        :type timezone: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_recordings_get_environment_recordings_availability_serialize(
+            uuid=uuid,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            start_date=start_date,
+            end_date=end_date,
+            include_unready=include_unready,
+            twin_uuid=twin_uuid,
+            context=context,
+            source_type=source_type,
+            timezone=timezone,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "RecordingAvailabilityResponse",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_environments_recordings_get_environment_recordings_availability_serialize(
+        self,
+        uuid,
+        start_timestamp,
+        end_timestamp,
+        start_date,
+        end_date,
+        include_unready,
+        twin_uuid,
+        context,
+        source_type,
+        timezone,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+            'twin_uuid': 'multi',
+            'context': 'multi',
+            'source_type': 'multi',
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        if start_timestamp is not None:
+            if isinstance(start_timestamp, date):
+                _query_params.append(
+                    (
+                        'start_timestamp',
+                        start_timestamp.strftime(
+                            self.api_client.configuration.date_format
+                        )
+                    )
+                )
+            else:
+                _query_params.append(('start_timestamp', start_timestamp))
+            
+        if end_timestamp is not None:
+            if isinstance(end_timestamp, date):
+                _query_params.append(
+                    (
+                        'end_timestamp',
+                        end_timestamp.strftime(
+                            self.api_client.configuration.date_format
+                        )
+                    )
+                )
+            else:
+                _query_params.append(('end_timestamp', end_timestamp))
+            
+        if start_date is not None:
+            if isinstance(start_date, date):
+                _query_params.append(
+                    (
+                        'start_date',
+                        start_date.strftime(
+                            self.api_client.configuration.date_format
+                        )
+                    )
+                )
+            else:
+                _query_params.append(('start_date', start_date))
+            
+        if end_date is not None:
+            if isinstance(end_date, date):
+                _query_params.append(
+                    (
+                        'end_date',
+                        end_date.strftime(
+                            self.api_client.configuration.date_format
+                        )
+                    )
+                )
+            else:
+                _query_params.append(('end_date', end_date))
+            
+        if include_unready is not None:
+            
+            _query_params.append(('include_unready', include_unready))
+            
+        if twin_uuid is not None:
+            
+            _query_params.append(('twin_uuid', twin_uuid))
+            
+        if context is not None:
+            
+            _query_params.append(('context', context))
+            
+        if source_type is not None:
+            
+            _query_params.append(('source_type', source_type))
+            
+        if timezone is not None:
+            
+            _query_params.append(('timezone', timezone))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/environments/{uuid}/recordings/availability',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -46453,6 +47132,386 @@ class DefaultApi:
 
 
     @validate_call
+    def src_app_api_environments_recordings_get_environment_timeline_events(
+        self,
+        uuid: StrictStr,
+        windows: StrictStr,
+        twin_uuid: Optional[StrictStr] = None,
+        include_alerts: Optional[StrictBool] = None,
+        include_telemetry: Optional[StrictBool] = None,
+        telemetry_event_types: Optional[StrictStr] = None,
+        limit: Optional[StrictInt] = None,
+        cursor: Optional[StrictStr] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ReplayTimelineWindowEventsResponseSchema:
+        """Get Environment Timeline Events
+
+        Return one keyset page of window annotations for a set of time ranges.  This resolves no recording. The caller already holds every window it wants annotated (catalog descriptors carry their own start/end), so requiring a recording here only bought a lookup against the largest table we have — once per recording, to re-derive timestamps the caller passed in anyway.  ``windows`` is ``start_us:end_us`` pairs, comma separated. Overlapping and touching ranges are merged, so selecting forty back-to-back recordings costs one or two range predicates rather than forty. Ordering is ascending by ``(timestamp_us, kind, uuid)`` and paging is keyset: unlike a newest-first ``LIMIT``, the oldest windows in a sparse multi-day selection cannot be starved of annotations by a denser recent one.  Events come back with no recording association. Mapping an annotation to the recordings whose window contains it — and applying any per-recording context policy — belongs to the caller, which is the only side that knows each window's recording identity and context.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param windows: (required)
+        :type windows: str
+        :param twin_uuid:
+        :type twin_uuid: str
+        :param include_alerts:
+        :type include_alerts: bool
+        :param include_telemetry:
+        :type include_telemetry: bool
+        :param telemetry_event_types:
+        :type telemetry_event_types: str
+        :param limit:
+        :type limit: int
+        :param cursor:
+        :type cursor: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_recordings_get_environment_timeline_events_serialize(
+            uuid=uuid,
+            windows=windows,
+            twin_uuid=twin_uuid,
+            include_alerts=include_alerts,
+            include_telemetry=include_telemetry,
+            telemetry_event_types=telemetry_event_types,
+            limit=limit,
+            cursor=cursor,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ReplayTimelineWindowEventsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_environments_recordings_get_environment_timeline_events_with_http_info(
+        self,
+        uuid: StrictStr,
+        windows: StrictStr,
+        twin_uuid: Optional[StrictStr] = None,
+        include_alerts: Optional[StrictBool] = None,
+        include_telemetry: Optional[StrictBool] = None,
+        telemetry_event_types: Optional[StrictStr] = None,
+        limit: Optional[StrictInt] = None,
+        cursor: Optional[StrictStr] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[ReplayTimelineWindowEventsResponseSchema]:
+        """Get Environment Timeline Events
+
+        Return one keyset page of window annotations for a set of time ranges.  This resolves no recording. The caller already holds every window it wants annotated (catalog descriptors carry their own start/end), so requiring a recording here only bought a lookup against the largest table we have — once per recording, to re-derive timestamps the caller passed in anyway.  ``windows`` is ``start_us:end_us`` pairs, comma separated. Overlapping and touching ranges are merged, so selecting forty back-to-back recordings costs one or two range predicates rather than forty. Ordering is ascending by ``(timestamp_us, kind, uuid)`` and paging is keyset: unlike a newest-first ``LIMIT``, the oldest windows in a sparse multi-day selection cannot be starved of annotations by a denser recent one.  Events come back with no recording association. Mapping an annotation to the recordings whose window contains it — and applying any per-recording context policy — belongs to the caller, which is the only side that knows each window's recording identity and context.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param windows: (required)
+        :type windows: str
+        :param twin_uuid:
+        :type twin_uuid: str
+        :param include_alerts:
+        :type include_alerts: bool
+        :param include_telemetry:
+        :type include_telemetry: bool
+        :param telemetry_event_types:
+        :type telemetry_event_types: str
+        :param limit:
+        :type limit: int
+        :param cursor:
+        :type cursor: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_recordings_get_environment_timeline_events_serialize(
+            uuid=uuid,
+            windows=windows,
+            twin_uuid=twin_uuid,
+            include_alerts=include_alerts,
+            include_telemetry=include_telemetry,
+            telemetry_event_types=telemetry_event_types,
+            limit=limit,
+            cursor=cursor,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ReplayTimelineWindowEventsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_environments_recordings_get_environment_timeline_events_without_preload_content(
+        self,
+        uuid: StrictStr,
+        windows: StrictStr,
+        twin_uuid: Optional[StrictStr] = None,
+        include_alerts: Optional[StrictBool] = None,
+        include_telemetry: Optional[StrictBool] = None,
+        telemetry_event_types: Optional[StrictStr] = None,
+        limit: Optional[StrictInt] = None,
+        cursor: Optional[StrictStr] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Get Environment Timeline Events
+
+        Return one keyset page of window annotations for a set of time ranges.  This resolves no recording. The caller already holds every window it wants annotated (catalog descriptors carry their own start/end), so requiring a recording here only bought a lookup against the largest table we have — once per recording, to re-derive timestamps the caller passed in anyway.  ``windows`` is ``start_us:end_us`` pairs, comma separated. Overlapping and touching ranges are merged, so selecting forty back-to-back recordings costs one or two range predicates rather than forty. Ordering is ascending by ``(timestamp_us, kind, uuid)`` and paging is keyset: unlike a newest-first ``LIMIT``, the oldest windows in a sparse multi-day selection cannot be starved of annotations by a denser recent one.  Events come back with no recording association. Mapping an annotation to the recordings whose window contains it — and applying any per-recording context policy — belongs to the caller, which is the only side that knows each window's recording identity and context.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param windows: (required)
+        :type windows: str
+        :param twin_uuid:
+        :type twin_uuid: str
+        :param include_alerts:
+        :type include_alerts: bool
+        :param include_telemetry:
+        :type include_telemetry: bool
+        :param telemetry_event_types:
+        :type telemetry_event_types: str
+        :param limit:
+        :type limit: int
+        :param cursor:
+        :type cursor: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_environments_recordings_get_environment_timeline_events_serialize(
+            uuid=uuid,
+            windows=windows,
+            twin_uuid=twin_uuid,
+            include_alerts=include_alerts,
+            include_telemetry=include_telemetry,
+            telemetry_event_types=telemetry_event_types,
+            limit=limit,
+            cursor=cursor,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ReplayTimelineWindowEventsResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_environments_recordings_get_environment_timeline_events_serialize(
+        self,
+        uuid,
+        windows,
+        twin_uuid,
+        include_alerts,
+        include_telemetry,
+        telemetry_event_types,
+        limit,
+        cursor,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        if windows is not None:
+            
+            _query_params.append(('windows', windows))
+            
+        if twin_uuid is not None:
+            
+            _query_params.append(('twin_uuid', twin_uuid))
+            
+        if include_alerts is not None:
+            
+            _query_params.append(('include_alerts', include_alerts))
+            
+        if include_telemetry is not None:
+            
+            _query_params.append(('include_telemetry', include_telemetry))
+            
+        if telemetry_event_types is not None:
+            
+            _query_params.append(('telemetry_event_types', telemetry_event_types))
+            
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
+        if cursor is not None:
+            
+            _query_params.append(('cursor', cursor))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/environments/{uuid}/timeline-events',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
     def src_app_api_environments_recordings_get_recording_data(
         self,
         uuid: StrictStr,
@@ -46515,6 +47574,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "RecordingSourcesEnvelopeSchema",
+            '202': "RecordingMaterializingSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -46590,6 +47650,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "RecordingSourcesEnvelopeSchema",
+            '202': "RecordingMaterializingSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -46665,6 +47726,7 @@ class DefaultApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "RecordingSourcesEnvelopeSchema",
+            '202': "RecordingMaterializingSchema",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -47006,367 +48068,6 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/api/v1/environments/{uuid}/recordings/{recording_uuid}/debug-artifacts',
-            path_params=_path_params,
-            query_params=_query_params,
-            header_params=_header_params,
-            body=_body_params,
-            post_params=_form_params,
-            files=_files,
-            auth_settings=_auth_settings,
-            collection_formats=_collection_formats,
-            _host=_host,
-            _request_auth=_request_auth
-        )
-
-
-
-
-    @validate_call
-    def src_app_api_environments_recordings_get_recording_timeline_events(
-        self,
-        uuid: StrictStr,
-        recording_uuid: StrictStr,
-        twin_uuid: Optional[StrictStr] = None,
-        include_alerts: Optional[StrictBool] = None,
-        include_telemetry: Optional[StrictBool] = None,
-        telemetry_event_types: Optional[StrictStr] = None,
-        limit_per_kind: Optional[StrictInt] = None,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ReplayTimelineEventsResponseSchema:
-        """Get Recording Timeline Events
-
-        Return replay timeline markers for alerts and telemetry within a recording window.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param recording_uuid: (required)
-        :type recording_uuid: str
-        :param twin_uuid:
-        :type twin_uuid: str
-        :param include_alerts:
-        :type include_alerts: bool
-        :param include_telemetry:
-        :type include_telemetry: bool
-        :param telemetry_event_types:
-        :type telemetry_event_types: str
-        :param limit_per_kind:
-        :type limit_per_kind: int
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_environments_recordings_get_recording_timeline_events_serialize(
-            uuid=uuid,
-            recording_uuid=recording_uuid,
-            twin_uuid=twin_uuid,
-            include_alerts=include_alerts,
-            include_telemetry=include_telemetry,
-            telemetry_event_types=telemetry_event_types,
-            limit_per_kind=limit_per_kind,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "ReplayTimelineEventsResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        ).data
-
-
-    @validate_call
-    def src_app_api_environments_recordings_get_recording_timeline_events_with_http_info(
-        self,
-        uuid: StrictStr,
-        recording_uuid: StrictStr,
-        twin_uuid: Optional[StrictStr] = None,
-        include_alerts: Optional[StrictBool] = None,
-        include_telemetry: Optional[StrictBool] = None,
-        telemetry_event_types: Optional[StrictStr] = None,
-        limit_per_kind: Optional[StrictInt] = None,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[ReplayTimelineEventsResponseSchema]:
-        """Get Recording Timeline Events
-
-        Return replay timeline markers for alerts and telemetry within a recording window.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param recording_uuid: (required)
-        :type recording_uuid: str
-        :param twin_uuid:
-        :type twin_uuid: str
-        :param include_alerts:
-        :type include_alerts: bool
-        :param include_telemetry:
-        :type include_telemetry: bool
-        :param telemetry_event_types:
-        :type telemetry_event_types: str
-        :param limit_per_kind:
-        :type limit_per_kind: int
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_environments_recordings_get_recording_timeline_events_serialize(
-            uuid=uuid,
-            recording_uuid=recording_uuid,
-            twin_uuid=twin_uuid,
-            include_alerts=include_alerts,
-            include_telemetry=include_telemetry,
-            telemetry_event_types=telemetry_event_types,
-            limit_per_kind=limit_per_kind,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "ReplayTimelineEventsResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        )
-
-
-    @validate_call
-    def src_app_api_environments_recordings_get_recording_timeline_events_without_preload_content(
-        self,
-        uuid: StrictStr,
-        recording_uuid: StrictStr,
-        twin_uuid: Optional[StrictStr] = None,
-        include_alerts: Optional[StrictBool] = None,
-        include_telemetry: Optional[StrictBool] = None,
-        telemetry_event_types: Optional[StrictStr] = None,
-        limit_per_kind: Optional[StrictInt] = None,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> RESTResponseType:
-        """Get Recording Timeline Events
-
-        Return replay timeline markers for alerts and telemetry within a recording window.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param recording_uuid: (required)
-        :type recording_uuid: str
-        :param twin_uuid:
-        :type twin_uuid: str
-        :param include_alerts:
-        :type include_alerts: bool
-        :param include_telemetry:
-        :type include_telemetry: bool
-        :param telemetry_event_types:
-        :type telemetry_event_types: str
-        :param limit_per_kind:
-        :type limit_per_kind: int
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_environments_recordings_get_recording_timeline_events_serialize(
-            uuid=uuid,
-            recording_uuid=recording_uuid,
-            twin_uuid=twin_uuid,
-            include_alerts=include_alerts,
-            include_telemetry=include_telemetry,
-            telemetry_event_types=telemetry_event_types,
-            limit_per_kind=limit_per_kind,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': "ReplayTimelineEventsResponseSchema",
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        return response_data.response
-
-
-    def _src_app_api_environments_recordings_get_recording_timeline_events_serialize(
-        self,
-        uuid,
-        recording_uuid,
-        twin_uuid,
-        include_alerts,
-        include_telemetry,
-        telemetry_event_types,
-        limit_per_kind,
-        _request_auth,
-        _content_type,
-        _headers,
-        _host_index,
-    ) -> RequestSerialized:
-
-        _host = None
-
-        _collection_formats: Dict[str, str] = {
-        }
-
-        _path_params: Dict[str, str] = {}
-        _query_params: List[Tuple[str, str]] = []
-        _header_params: Dict[str, Optional[str]] = _headers or {}
-        _form_params: List[Tuple[str, str]] = []
-        _files: Dict[
-            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
-        ] = {}
-        _body_params: Optional[bytes] = None
-
-        # process the path parameters
-        if uuid is not None:
-            _path_params['uuid'] = uuid
-        if recording_uuid is not None:
-            _path_params['recording_uuid'] = recording_uuid
-        # process the query parameters
-        if twin_uuid is not None:
-            
-            _query_params.append(('twin_uuid', twin_uuid))
-            
-        if include_alerts is not None:
-            
-            _query_params.append(('include_alerts', include_alerts))
-            
-        if include_telemetry is not None:
-            
-            _query_params.append(('include_telemetry', include_telemetry))
-            
-        if telemetry_event_types is not None:
-            
-            _query_params.append(('telemetry_event_types', telemetry_event_types))
-            
-        if limit_per_kind is not None:
-            
-            _query_params.append(('limit_per_kind', limit_per_kind))
-            
-        # process the header parameters
-        # process the form parameters
-        # process the body parameter
-
-
-        # set the HTTP header `Accept`
-        if 'Accept' not in _header_params:
-            _header_params['Accept'] = self.api_client.select_header_accept(
-                [
-                    'application/json'
-                ]
-            )
-
-
-        # authentication setting
-        _auth_settings: List[str] = [
-            'CustomTokenAuthentication'
-        ]
-
-        return self.api_client.param_serialize(
-            method='GET',
-            resource_path='/api/v1/environments/{uuid}/recordings/{recording_uuid}/timeline-events',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -57254,6 +57955,7 @@ class DefaultApi:
     def src_app_api_episode_recompute_episode_parquet(
         self,
         uuid: StrictStr,
+        allow_pending_recordings: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -57273,6 +57975,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
+        :param allow_pending_recordings:
+        :type allow_pending_recordings: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -57297,6 +58001,7 @@ class DefaultApi:
 
         _param = self._src_app_api_episode_recompute_episode_parquet_serialize(
             uuid=uuid,
+            allow_pending_recordings=allow_pending_recordings,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -57321,6 +58026,7 @@ class DefaultApi:
     def src_app_api_episode_recompute_episode_parquet_with_http_info(
         self,
         uuid: StrictStr,
+        allow_pending_recordings: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -57340,6 +58046,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
+        :param allow_pending_recordings:
+        :type allow_pending_recordings: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -57364,6 +58072,7 @@ class DefaultApi:
 
         _param = self._src_app_api_episode_recompute_episode_parquet_serialize(
             uuid=uuid,
+            allow_pending_recordings=allow_pending_recordings,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -57388,6 +58097,7 @@ class DefaultApi:
     def src_app_api_episode_recompute_episode_parquet_without_preload_content(
         self,
         uuid: StrictStr,
+        allow_pending_recordings: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -57407,6 +58117,8 @@ class DefaultApi:
 
         :param uuid: (required)
         :type uuid: str
+        :param allow_pending_recordings:
+        :type allow_pending_recordings: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -57431,6 +58143,7 @@ class DefaultApi:
 
         _param = self._src_app_api_episode_recompute_episode_parquet_serialize(
             uuid=uuid,
+            allow_pending_recordings=allow_pending_recordings,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -57450,6 +58163,7 @@ class DefaultApi:
     def _src_app_api_episode_recompute_episode_parquet_serialize(
         self,
         uuid,
+        allow_pending_recordings,
         _request_auth,
         _content_type,
         _headers,
@@ -57474,6 +58188,10 @@ class DefaultApi:
         if uuid is not None:
             _path_params['uuid'] = uuid
         # process the query parameters
+        if allow_pending_recordings is not None:
+            
+            _query_params.append(('allow_pending_recordings', allow_pending_recordings))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter

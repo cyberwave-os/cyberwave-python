@@ -433,12 +433,15 @@ __all__ = [
     "RLTaskTaskSpecValidateResponseSchema",
     "RLTaskUpdateSchema",
     "RatesValueValue",
+    "RecordingAvailabilityDay",
+    "RecordingAvailabilityResponse",
     "RecordingDetailSchema",
     "RecordingGenerationRequestSchema",
     "RecordingGenerationRequestSchemaByDate",
     "RecordingGenerationResponseSchema",
     "RecordingListItem",
     "RecordingListResponse",
+    "RecordingMaterializingSchema",
     "RecordingPreflightSchema",
     "RecordingSourcesEnvelopeSchema",
     "RecordingSourcesSchema",
@@ -449,7 +452,8 @@ __all__ = [
     "ReloadCapabilitiesBulkSchema",
     "RemoveMemberResponse",
     "ReplayTimelineEventSchema",
-    "ReplayTimelineEventsResponseSchema",
+    "ReplayTimelineWindowEventsResponseSchema",
+    "ReplayTimelineWindowSchema",
     "ResourceMetricsSchema",
     "Response",
     "RevokeUserFeatureRequest",
@@ -1003,12 +1007,15 @@ from cyberwave.rest.models.rl_task_task_spec_upsert_schema import RLTaskTaskSpec
 from cyberwave.rest.models.rl_task_task_spec_validate_response_schema import RLTaskTaskSpecValidateResponseSchema as RLTaskTaskSpecValidateResponseSchema
 from cyberwave.rest.models.rl_task_update_schema import RLTaskUpdateSchema as RLTaskUpdateSchema
 from cyberwave.rest.models.rates_value_value import RatesValueValue as RatesValueValue
+from cyberwave.rest.models.recording_availability_day import RecordingAvailabilityDay as RecordingAvailabilityDay
+from cyberwave.rest.models.recording_availability_response import RecordingAvailabilityResponse as RecordingAvailabilityResponse
 from cyberwave.rest.models.recording_detail_schema import RecordingDetailSchema as RecordingDetailSchema
 from cyberwave.rest.models.recording_generation_request_schema import RecordingGenerationRequestSchema as RecordingGenerationRequestSchema
 from cyberwave.rest.models.recording_generation_request_schema_by_date import RecordingGenerationRequestSchemaByDate as RecordingGenerationRequestSchemaByDate
 from cyberwave.rest.models.recording_generation_response_schema import RecordingGenerationResponseSchema as RecordingGenerationResponseSchema
 from cyberwave.rest.models.recording_list_item import RecordingListItem as RecordingListItem
 from cyberwave.rest.models.recording_list_response import RecordingListResponse as RecordingListResponse
+from cyberwave.rest.models.recording_materializing_schema import RecordingMaterializingSchema as RecordingMaterializingSchema
 from cyberwave.rest.models.recording_preflight_schema import RecordingPreflightSchema as RecordingPreflightSchema
 from cyberwave.rest.models.recording_sources_envelope_schema import RecordingSourcesEnvelopeSchema as RecordingSourcesEnvelopeSchema
 from cyberwave.rest.models.recording_sources_schema import RecordingSourcesSchema as RecordingSourcesSchema
@@ -1019,7 +1026,8 @@ from cyberwave.rest.models.relative_translation import RelativeTranslation as Re
 from cyberwave.rest.models.reload_capabilities_bulk_schema import ReloadCapabilitiesBulkSchema as ReloadCapabilitiesBulkSchema
 from cyberwave.rest.models.remove_member_response import RemoveMemberResponse as RemoveMemberResponse
 from cyberwave.rest.models.replay_timeline_event_schema import ReplayTimelineEventSchema as ReplayTimelineEventSchema
-from cyberwave.rest.models.replay_timeline_events_response_schema import ReplayTimelineEventsResponseSchema as ReplayTimelineEventsResponseSchema
+from cyberwave.rest.models.replay_timeline_window_events_response_schema import ReplayTimelineWindowEventsResponseSchema as ReplayTimelineWindowEventsResponseSchema
+from cyberwave.rest.models.replay_timeline_window_schema import ReplayTimelineWindowSchema as ReplayTimelineWindowSchema
 from cyberwave.rest.models.resource_metrics_schema import ResourceMetricsSchema as ResourceMetricsSchema
 from cyberwave.rest.models.response import Response as Response
 from cyberwave.rest.models.revoke_user_feature_request import RevokeUserFeatureRequest as RevokeUserFeatureRequest
