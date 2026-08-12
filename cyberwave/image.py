@@ -395,6 +395,7 @@ def _build_metadata_blob(
             "workload_uuid",
             "model_uuid",
             "model_slug",
+            "structured_task",
             "output_format",
         ):
             if key in raw_output and key not in meta:

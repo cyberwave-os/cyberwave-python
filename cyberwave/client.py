@@ -70,15 +70,54 @@ _SDK_USER_AGENT = f"cyberwave-python/{_SDK_VERSION}"
 _SDK_VERSION_HEADER = "X-Cyberwave-SDK-Version"
 
 
+CLIENT_USER_AGENT_ENV = "CYBERWAVE_CLIENT_USER_AGENT"
+
+
+def _compose_user_agent(client_identity: str | None) -> str:
+    """Build the ``User-Agent`` for outbound REST calls.
+
+    Downstream tools (CLI, MCP server) contribute their own ``product/version``
+    token so backend tracking can tell them apart from a user's own script —
+    otherwise every caller looks identical, since they all go through this
+    client. Both tokens are kept, space-separated per the ``User-Agent``
+    convention, so one request reports the tool *and* the SDK underneath it::
+
+        cyberwave-cli/0.12.6 cyberwave-python/0.6.4
+
+    Resolution order is the explicit ``user_agent=`` argument, then the
+    ``CYBERWAVE_CLIENT_USER_AGENT`` environment variable. The env var exists so
+    a wrapper that builds clients in many places (the CLI has ~8 call sites)
+    can identify itself once at startup instead of threading a kwarg through
+    each one — and so call sites added later are covered automatically.
+    """
+    identity = (client_identity or os.getenv(CLIENT_USER_AGENT_ENV) or "").strip()
+    # Guard against a stray newline / quote in an env value reaching a header.
+    identity = " ".join(identity.split())
+    return f"{identity} {_SDK_USER_AGENT}" if identity else _SDK_USER_AGENT
+
+
 def _apply_sdk_identity_headers(header_params: dict[str, Any]) -> dict[str, Any]:
     """Add SDK identity headers without overriding caller-provided values.
 
-    Sets a ``User-Agent`` and ``X-Cyberwave-SDK-Version`` header so backend
-    request tracking can report SDK version distribution over REST. Callers that
-    set their own ``User-Agent`` (e.g. the CLI) keep it.
+    Sets ``X-Cyberwave-SDK-Version`` so backend request tracking can report SDK
+    version distribution over REST, and fills in a ``User-Agent`` for callers
+    that reach ``call_api`` without one.
+
+    Note that requests routed through ``ApiClient.param_serialize`` already
+    carry a ``User-Agent`` by the time they get here — ``param_serialize``
+    merges ``ApiClient.default_headers`` into the per-call headers. That value
+    is set once in :meth:`Cyberwave._setup_rest_client` via
+    :func:`_compose_user_agent`; without it the generated client's placeholder
+    (``OpenAPI-Generator/1.0.0/python``) would be what reached the backend.
+
+    The fallback goes through :func:`_compose_user_agent` too, so a request that
+    reaches here without one still reports the calling tool: ``_compose_user_agent``
+    reads ``CYBERWAVE_CLIENT_USER_AGENT``, which is how the CLI and MCP server
+    identify themselves. Using the bare SDK token here would silently attribute
+    those requests to a user script.
     """
     if not any(str(key).lower() == "user-agent" for key in header_params):
-        header_params["User-Agent"] = _SDK_USER_AGENT
+        header_params["User-Agent"] = _compose_user_agent(None)
     if not any(
         str(key).lower() == _SDK_VERSION_HEADER.lower() for key in header_params
     ):
@@ -174,8 +213,16 @@ class Cyberwave:
         mode: Optional[str] = "live",
         environment_id: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        user_agent: Optional[str] = None,
         **config_kwargs,
     ):
+        """Args:
+        user_agent: Optional ``product/version`` token identifying the tool
+            building this client (e.g. ``"cyberwave-cli/0.12.6"``). Prepended
+            to the SDK's own token on every REST request so backend tracking
+            can distinguish the CLI / MCP server / a user script. Library
+            callers can leave this unset.
+        """
         runtime_mode = _resolve_runtime_mode(mode)
 
         if not base_url:
@@ -220,6 +267,9 @@ class Cyberwave:
         if source_type is None and not os.getenv("CYBERWAVE_SOURCE_TYPE"):
             self.config.source_type = _default_state_source_type(runtime_mode)
 
+        # Set before ``_setup_rest_client`` — it reads this to build the
+        # ``User-Agent``, and ``configure()`` calls it again on rebuild.
+        self._user_agent = user_agent
         self._setup_rest_client()
         self._mqtt_client: Optional[CyberwaveMQTTClient] = None
         self._data_backend: Optional[DataBackend] = None
@@ -242,6 +292,10 @@ class Cyberwave:
         configuration.verify_ssl = self.config.verify_ssl
 
         api_client = ApiClient(configuration)
+        # Replaces the generated placeholder ``OpenAPI-Generator/1.0.0/python``.
+        # ``param_serialize`` merges ``default_headers`` into every request, so
+        # this is what actually reaches the backend.
+        api_client.user_agent = _compose_user_agent(getattr(self, "_user_agent", None))
 
         original_response_deserialize = api_client.response_deserialize
         last_request_headers = {}

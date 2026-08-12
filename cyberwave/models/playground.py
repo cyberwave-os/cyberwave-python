@@ -43,7 +43,7 @@ from __future__ import annotations
 import logging
 import uuid as _uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from cyberwave.image import ImageSource
@@ -145,12 +145,20 @@ STRUCTURED_ACTIONS: tuple[StructuredAction, ...] = (
 _ACTIONS_BY_ID: dict[str, StructuredAction] = {a.id: a for a in STRUCTURED_ACTIONS}
 
 
-def _get_action(task_id: str) -> StructuredAction | None:
+def get_action(task_id: str) -> StructuredAction | None:
+    """Return the catalog entry for ``task_id``, or ``None`` if unknown."""
     return _ACTIONS_BY_ID.get(task_id)
 
 
-def _list_actions() -> list[StructuredAction]:
+def list_actions() -> list[StructuredAction]:
+    """Return the catalog in declaration order."""
     return list(STRUCTURED_ACTIONS)
+
+
+# Retained so the deprecated ``cyberwave.mlmodels`` alias and existing imports
+# keep resolving. Prefer the public names above.
+_get_action = get_action
+_list_actions = list_actions
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +223,7 @@ class PlaygroundHandle:
         No API call — uses the bundled catalog. For the live server-side catalog
         call ``cw.api.src_app_api_mlmodels_list_structured_actions()`` directly.
         """
-        return _list_actions()
+        return list_actions()
 
     # ------------------------------------------------------------------
     # Run
@@ -238,12 +246,23 @@ class PlaygroundHandle:
         camera_intrinsics: dict[str, Any] | None = None,
         camera_pose: dict[str, Any] | None = None,
         history: list[dict[str, Any]] | None = None,
-        product: bool = False,
     ) -> MLModelRunResultSchema | MLModelRunQueuedSchema:
         """Execute a run against the bound model.
 
-        By default hits ``POST /mlmodels/{uuid}/playground/run``. Set
-        ``product=True`` for ``POST /mlmodels/{uuid}/run`` (SDK automation).
+        Always hits ``POST /mlmodels/{uuid}/run`` — the authenticated,
+        credit-gated endpoint for SDK, workflow, and automation callers.
+
+        ``POST /mlmodels/{uuid}/playground/run`` is deliberately not reachable
+        from the SDK. It backs the in-app catalog try-it surface: unauthenticated,
+        metered against playground quota rather than credits, and browser-only
+        server-side (it rejects callers that send no ``Origin``). Routing SDK
+        traffic there would bypass credit gating and 403 in any case.
+
+        Note that no SDK release ever reached it: this function used to default
+        to the playground path, but ``invoke_mlmodel_run`` was handed the
+        ``DefaultApi`` facade rather than its ``ApiClient``, so every run raised
+        ``AttributeError`` before the first byte went over the wire. See
+        ``tests/test_playground_invoke_run.py``.
 
         Args:
             prompt: User-facing prompt.
@@ -332,7 +351,6 @@ class PlaygroundHandle:
             self._api,
             uuid=entry.uuid,
             schema=schema,
-            playground=not product,
         )
         return self._last_result
 
@@ -384,17 +402,28 @@ class PlaygroundHandle:
 
         from cyberwave.image import save_annotated_image
 
+        # Prefer the provenance the server stamped on the result over what we
+        # resolved locally: a cascade may have run a different model than the
+        # one addressed, and only the response knows which. ``structured_task``
+        # has no local equivalent at all — without it this method embeds less
+        # than the module-level ``cw.save_annotated_image(source, result, path)``
+        # does for the same run.
         payload: dict[str, Any] = {
             "output_format": output_format,
             "output": getattr(result, "output", None),
             "raw": getattr(result, "raw", None),
             "status": getattr(result, "status", "completed"),
             "workload_uuid": None,
-            "model_uuid": self._resolved.uuid if self._resolved else None,
+            "model_uuid": getattr(result, "model_uuid", None)
+            or (self._resolved.uuid if self._resolved else None),
+            "structured_task": getattr(result, "structured_task", None),
         }
         extra: dict[str, Any] = {}
-        if self._resolved and self._resolved.slug:
-            extra["model_slug"] = self._resolved.slug
+        model_slug = getattr(result, "model_slug", None) or (
+            self._resolved.slug if self._resolved else None
+        )
+        if model_slug:
+            extra["model_slug"] = model_slug
 
         result_path = save_annotated_image(
             source,
@@ -495,35 +524,55 @@ class PlaygroundClient:
 _AUTH = ["CustomTokenAuthentication"]
 
 
+class _RunTransport(Protocol):
+    """The slice of the generated ``ApiClient`` that :func:`invoke_mlmodel_run` uses.
+
+    Spelled as a Protocol rather than ``DefaultApi | Any`` because that union
+    collapses to ``Any`` and type-checks nothing — which is how the facade was
+    passed where a transport was required in the first place.
+    """
+
+    def param_serialize(self, **kwargs: Any) -> tuple[Any, ...]: ...
+
+    def call_api(self, *args: Any) -> Any: ...
+
+    def response_deserialize(self, **kwargs: Any) -> Any: ...
+
+
 def invoke_mlmodel_run(
-    api: DefaultApi,
+    api: DefaultApi | _RunTransport,
     *,
     uuid: str,
     schema: Any,
-    playground: bool,
 ) -> MLModelRunResultSchema | MLModelRunQueuedSchema:
-    """POST to the playground or product ML model run endpoint."""
-    resource_path = (
-        "/api/v1/mlmodels/{uuid}/playground/run"
-        if playground
-        else "/api/v1/mlmodels/{uuid}/run"
-    )
+    """POST to the ML model run endpoint.
+
+    Always ``/run`` — the authenticated, credit-gated route. There is
+    deliberately no switch for ``/playground/run``: that endpoint backs the
+    in-app try-it surface and is browser-only server-side, so the SDK must
+    never reach it. See :meth:`PlaygroundHandle.run`.
+    """
+    resource_path = "/api/v1/mlmodels/{uuid}/run"
     if hasattr(schema, "to_dict"):
         body: dict[str, Any] = schema.to_dict()
     elif hasattr(schema, "model_dump"):
         body = schema.model_dump(exclude_none=True)
     else:
         body = dict(schema)
-    _param = api.param_serialize(
+    # ``param_serialize`` / ``call_api`` / ``response_deserialize`` live on the
+    # generated ``ApiClient``, not on the ``DefaultApi`` operations facade that
+    # merely holds one. Accept either so callers can pass whichever they have.
+    transport = getattr(api, "api_client", api)
+    _param = transport.param_serialize(
         method="POST",
         resource_path=resource_path,
         path_params={"uuid": uuid},
         body=body,
         auth_settings=_AUTH,
     )
-    response = api.call_api(*_param)
+    response = transport.call_api(*_param)
     response.read()
-    return api.response_deserialize(
+    return transport.response_deserialize(
         response_data=response,
         response_types_map={
             "200": "MLModelRunResultSchema",

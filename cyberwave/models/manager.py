@@ -186,7 +186,8 @@ class ModelManager:
         """Run cloud model inference for automation / workflow workers.
 
         Alias used by generated workflow workers (``client.mlmodels.run``).
-        Uses the product ``POST /mlmodels/{uuid}/run`` endpoint (credit-gated).
+        Uses the product ``POST /mlmodels/{uuid}/run`` endpoint (credit-gated)
+        — as does every SDK run path, so no endpoint switch is needed here.
         """
         if self.playground is None:
             raise CyberwaveAPIError(
@@ -194,7 +195,7 @@ class ModelManager:
                 "Use 'cw = Cyberwave(api_key=...)' instead of constructing "
                 "ModelManager directly without an api_client."
             )
-        return self.playground(model_id).run(**kwargs, product=True)
+        return self.playground(model_id).run(**kwargs)
 
     def list(
         self,

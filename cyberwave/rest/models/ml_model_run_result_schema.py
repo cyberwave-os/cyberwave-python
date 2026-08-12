@@ -34,7 +34,10 @@ class MLModelRunResultSchema(BaseModel):
     output: Optional[Any]
     raw: Optional[StrictStr] = None
     actions: Optional[MotionEpisodeSchema] = None
-    __properties: ClassVar[List[str]] = ["status", "execution_uuid", "output_format", "output", "raw", "actions"]
+    model_uuid: Optional[StrictStr] = None
+    model_slug: Optional[StrictStr] = None
+    structured_task: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["status", "execution_uuid", "output_format", "output", "raw", "actions", "model_uuid", "model_slug", "structured_task"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -98,6 +101,21 @@ class MLModelRunResultSchema(BaseModel):
         if self.actions is None and "actions" in self.model_fields_set:
             _dict['actions'] = None
 
+        # set to None if model_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.model_uuid is None and "model_uuid" in self.model_fields_set:
+            _dict['model_uuid'] = None
+
+        # set to None if model_slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.model_slug is None and "model_slug" in self.model_fields_set:
+            _dict['model_slug'] = None
+
+        # set to None if structured_task (nullable) is None
+        # and model_fields_set contains the field
+        if self.structured_task is None and "structured_task" in self.model_fields_set:
+            _dict['structured_task'] = None
+
         return _dict
 
     @classmethod
@@ -115,7 +133,10 @@ class MLModelRunResultSchema(BaseModel):
             "output_format": obj.get("output_format"),
             "output": obj.get("output"),
             "raw": obj.get("raw"),
-            "actions": MotionEpisodeSchema.from_dict(obj["actions"]) if obj.get("actions") is not None else None
+            "actions": MotionEpisodeSchema.from_dict(obj["actions"]) if obj.get("actions") is not None else None,
+            "model_uuid": obj.get("model_uuid"),
+            "model_slug": obj.get("model_slug"),
+            "structured_task": obj.get("structured_task")
         })
         return _obj
 

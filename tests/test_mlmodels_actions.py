@@ -22,8 +22,8 @@ import pytest
 
 from cyberwave.models.playground import (
     STRUCTURED_ACTIONS,
-    _get_action as get_action,
-    _list_actions as list_actions,
+    get_action,
+    list_actions,
 )
 
 

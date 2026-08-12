@@ -1,7 +1,6 @@
 # flake8: noqa
 
 # import apis into api package
-from cyberwave.rest.api.admin_api import AdminApi
 from cyberwave.rest.api.agents_api import AgentsApi
 from cyberwave.rest.api.crm_api import CRMApi
 from cyberwave.rest.api.crm_inbox_api import CRMInboxApi

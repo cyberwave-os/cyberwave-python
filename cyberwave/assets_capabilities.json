@@ -4862,11 +4862,6 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 0,
