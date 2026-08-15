@@ -243,6 +243,16 @@ class CyberwaveError(Exception):
             setattr(self, key, value)
 
 
+class RecordingPayloadTooLargeError(CyberwaveError):
+    """A recording catalog response was probably rejected by the API gateway.
+
+    Cloud Run replaces an oversized response with an empty platform-generated
+    HTTP 500, so the SDK recognizes that narrow signature and raises this
+    specific error. Callers can catch it separately from ordinary backend
+    failures and retry with a shorter date interval or smaller page limit.
+    """
+
+
 class NoOngoingVideoStreamAvailable(CyberwaveError):
     """Raised by ``twin.camera.get_video()`` when the streaming SFU reports
     no producer (reply ``type == "wait"``) or a hard error (reply

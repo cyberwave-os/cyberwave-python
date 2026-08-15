@@ -42784,7 +42784,7 @@ class DefaultApi:
     ) -> RecordingListResponse:
         """Get Environment Recordings
 
-        List a stable, filterable recording catalog.  Omitting ``limit`` retains the legacy all-items behavior. Supplying it enables signed, cursor-based pages ordered by ``(effective_start_us, uuid)`` descending. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
+        List a stable, filterable recording catalog.  Every response is a bounded, newest-first page ordered by ``(effective_start_us, uuid)`` descending. With no date filters it covers the environment's whole eligible history, not only its latest day. Omitting ``limit`` returns the first ``CATALOG_DEFAULT_PAGE_SIZE`` (100) items; supplied limits are clamped to ``CATALOG_MAX_PAGE_SIZE`` (100). Follow ``next_cursor`` while ``has_more`` is true to read the selected catalog.  A date window is applied only when both ``start_date`` and ``end_date`` (or both legacy ``start_timestamp``/``end_timestamp`` aliases) are given. ``include_unready=false`` always returns ready rows only; ``include_unready=true`` is restricted to staff/administrators. When it is omitted, non-administrators receive ready rows only and staff/admin users follow the deployment's ``RECORDINGS_READY_ONLY_DEFAULT`` policy. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
 
         :param uuid: (required)
         :type uuid: str
@@ -42891,7 +42891,7 @@ class DefaultApi:
     ) -> ApiResponse[RecordingListResponse]:
         """Get Environment Recordings
 
-        List a stable, filterable recording catalog.  Omitting ``limit`` retains the legacy all-items behavior. Supplying it enables signed, cursor-based pages ordered by ``(effective_start_us, uuid)`` descending. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
+        List a stable, filterable recording catalog.  Every response is a bounded, newest-first page ordered by ``(effective_start_us, uuid)`` descending. With no date filters it covers the environment's whole eligible history, not only its latest day. Omitting ``limit`` returns the first ``CATALOG_DEFAULT_PAGE_SIZE`` (100) items; supplied limits are clamped to ``CATALOG_MAX_PAGE_SIZE`` (100). Follow ``next_cursor`` while ``has_more`` is true to read the selected catalog.  A date window is applied only when both ``start_date`` and ``end_date`` (or both legacy ``start_timestamp``/``end_timestamp`` aliases) are given. ``include_unready=false`` always returns ready rows only; ``include_unready=true`` is restricted to staff/administrators. When it is omitted, non-administrators receive ready rows only and staff/admin users follow the deployment's ``RECORDINGS_READY_ONLY_DEFAULT`` policy. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
 
         :param uuid: (required)
         :type uuid: str
@@ -42998,7 +42998,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Get Environment Recordings
 
-        List a stable, filterable recording catalog.  Omitting ``limit`` retains the legacy all-items behavior. Supplying it enables signed, cursor-based pages ordered by ``(effective_start_us, uuid)`` descending. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
+        List a stable, filterable recording catalog.  Every response is a bounded, newest-first page ordered by ``(effective_start_us, uuid)`` descending. With no date filters it covers the environment's whole eligible history, not only its latest day. Omitting ``limit`` returns the first ``CATALOG_DEFAULT_PAGE_SIZE`` (100) items; supplied limits are clamped to ``CATALOG_MAX_PAGE_SIZE`` (100). Follow ``next_cursor`` while ``has_more`` is true to read the selected catalog.  A date window is applied only when both ``start_date`` and ``end_date`` (or both legacy ``start_timestamp``/``end_timestamp`` aliases) are given. ``include_unready=false`` always returns ready rows only; ``include_unready=true`` is restricted to staff/administrators. When it is omitted, non-administrators receive ready rows only and staff/admin users follow the deployment's ``RECORDINGS_READY_ONLY_DEFAULT`` policy. Repeated twin/context/source filters are ORed within a kind and ANDed across kinds.
 
         :param uuid: (required)
         :type uuid: str
@@ -43253,7 +43253,7 @@ class DefaultApi:
     ) -> RecordingAvailabilityResponse:
         """Get Environment Recordings Availability
 
-        Return UTC/default-timezone recording date availability without media IO.
+        Return recording-date availability without media IO.  With no date or catalog filters this covers every eligible recording in the environment; unlike the catalog endpoint it is never paginated. ``timezone`` defaults to ``UTC`` and controls the date buckets and first/last dates. Date-window and ``include_unready`` defaults/authorization are identical to :func:`get_environment_recordings`: give both date bounds to filter, pass ``include_unready=false`` for ready rows only, and do not rely on an omitted readiness flag when a predictable staff/admin result is required.
 
         :param uuid: (required)
         :type uuid: str
@@ -43356,7 +43356,7 @@ class DefaultApi:
     ) -> ApiResponse[RecordingAvailabilityResponse]:
         """Get Environment Recordings Availability
 
-        Return UTC/default-timezone recording date availability without media IO.
+        Return recording-date availability without media IO.  With no date or catalog filters this covers every eligible recording in the environment; unlike the catalog endpoint it is never paginated. ``timezone`` defaults to ``UTC`` and controls the date buckets and first/last dates. Date-window and ``include_unready`` defaults/authorization are identical to :func:`get_environment_recordings`: give both date bounds to filter, pass ``include_unready=false`` for ready rows only, and do not rely on an omitted readiness flag when a predictable staff/admin result is required.
 
         :param uuid: (required)
         :type uuid: str
@@ -43459,7 +43459,7 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Get Environment Recordings Availability
 
-        Return UTC/default-timezone recording date availability without media IO.
+        Return recording-date availability without media IO.  With no date or catalog filters this covers every eligible recording in the environment; unlike the catalog endpoint it is never paginated. ``timezone`` defaults to ``UTC`` and controls the date buckets and first/last dates. Date-window and ``include_unready`` defaults/authorization are identical to :func:`get_environment_recordings`: give both date bounds to filter, pass ``include_unready=false`` for ready rows only, and do not rely on an omitted readiness flag when a predictable staff/admin result is required.
 
         :param uuid: (required)
         :type uuid: str

@@ -46,6 +46,7 @@ from .exceptions import (
     CyberwaveValidationError,
     DepthTransportNotMQTTError,
     NoOngoingVideoStreamAvailable,
+    RecordingPayloadTooLargeError,
 )
 from ._version import get_version
 
@@ -349,6 +350,7 @@ __all__ = [
     "CyberwaveTimeoutError",
     "CyberwaveValidationError",
     "DepthTransportNotMQTTError",
+    "RecordingPayloadTooLargeError",
     # Compact API
     "configure",
     "twin",

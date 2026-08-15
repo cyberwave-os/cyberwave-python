@@ -68,6 +68,7 @@ logger = logging.getLogger(__name__)
 _SDK_VERSION = get_version()
 _SDK_USER_AGENT = f"cyberwave-python/{_SDK_VERSION}"
 _SDK_VERSION_HEADER = "X-Cyberwave-SDK-Version"
+_SDK_ACCEPT_ENCODING = "gzip"
 
 
 CLIENT_USER_AGENT_ENV = "CYBERWAVE_CLIENT_USER_AGENT"
@@ -82,7 +83,7 @@ def _compose_user_agent(client_identity: str | None) -> str:
     client. Both tokens are kept, space-separated per the ``User-Agent``
     convention, so one request reports the tool *and* the SDK underneath it::
 
-        cyberwave-cli/0.12.6 cyberwave-python/0.6.4
+        cyberwave-cli/0.12.6 cyberwave-python/0.6.5
 
     Resolution order is the explicit ``user_agent=`` argument, then the
     ``CYBERWAVE_CLIENT_USER_AGENT`` environment variable. The env var exists so
@@ -100,8 +101,14 @@ def _apply_sdk_identity_headers(header_params: dict[str, Any]) -> dict[str, Any]
     """Add SDK identity headers without overriding caller-provided values.
 
     Sets ``X-Cyberwave-SDK-Version`` so backend request tracking can report SDK
-    version distribution over REST, and fills in a ``User-Agent`` for callers
-    that reach ``call_api`` without one.
+    version distribution over REST, fills in a ``User-Agent`` for callers that
+    reach ``call_api`` without one, and explicitly negotiates gzip JSON.
+
+    The Django backend's gzip middleware only compresses when the request sends
+    ``Accept-Encoding: gzip``. urllib3 otherwise advertises ``identity`` by
+    default; large recording catalog responses can then exceed Cloud Run's
+    response-size limit before they reach the SDK. urllib3 transparently
+    decompresses the gzip response for callers.
 
     Note that requests routed through ``ApiClient.param_serialize`` already
     carry a ``User-Agent`` by the time they get here — ``param_serialize``
@@ -122,6 +129,8 @@ def _apply_sdk_identity_headers(header_params: dict[str, Any]) -> dict[str, Any]
         str(key).lower() == _SDK_VERSION_HEADER.lower() for key in header_params
     ):
         header_params[_SDK_VERSION_HEADER] = _SDK_VERSION
+    if not any(str(key).lower() == "accept-encoding" for key in header_params):
+        header_params["Accept-Encoding"] = _SDK_ACCEPT_ENCODING
     return header_params
 
 

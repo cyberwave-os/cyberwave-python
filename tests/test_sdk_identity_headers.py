@@ -25,6 +25,7 @@ def test_applies_identity_headers_to_empty_dict() -> None:
     headers = _apply_sdk_identity_headers({})
     assert headers["User-Agent"] == _SDK_USER_AGENT
     assert headers[_SDK_VERSION_HEADER] == _SDK_VERSION
+    assert headers["Accept-Encoding"] == "gzip"
 
 
 def test_fallback_user_agent_carries_the_calling_tool(
@@ -58,3 +59,9 @@ def test_preserves_caller_user_agent_case_insensitively() -> None:
 def test_preserves_existing_sdk_version_header() -> None:
     headers = _apply_sdk_identity_headers({_SDK_VERSION_HEADER: "override"})
     assert headers[_SDK_VERSION_HEADER] == "override"
+
+
+def test_preserves_caller_accept_encoding_case_insensitively() -> None:
+    headers = _apply_sdk_identity_headers({"accept-encoding": "br"})
+    assert headers["accept-encoding"] == "br"
+    assert "Accept-Encoding" not in headers

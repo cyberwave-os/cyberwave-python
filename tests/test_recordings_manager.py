@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
+from cyberwave.exceptions import CyberwaveError, RecordingPayloadTooLargeError
 from cyberwave.managers.recordings import (
     RecordingList,
     RecordingListItem,
     RecordingType,
 )
+from cyberwave.rest.exceptions import ServiceException
 
 
 def _item(uuid: str, twin: str | None, metadata: dict) -> RecordingListItem:
@@ -131,12 +135,441 @@ def _rest_item(uuid: str, twin: str | None, metadata: dict) -> SimpleNamespace:
     )
 
 
-def _api_listing(*items: SimpleNamespace) -> MagicMock:
-    api = MagicMock()
-    api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
-        SimpleNamespace(items=list(items))
+def _stub_availability(
+    api: MagicMock, last_date: "str | None" = "2026-07-05"
+) -> MagicMock:
+    """Stub the availability call the way the REST contract shapes it.
+
+    ``first_date``/``last_date`` are ISO **strings** on the wire, not ``date``
+    objects — stubbing them as dates would hide the normalization the manager
+    has to do before handing them to the catalog endpoint.
+    """
+    api.src_app_api_environments_recordings_get_environment_recordings_availability.return_value = SimpleNamespace(
+        first_date=last_date,
+        last_date=last_date,
+        days=[],
+        total_count=0,
+        facets={},
+        timezone="UTC",
     )
     return api
+
+
+def _api_listing(*items: SimpleNamespace) -> MagicMock:
+    """A single-page API stub whose environment has recordings on 2026-07-05."""
+    api = _stub_availability(MagicMock())
+    api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
+        SimpleNamespace(items=list(items), next_cursor=None, has_more=False)
+    )
+    return api
+
+
+_DEFAULT_LAST_DATE = object()
+
+
+class _FakeCatalogApi:
+    """A REST stub that pages exactly like the catalog endpoint.
+
+    ``cursor`` is the offset of the next unread row, which is enough to model
+    the server's ``(effective_start_us, uuid)`` keyset walk for tests. Pass
+    ``last_date=None`` for an environment that has no recordings at all;
+    otherwise it is an ISO string, as the availability contract defines it.
+    """
+
+    def __init__(
+        self,
+        rows: "list[SimpleNamespace]",
+        *,
+        last_date: object = _DEFAULT_LAST_DATE,
+    ) -> None:
+        self._rows = list(rows)
+        self._last_date = (
+            "2026-07-05" if last_date is _DEFAULT_LAST_DATE else last_date
+        )
+        self.availability_calls: list[dict] = []
+        self.list_calls: list[dict] = []
+
+    def src_app_api_environments_recordings_get_environment_recordings_availability(
+        self, uuid: str, **kwargs
+    ) -> SimpleNamespace:
+        self.availability_calls.append({"uuid": uuid, **kwargs})
+        return SimpleNamespace(
+            first_date=self._last_date,
+            last_date=self._last_date,
+            days=[],
+            total_count=len(self._rows),
+            facets={},
+            timezone="UTC",
+        )
+
+    def src_app_api_environments_recordings_get_environment_recordings(
+        self, uuid: str, **kwargs
+    ) -> SimpleNamespace:
+        self.list_calls.append({"uuid": uuid, **kwargs})
+        offset = int(kwargs["cursor"]) if kwargs.get("cursor") else 0
+        window = self._rows[offset : offset + kwargs["limit"]]
+        consumed = offset + len(window)
+        has_more = consumed < len(self._rows)
+        return SimpleNamespace(
+            items=window,
+            next_cursor=str(consumed) if has_more else None,
+            has_more=has_more,
+            page_size=len(window),
+            facets={},
+        )
+
+
+def _rest_items(count: int, twin: str = "t1") -> "list[SimpleNamespace]":
+    return [
+        _rest_item(f"rec-{index:04d}", twin, {"recording_type": "camera"})
+        for index in range(count)
+    ]
+
+
+def test_manager_list_without_dates_scopes_to_the_latest_available_day() -> None:
+    """No date filter means "the most recent day that has recordings" — the same
+    availability-then-window flow the replay calendar picker uses. The ISO
+    string the availability contract returns must reach the catalog call as a
+    real ``date``."""
+    api = _FakeCatalogApi(_rest_items(3), last_date="2026-07-05")
+
+    items = RecordingManager(api).list("env-1")
+
+    assert [item.uuid for item in items] == ["rec-0000", "rec-0001", "rec-0002"]
+    assert api.availability_calls[0]["uuid"] == "env-1"
+    assert api.list_calls[0]["start_date"] == date(2026, 7, 5)
+    assert api.list_calls[0]["end_date"] == date(2026, 7, 5)
+
+
+def test_manager_list_defaults_to_ready_recordings_like_the_replay_picker() -> None:
+    api = _FakeCatalogApi(_rest_items(1))
+
+    RecordingManager(api).list("env-1")
+
+    assert api.availability_calls[0]["include_unready"] is False
+    assert api.list_calls[0]["include_unready"] is False
+
+
+def test_manager_list_returns_empty_without_requesting_a_catalog_page() -> None:
+    api = _FakeCatalogApi([], last_date=None)
+
+    items = RecordingManager(api).list("env-1")
+
+    assert list(items) == []
+    assert api.list_calls == []
+
+
+def test_manager_list_default_limit_reads_four_safe_pages() -> None:
+    api = _FakeCatalogApi(_rest_items(500))
+
+    items = RecordingManager(api).list("env-1")
+
+    assert len(items) == 200
+    assert [call["limit"] for call in api.list_calls] == [50, 50, 50, 50]
+
+
+def test_manager_list_limit_zero_reads_every_page() -> None:
+    api = _FakeCatalogApi(_rest_items(230))
+
+    items = RecordingManager(api).list("env-1", limit=0)
+
+    assert len(items) == 230
+    assert [item.uuid for item in items][:2] == ["rec-0000", "rec-0001"]
+    assert [call["limit"] for call in api.list_calls] == [50, 50, 50, 50, 50]
+
+
+def test_manager_list_requests_only_the_remainder_on_the_final_page() -> None:
+    api = _FakeCatalogApi(_rest_items(500))
+
+    items = RecordingManager(api).list("env-1", limit=150)
+
+    assert len(items) == 150
+    assert [call["limit"] for call in api.list_calls] == [50, 50, 50]
+
+
+def test_manager_list_follows_the_server_cursor_between_pages() -> None:
+    api = _FakeCatalogApi(_rest_items(150))
+
+    RecordingManager(api).list("env-1", limit=0)
+
+    assert [call.get("cursor") for call in api.list_calls] == [None, "50", "100"]
+
+
+def test_manager_list_stops_when_the_server_reports_no_further_pages() -> None:
+    api = _FakeCatalogApi(_rest_items(30))
+
+    items = RecordingManager(api).list("env-1", limit=0)
+
+    assert len(items) == 30
+    assert len(api.list_calls) == 1
+
+
+def test_manager_list_stops_when_a_page_advertises_more_without_a_cursor() -> None:
+    """A server that claims ``has_more`` but omits ``next_cursor`` must end the
+    walk rather than replay the same page forever."""
+    api = _stub_availability(MagicMock())
+    api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
+        SimpleNamespace(items=_rest_items(2), next_cursor=None, has_more=True)
+    )
+
+    items = RecordingManager(api).list("env-1", limit=0)
+
+    assert len(items) == 2
+    assert (
+        api.src_app_api_environments_recordings_get_environment_recordings.call_count
+        == 1
+    )
+
+
+def test_manager_list_warns_that_only_the_latest_day_was_listed(caplog) -> None:
+    """The implicit day window is a silent narrowing otherwise — a caller who
+    expects the whole history has to be told which day they actually got."""
+    api = _FakeCatalogApi(_rest_items(3), last_date="2026-07-05")
+
+    with caplog.at_level(logging.WARNING, logger="cyberwave.managers.recordings"):
+        RecordingManager(api).list("env-1")
+
+    assert "2026-07-05" in caplog.text
+    assert "start=" in caplog.text and "end=" in caplog.text
+
+
+def test_manager_list_does_not_warn_about_the_window_when_dates_are_given(
+    caplog,
+) -> None:
+    api = _FakeCatalogApi(_rest_items(3))
+
+    with caplog.at_level(logging.WARNING, logger="cyberwave.managers.recordings"):
+        RecordingManager(api).list("env-1", start="2026-07-01", end="2026-07-05")
+
+    assert caplog.text == ""
+
+
+def test_manager_list_warns_when_the_limit_left_recordings_unread(caplog) -> None:
+    api = _FakeCatalogApi(_rest_items(500))
+
+    with caplog.at_level(logging.WARNING, logger="cyberwave.managers.recordings"):
+        items = RecordingManager(api).list("env-1", start="2026-07-01", end="2026-07-05")
+
+    assert len(items) == 200
+    assert "limit=200" in caplog.text
+    assert "limit=0" in caplog.text  # tells the caller how to get the rest
+
+
+def test_manager_list_does_not_warn_about_the_limit_when_nothing_was_left(
+    caplog,
+) -> None:
+    api = _FakeCatalogApi(_rest_items(30))
+
+    with caplog.at_level(logging.WARNING, logger="cyberwave.managers.recordings"):
+        RecordingManager(api).list("env-1", start="2026-07-01", end="2026-07-05")
+
+    assert caplog.text == ""
+
+
+def test_manager_list_limit_zero_never_warns_about_truncation(caplog) -> None:
+    api = _FakeCatalogApi(_rest_items(230))
+
+    with caplog.at_level(logging.WARNING, logger="cyberwave.managers.recordings"):
+        RecordingManager(api).list(
+            "env-1", start="2026-07-01", end="2026-07-05", limit=0
+        )
+
+    assert caplog.text == ""
+
+
+def test_manager_list_warns_when_the_server_cannot_hand_back_a_next_cursor(
+    caplog,
+) -> None:
+    """Stopping on an unusable cursor drops recordings the server says exist —
+    that must not look like a complete result."""
+    api = _stub_availability(MagicMock())
+    api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
+        SimpleNamespace(items=_rest_items(2), next_cursor=None, has_more=True)
+    )
+
+    with caplog.at_level(logging.WARNING, logger="cyberwave.managers.recordings"):
+        RecordingManager(api).list("env-1", start="2026-07-01", end="2026-07-05")
+
+    assert "cursor" in caplog.text
+
+
+def test_manager_list_stops_when_the_cursor_stops_advancing() -> None:
+    """A server that keeps handing back the cursor we just used must end the
+    walk. Without this the ``limit=0`` loop re-requests one page forever."""
+    calls = {"count": 0}
+
+    def stuck_page(*_args, **_kwargs) -> SimpleNamespace:
+        calls["count"] += 1
+        if calls["count"] > 5:
+            raise AssertionError("cursor walk never terminated")
+        return SimpleNamespace(items=_rest_items(2), next_cursor="stuck", has_more=True)
+
+    api = _stub_availability(MagicMock())
+    api.src_app_api_environments_recordings_get_environment_recordings.side_effect = (
+        stuck_page
+    )
+
+    items = RecordingManager(api).list("env-1", limit=0)
+
+    assert calls["count"] == 2  # the first page, then the one that proves no progress
+    assert len(items) == 4
+
+
+def test_manager_list_negative_limit_raises() -> None:
+    with pytest.raises(CyberwaveError, match="(?i)limit"):
+        RecordingManager(_FakeCatalogApi([])).list("env-1", limit=-1)
+
+
+def test_manager_list_reports_probable_gateway_payload_limit() -> None:
+    api = _FakeCatalogApi(_rest_items(1))
+    error = ServiceException(status=500, reason="Internal Server Error", body="")
+    error.headers = {
+        "Server": "Google Frontend",
+        "Content-Length": "0",
+        "Content-Type": "text/html",
+        "X-Cloud-Trace-Context": "trace-id/123;o=1",
+    }
+    api.src_app_api_environments_recordings_get_environment_recordings = MagicMock(
+        side_effect=error
+    )
+
+    with pytest.raises(RecordingPayloadTooLargeError) as raised:
+        RecordingManager(api).list(
+            "env-1", start="2026-08-04", end="2026-08-11"
+        )
+
+    message = str(raised.value)
+    assert "payload is too large" in message
+    assert "shorter start/end interval" in message
+    assert "limit" in message
+    assert "trace-id/123" in message
+
+
+def test_manager_list_does_not_relabel_an_ordinary_server_error() -> None:
+    api = _FakeCatalogApi(_rest_items(1))
+    error = ServiceException(status=500, reason="Internal Server Error", body="boom")
+    error.headers = {"Server": "Google Frontend", "Content-Type": "text/html"}
+    api.src_app_api_environments_recordings_get_environment_recordings = MagicMock(
+        side_effect=error
+    )
+
+    with pytest.raises(CyberwaveError) as raised:
+        RecordingManager(api).list(
+            "env-1", start="2026-08-04", end="2026-08-11"
+        )
+
+    assert not isinstance(raised.value, RecordingPayloadTooLargeError)
+    assert "payload is too large" not in str(raised.value)
+
+
+def test_manager_list_with_explicit_dates_skips_the_availability_request() -> None:
+    api = _FakeCatalogApi(_rest_items(1))
+
+    RecordingManager(api).list("env-1", start="2026-07-01", end="2026-07-05")
+
+    assert api.availability_calls == []
+    assert api.list_calls[0]["start_date"] == date(2026, 7, 1)
+    assert api.list_calls[0]["end_date"] == date(2026, 7, 5)
+
+
+def test_manager_list_forwards_include_unready_to_availability() -> None:
+    api = _FakeCatalogApi(_rest_items(1))
+
+    RecordingManager(api).list("env-1", include_unready=True)
+
+    assert api.availability_calls[0]["include_unready"] is True
+    assert api.list_calls[0]["include_unready"] is True
+
+
+def test_manager_list_paginates_through_the_real_generated_client(monkeypatch) -> None:
+    """Drive the actual generated REST client with only the transport stubbed.
+
+    The hand-written stubs above accept whatever we send; this one runs the
+    real ``@validate_call`` signatures and query serializer, so a renamed or
+    retyped parameter (``limit``, ``cursor``, ``start_date``, ``twin_uuid``)
+    fails here instead of silently dropping off the wire.
+    """
+    from cyberwave.rest import ApiClient, Configuration, DefaultApi
+    from cyberwave.rest.models.recording_availability_response import (
+        RecordingAvailabilityResponse,
+    )
+    from cyberwave.rest.models.recording_list_item import RecordingListItem as RestItem
+    from cyberwave.rest.models.recording_list_response import RecordingListResponse
+
+    api_client = ApiClient(Configuration(host="https://example.invalid"))
+    requested_urls: list[str] = []
+    rows = [
+        RestItem(uuid=f"rec-{index:04d}", twin_uuid="twin-1", environment_uuid="env-1",
+                 metadata={"recording_type": "camera"})
+        for index in range(150)
+    ]
+
+    def fake_call_api(method, url, *_args, **_kwargs):
+        requested_urls.append(url)
+        return SimpleNamespace(read=lambda: None)
+
+    def fake_deserialize(*, response_data, response_types_map):
+        if "availability" in requested_urls[-1]:
+            return SimpleNamespace(
+                data=RecordingAvailabilityResponse(
+                    first_date="2026-07-05", last_date="2026-07-05", days=[],
+                    total_count=len(rows), facets={}, timezone="UTC",
+                )
+            )
+        from urllib.parse import parse_qs, urlparse
+
+        offset = int(parse_qs(urlparse(requested_urls[-1]).query).get("cursor", [0])[0])
+        window = rows[offset : offset + 50]
+        has_more = offset + len(window) < len(rows)
+        return SimpleNamespace(
+            data=RecordingListResponse(
+                items=window,
+                next_cursor=str(offset + len(window)) if has_more else None,
+                has_more=has_more,
+                page_size=len(window),
+                facets={},
+            )
+        )
+
+    monkeypatch.setattr(api_client, "call_api", fake_call_api)
+    monkeypatch.setattr(api_client, "response_deserialize", fake_deserialize)
+
+    items = RecordingManager(DefaultApi(api_client)).list(
+        "env-1", limit=0, twin_uuids=["twin-1"]
+    )
+
+    assert len(items) == 150
+    assert "recordings/availability" in requested_urls[0]
+    assert "twin_uuid=twin-1" in requested_urls[0]
+    assert "include_unready=false" in requested_urls[0]
+    # The availability window reaches the catalog call as start_date/end_date —
+    # not as the legacy start_timestamp/end_timestamp aliases.
+    assert "start_timestamp" not in requested_urls[1]
+    assert "start_date=2026-07-05" in requested_urls[1]
+    assert "end_date=2026-07-05" in requested_urls[1]
+    assert "include_unready=false" in requested_urls[1]
+    assert "limit=50" in requested_urls[1]
+    assert "cursor=" not in requested_urls[1]
+    assert "cursor=50" in requested_urls[2]
+
+
+def test_twin_handle_list_narrows_both_requests_server_side() -> None:
+    """Pagination makes client-side twin narrowing lossy: a page of 100
+    environment-wide rows can contain none of this twin's. Push the filter down
+    so both the availability window and the pages are already twin-scoped."""
+    api = _FakeCatalogApi(_rest_items(2, twin="twin-1"))
+    twin = SimpleNamespace(
+        uuid="twin-1",
+        environment_id="env-1",
+        client=SimpleNamespace(
+            environments=SimpleNamespace(recordings=RecordingManager(api))
+        ),
+    )
+
+    TwinRecordingsHandle(twin).list()
+
+    assert api.availability_calls[0]["twin_uuid"] == ["twin-1"]
+    assert api.list_calls[0]["twin_uuid"] == ["twin-1"]
 
 
 def test_manager_list_returns_wrapped_items() -> None:
@@ -441,8 +874,6 @@ def test_manager_get_without_twin_uuid_includes_all_twins(monkeypatch) -> None:
 
 import importlib
 
-from cyberwave.exceptions import CyberwaveError
-
 
 def _recording(local_paths: dict, signed_urls=None, types=frozenset()) -> Recording:
     import tempfile
@@ -631,7 +1062,9 @@ def test_manager_list_forwards_parsed_dates_to_rest_call() -> None:
         "env-1", start="2026-07-01", end=datetime(2026, 7, 5, 12, 0, 0)
     )
     call = api.src_app_api_environments_recordings_get_environment_recordings.call_args
-    assert call.args == ("env-1", date(2026, 7, 1), date(2026, 7, 5))
+    assert call.args == ("env-1",)
+    assert call.kwargs["start_date"] == date(2026, 7, 1)
+    assert call.kwargs["end_date"] == date(2026, 7, 5)
 
 
 def test_twin_handle_list_forwards_parsed_dates() -> None:
@@ -645,11 +1078,14 @@ def test_twin_handle_list_forwards_parsed_dates() -> None:
     )
     TwinRecordingsHandle(twin).list(start="2026-07-01T00:00:00Z", end="2026-07-05")
     call = api.src_app_api_environments_recordings_get_environment_recordings.call_args
-    assert call.args == ("env-1", date(2026, 7, 1), date(2026, 7, 5))
+    assert call.args == ("env-1",)
+    assert call.kwargs["start_date"] == date(2026, 7, 1)
+    assert call.kwargs["end_date"] == date(2026, 7, 5)
+    assert call.kwargs["twin_uuid"] == ["twin-1"]
 
 
 def test_recording_list_item_get_uses_attached_manager(monkeypatch) -> None:
-    api = MagicMock()
+    api = _stub_availability(MagicMock())
     api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
         SimpleNamespace(
             items=[_rest_item("cam", "t1", {"recording_type": "camera"})]
@@ -681,7 +1117,7 @@ def test_recording_list_item_get_reads_robot_and_cleans_up(monkeypatch) -> None:
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    api = MagicMock()
+    api = _stub_availability(MagicMock())
     api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
         SimpleNamespace(
             items=[_rest_item("rob", "t1", {"metadata_type": "TwinRecordingMetadata"})]
@@ -708,7 +1144,7 @@ def test_recording_list_item_get_reads_robot_and_cleans_up(monkeypatch) -> None:
 
 
 def test_recording_list_item_get_shows_video_and_cleans_up(monkeypatch) -> None:
-    api = MagicMock()
+    api = _stub_availability(MagicMock())
     api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
         SimpleNamespace(
             items=[_rest_item("cam", "t1", {"recording_type": "camera"})]
@@ -735,7 +1171,7 @@ def test_recording_list_item_get_shows_video_and_cleans_up(monkeypatch) -> None:
 
 
 def test_twin_handle_list_items_get_use_twin_environment(monkeypatch) -> None:
-    api = MagicMock()
+    api = _stub_availability(MagicMock())
     api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
         SimpleNamespace(
             items=[_rest_item("rob", "twin-1", {"metadata_type": "TwinRecordingMetadata"})]
@@ -787,7 +1223,7 @@ def test_recording_list_item_get_forwards_twin_uuid(monkeypatch) -> None:
     """An item from twin.recordings.list() carries its twin_uuid; item.get()
     must forward it so a shared multi-twin recording only downloads THIS twin's
     artifacts."""
-    api = MagicMock()
+    api = _stub_availability(MagicMock())
     api.src_app_api_environments_recordings_get_environment_recordings.return_value = (
         SimpleNamespace(
             items=[_rest_item("rec", "twin-1", {"metadata_type": "TwinRecordingMetadata"})]

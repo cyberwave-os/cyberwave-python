@@ -28,6 +28,47 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MATERIALIZING_RETRY_SECONDS = 15
 
+#: Page size requested from the catalog endpoint. The deployed frontend uses
+#: the same conservative size: environments with large per-recording metadata
+#: can complete a 50-item page that fails at the server/proxy boundary when
+#: asked to render 100. Every read remains paged, preventing an unbounded
+#: history response from overflowing the HTTP body ceiling.
+CATALOG_PAGE_SIZE = 50
+
+#: How many recordings ``list()`` returns when the caller does not say. ``0``
+#: means "keep following pages until the catalog is exhausted".
+DEFAULT_LIST_LIMIT = 200
+
+
+def _response_header(error: Exception, name: str) -> str | None:
+    """Read an exception response header case-insensitively."""
+    headers = getattr(error, "headers", None)
+    if not headers:
+        return None
+    for key, value in headers.items():
+        if str(key).lower() == name.lower():
+            return str(value)
+    return None
+
+
+def _is_probable_recording_payload_too_large(error: Exception) -> bool:
+    """Recognize Cloud Run's platform-generated oversized-response failure.
+
+    Cloud Run does not expose a dedicated status or response header for this
+    case. It discards the application response and emits the narrow signature
+    observed in its request logs: an empty HTML 500 from Google Frontend with a
+    zero content length. Requiring the whole signature avoids relabeling normal
+    JSON 500 responses from the Cyberwave backend.
+    """
+    content_type = (_response_header(error, "content-type") or "").lower()
+    return (
+        getattr(error, "status", None) == 500
+        and getattr(error, "body", None) in (None, "")
+        and (_response_header(error, "server") or "").lower() == "google frontend"
+        and _response_header(error, "content-length") == "0"
+        and content_type.startswith("text/html")
+    )
+
 
 def _materializing_message(body: RecordingMaterializingSchema) -> str:
     """Render a 202 body, preserving its reason and retry interval.
@@ -544,6 +585,37 @@ class RecordingManager:
     def __init__(self, api: Any) -> None:
         self.api = api
 
+    def _latest_available_date(
+        self,
+        environment_id: str,
+        *,
+        include_unready: bool,
+        twin_uuids: "list[str] | None",
+    ) -> "date | None":
+        """Return the most recent calendar day (UTC) that has recordings.
+
+        Mirrors the replay calendar picker: ask the storage-free availability
+        endpoint which days exist before paging any of them. ``None`` means the
+        environment (under these filters) has no recordings at all.
+        """
+        from ..exceptions import CyberwaveError
+
+        try:
+            availability = self.api.src_app_api_environments_recordings_get_environment_recordings_availability(
+                environment_id,
+                include_unready=include_unready,
+                twin_uuid=twin_uuids,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise CyberwaveError(
+                "Failed to read recording availability for environment "
+                f"{environment_id}: {e}"
+            ) from e
+        # The availability contract types its bounds as ISO strings, while the
+        # catalog endpoint wants real dates — normalize rather than relying on
+        # incidental coercion.
+        return _parse_date_filter(getattr(availability, "last_date", None))
+
     def list(
         self,
         environment_id: str,
@@ -551,16 +623,50 @@ class RecordingManager:
         filter: "Union[RecordingType, str, Iterable[Union[RecordingType, str]], None]" = None,  # noqa: A002
         start: "date | datetime | str | None" = None,
         end: "date | datetime | str | None" = None,
-        include_unready: bool | None = None,
+        include_unready: bool = False,
+        limit: int = DEFAULT_LIST_LIMIT,
+        twin_uuids: "list[str] | None" = None,
     ) -> RecordingList:
         """List recordings for an environment, optionally filtered by type.
 
         ``start``/``end`` accept a ``date``, a ``datetime``, or an ISO 8601
         string (e.g. ``"2026-07-01"`` or ``"2026-07-01T10:30:00Z"``) and are
-        inclusive calendar-day bounds. ``include_unready`` overrides the
-        server's default visibility policy for materializing and failed rows.
+        inclusive calendar-day bounds. With neither given, this asks the
+        availability endpoint which days have recordings and lists the most
+        recent one — the same narrow-then-fetch flow the replay calendar picker
+        uses, and the reason listing a busy environment no longer tries to
+        return its whole history in one response.
+
+        ``limit`` caps how many recordings are returned; pages are fetched
+        ``CATALOG_PAGE_SIZE`` at a time until the cap is reached or the catalog
+        runs out. ``limit=0`` follows every page. ``filter`` is applied to the
+        fetched rows afterwards, so it narrows the result rather than widening
+        the search.
+
+        ``include_unready`` defaults to ``False``, matching the replay picker;
+        set it to ``True`` to include materializing and failed rows.
+        ``twin_uuids`` restricts both the availability lookup and the pages to
+        those twins server-side.
+
+        Both narrowings log a warning (visible without any logging setup) so a
+        partial result never looks like the whole catalog: one naming the day
+        that was listed, one when ``limit`` stopped the walk while the server
+        still had pages.
+
+        Defaults: ``start=None`` and ``end=None`` select the latest available
+        UTC day; ``include_unready=False`` selects ready rows only; and
+        ``limit=200`` returns at most 200 rows. Each HTTP page is 50 rows.
+        ``limit=0`` follows every page in the selected day/range. The public
+        ``filter`` is applied after pagination, so it does not alter the server
+        search window or make the result complete beyond ``limit``.
         """
         from ..exceptions import CyberwaveError
+
+        if limit < 0:
+            raise CyberwaveError(
+                "limit must be 0 (fetch every page) or a positive number of "
+                f"recordings, got {limit}"
+            )
 
         start_date = _parse_date_filter(start)
         end_date = _parse_date_filter(end)
@@ -569,26 +675,109 @@ class RecordingManager:
                 "Both 'start' and 'end' must be provided together to filter "
                 "recordings by date — a one-sided date window is ignored."
             )
-        try:
-            resp = self.api.src_app_api_environments_recordings_get_environment_recordings(
+        if start_date is None:
+            start_date = end_date = self._latest_available_date(
                 environment_id,
-                start_date,
-                end_date,
                 include_unready=include_unready,
+                twin_uuids=twin_uuids,
             )
-        except Exception as e:  # noqa: BLE001
-            raise CyberwaveError(
-                f"Failed to list recordings for environment {environment_id}: {e}"
-            ) from e
-        items = RecordingList(
-            RecordingListItem._from_rest(obj)
-            for obj in (getattr(resp, "items", None) or [])
+            if start_date is None:
+                logger.warning(
+                    "recordings.list(): environment %s has no recordings under "
+                    "these filters.",
+                    environment_id,
+                )
+                return RecordingList()
+            # Warn rather than log quietly: a caller who expects the whole
+            # history gets one day, and nothing else in the result says so.
+            logger.warning(
+                "recordings.list(): no start/end given, so only %s is listed — "
+                "the most recent day with recordings. Pass start=/end= to list "
+                "a wider window.",
+                start_date.isoformat(),
+            )
+
+        window = (
+            start_date.isoformat()
+            if start_date == end_date
+            else f"{start_date.isoformat()}..{end_date.isoformat()}"  # type: ignore[union-attr]
         )
-        for item in items:
-            # Attach so item.get() works without the caller having to hold onto
-            # the manager separately.
-            object.__setattr__(item, "_manager", self)
-            object.__setattr__(item, "_environment_id", environment_id)
+        items = RecordingList()
+        cursor: str | None = None
+        truncated_by_limit = False
+        while True:
+            remaining = (limit - len(items)) if limit else CATALOG_PAGE_SIZE
+            page_limit = min(remaining, CATALOG_PAGE_SIZE)
+            try:
+                resp = self.api.src_app_api_environments_recordings_get_environment_recordings(
+                    environment_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    include_unready=include_unready,
+                    limit=page_limit,
+                    cursor=cursor,
+                    twin_uuid=twin_uuids,
+                )
+            except Exception as e:  # noqa: BLE001
+                if _is_probable_recording_payload_too_large(e):
+                    from ..exceptions import RecordingPayloadTooLargeError
+
+                    trace_id = _response_header(e, "x-cloud-trace-context")
+                    trace_hint = f" Cloud trace: {trace_id}." if trace_id else ""
+                    raise RecordingPayloadTooLargeError(
+                        "Recording catalog payload is too large for the API "
+                        f"gateway for {window}. Use a shorter start/end interval "
+                        f"or set limit below {page_limit}, then retry.{trace_hint}",
+                        environment_id=environment_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                        page_limit=page_limit,
+                        trace_id=trace_id,
+                    ) from e
+                raise CyberwaveError(
+                    f"Failed to list recordings for environment {environment_id}: {e}"
+                ) from e
+            page = [
+                RecordingListItem._from_rest(obj)
+                for obj in (getattr(resp, "items", None) or [])
+            ]
+            for item in page:
+                # Attach so item.get() works without the caller having to hold
+                # onto the manager separately.
+                object.__setattr__(item, "_manager", self)
+                object.__setattr__(item, "_environment_id", environment_id)
+            items.extend(page)
+
+            next_cursor = getattr(resp, "next_cursor", None)
+            server_has_more = bool(getattr(resp, "has_more", False))
+            # An empty page, one that advertises more without handing back a
+            # cursor, or one that hands back the cursor we just used cannot be
+            # advanced past — stop instead of re-requesting it forever.
+            can_advance = bool(page and next_cursor and next_cursor != cursor)
+            if not server_has_more or not can_advance:
+                if server_has_more:
+                    logger.warning(
+                        "recordings.list(): the server reports more recordings "
+                        "for %s but returned no usable next cursor; stopping "
+                        "with %d.",
+                        window,
+                        len(items),
+                    )
+                break
+            if limit and len(items) >= limit:
+                truncated_by_limit = True
+                break
+            cursor = next_cursor
+
+        if truncated_by_limit:
+            logger.warning(
+                "recordings.list(): stopped at limit=%d and more recordings are "
+                "available for %s. Raise limit= or pass limit=0 to fetch every "
+                "page.",
+                limit,
+                window,
+            )
+
         if filter is not None:
             items = items.filter(filter)
         return items
@@ -832,13 +1021,26 @@ class TwinRecordingsHandle:
         filter: "Union[RecordingType, str, Iterable[Union[RecordingType, str]], None]" = None,  # noqa: A002
         start: "date | datetime | str | None" = None,
         end: "date | datetime | str | None" = None,
-        include_unready: bool | None = None,
+        include_unready: bool = False,
+        limit: int = DEFAULT_LIST_LIMIT,
     ) -> RecordingList:
+        """List this twin's recordings using :meth:`RecordingManager.list` defaults.
+
+        No date range selects this twin's latest available UTC day;
+        ``include_unready`` defaults to ``False``; and ``limit`` defaults to
+        200 (or uses ``0`` for every page in the selected day/range). The twin
+        restriction is applied server-side before availability and pagination.
+        """
+        # Narrow server-side: a page of environment-wide rows can legitimately
+        # contain none of this twin's, so filtering only after the fetch would
+        # make a bounded read look empty.
         all_items = self._manager().list(
             self._twin.environment_id,
             start=start,
             end=end,
             include_unready=include_unready,
+            limit=limit,
+            twin_uuids=[str(self._twin.uuid)],
         )
         mine = RecordingList(
             item for item in all_items if item.twin_uuid == str(self._twin.uuid)

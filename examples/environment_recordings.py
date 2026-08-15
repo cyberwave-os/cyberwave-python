@@ -18,8 +18,14 @@ cw = Cyberwave()
 robot = cw.twin("the-robot-studio/so101")
 environment_id = robot.environment_id
 
+# With no start/end, list() looks up which days have recordings and returns the
+# most recent one (paged, 50 per request). Pass start/end for an older window,
+# or limit=0 to follow every page.
 recordings = cw.environments.recordings.list(environment_id=environment_id)
-print(f"Found {len(recordings)} recording(s) in environment {environment_id}")
+print(
+    f"Found {len(recordings)} recording(s) on the latest recorded day "
+    f"in environment {environment_id}"
+)
 
 for item in recordings:
     print(f"  {item.uuid} twin={item.twin_uuid} types={sorted(t.value for t in item.types)}")

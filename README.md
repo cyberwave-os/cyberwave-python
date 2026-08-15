@@ -135,6 +135,34 @@ Full guides and the complete API reference are at **[docs.cyberwave.com](https:/
 ([overview](https://docs.cyberwave.com/overview) ·
 [API reference](https://docs.cyberwave.com/api-reference/overview)).
 
+## Listing recordings
+
+`recordings.list()` is paged. With no `start`/`end` it lists the most recent day
+that has recordings instead of the environment's whole history, and it returns
+at most `limit` rows (default `200`, fetched 50 per request). Pass `limit=0` to
+follow every page.
+
+Like the replay picker, listing excludes materializing or failed recordings by
+default. Pass `include_unready=True` only when a caller needs those rows.
+
+```python
+items = cw.environments.recordings.list(environment_id="acme/envs/floor")
+items = cw.environments.recordings.list(
+    environment_id="acme/envs/floor",
+    start="2026-07-01",
+    end="2026-07-05",
+    limit=0,
+)
+```
+
+Whenever the result is partial — scoped to one day, or cut short by `limit`
+while the server still had pages — `list()` logs a warning naming the window and
+telling you which argument widens it, so a truncated list never looks complete.
+
+If Cloud Run rejects a catalog response at its payload-size boundary, the SDK
+raises `RecordingPayloadTooLargeError` with the affected window, cloud trace,
+and a concrete retry hint. Restrict `start`/`end` or lower `limit` and retry.
+
 ## Recording readiness
 
 Recording list items expose the server's playback assessment when it is
