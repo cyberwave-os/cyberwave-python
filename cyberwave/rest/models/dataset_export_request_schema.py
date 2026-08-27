@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.camera_metadata_item_schema import CameraMetadataItemSchema
 from typing import Optional, Set
@@ -30,7 +30,8 @@ class DatasetExportRequestSchema(BaseModel):
     """ # noqa: E501
     format: StrictStr
     camera_metadata: Optional[List[CameraMetadataItemSchema]] = None
-    __properties: ClassVar[List[str]] = ["format", "camera_metadata"]
+    retry: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["format", "camera_metadata", "retry"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -96,7 +97,8 @@ class DatasetExportRequestSchema(BaseModel):
 
         _obj = cls.model_validate({
             "format": obj.get("format"),
-            "camera_metadata": [CameraMetadataItemSchema.from_dict(_item) for _item in obj["camera_metadata"]] if obj.get("camera_metadata") is not None else None
+            "camera_metadata": [CameraMetadataItemSchema.from_dict(_item) for _item in obj["camera_metadata"]] if obj.get("camera_metadata") is not None else None,
+            "retry": obj.get("retry") if obj.get("retry") is not None else False
         })
         return _obj
 

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.workflow_schema import WorkflowSchema
 from typing import Optional, Set
@@ -31,7 +31,19 @@ class AgentWorkflowApplyResponseSchema(BaseModel):
     workflow: WorkflowSchema
     workflow_edit: Dict[str, Any]
     applied_workflow_changes: Optional[List[Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["workflow", "workflow_edit", "applied_workflow_changes"]
+    execution_readiness: Optional[StrictStr] = 'ready'
+    missing_requirements: Optional[List[Dict[str, Any]]] = None
+    __properties: ClassVar[List[str]] = ["workflow", "workflow_edit", "applied_workflow_changes", "execution_readiness", "missing_requirements"]
+
+    @field_validator('execution_readiness')
+    def execution_readiness_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['ready', 'needs_setup']):
+            raise ValueError("must be one of enum values ('ready', 'needs_setup')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -89,7 +101,9 @@ class AgentWorkflowApplyResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "workflow": WorkflowSchema.from_dict(obj["workflow"]) if obj.get("workflow") is not None else None,
             "workflow_edit": obj.get("workflow_edit"),
-            "applied_workflow_changes": obj.get("applied_workflow_changes")
+            "applied_workflow_changes": obj.get("applied_workflow_changes"),
+            "execution_readiness": obj.get("execution_readiness") if obj.get("execution_readiness") is not None else 'ready',
+            "missing_requirements": obj.get("missing_requirements")
         })
         return _obj
 

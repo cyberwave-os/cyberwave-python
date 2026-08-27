@@ -19,7 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from cyberwave.rest.models.organization_schema import OrganizationSchema
+from cyberwave.rest.models.organization_with_workspaces_schema import OrganizationWithWorkspacesSchema
 from cyberwave.rest.models.plan_schema import PlanSchema
 from cyberwave.rest.models.workspace_schema import WorkspaceSchema
 from typing import Optional, Set
@@ -34,7 +34,7 @@ class WorkspaceResponseSchema(BaseModel):
     description: StrictStr
     slug: StrictStr
     owner: Optional[StrictBool] = False
-    organization: OrganizationSchema
+    organization: OrganizationWithWorkspacesSchema
     plan: PlanSchema
     __properties: ClassVar[List[str]] = ["team", "description", "slug", "owner", "organization", "plan"]
 
@@ -102,7 +102,7 @@ class WorkspaceResponseSchema(BaseModel):
             "description": obj.get("description"),
             "slug": obj.get("slug"),
             "owner": obj.get("owner") if obj.get("owner") is not None else False,
-            "organization": OrganizationSchema.from_dict(obj["organization"]) if obj.get("organization") is not None else None,
+            "organization": OrganizationWithWorkspacesSchema.from_dict(obj["organization"]) if obj.get("organization") is not None else None,
             "plan": PlanSchema.from_dict(obj["plan"]) if obj.get("plan") is not None else None
         })
         return _obj

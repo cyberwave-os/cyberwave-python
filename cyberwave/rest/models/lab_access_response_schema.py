@@ -29,6 +29,7 @@ class LabAccessResponseSchema(BaseModel):
     """ # noqa: E501
     success: StrictBool
     session_status: StrictStr
+    kind: StrictStr
     environment_uuid: StrictStr
     environment_name: StrictStr
     role: StrictStr
@@ -37,7 +38,7 @@ class LabAccessResponseSchema(BaseModel):
     queue_position: Optional[StrictInt] = None
     estimated_wait_minutes: Optional[StrictInt] = None
     session_expires_at: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["success", "session_status", "environment_uuid", "environment_name", "role", "message", "already_had_session", "queue_position", "estimated_wait_minutes", "session_expires_at"]
+    __properties: ClassVar[List[str]] = ["success", "session_status", "kind", "environment_uuid", "environment_name", "role", "message", "already_had_session", "queue_position", "estimated_wait_minutes", "session_expires_at"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -107,6 +108,7 @@ class LabAccessResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "success": obj.get("success"),
             "session_status": obj.get("session_status"),
+            "kind": obj.get("kind"),
             "environment_uuid": obj.get("environment_uuid"),
             "environment_name": obj.get("environment_name"),
             "role": obj.get("role"),

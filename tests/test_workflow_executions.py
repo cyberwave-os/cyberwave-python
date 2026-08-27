@@ -376,3 +376,59 @@ class TestErrorHandling:
 
         with pytest.raises(CyberwaveError, match="transient blip"):
             reporter.node_started(NODE_UUID)
+
+
+class TestCancellationTracking:
+    """``mark_canceled``/``is_canceled`` — the local, in-memory cancel cache
+    the generated worker's ``@cw.on_workflow_cancel`` callback populates and
+    a trigger invocation's cooperative-cancellation check reads."""
+
+    def test_is_canceled_false_before_any_cancellation(self):
+        manager = WorkflowExecutionManager(_make_client())
+
+        assert manager.is_canceled("exec-1") is False
+
+    def test_mark_canceled_then_is_canceled_true(self):
+        manager = WorkflowExecutionManager(_make_client())
+
+        manager.mark_canceled("exec-1")
+
+        assert manager.is_canceled("exec-1") is True
+        assert manager.is_canceled("exec-2") is False
+
+    def test_mark_canceled_is_idempotent(self):
+        manager = WorkflowExecutionManager(_make_client())
+
+        manager.mark_canceled("exec-1")
+        manager.mark_canceled("exec-1")
+
+        assert manager.is_canceled("exec-1") is True
+
+    def test_mark_canceled_silently_ignores_falsy_execution_uuid(self):
+        manager = WorkflowExecutionManager(_make_client())
+
+        manager.mark_canceled(None)
+        manager.mark_canceled("")
+
+        assert manager.is_canceled(None) is False
+        assert manager.is_canceled("") is False
+
+    def test_is_canceled_accepts_falsy_without_raising(self):
+        manager = WorkflowExecutionManager(_make_client())
+
+        assert manager.is_canceled(None) is False
+        assert manager.is_canceled("") is False
+
+    def test_cache_is_bounded_fifo(self):
+        from cyberwave.workflow_executions import CANCELED_EXECUTIONS_CACHE_SIZE
+
+        manager = WorkflowExecutionManager(_make_client())
+
+        for i in range(CANCELED_EXECUTIONS_CACHE_SIZE + 5):
+            manager.mark_canceled(f"exec-{i}")
+
+        # The oldest entries were evicted...
+        assert manager.is_canceled("exec-0") is False
+        assert manager.is_canceled("exec-4") is False
+        # ...but the most recent ones are still tracked.
+        assert manager.is_canceled(f"exec-{CANCELED_EXECUTIONS_CACHE_SIZE + 4}") is True

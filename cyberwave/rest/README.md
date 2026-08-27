@@ -177,7 +177,6 @@ Class | Method | HTTP request | Description
 *DefaultApi* | [**src_app_api_urdf_upload_zip_file**](docs/DefaultApi.md#src_app_api_urdf_upload_zip_file) | **POST** /api/v1/urdf-projects/{uuid}/zip-file | Upload Zip File
 *DefaultApi* | [**src_users_api_members_leave_team**](docs/DefaultApi.md#src_users_api_members_leave_team) | **DELETE** /api/v1users/workspaces/{team_uuid}/members/{uuid}/leave | Leave Team
 *DefaultApi* | [**src_users_api_members_list_team_members**](docs/DefaultApi.md#src_users_api_members_list_team_members) | **GET** /api/v1users/workspaces/{team_uuid}/members | List Team Members
-*DefaultApi* | [**src_users_api_members_remove_team_member**](docs/DefaultApi.md#src_users_api_members_remove_team_member) | **DELETE** /api/v1users/workspaces/{team_uuid}/members/{uuid} | Remove Team Member
 *DefaultApi* | [**src_users_api_organizations_delete_organization**](docs/DefaultApi.md#src_users_api_organizations_delete_organization) | **DELETE** /api/v1users/organizations/{uuid} | Delete Organization
 *DefaultApi* | [**src_users_api_organizations_get_organization**](docs/DefaultApi.md#src_users_api_organizations_get_organization) | **GET** /api/v1users/organizations/{uuid} | Get Organization
 *DefaultApi* | [**src_users_api_organizations_get_organization_by_slug**](docs/DefaultApi.md#src_users_api_organizations_get_organization_by_slug) | **GET** /api/v1users/organizations/by-slug/{slug} | Get Organization By Slug

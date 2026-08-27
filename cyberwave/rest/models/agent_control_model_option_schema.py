@@ -33,10 +33,12 @@ class AgentControlModelOptionSchema(BaseModel):
     model_provider_name: StrictStr
     model_external_id: StrictStr
     mapped_model_id: Optional[StrictStr] = None
+    reasoning_effort: Optional[StrictStr] = None
+    metadata: Optional[Dict[str, Any]] = None
     is_default: Optional[StrictBool] = False
     slug: Optional[StrictStr] = None
     supported_task_ids: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "display_name", "model_provider_name", "model_external_id", "mapped_model_id", "is_default", "slug", "supported_task_ids"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "display_name", "model_provider_name", "model_external_id", "mapped_model_id", "reasoning_effort", "metadata", "is_default", "slug", "supported_task_ids"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -82,6 +84,11 @@ class AgentControlModelOptionSchema(BaseModel):
         if self.mapped_model_id is None and "mapped_model_id" in self.model_fields_set:
             _dict['mapped_model_id'] = None
 
+        # set to None if reasoning_effort (nullable) is None
+        # and model_fields_set contains the field
+        if self.reasoning_effort is None and "reasoning_effort" in self.model_fields_set:
+            _dict['reasoning_effort'] = None
+
         # set to None if slug (nullable) is None
         # and model_fields_set contains the field
         if self.slug is None and "slug" in self.model_fields_set:
@@ -105,6 +112,8 @@ class AgentControlModelOptionSchema(BaseModel):
             "model_provider_name": obj.get("model_provider_name"),
             "model_external_id": obj.get("model_external_id"),
             "mapped_model_id": obj.get("mapped_model_id"),
+            "reasoning_effort": obj.get("reasoning_effort"),
+            "metadata": obj.get("metadata"),
             "is_default": obj.get("is_default") if obj.get("is_default") is not None else False,
             "slug": obj.get("slug"),
             "supported_task_ids": obj.get("supported_task_ids")

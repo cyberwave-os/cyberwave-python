@@ -237,7 +237,8 @@ class EdgeCameraConfig:
 
     # IP camera authentication (optional)
     username: Optional[str] = None
-    password: Optional[str] = None
+    # repr=False: the generated __repr__ would print the password in full.
+    password: Optional[str] = field(default=None, repr=False)
 
     # NVR settings (optional)
     channel: Optional[int] = None

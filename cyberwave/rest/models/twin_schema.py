@@ -55,6 +55,7 @@ class TwinSchema(BaseModel):
     metadata: Dict[str, Any]
     capabilities: Dict[str, Any]
     universal_schema: Optional[Dict[str, Any]] = None
+    schema_hash: Optional[StrictStr] = None
     controller_policy_uuid: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = None
     attach_to_twin_uuid: Optional[StrictStr] = None
@@ -72,7 +73,7 @@ class TwinSchema(BaseModel):
     export_warnings: Optional[List[Dict[str, StrictStr]]] = None
     mqtt_command_schema: Optional[Dict[str, Any]] = None
     controllable_joint_names: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "universal_schema", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "universal_schema", "schema_hash", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -153,6 +154,11 @@ class TwinSchema(BaseModel):
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
             _dict['universal_schema'] = None
 
+        # set to None if schema_hash (nullable) is None
+        # and model_fields_set contains the field
+        if self.schema_hash is None and "schema_hash" in self.model_fields_set:
+            _dict['schema_hash'] = None
+
         # set to None if controller_policy_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.controller_policy_uuid is None and "controller_policy_uuid" in self.model_fields_set:
@@ -212,6 +218,7 @@ class TwinSchema(BaseModel):
             "metadata": obj.get("metadata"),
             "capabilities": obj.get("capabilities"),
             "universal_schema": obj.get("universal_schema"),
+            "schema_hash": obj.get("schema_hash"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "visibility": obj.get("visibility"),
             "attach_to_twin_uuid": obj.get("attach_to_twin_uuid"),

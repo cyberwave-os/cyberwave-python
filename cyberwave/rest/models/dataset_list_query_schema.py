@@ -29,7 +29,7 @@ class DatasetListQuerySchema(BaseModel):
     Query parameters for ``GET /datasets`` (pagination + filters).
     """ # noqa: E501
     limit: Optional[Annotated[int, Field(le=500, strict=True, ge=1)]] = None
-    offset: Optional[Annotated[int, Field(strict=True, ge=0)]] = None
+    offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None
     environment: Optional[StrictStr] = None
     processing_status: Optional[StrictStr] = None
     __properties: ClassVar[List[str]] = ["limit", "offset", "environment", "processing_status"]

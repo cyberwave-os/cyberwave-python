@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,14 +30,27 @@ class EnvironmentAgentRequestSchema(BaseModel):
     """ # noqa: E501
     message: StrictStr
     cyberwave_api_key: StrictStr
+    assistant_session_id: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
+    interaction_intent: Optional[StrictStr] = None
     history: Optional[List[Dict[str, StrictStr]]] = None
     pending_confirmation: Optional[Dict[str, Any]] = None
     current_twins: Optional[List[Optional[Dict[str, Any]]]] = None
+    context_refs: Optional[List[Optional[Dict[str, Any]]]] = None
     mlmodel_uuid: Optional[StrictStr] = None
     image_base64: Optional[StrictStr] = None
     image_mime_type: Optional[StrictStr] = None
     image_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["message", "cyberwave_api_key", "history", "pending_confirmation", "current_twins", "mlmodel_uuid", "image_base64", "image_mime_type", "image_name"]
+    __properties: ClassVar[List[str]] = ["message", "cyberwave_api_key", "assistant_session_id", "interaction_intent", "history", "pending_confirmation", "current_twins", "context_refs", "mlmodel_uuid", "image_base64", "image_mime_type", "image_name"]
+
+    @field_validator('interaction_intent')
+    def interaction_intent_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['workflow_context']):
+            raise ValueError("must be one of enum values ('workflow_context')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,6 +91,16 @@ class EnvironmentAgentRequestSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if assistant_session_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.assistant_session_id is None and "assistant_session_id" in self.model_fields_set:
+            _dict['assistant_session_id'] = None
+
+        # set to None if interaction_intent (nullable) is None
+        # and model_fields_set contains the field
+        if self.interaction_intent is None and "interaction_intent" in self.model_fields_set:
+            _dict['interaction_intent'] = None
+
         # set to None if pending_confirmation (nullable) is None
         # and model_fields_set contains the field
         if self.pending_confirmation is None and "pending_confirmation" in self.model_fields_set:
@@ -116,9 +140,12 @@ class EnvironmentAgentRequestSchema(BaseModel):
         _obj = cls.model_validate({
             "message": obj.get("message"),
             "cyberwave_api_key": obj.get("cyberwave_api_key"),
+            "assistant_session_id": obj.get("assistant_session_id"),
+            "interaction_intent": obj.get("interaction_intent"),
             "history": obj.get("history"),
             "pending_confirmation": obj.get("pending_confirmation"),
             "current_twins": obj.get("current_twins"),
+            "context_refs": obj.get("context_refs"),
             "mlmodel_uuid": obj.get("mlmodel_uuid"),
             "image_base64": obj.get("image_base64"),
             "image_mime_type": obj.get("image_mime_type"),

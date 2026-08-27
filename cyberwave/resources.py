@@ -230,6 +230,63 @@ def _image_extension_from_mime(mime_type: str) -> str:
     }.get(mime_type, ".png")
 
 
+# Keep in sync with ``MAX_SCHEMA_PATCH_OPERATIONS`` in
+# ``cyberwave-backend/src/app/services/universal_schema_patch.py``. The backend
+# rejects an over-cap batch rather than truncating it, so batches are chunked
+# here; in practice nothing chunks, since the largest real workload is ~28 ops.
+MAX_SCHEMA_PATCH_OPERATIONS = 1000
+
+
+def _patch_universal_schema_batch(
+    manager: "BaseResourceManager",
+    *,
+    resource_path: str,
+    entity_id: str,
+    operations: List[Dict[str, Any]],
+    description: str,
+) -> Optional[Dict[str, Any]]:
+    """POST a batch of JSON Pointer operations, chunked to the server's cap.
+
+    Deliberately calls the endpoint by raw path via ``param_serialize`` rather than
+    through a generated ``src_app_api_*`` stub: ``cyberwave/rest/`` is regenerated
+    from a live backend in CI, so referencing a not-yet-generated stub would fail
+    at runtime with ``AttributeError`` for anyone on an older generated client.
+    Mirrors ``EnvironmentManager.patch_universal_schema``.
+
+    Each chunk is atomic on the server; a chunked sequence as a whole is not.
+    Returns the last chunk's response, or None for an empty operation list.
+    """
+    if not operations:
+        return None
+
+    result: Optional[Dict[str, Any]] = None
+    try:
+        for start in range(0, len(operations), MAX_SCHEMA_PATCH_OPERATIONS):
+            chunk = operations[start : start + MAX_SCHEMA_PATCH_OPERATIONS]
+            _param = manager.api.api_client.param_serialize(
+                method="PATCH",
+                resource_path=resource_path,
+                path_params={"uuid": entity_id},
+                body={"operations": chunk},
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = manager.api.api_client.call_api(*_param)
+            response_data.read()
+            result = manager.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+    except Exception as e:
+        manager._handle_error(e, description)
+        raise
+
+    return result
+
+
 class BaseResourceManager:
     """Base class for resource managers"""
 
@@ -238,22 +295,44 @@ class BaseResourceManager:
 
     def _handle_error(self, e: Exception, operation: str):
         """Handle API errors consistently"""
+        # Already translated by client.py. These expose status_code, not status,
+        # so re-wrapping hit the bare branch below and dropped the status code,
+        # the subclass, and CyberwaveInsufficientCreditsError's balance fields.
+        # Re-raise instead, but keep the "Failed to ..." context re-wrapping used
+        # to add. Nested managers reach this twice with the same object
+        # (get_device -> list_devices), so rebuild from the stashed original: the
+        # outermost call is the one the user made, and it names the operation.
+        if isinstance(e, CyberwaveAPIError):
+            base = getattr(e, "_untranslated_message", None)
+            if base is None:
+                base = e.message
+                e._untranslated_message = base
+            e.operation = operation
+            e.message = f"Failed to {operation}: {base}"
+            e.args = (e.message, *e.args[1:])
+            raise e
+
         if hasattr(e, "status"):
             body = getattr(e, "body", None)
             response_dict = body if isinstance(body, dict) else None
-
-            # Try to extract request headers if available
-            request_headers = None
-            if hasattr(e, "request_headers"):
-                request_headers = e.request_headers
-
-            raise CyberwaveAPIError(
+            err = CyberwaveAPIError(
                 f"Failed to {operation}: {str(e)}",
                 status_code=int(e.status) if hasattr(e.status, "__int__") else None,
                 response_data=response_dict,
-                request_headers=request_headers,
+                request_headers=getattr(e, "request_headers", None),
             )
-        raise CyberwaveAPIError(f"Failed to {operation}: {str(e)}")
+        else:
+            err = CyberwaveAPIError(f"Failed to {operation}: {str(e)}")
+
+        # Same contract as the isinstance branch above. Only 401/402 arrive here
+        # already translated; every other status builds a new object on this path,
+        # so without the stash an outer manager would prefix the prefix.
+        err._untranslated_message = str(e)
+        err.operation = operation
+        # No `from e`: callers duck-type on `.status`, so `e` is not always a
+        # BaseException. Every real call site is inside `except`, which chains it
+        # as __context__ anyway.
+        raise err
 
     def check_slug(
         self,
@@ -816,8 +895,10 @@ class EnvironmentManager(BaseResourceManager):
             from cyberwave.rest import EnvironmentWaypointPositionUpdateSchema
 
             payload = EnvironmentWaypointPositionUpdateSchema.from_dict(update_fields)
-            return self.api.src_app_api_environments_update_environment_waypoint_position(
-                environment_id, waypoint_id, payload
+            return (
+                self.api.src_app_api_environments_update_environment_waypoint_position(
+                    environment_id, waypoint_id, payload
+                )
             )
         except Exception as e:
             self._handle_error(
@@ -1388,6 +1469,54 @@ class AssetManager(BaseResourceManager):
         except Exception as e:
             self._handle_error(e, f"patch universal schema for asset {asset_id}")
             raise
+
+    def patch_universal_schema_batch(
+        self, asset_id: str, operations: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Apply many JSON Pointer operations to the asset's universal schema at once.
+
+        Operations are applied in order, each seeing the result of the previous
+        ones — the same outcome as calling :meth:`patch_universal_schema` once per
+        operation, but the schema hash, the database write and the stored-URDF
+        regeneration happen once for the whole batch instead of once per
+        operation. For a robot with a few dozen joints that is the difference
+        between a few hundred object-storage round trips and a handful.
+
+        All-or-nothing: if any operation fails nothing is persisted, and the error
+        identifies the offending operation by index.
+
+        Args:
+            asset_id: UUID of the asset
+            operations: List of ``{"op": "add"|"replace", "path": ..., "value": ...}``
+
+        Returns:
+            Dict with keys:
+                - schema: The updated full schema
+                - applied: Number of operations applied
+                - changed: False when the operations reproduced the stored schema,
+                  in which case no write or regeneration was performed
+
+            None when ``operations`` is empty.
+
+        Example:
+            result = cw.assets.patch_universal_schema_batch(
+                asset_id,
+                [
+                    {"op": "replace", "path": "/joints/0/type", "value": "continuous"},
+                    {"op": "replace", "path": "/joints/0/limits/lower", "value": None},
+                    {"op": "replace", "path": "/joints/0/limits/upper", "value": None},
+                ],
+            )
+            print(result["applied"], result["changed"])
+        """
+        return _patch_universal_schema_batch(
+            self,
+            resource_path="/api/v1/assets/{uuid}/universal-schema/batch",
+            entity_id=asset_id,
+            operations=operations,
+            description=f"batch patch universal schema for asset {asset_id}",
+        )
 
     def get_universal_schema_at_path(
         self, asset_id: str, path: str = ""
@@ -1986,6 +2115,55 @@ class EdgeManager(BaseResourceManager):
             self._handle_error(e, f"discover edge {fingerprint}")
             raise
 
+    def get_twins(self, edge_id: str) -> List[Dict[str, Any]]:
+        """Twins bound to this edge: ``GET /api/v1/edges/{uuid}/twins``.
+
+        The backend matches this edge's fingerprint across its whole
+        workspace. Rows are ``{twin_uuid, twin_name, camera_config}``.
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/edges/{uuid}/twins",
+                path_params={"uuid": edge_id},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"get twins for edge {edge_id}")
+            raise
+
+    def unpair_twin(self, edge_id: str, twin_id: str) -> Dict[str, bool]:
+        """Release a twin from this edge: ``DELETE /api/v1/edges/{uuid}/twins/{twin_uuid}``.
+
+        Clears both the canonical ``metadata.edge_fingerprint`` and the legacy
+        ``edge_configs`` map. ``{"success": False}`` means there was no binding
+        to remove.
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="DELETE",
+                resource_path="/api/v1/edges/{uuid}/twins/{twin_uuid}",
+                path_params={"uuid": edge_id, "twin_uuid": twin_id},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"unpair twin {twin_id} from edge {edge_id}")
+            raise
+
     def delete(self, edge_id: str) -> Dict[str, bool]:
         """Delete an edge."""
         try:
@@ -2448,6 +2626,46 @@ class TwinManager(BaseResourceManager):
         except Exception as e:
             self._handle_error(e, f"patch universal schema for twin {twin_id}")
             raise
+
+    def patch_universal_schema_batch(
+        self, twin_id: str, operations: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Apply many JSON Pointer operations to the twin's universal schema at once.
+
+        Operations are applied in order, each seeing the result of the previous
+        ones — the same outcome as calling :meth:`patch_universal_schema` once per
+        operation, but the deep copy, the schema validation, the database write and
+        the MQTT notification happen once for the whole batch instead of once per
+        operation.
+
+        All-or-nothing: if any operation fails nothing is persisted, and the error
+        identifies the offending operation by index.
+
+        Args:
+            twin_id: UUID of the twin
+            operations: List of ``{"op": "add"|"replace", "path": ..., "value": ...}``
+
+        Returns:
+            Dict with keys ``schema``, ``applied`` and ``changed``; None when
+            ``operations`` is empty.
+
+        Example:
+            result = cw.twins.patch_universal_schema_batch(
+                twin_id,
+                [
+                    {"op": "replace", "path": "/sensors/0/parameters/id", "value": "cam"},
+                    {"op": "add", "path": "/sensors/0/parameters/fps", "value": 30},
+                ],
+            )
+        """
+        return _patch_universal_schema_batch(
+            self,
+            resource_path="/api/v1/twins/{uuid}/universal-schema/batch",
+            entity_id=twin_id,
+            operations=operations,
+            description=f"batch patch universal schema for twin {twin_id}",
+        )
 
     # =========================================================================
     # Edge Device Pairing

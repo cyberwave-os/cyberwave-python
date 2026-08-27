@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -32,7 +33,21 @@ class AgentCreateEnvironmentSchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr] = None
     mlmodel_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["prompt", "cyberwave_api_key", "workspace_uuid", "project_uuid", "mlmodel_uuid"]
+    assistant_session_id: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
+    image_base64: Optional[Annotated[str, Field(strict=True, max_length=7000000)]] = None
+    image_mime_type: Optional[StrictStr] = None
+    image_name: Optional[Annotated[str, Field(strict=True, max_length=255)]] = None
+    __properties: ClassVar[List[str]] = ["prompt", "cyberwave_api_key", "workspace_uuid", "project_uuid", "mlmodel_uuid", "assistant_session_id", "image_base64", "image_mime_type", "image_name"]
+
+    @field_validator('image_mime_type')
+    def image_mime_type_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['image/png', 'image/jpeg', 'image/webp']):
+            raise ValueError("must be one of enum values ('image/png', 'image/jpeg', 'image/webp')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -88,6 +103,26 @@ class AgentCreateEnvironmentSchema(BaseModel):
         if self.mlmodel_uuid is None and "mlmodel_uuid" in self.model_fields_set:
             _dict['mlmodel_uuid'] = None
 
+        # set to None if assistant_session_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.assistant_session_id is None and "assistant_session_id" in self.model_fields_set:
+            _dict['assistant_session_id'] = None
+
+        # set to None if image_base64 (nullable) is None
+        # and model_fields_set contains the field
+        if self.image_base64 is None and "image_base64" in self.model_fields_set:
+            _dict['image_base64'] = None
+
+        # set to None if image_mime_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.image_mime_type is None and "image_mime_type" in self.model_fields_set:
+            _dict['image_mime_type'] = None
+
+        # set to None if image_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.image_name is None and "image_name" in self.model_fields_set:
+            _dict['image_name'] = None
+
         return _dict
 
     @classmethod
@@ -104,7 +139,11 @@ class AgentCreateEnvironmentSchema(BaseModel):
             "cyberwave_api_key": obj.get("cyberwave_api_key"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "project_uuid": obj.get("project_uuid"),
-            "mlmodel_uuid": obj.get("mlmodel_uuid")
+            "mlmodel_uuid": obj.get("mlmodel_uuid"),
+            "assistant_session_id": obj.get("assistant_session_id"),
+            "image_base64": obj.get("image_base64"),
+            "image_mime_type": obj.get("image_mime_type"),
+            "image_name": obj.get("image_name")
         })
         return _obj
 

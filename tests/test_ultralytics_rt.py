@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from cyberwave.models.runtimes.ultralytics_rt import UltralyticsRuntime
-from cyberwave.models.types import PredictionResult
+from cyberwave.models.types import DepthResult, PredictionResult
 from tests.test_runtime_conformance import RuntimeConformanceMixin
 
 
@@ -39,10 +39,11 @@ def _result_mock(
     result.boxes = boxes
     result.names = names
     # Explicit None for every task-dispatch attribute so the runtime does not
-    # mistake a MagicMock truthy value for a real probs/obb/masks object.
+    # mistake a MagicMock truthy value for a real probs/obb/masks/depth object.
     result.probs = None
     result.obb = None
     result.masks = None
+    result.depth = None
     if keypoints_data is None:
         result.keypoints = None
     else:
@@ -151,6 +152,7 @@ class TestUltralyticsPredictPose:
         result.probs = None
         result.obb = None
         result.masks = None
+        result.depth = None
         result.keypoints = _NoData()
         model = MagicMock(return_value=[result])
 
@@ -875,3 +877,303 @@ class TestUltralyticsWritableModelDirContract:
 
         assert Path.cwd() == cwd_before
         handle.set_classes.assert_called_once_with(["helmet"], "text_pe_tensor")
+
+
+class TestUltralyticsPredictDepth:
+    """``yolo26*-depth`` returns metric depth, not detections.
+
+    A depth result carries no boxes, so before the depth branch existed it fell
+    through every dispatch check to ``result.boxes is None -> continue`` and the
+    caller got an empty ``DetectionResult`` — no error, no depth, nothing
+    downstream to notice. These pin the branch and the resolution guard.
+    """
+
+    @staticmethod
+    def _depth_result(depth: np.ndarray, orig_shape=(480, 640)) -> MagicMock:
+        result = MagicMock()
+        result.orig_shape = orig_shape
+        result.boxes = None
+        result.probs = None
+        result.obb = None
+        result.masks = None
+        result.keypoints = None
+        tensor = MagicMock()
+        tensor.cpu.return_value.numpy.return_value = depth
+        result.depth = MagicMock()
+        result.depth.data = tensor
+        return result
+
+    def test_returns_metric_depth_result(self):
+        rt = UltralyticsRuntime()
+        depth = np.full((480, 640), 3.5, dtype=np.float32)
+        model = MagicMock(return_value=[self._depth_result(depth)])
+
+        pred = rt.predict(model, np.zeros((480, 640, 3), dtype=np.uint8))
+
+        assert isinstance(pred, DepthResult)
+        # Metric matters twice over: it suppresses the disparity inversion in
+        # send_depth and satisfies object_pose's metric depth-source guard.
+        assert pred.metric is True
+        assert pred.depth_map.shape == (480, 640)
+        assert pred.depth_map.dtype == np.float32
+        np.testing.assert_allclose(pred.depth_map, 3.5)
+        assert (pred.h, pred.w) == (480, 640)
+
+    def test_resizes_head_output_back_to_the_frame(self):
+        """Trained at imgsz=768, so the head may not emit at frame resolution.
+
+        Depth pixel (u, v) has to line up with camera pixel (u, v) or the
+        pinhole back-projection downstream puts every point in the wrong place.
+        """
+        pytest.importorskip("cv2")
+        rt = UltralyticsRuntime()
+        depth = np.full((768, 768), 2.0, dtype=np.float32)
+        model = MagicMock(return_value=[self._depth_result(depth, (480, 640))])
+
+        pred = rt.predict(model, np.zeros((480, 640, 3), dtype=np.uint8))
+
+        assert pred.depth_map.shape == (480, 640)
+        np.testing.assert_allclose(pred.depth_map, 2.0, atol=1e-5)
+
+    def test_squeezes_a_leading_batch_dimension(self):
+        rt = UltralyticsRuntime()
+        depth = np.full((1, 480, 640), 1.25, dtype=np.float32)
+        model = MagicMock(return_value=[self._depth_result(depth)])
+
+        pred = rt.predict(model, np.zeros((480, 640, 3), dtype=np.uint8))
+
+        assert pred.depth_map.shape == (480, 640)
+
+    def test_malformed_depth_falls_through_instead_of_propagating(self):
+        """A non-2-D depth payload must not reach a consumer as a depth map."""
+        rt = UltralyticsRuntime()
+        model = MagicMock(
+            return_value=[self._depth_result(np.zeros((3, 4, 5), dtype=np.float32))]
+        )
+
+        pred = rt.predict(model, np.zeros((480, 640, 3), dtype=np.uint8))
+
+        assert not isinstance(pred, DepthResult)
+
+    def test_detection_results_are_untouched(self):
+        """The depth branch runs first, so guard the task it could shadow."""
+        rt = UltralyticsRuntime()
+        result_obj = _result_mock(
+            boxes=[_box_mock([10.0, 20.0, 110.0, 220.0], cls=0, conf=0.9)],
+            names={0: "person"},
+        )
+        model = MagicMock(return_value=[result_obj])
+
+        pred = rt.predict(model, np.zeros((480, 640, 3), dtype=np.uint8))
+
+        assert not isinstance(pred, DepthResult)
+        assert len(pred.detections) == 1
+
+
+# --------------------------------------------------------------------------
+# Bulk box parsing (CYB-3248)
+# --------------------------------------------------------------------------
+
+
+class _CountingTensor:
+    """Minimal stand-in for a torch tensor that records host transfers.
+
+    ``cpu().numpy()`` is the only path the runtime may use to pull box
+    attributes across; every call bumps the shared counter so a test can
+    assert the whole batch moved in one transfer.
+    """
+
+    def __init__(self, arr: np.ndarray, counter: dict[str, int], name: str):
+        self._arr = arr
+        self._counter = counter
+        self._name = name
+
+    def cpu(self) -> "_CountingTensor":
+        return self
+
+    def numpy(self) -> np.ndarray:
+        self._counter[self._name] = self._counter.get(self._name, 0) + 1
+        return self._arr
+
+    # Per-box access, i.e. what the old ``for box in result.boxes`` path used.
+    def __getitem__(self, idx):
+        self._counter[f"{self._name}_item"] = (
+            self._counter.get(f"{self._name}_item", 0) + 1
+        )
+        return self._arr[idx]
+
+    def __len__(self) -> int:
+        return len(self._arr)
+
+    def tolist(self):
+        return self._arr.tolist()
+
+
+class _BulkBoxes:
+    """Tensor-batch ``Boxes`` stand-in, as Ultralytics hands back on GPU.
+
+    Iterating yields per-box wrappers, so a regression to the per-box form
+    still produces correct output — it just shows up as a transfer count
+    above one, which is exactly what the assertions here pin.
+    """
+
+    def __init__(self, cls_arr, conf_arr, xyxy_arr, counter):
+        self.cls = _CountingTensor(cls_arr, counter, "cls")
+        self.conf = _CountingTensor(conf_arr, counter, "conf")
+        self.xyxy = _CountingTensor(xyxy_arr, counter, "xyxy")
+        self._n = len(cls_arr)
+
+    def __len__(self) -> int:
+        return self._n
+
+    def __iter__(self):
+        for i in range(self._n):
+            box = MagicMock()
+            box.cls = [self.cls[i]]
+            box.conf = [self.conf[i]]
+            box.xyxy = [MagicMock()]
+            box.xyxy[0].tolist.return_value = list(self.xyxy[i])
+            yield box
+
+
+def _bulk_result(n: int, *, masks: bool = False, kps: bool = False):
+    """Synthetic N-detection result with deterministic, distinguishable values."""
+    rng = np.random.default_rng(3248)
+    cls_arr = np.arange(n, dtype=np.float32) % 3
+    conf_arr = np.linspace(0.51, 0.99, n, dtype=np.float32)
+    x1 = np.arange(n, dtype=np.float32)
+    xyxy_arr = np.stack([x1, x1 + 1, x1 + 11, x1 + 21], axis=1)
+
+    counter: dict[str, int] = {}
+    result = MagicMock()
+    result.orig_shape = (480, 640)
+    result.boxes = _BulkBoxes(cls_arr, conf_arr, xyxy_arr, counter)
+    result.names = {0: "person", 1: "car", 2: "dog"}
+    # Explicit None for every task-dispatch attribute, same convention as
+    # _result_mock. Depth is checked before the detect branch, and a bare
+    # MagicMock is truthy there — it only fails to shadow this because
+    # np.asarray() coerces it to a 0-length array that trips the ndim guard.
+    # Pinning it None keeps these tests off that accident.
+    result.probs = None
+    result.obb = None
+    result.depth = None
+
+    if masks:
+        mask_arr = rng.random((n, 8, 8), dtype=np.float32)
+        result.masks = MagicMock()
+        result.masks.data = _CountingTensor(mask_arr, counter, "masks")
+    else:
+        result.masks = None
+        mask_arr = None
+
+    if kps:
+        kp_arr = rng.random((n, 17, 3), dtype=np.float32)
+        result.keypoints = MagicMock()
+        result.keypoints.data = _CountingTensor(kp_arr, counter, "kps")
+    else:
+        result.keypoints = None
+        kp_arr = None
+
+    return result, counter, (cls_arr, conf_arr, xyxy_arr, mask_arr, kp_arr)
+
+
+class TestUltralyticsBulkBoxParsing:
+    """Pins the bulk (whole-batch) read of result.boxes — see CYB-3248.
+
+    The per-box form this replaced cost three device->host copies and three
+    implicit syncs per detection on a GPU worker.
+    """
+
+    def test_output_matches_source_arrays_at_n100_with_masks_and_keypoints(self):
+        n = 100
+        rt = UltralyticsRuntime()
+        result, _, (cls_arr, conf_arr, xyxy_arr, mask_arr, kp_arr) = _bulk_result(
+            n, masks=True, kps=True
+        )
+        names = {0: "person", 1: "car", 2: "dog"}
+
+        pred = rt.predict(
+            MagicMock(return_value=[result]),
+            np.zeros((480, 640, 3), dtype=np.uint8),
+        )
+
+        assert len(pred.detections) == n
+        frame_area = 480 * 640
+        for i, det in enumerate(pred.detections):
+            assert det.label == names[int(cls_arr[i])]
+            assert det.confidence == pytest.approx(float(conf_arr[i]))
+            assert det.bbox.x1 == pytest.approx(float(xyxy_arr[i][0]))
+            assert det.bbox.y1 == pytest.approx(float(xyxy_arr[i][1]))
+            assert det.bbox.x2 == pytest.approx(float(xyxy_arr[i][2]))
+            assert det.bbox.y2 == pytest.approx(float(xyxy_arr[i][3]))
+            assert det.area_ratio == pytest.approx(det.bbox.area / frame_area)
+            # Index alignment: mask[i] / keypoints[i] must still line up with
+            # box i now that the loop indexes bulk arrays instead of zipping.
+            assert np.array_equal(det.mask.data, mask_arr[i])
+            assert np.array_equal(det.keypoints, kp_arr[i])
+            assert len(det.keypoint_set.points) == 17
+
+    def test_reads_each_box_attribute_once_not_per_box(self):
+        rt = UltralyticsRuntime()
+        result, counter, _ = _bulk_result(100)
+
+        rt.predict(
+            MagicMock(return_value=[result]),
+            np.zeros((480, 640, 3), dtype=np.uint8),
+        )
+
+        # One whole-batch transfer per attribute, regardless of N.
+        assert counter.get("cls") == 1
+        assert counter.get("conf") == 1
+        assert counter.get("xyxy") == 1
+        # And no per-box indexing into the device tensors.
+        assert counter.get("conf_item") is None
+        assert counter.get("cls_item") is None
+
+    def test_class_filter_still_applies_over_bulk_arrays(self):
+        rt = UltralyticsRuntime()
+        result, counter, (cls_arr, _, _, _, _) = _bulk_result(30)
+
+        pred = rt.predict(
+            MagicMock(return_value=[result]),
+            np.zeros((480, 640, 3), dtype=np.uint8),
+            classes=["dog"],
+        )
+
+        expected = int((cls_arr == 2).sum())
+        assert len(pred.detections) == expected
+        assert {d.label for d in pred.detections} == {"dog"}
+        assert counter.get("conf") == 1
+
+    def test_empty_boxes_produce_no_detections(self):
+        rt = UltralyticsRuntime()
+        result, _, _ = _bulk_result(0)
+
+        pred = rt.predict(
+            MagicMock(return_value=[result]),
+            np.zeros((480, 640, 3), dtype=np.uint8),
+        )
+
+        assert pred.detections == []
+
+    def test_falls_back_to_per_box_helpers_for_non_tensor_boxes(self):
+        # Mocked handles in the rest of this suite hand back a plain list of
+        # box mocks, which has no .cls/.conf/.xyxy — the fallback must keep
+        # those working.
+        rt = UltralyticsRuntime()
+        result_obj = _result_mock(
+            boxes=[
+                _box_mock([10.0, 20.0, 110.0, 220.0], cls=0, conf=0.9),
+                _box_mock([200.0, 300.0, 250.0, 350.0], cls=1, conf=0.8),
+            ],
+            names={0: "person", 1: "car"},
+        )
+
+        pred = rt.predict(
+            MagicMock(return_value=[result_obj]),
+            np.zeros((480, 640, 3), dtype=np.uint8),
+        )
+
+        assert [d.label for d in pred.detections] == ["person", "car"]
+        assert [round(d.confidence, 2) for d in pred.detections] == [0.9, 0.8]
+        assert pred.detections[0].bbox.x2 == 110.0

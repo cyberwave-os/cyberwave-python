@@ -386,22 +386,26 @@ class WorkflowAgentClient(AgentClientBase):
         mode: ControlMode = "simulation",
         simulation_backend: str | None = None,
         visibility: str = "private",
+        setup_mode: str = "explicit",
     ) -> dict[str, Any]:
         """Apply confirmed setup actions and draft a workflow."""
+        options: dict[str, Any] = {
+            "confirmed_actions": confirmed_actions or [],
+            "agent_plan": agent_plan,
+            "mlmodel_uuid": mlmodel_uuid,
+            "twin_uuid": twin_uuid,
+            "controller_policy_uuid": controller_policy_uuid,
+            "mode": mode,
+            "simulation_backend": simulation_backend,
+            "visibility": visibility,
+        }
+        if setup_mode != "explicit":
+            options["setup_mode"] = setup_mode
         return self._prompt_post(
             environment_uuid,
             "/api/v1/agents/environments/{environment_uuid}/workflows/setup-and-draft",
             prompt,
-            {
-                "confirmed_actions": confirmed_actions or [],
-                "agent_plan": agent_plan,
-                "mlmodel_uuid": mlmodel_uuid,
-                "twin_uuid": twin_uuid,
-                "controller_policy_uuid": controller_policy_uuid,
-                "mode": mode,
-                "simulation_backend": simulation_backend,
-                "visibility": visibility,
-            },
+            options,
             "setup and draft workflow",
         )
 

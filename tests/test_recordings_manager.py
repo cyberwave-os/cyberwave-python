@@ -167,6 +167,49 @@ def _api_listing(*items: SimpleNamespace) -> MagicMock:
 _DEFAULT_LAST_DATE = object()
 
 
+def _bind_to_generated_client(operation: str, uuid: str, kwargs: dict) -> dict:
+    """Reject a call the generated ``DefaultApi`` would not accept.
+
+    A ``**kwargs`` stub swallows a parameter that was renamed or dropped from
+    the OpenAPI schema, so the pagination tests below would keep passing
+    against a client that can no longer send the window, the cursor, or the
+    twin filter. Binding to the real signature makes that a failure here rather
+    than a silently unbounded request in production.
+
+    ``cyberwave/rest`` is generated from the backend's OpenAPI schema and is not
+    committed, so a stale checkout is a normal state to be in. This helper is
+    reached from every transport-stubbed test in the file, so a missing
+    operation has to name itself: a bare ``AttributeError`` from ``getattr``
+    would surface ~20 times with no hint about regeneration, which is exactly
+    the confusion ``test_generated_client_exposes_the_bounded_catalog_contract``
+    exists to prevent.
+    """
+    import inspect
+
+    from cyberwave.rest import DefaultApi
+
+    method = getattr(DefaultApi, operation, None)
+    if method is None:
+        raise AssertionError(
+            f"Generated REST client has no operation {operation!r}. "
+            "cyberwave/rest is generated from the backend OpenAPI schema and is "
+            "not committed — regenerate it before running these tests "
+            "(see the generate step in "
+            ".github/workflows/sdk-python-test-and-release.yml)."
+        )
+
+    try:
+        inspect.signature(method).bind(None, uuid, **kwargs)  # `None` is `self`
+    except TypeError as exc:
+        raise AssertionError(
+            f"{operation} does not accept {sorted(kwargs)} — the generated "
+            f"client is out of step with what RecordingManager sends ({exc}). "
+            "Regenerate cyberwave/rest, then re-check the manager if the "
+            "parameter was genuinely renamed or dropped upstream."
+        ) from exc
+    return {"uuid": uuid, **kwargs}
+
+
 class _FakeCatalogApi:
     """A REST stub that pages exactly like the catalog endpoint.
 
@@ -174,6 +217,10 @@ class _FakeCatalogApi:
     the server's ``(effective_start_us, uuid)`` keyset walk for tests. Pass
     ``last_date=None`` for an environment that has no recordings at all;
     otherwise it is an ISO string, as the availability contract defines it.
+
+    Both operations bind their arguments to the generated ``DefaultApi``
+    signature before answering, so these stubs stay honest about what the real
+    client accepts.
     """
 
     def __init__(
@@ -192,7 +239,13 @@ class _FakeCatalogApi:
     def src_app_api_environments_recordings_get_environment_recordings_availability(
         self, uuid: str, **kwargs
     ) -> SimpleNamespace:
-        self.availability_calls.append({"uuid": uuid, **kwargs})
+        self.availability_calls.append(
+            _bind_to_generated_client(
+                "src_app_api_environments_recordings_get_environment_recordings_availability",
+                uuid,
+                kwargs,
+            )
+        )
         return SimpleNamespace(
             first_date=self._last_date,
             last_date=self._last_date,
@@ -205,7 +258,13 @@ class _FakeCatalogApi:
     def src_app_api_environments_recordings_get_environment_recordings(
         self, uuid: str, **kwargs
     ) -> SimpleNamespace:
-        self.list_calls.append({"uuid": uuid, **kwargs})
+        self.list_calls.append(
+            _bind_to_generated_client(
+                "src_app_api_environments_recordings_get_environment_recordings",
+                uuid,
+                kwargs,
+            )
+        )
         offset = int(kwargs["cursor"]) if kwargs.get("cursor") else 0
         window = self._rows[offset : offset + kwargs["limit"]]
         consumed = offset + len(window)
@@ -481,6 +540,70 @@ def test_manager_list_forwards_include_unready_to_availability() -> None:
     assert api.list_calls[0]["include_unready"] is True
 
 
+def test_generated_client_exposes_the_bounded_catalog_contract() -> None:
+    """Fail loudly when ``cyberwave/rest`` predates the bounded catalog.
+
+    ``cyberwave/rest`` is generated from the backend's OpenAPI schema and is
+    not committed, so a stale checkout is a normal state to be in. Every other
+    test here stubs the transport, which means a stale client would otherwise
+    surface as a confusing ``AttributeError``/``TypeError`` deep inside
+    ``list()``. Assert the operations and models the manager depends on exist,
+    with the parameters it actually sends.
+    """
+    import inspect
+
+    from cyberwave.rest import DefaultApi
+    from cyberwave.rest.models.recording_availability_day import (
+        RecordingAvailabilityDay,
+    )
+    from cyberwave.rest.models.recording_availability_response import (
+        RecordingAvailabilityResponse,
+    )
+    from cyberwave.rest.models.recording_list_response import RecordingListResponse
+
+    catalog = inspect.signature(
+        DefaultApi.src_app_api_environments_recordings_get_environment_recordings
+    ).parameters
+    assert {
+        "start_date",
+        "end_date",
+        "include_unready",
+        "limit",
+        "cursor",
+        "twin_uuid",
+    } <= set(catalog)
+    # The legacy aliases stay in the contract, so pre-0.7.0 direct REST callers
+    # keep working against the same deployment.
+    assert {"start_timestamp", "end_timestamp"} <= set(catalog)
+
+    availability = inspect.signature(
+        DefaultApi.src_app_api_environments_recordings_get_environment_recordings_availability
+    ).parameters
+    assert {"start_date", "end_date", "include_unready", "twin_uuid"} <= set(
+        availability
+    )
+    # Availability is a whole-history question, so it is never paged — sending
+    # limit/cursor would be a sign the manager is driving the wrong endpoint.
+    assert "limit" not in availability and "cursor" not in availability
+
+    # ``_latest_available_date`` reads ``last_date``; the pagination walk reads
+    # ``next_cursor``/``has_more``.
+    assert "last_date" in RecordingAvailabilityResponse.model_fields
+    assert {"next_cursor", "has_more"} <= set(RecordingListResponse.model_fields)
+    # The import above is the real assertion for this model; assert on a field so the
+    # check cannot pass against a stub that merely has the right name.
+    #
+    # Match the WIRE name, not the attribute name. ``date`` is a reserved word for the
+    # Python generator, so the property is emitted as ``var_date`` with ``alias="date"``
+    # — the same rename ``RecordingGenerationRequestSchemaByDate`` already carries.
+    # ``model_fields`` is keyed by the attribute, so asserting ``"date"`` against it
+    # fails for a perfectly correct client.
+    assert "date" in {
+        field.alias or name
+        for name, field in RecordingAvailabilityDay.model_fields.items()
+    }
+
+
 def test_manager_list_paginates_through_the_real_generated_client(monkeypatch) -> None:
     """Drive the actual generated REST client with only the transport stubbed.
 
@@ -549,8 +672,16 @@ def test_manager_list_paginates_through_the_real_generated_client(monkeypatch) -
     assert "end_date=2026-07-05" in requested_urls[1]
     assert "include_unready=false" in requested_urls[1]
     assert "limit=50" in requested_urls[1]
+    assert "twin_uuid=twin-1" in requested_urls[1]
     assert "cursor=" not in requested_urls[1]
     assert "cursor=50" in requested_urls[2]
+    # Every narrowing survives onto page 2 as well: a cursor walk that dropped
+    # the window or the readiness filter would silently widen mid-listing.
+    assert "start_date=2026-07-05" in requested_urls[2]
+    assert "end_date=2026-07-05" in requested_urls[2]
+    assert "include_unready=false" in requested_urls[2]
+    assert "twin_uuid=twin-1" in requested_urls[2]
+    assert "limit=50" in requested_urls[2]
 
 
 def test_twin_handle_list_narrows_both_requests_server_side() -> None:
@@ -655,7 +786,7 @@ def test_get_downloads_all_sources_to_temp(monkeypatch) -> None:
 
     downloaded: list[tuple[str, Path]] = []
 
-    def fake_download(url: str, dest: Path) -> None:
+    def fake_download(url: str, dest: Path, **_) -> None:
         dest.write_bytes(b"data")
         downloaded.append((url, dest))
 
@@ -698,7 +829,7 @@ def test_get_does_not_download_camera_parquet(monkeypatch) -> None:
     )
     mgr = RecordingManager(api)
 
-    def fake_download(url: str, dest: Path) -> None:
+    def fake_download(url: str, dest: Path, **_) -> None:
         dest.write_bytes(b"data")
 
     monkeypatch.setattr(RecordingManager, "_download", staticmethod(fake_download))
@@ -733,7 +864,7 @@ def test_get_path_filter_restricts_download(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         RecordingManager, "_download",
-        staticmethod(lambda url, dest: dest.write_bytes(b"d")),
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
     )
     item = RecordingListItem(
         uuid="rec-1", twin_uuid="twin-1", environment_uuid="env-1",
@@ -773,7 +904,7 @@ def test_get_cleans_up_tempdir_when_a_download_fails(monkeypatch) -> None:
         p for p in Path(tempfile.gettempdir()).glob("cw-recording-*")
     }
 
-    def flaky_download(url: str, dest: Path) -> None:
+    def flaky_download(url: str, dest: Path, **_) -> None:
         if url.endswith("a.mp4"):
             dest.write_bytes(b"partial")  # first file lands...
             return
@@ -794,6 +925,488 @@ def test_get_cleans_up_tempdir_when_a_download_fails(monkeypatch) -> None:
     assert after == before  # no new cw-recording-* dir left behind
 
 
+def _camera_parts(*names: str) -> MagicMock:
+    """An API whose envelope carries one camera stream of ``names`` video parts."""
+    api = MagicMock()
+    api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
+        {"twin-1": {"camera": {"videos": [{"signed_url": f"https://x/{n}"} for n in names]}}}
+    )
+    return api
+
+
+def _camera_item() -> RecordingListItem:
+    return RecordingListItem(
+        uuid="rec-1", twin_uuid="twin-1", environment_uuid="env-1",
+        metadata={"recording_type": "camera"},
+    )
+
+
+def test_get_downloads_parts_concurrently(monkeypatch) -> None:
+    """A segmented recording is fetched in parallel: every part must be in flight
+    at once, otherwise each pays its own connect/first-byte round trip serially."""
+    import threading
+
+    api = _camera_parts("a.mp4", "b.mp4", "c.mp4", "d.mp4")
+    # A barrier proves concurrency exactly rather than inferring it from timing:
+    # if the downloads were serialized, the first worker would never be released
+    # and this raises BrokenBarrierError instead of passing on a lucky schedule.
+    barrier = threading.Barrier(4, timeout=10)
+
+    def fake_download(url: str, dest: Path, **_) -> None:
+        barrier.wait()
+        dest.write_bytes(b"data")
+
+    monkeypatch.setattr(RecordingManager, "_download", staticmethod(fake_download))
+    rec = RecordingManager(api).get(_camera_item())
+    assert len(rec.local_paths["camera"]) == 4
+    rec.close()
+
+
+def test_get_max_workers_one_downloads_serially(monkeypatch) -> None:
+    """``max_workers=1`` is the escape hatch back to the pre-parallel behavior."""
+    import threading
+    import time
+
+    api = _camera_parts("a.mp4", "b.mp4", "c.mp4")
+    lock = threading.Lock()
+    state = {"active": 0, "peak": 0}
+
+    def fake_download(url: str, dest: Path, **_) -> None:
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.02)
+        dest.write_bytes(b"data")
+        with lock:
+            state["active"] -= 1
+
+    monkeypatch.setattr(RecordingManager, "_download", staticmethod(fake_download))
+    rec = RecordingManager(api).get(_camera_item(), max_workers=1)
+    assert state["peak"] == 1
+    assert len(rec.local_paths["camera"]) == 3
+    rec.close()
+
+
+def test_get_local_paths_order_is_independent_of_completion_order(monkeypatch) -> None:
+    """``local_paths`` follows envelope order, not whichever download finished
+    first. ``_paths_with_ext`` does not sort, so completion order would otherwise
+    decide which part ``show_video()`` plays."""
+    import time
+
+    names = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"]
+    api = _camera_parts(*names)
+
+    def fake_download(url: str, dest: Path, **_) -> None:
+        # Finish in reverse: the last part lands first.
+        time.sleep(0.02 * (len(names) - names.index(url.rsplit("/", 1)[-1])))
+        dest.write_bytes(b"data")
+
+    monkeypatch.setattr(RecordingManager, "_download", staticmethod(fake_download))
+    rec = RecordingManager(api).get(_camera_item())
+    assert [p.name for p in rec.local_paths["camera"]] == [
+        "000_a.mp4", "001_b.mp4", "002_c.mp4", "003_d.mp4"
+    ]
+    rec.close()
+
+
+def test_get_cancels_queued_downloads_when_one_fails(monkeypatch) -> None:
+    """One part failing abandons the whole fetch, so parts still queued behind it
+    must be dropped rather than downloaded into a temp dir about to be reaped.
+
+    It also pins the ordering of cleanup: ``get()`` returns only once the running
+    workers have settled, so the rmtree never races a download mid-write.
+    """
+    import tempfile
+    import threading
+
+    from cyberwave.exceptions import CyberwaveError
+
+    parts = [f"p{i:02d}.mp4" for i in range(20)]
+    api = _camera_parts(*parts)
+    release = threading.Event()
+    attempted: list[str] = []
+    finished: list[str] = []
+    lock = threading.Lock()
+
+    def fake_download(url: str, dest: Path, **_) -> None:
+        with lock:
+            attempted.append(url)
+        if url.endswith("p00.mp4"):
+            raise CyberwaveError("boom")
+        release.wait(timeout=1.0)  # still in flight when the failure surfaces
+        with lock:
+            finished.append(url)
+        if dest.parent.exists():
+            dest.write_bytes(b"data")
+
+    before = {p for p in Path(tempfile.gettempdir()).glob("cw-recording-*")}
+    monkeypatch.setattr(RecordingManager, "_download", staticmethod(fake_download))
+    with pytest.raises(CyberwaveError, match="boom"):
+        RecordingManager(api).get(_camera_item(), max_workers=2)
+
+    # With 2 workers and 20 parts, the failure surfaces while 18 are still queued;
+    # those must never be requested. Serial code would have attempted only 1, so
+    # the lower bound also proves the parallel path ran.
+    assert 2 <= len(attempted) <= 5, attempted
+    # Everything that did start has finished by the time get() returns.
+    assert len(finished) == len(attempted) - 1
+    assert {p for p in Path(tempfile.gettempdir()).glob("cw-recording-*")} == before
+
+
+def test_get_grows_http_pool_to_match_requested_concurrency(monkeypatch) -> None:
+    """Raising ``max_workers`` past the default must grow the shared pool. Left at
+    the default size, urllib3 opens the surplus connections and discards them on
+    return, so the artifacts past the pool size re-pay a handshake each and the
+    extra workers buy far less than they should."""
+    from cyberwave.managers import recordings as rec_mod
+
+    sizes: list[int | None] = []
+
+    def fake_pool_manager(**kwargs) -> MagicMock:
+        sizes.append(kwargs.get("maxsize"))
+        return MagicMock()
+
+    monkeypatch.setattr(rec_mod, "_http_pool", None, raising=False)
+    monkeypatch.setattr(rec_mod, "_http_pool_maxsize", 0, raising=False)
+    monkeypatch.setattr(rec_mod.urllib3, "PoolManager", fake_pool_manager)
+    # _download is stubbed, so the pool can only be sized by get() itself.
+    monkeypatch.setattr(
+        RecordingManager, "_download",
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
+    )
+
+    api = _camera_parts(*[f"p{i:02d}.mp4" for i in range(20)])
+    requested = rec_mod.DEFAULT_DOWNLOAD_WORKERS * 2
+    rec = RecordingManager(api).get(_camera_item(), max_workers=requested)
+    assert sizes, "get() never sized the shared pool"
+    assert max(s or 0 for s in sizes) >= requested
+    rec.close()
+
+
+def test_video_parts_arrive_in_timeline_order_not_envelope_order(monkeypatch) -> None:
+    """Envelope order is not a contract: the finalized server path sorts video
+    chunks by ``chunk_index``, but the progressive path emits the manifest's
+    ``video_parts`` in stored order and a gap-fill can append a part belonging
+    earlier. The receiving end must still see segments in timeline order —
+    ``_paths_with_ext`` does not sort, so ``show_video()`` plays local_paths[0]."""
+    api = MagicMock()
+    api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
+        {"twin-1": {"camera": {"videos": [
+            # Deliberately shuffled, as a gap-fill append would leave them.
+            {"signed_url": "https://x/c.mp4", "first_timestamp_us": 3_000_000,
+             "chunk_index": 2},
+            {"signed_url": "https://x/a.mp4", "first_timestamp_us": 1_000_000,
+             "chunk_index": 0},
+            {"signed_url": "https://x/d.mp4", "first_timestamp_us": 4_000_000,
+             "chunk_index": 3},
+            {"signed_url": "https://x/b.mp4", "first_timestamp_us": 2_000_000,
+             "chunk_index": 1},
+        ]}}}
+    )
+    monkeypatch.setattr(
+        RecordingManager, "_download",
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
+    )
+    rec = RecordingManager(api).get(_camera_item())
+    assert [p.name for p in rec.local_paths["camera"]] == [
+        "000_a.mp4", "001_b.mp4", "002_c.mp4", "003_d.mp4"
+    ]
+    assert rec._paths_with_ext(".mp4")[0].name == "000_a.mp4"  # show_video() plays this
+    rec.close()
+
+
+def test_zero_filled_timestamps_fall_through_to_the_index(monkeypatch) -> None:
+    """A timestamp tier that answers for every part but orders none of them must
+    not claim the sort.
+
+    The server zero-fills a missing window twice over — once when it records the
+    part (``int(start_timestamp_us or 0)``) and again when it builds the envelope
+    (``.get("start_timestamp_us", 0)``) — so "every part answered" is satisfied by
+    a column of zeros. Accepting that tier makes ``chunk_index``/``part_index``
+    unreachable on exactly the envelope this ordering exists to defend, and leaves
+    the parts in whatever order they arrived.
+    """
+    api = MagicMock()
+    api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
+        {"twin-1": {"camera": {"videos": [
+            {"signed_url": "https://x/c.mp4", "first_timestamp_us": 0, "chunk_index": 2},
+            {"signed_url": "https://x/a.mp4", "first_timestamp_us": 0, "chunk_index": 0},
+            {"signed_url": "https://x/b.mp4", "first_timestamp_us": 0, "chunk_index": 1},
+        ]}}}
+    )
+    monkeypatch.setattr(
+        RecordingManager, "_download",
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
+    )
+    rec = RecordingManager(api).get(_camera_item())
+    assert [p.name for p in rec.local_paths["camera"]] == [
+        "000_a.mp4", "001_b.mp4", "002_c.mp4"
+    ]
+    rec.close()
+
+
+def test_robot_parts_ordered_by_part_index_when_no_timestamps(monkeypatch) -> None:
+    """Actuation parts label their window ``start_timestamp_us`` (not
+    ``first_timestamp_us``); with neither present, ``part_index`` orders them.
+    read_robot() concatenates in filename order with no timestamp re-sort, so a
+    wrong order here silently interleaves rows against time."""
+    api = MagicMock()
+    api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
+        {"twin-1": {"actuation": {"parts": [
+            {"signed_url": "https://x/p2.parquet", "part_index": 2},
+            {"signed_url": "https://x/p0.parquet", "part_index": 0},
+            {"signed_url": "https://x/p1.parquet", "part_index": 1},
+        ]}}}
+    )
+    monkeypatch.setattr(
+        RecordingManager, "_download",
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
+    )
+    rec = RecordingManager(api).get("rec-1", environment_id="env-1")
+    assert [p.name for p in rec.local_paths["actuation"]] == [
+        "000_p0.parquet", "001_p1.parquet", "002_p2.parquet"
+    ]
+    rec.close()
+
+
+def test_parts_keep_arrival_order_when_ordering_keys_are_incomplete(monkeypatch) -> None:
+    """Partial ordering information must not reorder anything: interleaving parts
+    that carry a timestamp with parts that do not would be worse than trusting the
+    order the server sent."""
+    api = MagicMock()
+    api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
+        {"twin-1": {"camera": {"videos": [
+            {"signed_url": "https://x/first.mp4"},                          # no keys
+            {"signed_url": "https://x/second.mp4", "chunk_index": 0},       # keyed
+        ]}}}
+    )
+    monkeypatch.setattr(
+        RecordingManager, "_download",
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
+    )
+    rec = RecordingManager(api).get(_camera_item())
+    assert [p.name for p in rec.local_paths["camera"]] == [
+        "000_first.mp4", "001_second.mp4"
+    ]
+    rec.close()
+
+
+def test_filename_index_pad_keeps_lexical_order_past_999_parts(monkeypatch) -> None:
+    """read_robot()/read_depth() sort parquet parts by FILENAME, so the index pad
+    has to be wide enough for the count: at three digits, part 1000 sorts before
+    part 999 and the concatenated rows jump backwards in time."""
+    api = MagicMock()
+    api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
+        {"twin-1": {"actuation": {"parts": [
+            {"signed_url": f"https://x/p{i:04d}.parquet", "part_index": i}
+            for i in range(1001)
+        ]}}}
+    )
+    monkeypatch.setattr(
+        RecordingManager, "_download",
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
+    )
+    rec = RecordingManager(api).get("rec-1", environment_id="env-1", max_workers=4)
+    paths = rec.local_paths["actuation"]
+    assert len(paths) == 1001
+    # What the readers actually do: sort by name. It must equal fetch order.
+    assert sorted(str(p) for p in paths) == [str(p) for p in paths]
+    assert paths[0].name.startswith("0000_") and paths[-1].name.startswith("1000_")
+    rec.close()
+
+
+def test_growing_the_http_pool_closes_the_one_it_replaces(monkeypatch) -> None:
+    """Growing the pool must close the pool it supersedes.
+
+    The replaced PoolManager still holds established keep-alive sockets. Dropping
+    the reference without closing leaks them until GC — the exact leak the shared
+    pool exists to prevent — and costs the next fetch a handshake for every
+    connection lost.
+    """
+    from unittest.mock import MagicMock
+
+    from cyberwave.managers import recordings as rec_mod
+
+    created: list[MagicMock] = []
+
+    def fake_pool_manager(**_kwargs) -> MagicMock:
+        pool = MagicMock()
+        created.append(pool)
+        return pool
+
+    monkeypatch.setattr(rec_mod, "_http_pool", None, raising=False)
+    monkeypatch.setattr(rec_mod, "_http_pool_maxsize", 0, raising=False)
+    monkeypatch.setattr(rec_mod.urllib3, "PoolManager", fake_pool_manager)
+
+    first = rec_mod._get_http_pool(8)
+    first.clear.assert_not_called()  # nothing to replace yet
+    second = rec_mod._get_http_pool(16)
+
+    assert second is not first, "a larger request must grow the pool"
+    first.clear.assert_called_once()
+    # The pool that is still in use is never closed, and a request that fits in
+    # the current size does not rebuild at all.
+    second.clear.assert_not_called()
+    assert rec_mod._get_http_pool(4) is second
+    assert len(created) == 2
+
+
+def test_get_http_pool_builds_one_pool_under_concurrent_callers(monkeypatch) -> None:
+    """Concurrent callers must not each build a pool. The factory sleeps so the
+    race is certain rather than lucky: unguarded, every thread passes the resize
+    check and the losers' pools are orphaned along with their connections."""
+    import threading
+    import time
+    from unittest.mock import MagicMock
+
+    from cyberwave.managers import recordings as rec_mod
+
+    created: list[MagicMock] = []
+
+    def slow_pool_manager(**_kwargs) -> MagicMock:
+        time.sleep(0.05)  # widen the window between the check and the assignment
+        pool = MagicMock()
+        created.append(pool)
+        return pool
+
+    monkeypatch.setattr(rec_mod, "_http_pool", None, raising=False)
+    monkeypatch.setattr(rec_mod, "_http_pool_maxsize", 0, raising=False)
+    monkeypatch.setattr(rec_mod.urllib3, "PoolManager", slow_pool_manager)
+
+    got: list[object] = []
+    threads = [
+        threading.Thread(target=lambda: got.append(rec_mod._get_http_pool(8)))
+        for _ in range(8)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(created) == 1, f"{len(created)} pools built for 8 concurrent callers"
+    assert {id(p) for p in got} == {id(created[0])}
+
+
+def test_get_clamps_max_workers_to_the_ceiling(monkeypatch) -> None:
+    """``len(sources)`` is no bound — a long recording holds hundreds of parts, so
+    an unclamped request would spawn a thread and a socket for every one."""
+    import threading
+
+    from cyberwave.managers import recordings as rec_mod
+
+    api = _camera_parts(*[f"p{i:03d}.mp4" for i in range(120)])
+    lock = threading.Lock()
+    # Count this executor's own workers by name, not threading.active_count():
+    # a global count picks up every other thread the test session is running.
+    # ThreadPoolExecutor names and reuses its threads, so distinct names is the
+    # number of workers it actually created.
+    workers_seen: set[str] = set()
+
+    def fake_download(url: str, dest: Path, **_) -> None:
+        with lock:
+            workers_seen.add(threading.current_thread().name)
+        dest.write_bytes(b"d")
+
+    monkeypatch.setattr(RecordingManager, "_download", staticmethod(fake_download))
+    rec = RecordingManager(api).get(_camera_item(), max_workers=120)
+    assert workers_seen, "no worker threads recorded"
+    assert all(n.startswith("cw-artifact") for n in workers_seen), workers_seen
+    assert len(workers_seen) <= rec_mod.MAX_DOWNLOAD_WORKERS, len(workers_seen)
+    assert len(rec.local_paths["camera"]) == 120  # all parts still fetched
+    rec.close()
+
+
+def test_download_abandons_stream_when_cancelled(monkeypatch, tmp_path) -> None:
+    """A failure elsewhere in the fetch must stop sibling transfers at the next
+    chunk. urllib3's read timeout cannot do this: it measures inactivity and
+    resets on every chunk, so a healthy transfer would run to completion into a
+    temp dir that is about to be deleted."""
+    import threading
+    from unittest.mock import MagicMock
+
+    from cyberwave.exceptions import CyberwaveError
+    from cyberwave.managers import recordings as rec_mod
+
+    cancel = threading.Event()
+    chunks_read = {"n": 0}
+
+    def chunks(_size):
+        # Bounded on purpose: an unbounded stream would hang forever if the
+        # cancel check regressed, instead of failing the assertion below.
+        for _ in range(50):
+            chunks_read["n"] += 1
+            if chunks_read["n"] == 3:
+                cancel.set()  # a sibling download fails on the third chunk
+            yield b"x" * 16
+
+    pool = MagicMock()
+    response = MagicMock()
+    response.status = 200
+    response.stream = chunks
+    pool.request.return_value = response
+    monkeypatch.setattr(rec_mod, "_http_pool", pool, raising=False)
+    monkeypatch.setattr(rec_mod, "_http_pool_maxsize", 99, raising=False)
+
+    with pytest.raises(CyberwaveError, match="cancelled mid-stream"):
+        RecordingManager._download(
+            "https://x/big.parquet", tmp_path / "big.parquet", cancel=cancel
+        )
+    assert chunks_read["n"] == 3  # stopped at the boundary, did not drain
+    response.release_conn.assert_called_once()
+
+
+def test_download_skips_entirely_when_already_cancelled(monkeypatch, tmp_path) -> None:
+    """A worker that has not started yet must not open a connection at all."""
+    from unittest.mock import MagicMock
+
+    import threading
+
+    from cyberwave.exceptions import CyberwaveError
+    from cyberwave.managers import recordings as rec_mod
+
+    pool = MagicMock()
+    monkeypatch.setattr(rec_mod, "_http_pool", pool, raising=False)
+    monkeypatch.setattr(rec_mod, "_http_pool_maxsize", 99, raising=False)
+    cancel = threading.Event()
+    cancel.set()
+
+    with pytest.raises(CyberwaveError, match="abandoned before starting"):
+        RecordingManager._download("https://x/a.mp4", tmp_path / "a.mp4", cancel=cancel)
+    pool.request.assert_not_called()
+    assert not (tmp_path / "a.mp4").exists()
+
+
+def test_get_rejects_non_positive_max_workers() -> None:
+    """``0`` reads as "no concurrency" but would fall through to the default and
+    start the full worker set, so it is rejected rather than coerced."""
+    from cyberwave.exceptions import CyberwaveError
+
+    api = _camera_parts("a.mp4")
+    for bad in (0, -1):
+        with pytest.raises(CyberwaveError, match="max_workers"):
+            RecordingManager(api).get(_camera_item(), max_workers=bad)
+
+
+def test_get_path_filter_keeps_unfiltered_source_indexes(monkeypatch) -> None:
+    """Filenames carry the index over ALL sources, so a filtered fetch names its
+    artifacts identically to an unfiltered one (and caches keyed on those names
+    stay valid across filters)."""
+    api = MagicMock()
+    api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
+        {"twin-1": {
+            "camera": {"videos": [{"signed_url": "https://x/a.mp4"}]},
+            "actuation": {"parts": [{"signed_url": "https://x/j.parquet"}]},
+        }}
+    )
+    monkeypatch.setattr(
+        RecordingManager, "_download",
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
+    )
+    rec = RecordingManager(api).get(_camera_item(), path=".parquet")
+    assert [p.name for p in rec.local_paths["actuation"]] == ["001_j.parquet"]
+    rec.close()
+
+
 def test_twin_handle_get_uses_twin_environment(monkeypatch) -> None:
     api = MagicMock()
     api.src_app_api_environments_recordings_get_recording_data.return_value = _envelope(
@@ -801,7 +1414,7 @@ def test_twin_handle_get_uses_twin_environment(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         RecordingManager, "_download",
-        staticmethod(lambda url, dest: dest.write_bytes(b"d")),
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
     )
     mgr = RecordingManager(api)
     twin = SimpleNamespace(
@@ -833,7 +1446,7 @@ def test_twin_handle_get_excludes_other_twins_artifacts(monkeypatch) -> None:
         RecordingManager,
         "_download",
         staticmethod(
-            lambda url, dest: (downloaded.append(url), dest.write_bytes(b"d"))
+            lambda url, dest, **_: (downloaded.append(url), dest.write_bytes(b"d"))
         ),
     )
     mgr = RecordingManager(api)
@@ -864,7 +1477,7 @@ def test_manager_get_without_twin_uuid_includes_all_twins(monkeypatch) -> None:
         RecordingManager,
         "_download",
         staticmethod(
-            lambda url, dest: (downloaded.append(url), dest.write_bytes(b"d"))
+            lambda url, dest, **_: (downloaded.append(url), dest.write_bytes(b"d"))
         ),
     )
     rec = RecordingManager(api).get("rec-1", environment_id="env-1")
@@ -1096,7 +1709,7 @@ def test_recording_list_item_get_uses_attached_manager(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         RecordingManager, "_download",
-        staticmethod(lambda url, dest: dest.write_bytes(b"d")),
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
     )
     items = RecordingManager(api).list("env-1")
     rec = items[0].get()
@@ -1129,7 +1742,7 @@ def test_recording_list_item_get_reads_robot_and_cleans_up(monkeypatch) -> None:
 
     written_dirs: list[Path] = []
 
-    def fake_download(url: str, dest: Path) -> None:
+    def fake_download(url: str, dest: Path, **_) -> None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(pa.table({"action": [1, 2]}), dest)
         written_dirs.append(dest.parent)
@@ -1155,7 +1768,7 @@ def test_recording_list_item_get_shows_video_and_cleans_up(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         RecordingManager, "_download",
-        staticmethod(lambda url, dest: dest.write_bytes(b"d")),
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
     )
     called = {}
     monkeypatch.setattr(
@@ -1182,7 +1795,7 @@ def test_twin_handle_list_items_get_use_twin_environment(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         RecordingManager, "_download",
-        staticmethod(lambda url, dest: dest.write_bytes(b"d")),
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
     )
     mgr = RecordingManager(api)
     twin = SimpleNamespace(
@@ -1240,7 +1853,7 @@ def test_recording_list_item_get_forwards_twin_uuid(monkeypatch) -> None:
         RecordingManager,
         "_download",
         staticmethod(
-            lambda url, dest: (downloaded.append(url), dest.write_bytes(b"d"))
+            lambda url, dest, **_: (downloaded.append(url), dest.write_bytes(b"d"))
         ),
     )
     items = RecordingManager(api).list("env-1")
@@ -1262,7 +1875,7 @@ def test_twin_handle_get_hides_other_twin_accessor(monkeypatch) -> None:
     monkeypatch.setattr(
         RecordingManager,
         "_download",
-        staticmethod(lambda url, dest: dest.write_bytes(b"d")),
+        staticmethod(lambda url, dest, **_: dest.write_bytes(b"d")),
     )
     mgr = RecordingManager(api)
     twin = SimpleNamespace(
@@ -1292,8 +1905,10 @@ def test_download_reuses_shared_http_pool(monkeypatch, tmp_path) -> None:
 
     created: list[MagicMock] = []
     responses: list[MagicMock] = []
+    pool_kwargs: list[dict] = []
 
-    def fake_pool_factory() -> MagicMock:
+    def fake_pool_factory(**kwargs) -> MagicMock:
+        pool_kwargs.append(kwargs)
         pool = MagicMock(name=f"pool-{len(created)}")
 
         def request(*_a, **_k):
@@ -1317,7 +1932,73 @@ def test_download_reuses_shared_http_pool(monkeypatch, tmp_path) -> None:
     # One pool created for all three downloads (no per-artifact pool leak) ...
     assert len(created) == 1
     assert created[0].request.call_count == 3
+    # ... sized to what a bare _download actually needs, which is one connection
+    # it reuses. Sizing the pool is get()'s job because only get() knows the
+    # fetch's concurrency; asking for the default here would grow the pool back to
+    # 8 on the first chunk of any smaller fetch, throwing away the pool get() had
+    # just built for it.
+    assert pool_kwargs[0].get("maxsize") == 1
     # ... and every response released its connection back to the shared pool.
     assert len(responses) == 3
     for resp in responses:
         resp.release_conn.assert_called_once()
+
+
+def test_is_final_true_for_finalized_row_without_flag() -> None:
+    assert _item("r1", "t1", {"recording_type": "camera"}).is_final is True
+
+
+def test_is_final_false_for_active_manifest() -> None:
+    item = _item(
+        "r1", "t1", {"recording_type": "active", "video_parts": [{"chunk_index": 0}]}
+    )
+    assert item.is_final is False
+
+
+def test_is_final_false_when_flag_explicitly_false() -> None:
+    item = _item("r1", "t1", {"recording_type": "camera", "is_final": False})
+    assert item.is_final is False
+
+
+def test_processing_status_prefers_server_field() -> None:
+    item = _item(
+        "r1", "t1", {"recording_type": "camera", "processing_status": "processing"}
+    )
+    assert item.processing_status == "processing"
+
+
+def test_processing_status_derived_when_field_absent() -> None:
+    assert _item("r1", "t1", {"recording_type": "camera"}).processing_status == "ready"
+    assert (
+        _item("r1", "t1", {"recording_type": "active"}).processing_status == "processing"
+    )
+
+
+def test_get_warns_when_camera_stream_has_no_downloadable_video(caplog) -> None:
+    """A CAMERA-classified item whose envelope yields no camera file (segment
+    MP4s still converting) must log a warning instead of failing silently."""
+    import logging
+    from types import SimpleNamespace
+
+    from cyberwave.managers.recordings import RecordingManager
+
+    envelope = SimpleNamespace(
+        items=SimpleNamespace(
+            twin_data={"t1": {}},  # camera pending: no camera entry at all
+        )
+    )
+    api = SimpleNamespace(
+        src_app_api_environments_recordings_get_recording_data=(
+            lambda env, rec, return_flatbuffers: envelope
+        )
+    )
+    manager = RecordingManager(api)
+    item = _item(
+        "r1", "t1", {"recording_type": "active", "video_parts": [{"chunk_index": 0}]}
+    )
+
+    with caplog.at_level(logging.WARNING, logger="cyberwave.managers.recordings"):
+        recording = manager.get(item, environment_id="env-1")
+    recording.close()
+
+    assert any("no downloadable video yet" in m for m in caplog.messages)

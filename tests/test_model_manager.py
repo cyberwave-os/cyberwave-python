@@ -487,6 +487,38 @@ class TestLoadCaching:
         assert m.runtime == "fake"
         assert m.device == "cpu"
 
+    def test_different_load_kwargs_not_cached(self, tmp_path):
+        """Two ``call_model`` nodes on one depth checkpoint can declare
+        different ``input_size`` values. Keyed on model/runtime/device alone,
+        the second silently ran at the first's resolution."""
+        (tmp_path / "depth_anything_v2_vits.pth").touch()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        m1 = mgr.load(
+            "depth_anything_v2_vits.pth", runtime="fake", device="cpu", input_size=322
+        )
+        m2 = mgr.load(
+            "depth_anything_v2_vits.pth", runtime="fake", device="cpu", input_size=518
+        )
+        m3 = mgr.load(
+            "depth_anything_v2_vits.pth", runtime="fake", device="cpu", input_size=322
+        )
+        assert m1 is not m2
+        assert m1 is m3
+
+    def test_kwarg_order_does_not_split_the_cache(self, tmp_path):
+        (tmp_path / "yolov8n.pt").touch()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        m1 = mgr.load("yolov8n", runtime="fake", device="cpu", a=1, b=2)
+        m2 = mgr.load("yolov8n", runtime="fake", device="cpu", b=2, a=1)
+        assert m1 is m2
+
+    def test_no_kwargs_key_is_unchanged(self):
+        """Pins the shape everything cached before load kwargs joined the key."""
+        assert (
+            ModelManager._cache_key("yolov8n", "ultralytics", "cuda:0", {})
+            == "yolov8n:ultralytics:cuda:0"
+        )
+
     def test_cache_key_uses_resolved_runtime(self, tmp_path):
         """Explicit runtime= and auto-detected runtime share the same
         cache entry when they resolve to the same backend."""

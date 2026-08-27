@@ -15,8 +15,9 @@ from pydantic import validate_call, Field, StrictFloat, StrictStr, StrictInt
 from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
-from pydantic import StrictInt, StrictStr
+from pydantic import Field, StrictStr
 from typing import Any, Dict, Optional
+from typing_extensions import Annotated
 
 from cyberwave.rest.api_client import ApiClient, RequestSerialized
 from cyberwave.rest.api_response import ApiResponse
@@ -40,8 +41,8 @@ class CatalogApi:
     def src_app_api_catalog_seed_search_catalog(
         self,
         query: StrictStr,
-        limit: Optional[StrictInt] = None,
-        offset: Optional[StrictInt] = None,
+        limit: Optional[Annotated[int, Field(le=50, strict=True, ge=1)]] = None,
+        offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -57,6 +58,7 @@ class CatalogApi:
     ) -> Dict[str, object]:
         """Search Catalog
 
+        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50).
 
         :param query: (required)
         :type query: str
@@ -114,8 +116,8 @@ class CatalogApi:
     def src_app_api_catalog_seed_search_catalog_with_http_info(
         self,
         query: StrictStr,
-        limit: Optional[StrictInt] = None,
-        offset: Optional[StrictInt] = None,
+        limit: Optional[Annotated[int, Field(le=50, strict=True, ge=1)]] = None,
+        offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -131,6 +133,7 @@ class CatalogApi:
     ) -> ApiResponse[Dict[str, object]]:
         """Search Catalog
 
+        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50).
 
         :param query: (required)
         :type query: str
@@ -188,8 +191,8 @@ class CatalogApi:
     def src_app_api_catalog_seed_search_catalog_without_preload_content(
         self,
         query: StrictStr,
-        limit: Optional[StrictInt] = None,
-        offset: Optional[StrictInt] = None,
+        limit: Optional[Annotated[int, Field(le=50, strict=True, ge=1)]] = None,
+        offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -205,6 +208,7 @@ class CatalogApi:
     ) -> RESTResponseType:
         """Search Catalog
 
+        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50).
 
         :param query: (required)
         :type query: str

@@ -19,6 +19,8 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.joint_schema_limits_value import JointSchemaLimitsValue
+from cyberwave.rest.models.mimic_joint_schema import MimicJointSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -32,10 +34,11 @@ class JointSchema(BaseModel):
     parent_link: StrictStr
     child_link: StrictStr
     axis: Optional[List[Union[StrictFloat, StrictInt]]]
-    limits: Optional[Dict[str, Union[StrictFloat, StrictInt]]]
+    limits: Optional[Dict[str, Optional[JointSchemaLimitsValue]]]
     origin: Optional[Dict[str, List[Union[StrictFloat, StrictInt]]]]
-    mimic: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "type", "parent_link", "child_link", "axis", "limits", "origin", "mimic"]
+    mimic: Optional[MimicJointSchema] = None
+    home_position: Optional[Union[StrictFloat, StrictInt]] = None
+    __properties: ClassVar[List[str]] = ["name", "type", "parent_link", "child_link", "axis", "limits", "origin", "mimic", "home_position"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,6 +79,16 @@ class JointSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each value in limits (dict)
+        _field_dict = {}
+        if self.limits:
+            for _key_limits in self.limits:
+                if self.limits[_key_limits]:
+                    _field_dict[_key_limits] = self.limits[_key_limits].to_dict()
+            _dict['limits'] = _field_dict
+        # override the default output from pydantic by calling `to_dict()` of mimic
+        if self.mimic:
+            _dict['mimic'] = self.mimic.to_dict()
         # set to None if axis (nullable) is None
         # and model_fields_set contains the field
         if self.axis is None and "axis" in self.model_fields_set:
@@ -96,6 +109,11 @@ class JointSchema(BaseModel):
         if self.mimic is None and "mimic" in self.model_fields_set:
             _dict['mimic'] = None
 
+        # set to None if home_position (nullable) is None
+        # and model_fields_set contains the field
+        if self.home_position is None and "home_position" in self.model_fields_set:
+            _dict['home_position'] = None
+
         return _dict
 
     @classmethod
@@ -113,9 +131,15 @@ class JointSchema(BaseModel):
             "parent_link": obj.get("parent_link"),
             "child_link": obj.get("child_link"),
             "axis": obj.get("axis"),
-            "limits": obj.get("limits"),
+            "limits": dict(
+                (_k, JointSchemaLimitsValue.from_dict(_v))
+                for _k, _v in obj["limits"].items()
+            )
+            if obj.get("limits") is not None
+            else None,
             "origin": obj.get("origin"),
-            "mimic": obj.get("mimic")
+            "mimic": MimicJointSchema.from_dict(obj["mimic"]) if obj.get("mimic") is not None else None,
+            "home_position": obj.get("home_position")
         })
         return _obj
 

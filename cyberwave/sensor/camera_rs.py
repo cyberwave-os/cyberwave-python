@@ -3,6 +3,7 @@
 Provides video streaming using Intel RealSense cameras with RGB and depth support.
 """
 
+import asyncio
 import fractions
 import logging
 from typing import TYPE_CHECKING, Callable, Optional, Tuple, Union
@@ -29,6 +30,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Pacing rate for the degraded (cached-frame) loop when ``color_fps`` is
+# unusable. Mirrors ``CV2VideoTrack._DEGRADED_FALLBACK_FPS``.
+_DEGRADED_FALLBACK_FPS = 30
+
 
 def require_realsense():
     """Check if RealSense is available, raise ImportError if not."""
@@ -44,6 +49,9 @@ class RealSenseVideoTrack(BaseVideoTrack):
 
     Supports RGB and depth streaming with frame alignment.
     """
+
+    # Default for tracks built without ``__init__``; ``+=`` rebinds per instance.
+    captured_frame_count: int = 0
 
     def __init__(
         self,
@@ -113,9 +121,19 @@ class RealSenseVideoTrack(BaseVideoTrack):
         self.config: Optional["rs.config"] = None
         self.align: Optional["rs.align"] = None
 
+        # Metres per raw uint16 unit, read from the device at start(). NOT
+        # always 0.001: ``depth_units`` is configurable and differs across
+        # models. Diagnostic only — the wire payload stays unlabelled and
+        # consumers keep their own (schema) calibration.
+        self._depth_scale_m_per_unit: Optional[float] = None
+
         # Cached frame for fallback when reading fails
         self._cached_color_image: Optional[np.ndarray] = None
         self._cached_depth_image: Optional[np.ndarray] = None
+
+        # Only moves on a real capture, unlike ``frame_count``, which the
+        # cached-frame fallback keeps advancing.
+        self.captured_frame_count: int = 0
 
         # MQTT client + twin_uuid are only required for the throttled MQTT
         # depth publish path; a ``depth_callback``-only caller can skip both.
@@ -184,6 +202,29 @@ class RealSenseVideoTrack(BaseVideoTrack):
             profile = self.pipeline.start(self.config)
 
             device = profile.get_device()
+
+            # Ground-truth metres-per-unit for the depth stream. Logged, not
+            # published: a device running non-default ``depth_units`` is worth
+            # surfacing at startup, but the twin's schema calibration stays the
+            # authority for decoding.
+            if self.enable_depth:
+                try:
+                    scale = float(device.first_depth_sensor().get_depth_scale())
+                    if scale > 0:
+                        self._depth_scale_m_per_unit = scale
+                        logger.info(
+                            "RealSense depth scale: %g m per unit%s",
+                            scale,
+                            "" if abs(scale - 0.001) < 1e-9 else " (not millimetres)",
+                        )
+                except Exception as exc:  # pragma: no cover - device-specific
+                    logger.warning(
+                        "Could not read RealSense depth scale (%s); depth frames "
+                        "are unaffected, but a non-millimetre device would go "
+                        "unnoticed here.",
+                        exc,
+                    )
+
             logger.info(
                 f"Started RealSense pipeline: {device.get_info(rs.camera_info.name)}, "
                 f"color={self.color_width}x{self.color_height}@{self.color_fps}fps"
@@ -273,6 +314,11 @@ class RealSenseVideoTrack(BaseVideoTrack):
         """Publish a depth frame via MQTT using the canonical wire payload."""
         if self.client is None or self.twin_uuid is None:
             return
+        # Deliberately unlabelled: no output_mode, no depth_scale. RealSense
+        # hands us raw uint16 in *device* units, and ``metric_mm`` would assert
+        # millimetres — which is exactly the claim ``depth_units`` can falsify.
+        # An unlabelled frame means "legacy uint16" and consumers keep their own
+        # schema calibration, which is the honest answer and what shipped before.
         depth_data = build_depth_mqtt_payload(depth_image)
         self.client.publish_depth_frame(self.twin_uuid, depth_data, timestamp)
 
@@ -288,6 +334,12 @@ class RealSenseVideoTrack(BaseVideoTrack):
 
         # If reading failed, use cached frame
         if not ret or frames is None:
+            # A disconnected device raises straight away where a healthy
+            # ``_get_frames`` blocks, so without this the loop free-runs.
+            fps = self.color_fps
+            if not isinstance(fps, (int, float)) or fps <= 0:
+                fps = _DEGRADED_FALLBACK_FPS
+            await asyncio.sleep(1.0 / float(fps))
             if self._cached_color_image is not None:
                 logger.debug("Failed to read frames from RealSense camera, using cached frame")
                 color_image = self._cached_color_image
@@ -298,6 +350,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
                 return None
         else:
             color_image, _ = frames
+            self.captured_frame_count += 1
 
         try:
             self._current_frame = color_image.copy()  # type: ignore[union-attr]

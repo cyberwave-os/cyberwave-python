@@ -53,7 +53,8 @@ class MLModelRunSchema(BaseModel):
     robot_context: Optional[RobotContextSchema] = None
     image_source: Optional[StrictStr] = None
     recording_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["prompt", "image_base64", "image_url", "audio_base64", "audio_b64", "audio_url", "language", "task", "structured_task", "twin_uuid", "params", "frames", "depth_base64", "camera_intrinsics", "camera_pose", "history", "robot_state", "robot_context", "image_source", "recording_uuid"]
+    video_url: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["prompt", "image_base64", "image_url", "audio_base64", "audio_b64", "audio_url", "language", "task", "structured_task", "twin_uuid", "params", "frames", "depth_base64", "camera_intrinsics", "camera_pose", "history", "robot_state", "robot_context", "image_source", "recording_uuid", "video_url"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -220,6 +221,11 @@ class MLModelRunSchema(BaseModel):
         if self.recording_uuid is None and "recording_uuid" in self.model_fields_set:
             _dict['recording_uuid'] = None
 
+        # set to None if video_url (nullable) is None
+        # and model_fields_set contains the field
+        if self.video_url is None and "video_url" in self.model_fields_set:
+            _dict['video_url'] = None
+
         return _dict
 
     @classmethod
@@ -251,7 +257,8 @@ class MLModelRunSchema(BaseModel):
             "robot_state": RobotStateSchema.from_dict(obj["robot_state"]) if obj.get("robot_state") is not None else None,
             "robot_context": RobotContextSchema.from_dict(obj["robot_context"]) if obj.get("robot_context") is not None else None,
             "image_source": obj.get("image_source"),
-            "recording_uuid": obj.get("recording_uuid")
+            "recording_uuid": obj.get("recording_uuid"),
+            "video_url": obj.get("video_url")
         })
         return _obj
 

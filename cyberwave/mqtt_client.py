@@ -453,6 +453,19 @@ class CyberwaveMQTTClient:
         """Publish depth frame data via MQTT."""
         return self._client.publish_depth_frame(twin_uuid, depth_data, timestamp)
 
+    def publish_pointcloud(
+        self,
+        twin_uuid: str,
+        point_cloud_data: Any,
+        timestamp: Optional[float] = None,
+        *,
+        stride: int = 6,
+    ):
+        """Publish a point cloud frame via MQTT."""
+        return self._client.publish_pointcloud(
+            twin_uuid, point_cloud_data, timestamp, stride=stride
+        )
+
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):
         """Publish WebRTC signaling message via MQTT."""
         return self._client.publish_webrtc_message(twin_uuid, webrtc_data)

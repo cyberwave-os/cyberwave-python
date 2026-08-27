@@ -161,6 +161,9 @@ class H264PacketVideoTrack(BaseVideoTrack):
             (default), ``"avcc"``, or ``"annexb"``. See :func:`to_annex_b`.
     """
 
+    # Default for tracks built without ``__init__``; ``+=`` rebinds per instance.
+    captured_frame_count: int = 0
+
     def __init__(
         self,
         get_packet: Callable[[], Optional[Tuple[bytes, bool]]],
@@ -181,6 +184,9 @@ class H264PacketVideoTrack(BaseVideoTrack):
         self.framing = framing
         self.time_reference = time_reference
         self._last_time: Optional[float] = None
+
+        # Only advances on a real access unit, unlike ``frame_count``.
+        self.captured_frame_count: int = 0
 
     def get_stream_attributes(self) -> dict:
         """Get streaming attributes for the offer payload."""
@@ -218,8 +224,11 @@ class H264PacketVideoTrack(BaseVideoTrack):
         except Exception as e:
             logger.warning("H264 packet provider error: %s", e)
 
-        # aiortc's pack() requires Annex-B start codes; normalise AVCC input.
         if data:
+            # The empty-packet tick below still advances ``frame_count``, so
+            # a stalled encoder would otherwise read as healthy forever.
+            self.captured_frame_count += 1
+            # aiortc's pack() requires Annex-B start codes; normalise AVCC input.
             data = to_annex_b(data, self.framing)
 
         # An empty packet round-trips to zero RTP payloads (H264Encoder.pack()

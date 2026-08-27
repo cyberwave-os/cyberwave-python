@@ -51,6 +51,17 @@ def available_runtimes() -> list[str]:
     return [name for name, cls in _RUNTIME_REGISTRY.items() if cls().is_available()]
 
 
+def is_runtime_registered(name: str) -> bool:
+    """Whether ``name`` is a runtime this SDK build knows about.
+
+    Deliberately does **not** check ``is_available()``: a registered runtime
+    with missing dependencies should still be selected so the caller gets
+    ``get_runtime``'s actionable ImportError, not a silent fallback to a
+    different backend.
+    """
+    return name in _RUNTIME_REGISTRY
+
+
 # Auto-register built-in runtimes.  Each runtime module defers its heavy
 # third-party import (onnxruntime, cv2, torch, tensorrt, tflite_runtime)
 # to load()/predict() method bodies, so the module-level imports below
@@ -97,3 +108,7 @@ register_runtime(HailoRuntime)
 from cyberwave.models.runtimes.vda_rt import VideoDepthAnythingRuntime  # noqa: E402
 
 register_runtime(VideoDepthAnythingRuntime)
+
+from cyberwave.models.runtimes.depth_anything_v2_rt import DepthAnythingV2Runtime  # noqa: E402
+
+register_runtime(DepthAnythingV2Runtime)

@@ -41,7 +41,11 @@ from typing import TYPE_CHECKING, Any, NoReturn
 from cyberwave.exceptions import CyberwaveAPIError, CyberwaveModelIntegrityError
 from cyberwave.models.cloud import CloudLoadedModel
 from cyberwave.models.loaded_model import LoadedModel
-from cyberwave.models.runtimes import get_runtime
+from cyberwave.models.runtimes import (
+    available_runtimes,
+    get_runtime,
+    is_runtime_registered,
+)
 
 if TYPE_CHECKING:
     from cyberwave.models.cascade import CascadeModel
@@ -521,7 +525,9 @@ class ModelManager:
         effective_device = device or self._default_device or self._detect_device()
         resolved_runtime = runtime or self._detect_runtime(model_id)
 
-        cache_key = f"{model_id}:{resolved_runtime}:{effective_device}"
+        cache_key = self._cache_key(
+            model_id, resolved_runtime, effective_device, kwargs
+        )
         cached = self._loaded.get(cache_key)
         if isinstance(cached, LoadedModel):
             return cached
@@ -842,6 +848,27 @@ class ModelManager:
 
         summary = self._mlmodels_client.get(model_id)
 
+        # Prefer the catalog-declared runtime over file-extension heuristics.
+        # E.g. metric_video_depth_anything_vits.pth has edge_runtime="video_depth_anything",
+        # but _detect_runtime_from_extension maps .pth → "torch".  Using the
+        # catalog value here is strictly more accurate; the explicit runtime=
+        # kwarg still wins if the caller passes one.
+        #
+        # The catalog also carries runtime names no SDK build ships (sam2, sam3
+        # today). Those must not become a hard ValueError from get_runtime() —
+        # fall through to the extension heuristic, which is what shipped before.
+        catalog_runtime = getattr(summary, "edge_runtime", None) or None
+        if catalog_runtime and not is_runtime_registered(catalog_runtime):
+            logger.warning(
+                "Catalog runtime %r for model %r is not registered in this SDK "
+                "build (available: %s); falling back to extension detection.",
+                catalog_runtime,
+                model_id,
+                ", ".join(sorted(available_runtimes())) or "(none)",
+            )
+            catalog_runtime = None
+        effective_runtime = runtime or catalog_runtime
+
         existing = self._find_cached_download(model_id)
         if existing is not None and not force_download:
             logger.info(
@@ -856,7 +883,7 @@ class ModelManager:
         return self._load_from_cached_download(
             model_id=model_id,
             model_path=model_path,
-            runtime=runtime,
+            runtime=effective_runtime,
             device=device,
             **kwargs,
         )
@@ -876,7 +903,9 @@ class ModelManager:
             model_path.suffix
         )
 
-        cache_key = f"{model_id}:{resolved_runtime}:{effective_device}"
+        cache_key = self._cache_key(
+            model_id, resolved_runtime, effective_device, kwargs
+        )
         cached = self._loaded.get(cache_key)
         if isinstance(cached, LoadedModel):
             return cached
@@ -1114,6 +1143,14 @@ class ModelManager:
         if lower.endswith((".engine", ".trt")):
             return "tensorrt"
         if lower.endswith(".pth"):
+            # Video-Depth-Anything checkpoints (both relative and metric)
+            # share the .pth extension with generic PyTorch files, but have
+            # their own runtime with a proper predict() implementation.
+            if "video_depth_anything" in lower:
+                return "video_depth_anything"
+            # Depth Anything V2 image checkpoints (depth_anything_v2_vits/vitb/vitl.pth)
+            if "depth_anything_v2" in lower:
+                return "depth_anything_v2"
             return "torch"
 
         raise ValueError(
@@ -1149,6 +1186,8 @@ class ModelManager:
             "whisper_cpp": [".gguf", ".bin"],
             "faster_whisper": [],
             "hailo": [".hef"],
+            "video_depth_anything": [".pth"],
+            "depth_anything_v2": [".pth"],
         }
         return mapping.get(runtime, [".pt"])
 
@@ -1189,6 +1228,26 @@ class ModelManager:
                     "Data bus not available for detection publishing", exc_info=True
                 )
         return self._resolved_data_bus
+
+    @staticmethod
+    def _cache_key(
+        model_id: str,
+        runtime: str,
+        device: str,
+        load_kwargs: dict[str, Any],
+    ) -> str:
+        """Cache key for a loaded model handle.
+
+        ``load_kwargs`` participates because they change the handle
+        ``rt.load()`` returns. ``input_size`` is the one the emitter resolves
+        per ``call_model`` node, so two nodes on the same depth checkpoint can
+        ask for different resolutions; keying on the triple alone gave the
+        second one the first's handle. No-kwargs keys stay byte-identical.
+        """
+        if not load_kwargs:
+            return f"{model_id}:{runtime}:{device}"
+        extras = ",".join(f"{k}={load_kwargs[k]!r}" for k in sorted(load_kwargs))
+        return f"{model_id}:{runtime}:{device}:{extras}"
 
     @staticmethod
     def _detect_device() -> str:

@@ -3,7 +3,7 @@ Configuration management for the Cyberwave SDK
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from cyberwave.constants import SOURCE_TYPE_EDGE
@@ -66,12 +66,13 @@ class CyberwaveConfig:
     """
 
     base_url: str = DEFAULT_BASE_URL
-    api_key: Optional[str] = None
-    token: Optional[str] = None
+    # repr=False: the generated __repr__ would print credentials in full.
+    api_key: Optional[str] = field(default=None, repr=False)
+    token: Optional[str] = field(default=None, repr=False)
     mqtt_host: Optional[str] = None
     mqtt_port: int | None = None
     mqtt_username: Optional[str] = None
-    mqtt_password: Optional[str] = None
+    mqtt_password: Optional[str] = field(default=None, repr=False)
     mqtt_use_tls: bool = False
     mqtt_tls_ca_cert: Optional[str] = None
     mqtt_protocol: Optional[int] = None

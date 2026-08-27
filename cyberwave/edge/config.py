@@ -28,8 +28,9 @@ class EdgeNodeConfig:
     """
 
     # Cyberwave connection
+    # repr=False: the generated __repr__ would print the API key in full.
     cyberwave_api_key: Optional[str] = field(
-        default_factory=lambda: os.getenv("CYBERWAVE_API_KEY")
+        default_factory=lambda: os.getenv("CYBERWAVE_API_KEY"), repr=False
     )
     cyberwave_base_url: str = field(
         default_factory=lambda: os.getenv(

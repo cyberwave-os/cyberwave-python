@@ -68,6 +68,14 @@ class ZenohSubscription(Subscription):
 
 
 _WATCHDOG_INTERVAL_S = 5.0
+
+_ZERO_PEER_PROBES_BEFORE_WARN = 3
+"""Consecutive zero-peer probes before warning that a session never linked up.
+Whichever of the driver and worker starts first is alone until the other boots,
+so warning on the first probe would fire on every normal start and train
+operators to ignore the line. A session that *loses* its last peer skips this
+grace period — that one is always worth hearing about."""
+
 _RECONNECT_BACKOFF_BASE_S = 1.0
 _RECONNECT_BACKOFF_MAX_S = 30.0
 _RECONNECT_MAX_ATTEMPTS = 20
@@ -223,6 +231,11 @@ class ZenohBackend(DataBackend):
         # Reconnection machinery
         self._reconnect_event = threading.Event()
         self._watchdog_stop = threading.Event()
+        # Remote-peer connectivity tracking. All three are written only by the
+        # watchdog thread. ``_peer_links`` is ``None`` until the first sample.
+        self._peer_links: int | None = None
+        self._zero_peer_probes = 0
+        self._zero_peer_warned = False
         self._active_sub_specs: list[tuple[str, Callable[[Sample], None], str]] = []
         self._active_sub_specs_lock = threading.Lock()
 
@@ -309,20 +322,80 @@ class ZenohBackend(DataBackend):
         """Whether the Zenoh session is believed to be alive."""
         return self._connected and not self._closed
 
+    def _session_info(self) -> Any:
+        """Return the session info handle.
+
+        ``.info`` is a property in zenoh >=1.x and a method in older versions.
+        """
+        info = self._session.info
+        return info() if callable(info) else info
+
+    def _peer_link_count(self) -> int | None:
+        """Remote sessions currently linked to ours (peers + routers).
+
+        ``None`` when the installed bindings don't expose the query — the
+        caller must treat that as *unknown*, never as zero, so an old binding
+        can't manufacture a spurious "no peers" warning.
+        """
+        try:
+            info = self._session_info()
+            return len(list(info.peers_zid())) + len(list(info.routers_zid()))
+        except Exception:
+            return None
+
+    def _log_peer_link_changes(self) -> None:
+        """Log transitions in remote-peer connectivity.
+
+        ``zid()`` succeeding only proves our *own* session object is alive — it
+        answers from local state and keeps answering after every remote peer has
+        gone away. Traffic on a bus with no peers therefore raises nothing and is
+        discarded silently. Sampling the peer count is what makes that visible.
+
+        Losing the last peer warns immediately; never having had one waits
+        :data:`_ZERO_PEER_PROBES_BEFORE_WARN` probes, because whichever of the
+        driver and worker starts first is legitimately alone until the other
+        boots. At most one warning per zero-peer episode.
+        """
+        peers = self._peer_link_count()
+        if peers is None:
+            return
+
+        if peers == 0:
+            self._zero_peer_probes += 1
+            lost_last_peer = bool(self._peer_links)
+            if not self._zero_peer_warned and (
+                lost_last_peer
+                or self._zero_peer_probes >= _ZERO_PEER_PROBES_BEFORE_WARN
+            ):
+                logger.warning(
+                    "Zenoh session has no remote peers — nothing published "
+                    "here reaches another process (same-process subscribers "
+                    "still receive). Discovery uses multicast scouting; set "
+                    "ZENOH_CONNECT on every participant if this host blocks it."
+                )
+                self._zero_peer_warned = True
+            self._peer_links = 0
+            return
+
+        self._zero_peer_probes = 0
+        self._zero_peer_warned = False
+        if self._peer_links in (0, None):
+            logger.info("Zenoh session linked to %d remote peer(s)", peers)
+        elif peers != self._peer_links:
+            logger.debug("Zenoh remote peers %d -> %d", self._peer_links, peers)
+        self._peer_links = peers
+
     def _session_watchdog(self) -> None:
         """Periodically probe session liveness; trigger reconnect on failure."""
         while not self._watchdog_stop.wait(_WATCHDOG_INTERVAL_S):
             if self._closed:
                 return
             try:
-                # .info is a property in zenoh >=1.x, a method in older versions.
-                info = self._session.info
-                if callable(info):
-                    info = info()
-                info.zid()
+                self._session_info().zid()
                 if not self._connected:
                     logger.info("Zenoh session probe succeeded — marking connected")
                     self._connected = True
+                self._log_peer_link_changes()
             except Exception:
                 if self._connected:
                     logger.warning("Zenoh session probe failed — starting reconnect")
@@ -357,6 +430,12 @@ class ZenohBackend(DataBackend):
                 self._session = self._open_session()
                 self._connected = True
                 self._reconnect_event.clear()
+                # Fresh session: forget the old peer state so the next probe
+                # reports who we rejoined rather than comparing against a tally
+                # that belonged to a session that no longer exists.
+                self._peer_links = None
+                self._zero_peer_probes = 0
+                self._zero_peer_warned = False
                 logger.info("Zenoh session reconnected (attempt %d)", attempt)
 
                 self._resubscribe_all()

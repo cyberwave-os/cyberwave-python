@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import time
 import warnings
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from cyberwave._error_metadata import mask_sensitive_headers
 from cyberwave._version import get_version
 from cyberwave.config import (
     CyberwaveConfig,
@@ -313,8 +315,18 @@ class Cyberwave:
             try:
                 return original_response_deserialize(response_data, response_types_map)
             except Exception as e:
-                if hasattr(e, "__dict__") and not hasattr(e, "request_headers"):
-                    e.request_headers = last_request_headers.copy()
+                # Mask here, not at render: this lands on any exception with
+                # a __dict__, including third-party ones, and anything that
+                # serializes exception attributes reads it without __str__.
+                # `is None` rather than `not hasattr`: cyberwave.exceptions.
+                # ApiException already sets request_headers = None in __init__,
+                # so a hasattr check would skip every transport exception once
+                # the two hierarchies are unified.
+                if (
+                    hasattr(e, "__dict__")
+                    and getattr(e, "request_headers", None) is None
+                ):
+                    e.request_headers = mask_sensitive_headers(last_request_headers)
                 if getattr(e, "status", None) == 402:
                     import json as _json
 
@@ -337,7 +349,7 @@ class Cyberwave:
                         message=msg,
                         status_code=402,
                         response_data=getattr(e, "body", None),
-                        request_headers=last_request_headers.copy(),
+                        request_headers=mask_sensitive_headers(last_request_headers),
                         balance=balance,
                         manual_block=manual_block,
                         manual_block_reason=manual_block_reason,
@@ -449,7 +461,13 @@ class Cyberwave:
                 setattr(self.api, attr_name, wrapped)
 
     def _create_wrapped_method(self, method):
-        """Create a wrapped version of an API method that handles auth errors"""
+        """Create a wrapped version of an API method that handles auth errors.
+
+        The ``except`` below only started matching once the two exception
+        hierarchies were unified; before that a rejected key surfaced
+        as a bare ``(401)``. The masked header dict is left off the translated
+        error to keep this message readable — it stays on the ``__cause__``.
+        """
 
         def wrapped(*args, **kwargs):
             try:
@@ -468,23 +486,24 @@ class Cyberwave:
                 error_msg += "  4. Run your script again!\n"
 
                 if hasattr(e, "request_headers") and e.request_headers:
-                    auth_header = e.request_headers.get("Authorization", "Not present")
-                    if auth_header and auth_header != "Not present":
-                        parts = auth_header.split(" ")
-                        if len(parts) == 2:
-                            token_preview = (
-                                parts[1][:8] + "..." if len(parts[1]) > 8 else parts[1]
-                            )
-                            error_msg += (
-                                f"Authorization header: {parts[0]} {token_preview}\n"
-                            )
-                    else:
-                        error_msg += "Authorization header: Not present\n"
+                    # Masked at attachment, so it can be shown as-is — the one
+                    # consumer that wants to see part of the key.
+                    auth_header = e.request_headers.get("Authorization")
+                    error_msg += (
+                        f"Authorization header: {auth_header}\n"
+                        if auth_header
+                        else "Authorization header: Not present\n"
+                    )
 
                 raise CyberwaveAPIError(
+                    # No request_headers: error_msg already names the
+                    # Authorization header above, and __str__ would append the
+                    # whole dict again — the doubling _handle_error was fixed
+                    # for. The masked dict stays on __cause__. Other statuses
+                    # keep theirs; they go through _handle_error, not here.
                     error_msg,
                     status_code=401,
-                    response_data=e.body if hasattr(e, "body") else None,
+                    response_data=getattr(e, "body", None),
                 ) from e
 
         return wrapped
@@ -492,23 +511,33 @@ class Cyberwave:
     def _get_data_backend(self) -> DataBackend:
         """Shared Zenoh/filesystem backend (one session per :class:`Cyberwave` client)."""
         if self._data_backend is None:
-            import os
-
             from cyberwave.data.config import BackendConfig, get_backend
 
             cfg = BackendConfig()
-            if (
-                cfg.backend == "zenoh"
-                and not cfg.zenoh_connect
-                and not cfg.zenoh_listen
-            ):
-                host = os.environ.get("ZENOH_ROUTER_HOST", "127.0.0.1")
-                port = os.environ.get("ZENOH_ROUTER_PORT", "7447")
-                cfg.zenoh_connect = [f"tcp/{host}:{port}"]
-                logger.info(
-                    "ZENOH_CONNECT unset; connecting to edge router at %s",
-                    cfg.zenoh_connect[0],
-                )
+            if cfg.backend == "zenoh":
+                # Leave connect empty when unconfigured: ZenohBackend then takes
+                # Zenoh's peer default and finds same-host peers by multicast
+                # scouting. Synthesizing an endpoint here made whichever
+                # container happened to listen on 7447 an unplanned hub, so its
+                # restart took the whole bus down with it.
+                if not cfg.zenoh_connect and platform.system() == "Darwin":
+                    # Darwin is the one host where the peer default reaches
+                    # nobody: multicast scouting links no two sessions there
+                    # (measured, see cyberwave-sdks/README.md), and edge-core
+                    # publishes the worker's 7447 for exactly this reason. A
+                    # star is better than an empty bus, and no edge host is a
+                    # Mac.
+                    cfg.zenoh_connect = ["tcp/127.0.0.1:7447"]
+                if cfg.zenoh_connect:
+                    logger.info(
+                        "Zenoh connecting to configured endpoints: %s",
+                        ", ".join(cfg.zenoh_connect),
+                    )
+                else:
+                    logger.info(
+                        "Zenoh peer-to-peer discovery (multicast scouting); "
+                        "set ZENOH_CONNECT to pin a router endpoint instead"
+                    )
             self._data_backend = get_backend(cfg)
         return self._data_backend
 
@@ -1392,6 +1421,10 @@ class Cyberwave:
     @property
     def on_synchronized(self) -> Callable:
         return self._hook_registry.on_synchronized
+
+    @property
+    def on_workflow_cancel(self) -> Callable:
+        return self._hook_registry.on_workflow_cancel
 
     # ── Worker runtime helpers ───────────────────────────────────
 

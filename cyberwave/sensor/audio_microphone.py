@@ -90,11 +90,13 @@ AUDIO_PTIME = 0.020
 DEFAULT_SAMPLE_RATE = 48000
 DEFAULT_LAYOUT = "mono"
 
-# Reused from sensor package to avoid circular import
+# Reused from sensor package to avoid circular import.
+# Must stay in sync with base_video.DEFAULT_TURN_SERVERS - see the rationale there
+# for why this is a single TURN entry on 443/TLS rather than a fallback list.
 _AUDIO_TURN_SERVERS = [
     {"urls": ["stun:turn.cyberwave.com:3478"]},
     {
-        "urls": "turn:turn.cyberwave.com:3478",
+        "urls": "turns:tls.turn.cyberwave.com:443",
         "username": "cyberwave-user",
         "credential": "cyberwave-admin",
     },

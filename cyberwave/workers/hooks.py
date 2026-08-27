@@ -44,6 +44,10 @@ MANUAL_TRIGGER_SUBTOPIC = "run"
 """Subtopic segment a manual "run now" command lands on, under the
 workflow-scoped base (see :func:`manual_trigger_topic`)."""
 
+WORKFLOW_CANCEL_SUBTOPIC = "cancel"
+"""Subtopic segment a cancel-this-run command lands on, under the
+workflow-scoped base (see :func:`workflow_cancel_topic`)."""
+
 
 def manual_trigger_topic(workflow_uuid: str) -> str:
     """Full (env-prefix-less) topic a manual "run now" command is published to.
@@ -61,6 +65,12 @@ def manual_trigger_topic(workflow_uuid: str) -> str:
     so keep both sides in sync via this single helper.
     """
     return f"cyberwave/workflow/{workflow_uuid}/{MANUAL_TRIGGER_SUBTOPIC}"
+
+
+def workflow_cancel_topic(workflow_uuid: str) -> str:
+    """Topic a "cancel this run" command is published to — sibling of
+    :func:`manual_trigger_topic` under the same workflow-scoped base."""
+    return f"cyberwave/workflow/{workflow_uuid}/{WORKFLOW_CANCEL_SUBTOPIC}"
 
 
 @dataclass(frozen=True)
@@ -421,6 +431,42 @@ class HookRegistry:
             "mqtt",
             twin_uuid,
             subtopic=MANUAL_TRIGGER_SUBTOPIC,
+            qos=qos,
+            scope="workflow",
+            workflow_uuid=wf_uuid,
+        )
+
+    def on_workflow_cancel(
+        self,
+        twin_uuid: str,
+        *,
+        workflow_uuid: str,
+        qos: int = 1,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Fire a callback when the backend cancels an in-flight run of this workflow.
+
+        Workflow-scoped sibling of :meth:`on_manual_trigger` — same shape,
+        subscribed under ``cyberwave/workflow/<workflow_uuid>/cancel``
+        instead of ``.../run``. ``payload`` is
+        ``{"execution_uuid", "requested_at"}``; the registered callback
+        records it via :meth:`WorkflowExecutionManager.mark_canceled`.
+        ``twin_uuid`` is required for parity but carries no semantic weight
+        here. ``qos=1`` default: a cancel should arrive even at the cost of
+        a possible duplicate (``mark_canceled`` is idempotent).
+        """
+        if not isinstance(workflow_uuid, str) or not workflow_uuid.strip():
+            raise ValueError(
+                "on_workflow_cancel requires a non-empty workflow_uuid"
+            )
+        if isinstance(qos, bool) or not isinstance(qos, int) or qos not in {0, 1, 2}:
+            raise ValueError("on_workflow_cancel qos must be one of 0, 1, or 2")
+        wf_uuid = workflow_uuid.strip()
+        channel = f"mqtt/workflow/{wf_uuid}/{WORKFLOW_CANCEL_SUBTOPIC}"
+        return self._make_decorator(
+            channel,
+            "mqtt",
+            twin_uuid,
+            subtopic=WORKFLOW_CANCEL_SUBTOPIC,
             qos=qos,
             scope="workflow",
             workflow_uuid=wf_uuid,

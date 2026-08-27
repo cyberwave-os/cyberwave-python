@@ -47,8 +47,8 @@ class SimulationStartSchema(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['mujoco', 'isaac', 'mujoco_warp']):
-            raise ValueError("must be one of enum values ('mujoco', 'isaac', 'mujoco_warp')")
+        if value not in set(['mujoco', 'mujoco_warp']):
+            raise ValueError("must be one of enum values ('mujoco', 'mujoco_warp')")
         return value
 
     model_config = ConfigDict(

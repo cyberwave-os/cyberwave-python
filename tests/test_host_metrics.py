@@ -2,23 +2,30 @@
 
 from __future__ import annotations
 
+import json
 import platform
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from cyberwave.edge import host_metrics as host_metrics_module
 from cyberwave.edge.host_metrics import (
     CPU_THERMAL_ZONE_TYPES,
     HostCpuTemperature,
     HostFacts,
     HostMemoryInfo,
     HostPowerDraw,
+    NetworkInterfaceFacts,
     discover_cpu_thermal_zones,
+    read_device_serial,
     read_host_cpu_temperature,
     read_host_facts,
     read_host_memory,
     read_host_power_draw,
+    read_network_interfaces,
+    read_primary_interface,
+    read_primary_mac_address,
     read_thermal_zone_celsius,
 )
 
@@ -357,6 +364,552 @@ class TestReadHostPowerDraw:
 
 
 # ---------------------------------------------------------------------------
+# read_network_interfaces
+# ---------------------------------------------------------------------------
+
+
+def _build_net_sysfs(
+    root: Path, interfaces: dict[str, dict[str, str]]
+) -> Path:
+    """Create a fake ``/sys/class/net`` tree under ``root``.
+
+    ``interfaces`` maps interface name to an optional ``{"address": ...,
+    "operstate": ...}`` dict; missing keys simply aren't written, mirroring
+    a real sysfs tree that may lack a file for a given driver.
+
+    A truthy ``"device"`` key creates the ``device`` entry that real sysfs
+    exposes as a symlink into the device tree for hardware-backed interfaces
+    only -- the signal :func:`_is_physical_interface` reads.
+    """
+    net_base = root / "net"
+    net_base.mkdir(parents=True, exist_ok=True)
+    for name, files in interfaces.items():
+        iface_dir = net_base / name
+        iface_dir.mkdir()
+        if "address" in files:
+            (iface_dir / "address").write_text(files["address"])
+        if "operstate" in files:
+            (iface_dir / "operstate").write_text(files["operstate"])
+        if files.get("device"):
+            (iface_dir / "device").mkdir()
+    return net_base
+
+
+class TestReadNetworkInterfaces:
+    def test_returns_empty_on_platforms_with_no_reader(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Linux reads sysfs and Darwin parses ``ifconfig``; nothing else is covered."""
+        monkeypatch.setattr(platform, "system", lambda: "Windows")
+        assert read_network_interfaces() == ()
+
+    def test_returns_empty_when_net_base_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        assert read_network_interfaces(net_base=tmp_path / "missing") == ()
+
+    def test_skips_loopback(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        base = _build_net_sysfs(
+            tmp_path,
+            {
+                "lo": {"address": "00:00:00:00:00:00", "operstate": "unknown"},
+                "eth0": {"address": "aa:bb:cc:dd:ee:ff", "operstate": "up"},
+            },
+        )
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address",
+            lambda ifname: "192.168.1.42" if ifname == "eth0" else None,
+        )
+        result = read_network_interfaces(net_base=base)
+        assert [nic.name for nic in result] == ["eth0"]
+
+    def test_reads_mac_and_up_state(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        base = _build_net_sysfs(
+            tmp_path,
+            {
+                "eth0": {"address": "aa:bb:cc:dd:ee:ff", "operstate": "up"},
+                "wlan0": {"address": "11:22:33:44:55:66", "operstate": "down"},
+            },
+        )
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address",
+            lambda ifname: {"eth0": "192.168.1.42"}.get(ifname),
+        )
+        result = {nic.name: nic for nic in read_network_interfaces(net_base=base)}
+
+        assert result["eth0"] == NetworkInterfaceFacts(
+            name="eth0",
+            ipv4_address="192.168.1.42",
+            mac_address="aa:bb:cc:dd:ee:ff",
+            is_up=True,
+        )
+        # Down interface: no IPv4, ``is_up`` reflects operstate -- MAC is
+        # still readable since it's a hardware property independent of link
+        # state.
+        assert result["wlan0"] == NetworkInterfaceFacts(
+            name="wlan0",
+            ipv4_address=None,
+            mac_address="11:22:33:44:55:66",
+            is_up=False,
+        )
+
+    def test_missing_address_or_operstate_files_degrade_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A driver that doesn't expose ``address``/``operstate`` shouldn't crash the reader."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        base = _build_net_sysfs(tmp_path, {"eth0": {}})
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address", lambda ifname: None
+        )
+        result = read_network_interfaces(net_base=base)
+        assert len(result) == 1
+        assert result[0].mac_address is None
+        assert result[0].is_up is False
+
+
+#: Abridged ``ifconfig -a`` output covering every case the Darwin parser has to
+#: get right: loopback, a tunnel with no link layer, an active NIC with both
+#: addresses, an unplugged NIC with a MAC but no IP, and an Apple-internal NIC
+#: that advertises ``RUNNING`` while its status says otherwise.
+_DARWIN_IFCONFIG_SAMPLE = """\
+lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384
+\tinet 127.0.0.1 netmask 0xff000000
+utun0: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380
+\tinet6 fe80::1234%utun0 prefixlen 64 scopeid 0x10
+anpi0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether ae:74:6f:9e:d5:dd
+\tstatus: inactive
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether 5c:e9:1e:6a:2b:11
+\tinet6 fe80::abcd%en0 prefixlen 64 secured scopeid 0xb
+\tinet 192.168.1.42 netmask 0xffffff00 broadcast 192.168.1.255
+\tmedia: autoselect
+\tstatus: active
+en5: flags=8823<UP,BROADCAST,SMART,SIMPLEX,MULTICAST> mtu 1500
+\tether aa:bb:cc:dd:ee:ff
+\tstatus: inactive
+"""
+
+
+class TestReadNetworkInterfacesDarwin:
+    """macOS enumeration via ``ifconfig``.
+
+    Linux reads sysfs; Darwin has no ``/sys/class/net`` so the same facts
+    come from parsing ``ifconfig -a``.  Without this the whole
+    ``network_interfaces`` block was empty on every Mac edge (CYB-3232).
+    """
+
+    def test_parses_ifconfig_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._ifconfig",
+            lambda: _DARWIN_IFCONFIG_SAMPLE,
+        )
+        result = {nic.name: nic for nic in read_network_interfaces()}
+
+        assert result["en0"] == NetworkInterfaceFacts(
+            name="en0",
+            ipv4_address="192.168.1.42",
+            mac_address="5c:e9:1e:6a:2b:11",
+            is_up=True,
+        )
+
+    def test_keeps_a_nic_that_has_a_mac_but_no_address(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unplugged NIC is exactly when you need its MAC.
+
+        Pinning a DHCP reservation is what gets the interface a *stable*
+        address, so dropping MAC-only interfaces removes the one fact that
+        would fix the problem.
+        """
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._ifconfig",
+            lambda: _DARWIN_IFCONFIG_SAMPLE,
+        )
+        result = {nic.name: nic for nic in read_network_interfaces()}
+
+        assert result["en5"] == NetworkInterfaceFacts(
+            name="en5",
+            ipv4_address=None,
+            mac_address="aa:bb:cc:dd:ee:ff",
+            is_up=False,
+        )
+
+    def test_skips_loopback_tunnels_and_apple_internal_interfaces(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A stock Mac lists ~30 interfaces; only the physical ones are reachable."""
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._ifconfig",
+            lambda: _DARWIN_IFCONFIG_SAMPLE,
+        )
+        assert [nic.name for nic in read_network_interfaces()] == ["en0", "en5"]
+
+    def test_status_beats_the_running_flag_for_link_state(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``RUNNING`` is not link state on Darwin.
+
+        Apple's internal NICs advertise ``RUNNING`` permanently, so reading
+        the flag alone reports every one of them as up.  ``status:`` is the
+        authoritative signal and matches Linux's ``operstate``.
+        """
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._ifconfig",
+            lambda: "anpi0: flags=8863<UP,RUNNING,MULTICAST> mtu 1500\n"
+            "\tether ae:74:6f:9e:d5:dd\n"
+            "\tstatus: inactive\n"
+            "en0: flags=8863<UP,RUNNING,MULTICAST> mtu 1500\n"
+            "\tether 5c:e9:1e:6a:2b:11\n"
+            "\tstatus: active\n",
+        )
+        # ``anpi0`` is filtered out entirely; ``en0`` is the observable case.
+        result = {nic.name: nic for nic in read_network_interfaces()}
+        assert result["en0"].is_up is True
+
+    def test_returns_empty_when_ifconfig_is_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._ifconfig", lambda: None
+        )
+        assert read_network_interfaces() == ()
+
+
+#: A Linux edge running driver containers, as ``/sys/class/net`` reports it.
+#: ``br-*``/``docker0``/``veth*`` all carry real MACs, are ``up``, and sort
+#: *ahead* of ``eth0`` -- so "first enumerated interface that is up" picks a
+#: container bridge.  Only ``eth0`` and ``wlan0`` have a ``device`` entry.
+_CONTAINER_HOST_INTERFACES = {
+    "br-1a2b3c4d5e6f": {"address": "02:42:1f:aa:bb:cc", "operstate": "up"},
+    "docker0": {"address": "02:42:3c:11:22:33", "operstate": "up"},
+    "eth0": {"address": "dc:a6:32:11:22:33", "operstate": "up", "device": True},
+    "lo": {"address": "00:00:00:00:00:00", "operstate": "unknown"},
+    "veth9c2f0a1": {"address": "8a:1c:4d:7e:22:9b", "operstate": "up"},
+    "wlan0": {"address": "dc:a6:32:44:55:66", "operstate": "down", "device": True},
+}
+
+_CONTAINER_HOST_IPV4 = {
+    "br-1a2b3c4d5e6f": "172.18.0.1",
+    "docker0": "172.17.0.1",
+    "eth0": "192.168.1.42",
+}
+
+
+#: Abridged ``ifconfig -a`` from a real M-series Mac, covering the three
+#: interface families that share the ``en`` prefix with the physical NICs and
+#: so cannot be excluded by name: an internal ``anpi`` peer (``media: none``),
+#: a Thunderbolt port (a ``member:`` of ``bridge0``), and an unplugged real
+#: NIC (``media: autoselect (none)``) that has to survive both rules.
+_DARWIN_IFCONFIG_EN_FAMILIES = """\
+anpi0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether ae:74:6f:9e:d5:dd
+\tmedia: none
+\tstatus: inactive
+en6: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether ae:74:6f:9e:d5:bd
+\tmedia: none
+\tstatus: inactive
+en2: flags=8963<UP,BROADCAST,SMART,RUNNING,PROMISC,SIMPLEX,MULTICAST> mtu 1500
+\tether 36:75:47:24:b3:40
+\tmedia: autoselect <full-duplex>
+\tstatus: inactive
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether 1c:1d:d3:eb:80:8c
+\tinet 192.168.1.14 netmask 0xffffff00 broadcast 192.168.1.255
+\tmedia: autoselect (1000baseT <full-duplex,flow-control>)
+\tstatus: active
+bridge0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether 36:75:47:24:b3:40
+\tmember: en2 flags=3<LEARNING,DISCOVER>
+\tmedia: <unknown type>
+\tstatus: inactive
+en11: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether 4c:c5:d9:8f:3f:50
+\tmedia: autoselect (none)
+\tstatus: inactive
+"""
+
+
+class TestReadNetworkInterfacesDarwinEnFamilies:
+    """The ``en``-prefixed interfaces a name blocklist cannot separate.
+
+    A stock Mac reports 11 interfaces after prefix filtering, of which nine
+    are Apple-internal peers or Thunderbolt ports -- enough to bury the real
+    NIC. They are distinguishable, just not by name (CYB-3232).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _darwin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._ifconfig",
+            lambda: _DARWIN_IFCONFIG_EN_FAMILIES,
+        )
+
+    def test_drops_internal_peers_and_thunderbolt_ports(self) -> None:
+        assert [nic.name for nic in read_network_interfaces()] == ["en0", "en11"]
+
+    def test_drops_an_interface_with_no_media_layer(self) -> None:
+        """``media: none`` means there is no physical layer at all.
+
+        ``en6`` carries a real-looking MAC from the same block as ``anpi0``
+        and asserts ``RUNNING``, so nothing else in the stanza gives it away.
+        """
+        assert "en6" not in {nic.name for nic in read_network_interfaces()}
+
+    def test_drops_a_thunderbolt_port_named_by_its_bridge(self) -> None:
+        """``en2`` is listed as a ``member:`` of ``bridge0``.
+
+        The bridge stanza appears *after* its members in ``ifconfig`` output,
+        so this only works if membership is applied after the whole scan.
+        """
+        assert "en2" not in {nic.name for nic in read_network_interfaces()}
+
+    def test_keeps_an_unplugged_physical_nic(self) -> None:
+        """``media: autoselect (none)`` is a media layer with no link.
+
+        This is the case the whole field exists for: an unplugged port whose
+        MAC you pin a DHCP reservation to so it gets a stable address. It
+        must not be swept up with the internal peers.
+        """
+        result = {nic.name: nic for nic in read_network_interfaces()}
+        assert result["en11"] == NetworkInterfaceFacts(
+            name="en11",
+            ipv4_address=None,
+            mac_address="4c:c5:d9:8f:3f:50",
+            is_up=False,
+        )
+
+
+class TestReadPrimaryInterface:
+    """The single interface the host actually routes out of.
+
+    Selecting by enumeration order and ``is_up`` picks ``br-*`` or
+    ``docker0`` on any edge running driver containers, because sysfs
+    enumeration is alphabetical and those sort ahead of ``eth0``. Asking the
+    kernel which interface holds the default route cannot make that mistake:
+    a bridge or ``veth`` peer never holds it (CYB-3232).
+    """
+
+    @pytest.fixture
+    def container_host(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> Path:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address",
+            lambda name: _CONTAINER_HOST_IPV4.get(name),
+        )
+        return _build_net_sysfs(tmp_path, _CONTAINER_HOST_INTERFACES)
+
+    def test_picks_the_default_route_interface_not_the_first_up_one(
+        self, monkeypatch: pytest.MonkeyPatch, container_host: Path
+    ) -> None:
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._route_source_address",
+            lambda: "192.168.1.42",
+        )
+        primary = read_primary_interface(net_base=container_host)
+        assert primary is not None
+        assert primary.name == "eth0"
+        assert primary.mac_address == "dc:a6:32:11:22:33"
+
+    def test_does_not_pick_a_container_bridge(
+        self, monkeypatch: pytest.MonkeyPatch, container_host: Path
+    ) -> None:
+        """``02:42:…`` is Docker's own OUI -- an unmistakable wrong answer."""
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._route_source_address",
+            lambda: "192.168.1.42",
+        )
+        primary = read_primary_interface(net_base=container_host)
+        assert primary is not None
+        assert not primary.name.startswith(("br-", "docker", "veth"))
+        assert not primary.mac_address.startswith("02:42:")
+
+    def test_falls_back_to_a_physical_interface_when_there_is_no_route(
+        self, monkeypatch: pytest.MonkeyPatch, container_host: Path
+    ) -> None:
+        """An edge on an isolated LAN, or one that booted before DHCP.
+
+        ``/sys/class/net/<if>/device`` exists only for hardware-backed
+        interfaces, so it separates ``eth0``/``wlan0`` from the bridges and
+        ``veth`` peers without a list of names to keep up to date.
+        """
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._route_source_address", lambda: None
+        )
+        primary = read_primary_interface(net_base=container_host)
+        assert primary is not None
+        assert primary.name == "eth0"
+
+    def test_fallback_prefers_an_up_physical_interface(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address", lambda name: None
+        )
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._route_source_address", lambda: None
+        )
+        base = _build_net_sysfs(
+            tmp_path,
+            {
+                "eth0": {"address": "aa:bb:cc:dd:ee:01", "operstate": "down", "device": True},
+                "wlan0": {"address": "aa:bb:cc:dd:ee:02", "operstate": "up", "device": True},
+            },
+        )
+        primary = read_primary_interface(net_base=base)
+        assert primary is not None
+        assert primary.name == "wlan0"
+
+    def test_returns_none_when_nothing_was_enumerated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Windows")
+        assert read_primary_interface() is None
+
+    def test_returns_none_when_no_interface_is_physical(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A container-only interface set is not something to hand an operator."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address", lambda name: None
+        )
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._route_source_address", lambda: None
+        )
+        base = _build_net_sysfs(
+            tmp_path, {"docker0": {"address": "02:42:3c:11:22:33", "operstate": "up"}}
+        )
+        assert read_primary_interface(net_base=base) is None
+
+    def test_route_probe_never_transmits(self) -> None:
+        """The probe address is reserved and the connect is UDP: no packets.
+
+        Guards the property that makes calling this every 30 s acceptable --
+        if the address or socket type ever changed, an edge would start
+        emitting traffic to a documentation-only prefix.
+        """
+        assert host_metrics_module._ROUTE_PROBE_ADDRESS[0].startswith("192.0.2.")
+
+
+class TestReadPrimaryMacAddress:
+    """Cross-platform fallback MAC, from the same source as the fingerprint."""
+
+    def test_formats_getnode_as_a_mac(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics.getnode", lambda: 0x5CE91E6A2B11
+        )
+        assert read_primary_mac_address() == "5c:e9:1e:6a:2b:11"
+
+    def test_returns_none_when_getnode_fabricated_a_random_node_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``uuid.getnode()`` invents a random node ID when no NIC is readable.
+
+        RFC 4122 has it set the multicast bit to mark the value as
+        not-a-hardware-address.  Uploading it anyway would put a
+        MAC-shaped string on the dashboard that matches no NIC on earth --
+        worse than showing nothing, since the operator would paste it into
+        a DHCP reservation that can never fire.
+        """
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics.getnode", lambda: 0x010203040506
+        )
+        assert read_primary_mac_address() is None
+
+    def test_returns_none_when_getnode_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def boom() -> int:
+            raise OSError("no interfaces")
+
+        monkeypatch.setattr("cyberwave.edge.host_metrics.getnode", boom)
+        assert read_primary_mac_address() is None
+
+
+class TestReadDeviceSerial:
+    def test_returns_none_on_non_linux(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
+        assert read_device_serial() is None
+
+    def test_reads_raspberry_pi_serial_from_cpuinfo(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        cpuinfo = tmp_path / "cpuinfo"
+        cpuinfo.write_text(
+            "processor\t: 0\n"
+            "Model\t\t: Raspberry Pi 5 Model B Rev 1.0\n"
+            "Serial\t\t: 100000001234abcd\n"
+        )
+        assert (
+            read_device_serial(cpuinfo_path=cpuinfo, device_tree_serial=tmp_path / "nope")
+            == "100000001234abcd"
+        )
+
+    def test_falls_back_to_the_device_tree_on_jetson(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Tegra kernels carry no ``Serial`` line; the serial is in the device tree.
+
+        The device-tree node is NUL-terminated, which has to be stripped or
+        the value round-trips through JSON with a trailing ``\\x00``.
+        """
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        cpuinfo = tmp_path / "cpuinfo"
+        cpuinfo.write_text("processor\t: 0\nmodel name\t: ARMv8\n")
+        dt_serial = tmp_path / "serial-number"
+        dt_serial.write_bytes(b"1421921012345\x00")
+
+        assert (
+            read_device_serial(cpuinfo_path=cpuinfo, device_tree_serial=dt_serial)
+            == "1421921012345"
+        )
+
+    def test_returns_none_when_no_source_exposes_a_serial(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        assert (
+            read_device_serial(
+                cpuinfo_path=tmp_path / "missing",
+                device_tree_serial=tmp_path / "also-missing",
+            )
+            is None
+        )
+
+    def test_ignores_the_all_zero_placeholder_serial(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Some boards expose ``Serial : 0000000000000000`` rather than omitting it."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        cpuinfo = tmp_path / "cpuinfo"
+        cpuinfo.write_text("Serial\t\t: 0000000000000000\n")
+        assert (
+            read_device_serial(cpuinfo_path=cpuinfo, device_tree_serial=tmp_path / "nope")
+            is None
+        )
+
+
+# ---------------------------------------------------------------------------
 # read_host_facts
 # ---------------------------------------------------------------------------
 
@@ -433,6 +986,144 @@ class TestHostFactsToDict:
         # schema: edge-core (the sole producer) cannot observe the
         # standalone CLI binary on production edges.
         assert "cli_version" not in out
+
+    def test_gauges_are_omitted_when_unread_but_kept_at_zero(self) -> None:
+        """The gauges follow the same present-key contract as everything else.
+
+        ``0.0`` is a legitimate reading (an idle percentage, a sub-zero-ish
+        sensor) so it must survive into the JSON; only ``None`` is dropped.
+        A truthiness check here would silently erase real data.
+        """
+        base_kwargs = dict(
+            platform="Linux-aarch64",
+            kernel=None,
+            memory_total_mb=None,
+            cpu_model=None,
+            cpu_count=None,
+            thermal_source=None,
+            has_hardware_watchdog=False,
+            sdk_version=None,
+            edge_core_version=None,
+        )
+
+        unread = HostFacts(**base_kwargs).to_dict()
+        assert "cpu_temp_c" not in unread
+        assert "memory_used_percent" not in unread
+        assert "memory_available_mb" not in unread
+
+        at_zero = HostFacts(
+            **base_kwargs,
+            cpu_temp_c=0.0,
+            memory_used_percent=0.0,
+            memory_available_mb=0.0,
+        ).to_dict()
+        assert at_zero["cpu_temp_c"] == 0.0
+        assert at_zero["memory_used_percent"] == 0.0
+        assert at_zero["memory_available_mb"] == 0.0
+
+    def test_network_interfaces_included_only_when_non_empty(self) -> None:
+        base_kwargs = dict(
+            platform="Linux-aarch64",
+            kernel=None,
+            memory_total_mb=None,
+            cpu_model=None,
+            cpu_count=None,
+            thermal_source=None,
+            has_hardware_watchdog=False,
+            sdk_version=None,
+            edge_core_version=None,
+        )
+
+        assert "network_interfaces" not in HostFacts(**base_kwargs).to_dict()
+
+        facts = HostFacts(
+            **base_kwargs,
+            network_interfaces=(
+                NetworkInterfaceFacts(
+                    name="eth0",
+                    ipv4_address="192.168.1.42",
+                    mac_address="aa:bb:cc:dd:ee:ff",
+                    is_up=True,
+                ),
+            ),
+        )
+        out = facts.to_dict()
+        assert out["network_interfaces"] == [
+            {
+                "name": "eth0",
+                "ipv4_address": "192.168.1.42",
+                "mac_address": "aa:bb:cc:dd:ee:ff",
+                "is_up": True,
+            }
+        ]
+
+    def test_primary_mac_comes_from_the_default_route_interface(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``host_facts`` carries ONE MAC, and it is the routable one.
+
+        The dashboard renders ``primary_mac_address`` with a copy button next
+        to it, so it has to be the MAC a DHCP reservation keys on -- not
+        whichever interface happened to sort first (CYB-3232).
+        """
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address",
+            lambda name: _CONTAINER_HOST_IPV4.get(name),
+        )
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._route_source_address",
+            lambda: "192.168.1.42",
+        )
+        base = _build_net_sysfs(tmp_path, _CONTAINER_HOST_INTERFACES)
+
+        out = read_host_facts(net_base=base).to_dict()
+        assert out["primary_mac_address"] == "dc:a6:32:11:22:33"
+        assert out["primary_interface_name"] == "eth0"
+
+    def test_primary_interface_name_absent_when_the_mac_came_from_getnode(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The two provenances have to stay distinguishable on the wire.
+
+        ``uuid.getnode()`` is not tied to a reachable interface, so a
+        consumer must be able to tell "this is the routable MAC" from "this
+        is the only MAC we could find at all".
+        """
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics.getnode", lambda: 0x5CE91E6A2B11
+        )
+        base = _build_net_sysfs(tmp_path, {})
+
+        out = read_host_facts(net_base=base).to_dict()
+        assert out["primary_mac_address"] == "5c:e9:1e:6a:2b:11"
+        assert "primary_interface_name" not in out
+
+    def test_identity_fields_included_only_when_known(self) -> None:
+        base_kwargs = dict(
+            platform="Linux-aarch64",
+            kernel=None,
+            memory_total_mb=None,
+            cpu_model=None,
+            cpu_count=None,
+            thermal_source=None,
+            has_hardware_watchdog=False,
+            sdk_version=None,
+            edge_core_version=None,
+        )
+
+        bare = HostFacts(**base_kwargs).to_dict()
+        assert "primary_mac_address" not in bare
+        assert "device_serial" not in bare
+
+        out = HostFacts(
+            **base_kwargs,
+            primary_mac_address="5c:e9:1e:6a:2b:11",
+            device_serial="100000001234abcd",
+        ).to_dict()
+        assert out["primary_mac_address"] == "5c:e9:1e:6a:2b:11"
+        assert out["device_serial"] == "100000001234abcd"
 
 
 class TestSoftwareVersions:
@@ -711,8 +1402,17 @@ class TestReadHostFacts:
         thermal_base = _build_thermal_sysfs(tmp_path, [("cpu-thermal", 55_000)])
         watchdog_dev = tmp_path / "watchdog"
         watchdog_dev.write_text("")  # presence-only check
+        net_base = _build_net_sysfs(
+            tmp_path, {"eth0": {"address": "aa:bb:cc:dd:ee:ff", "operstate": "up"}}
+        )
+        monkeypatch.setattr(
+            "cyberwave.edge.host_metrics._read_ipv4_address",
+            lambda ifname: "192.168.1.42" if ifname == "eth0" else None,
+        )
 
-        facts = read_host_facts(thermal_base=thermal_base, watchdog_device=watchdog_dev)
+        facts = read_host_facts(
+            thermal_base=thermal_base, watchdog_device=watchdog_dev, net_base=net_base
+        )
 
         assert facts.memory_total_mb == pytest.approx(3906292 / 1024, abs=1)
         assert facts.cpu_model == "Cortex-A72"
@@ -720,6 +1420,123 @@ class TestReadHostFacts:
         assert facts.thermal_source is not None
         assert "cpu-thermal" in facts.thermal_source
         assert facts.has_hardware_watchdog is True
+        # Gauge copy: read from the same sysfs/procfs sources as the
+        # heartbeat's dynamic readers, so the dashboard keeps a reading
+        # after the bootstrap publisher hands over to the drivers.
+        assert facts.cpu_temp_c == pytest.approx(55.0)
+        assert facts.memory_available_mb == pytest.approx(2000000 / 1024, abs=1)
+        assert facts.memory_used_percent == pytest.approx(48.8, abs=0.2)
+        assert facts.network_interfaces == (
+            NetworkInterfaceFacts(
+                name="eth0",
+                ipv4_address="192.168.1.42",
+                mac_address="aa:bb:cc:dd:ee:ff",
+                is_up=True,
+            ),
+        )
+
+    def test_gauge_copy_reports_hottest_zone_not_the_source_zone(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``cpu_temp_c`` is the hottest zone; ``thermal_source`` names the first.
+
+        These deliberately disagree. ``thermal_source`` is an identity
+        field (which sysfs path the publisher reads) and its existing
+        meaning must not shift, while a temperature reading is only useful
+        as the worst case across cores. Zone 0 is the coolest here so a
+        regression that collapsed the two would show 40, not 71.
+        """
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        thermal_base = _build_thermal_sysfs(
+            tmp_path,
+            [("cpu-thermal", 40_000), ("coretemp", 71_000), ("coretemp", 66_000)],
+        )
+
+        facts = read_host_facts(
+            thermal_base=thermal_base, watchdog_device=tmp_path / "absent"
+        )
+
+        assert facts.cpu_temp_c == pytest.approx(71.0)
+        assert facts.thermal_source is not None
+        assert facts.thermal_source.startswith("thermal_zone0")
+
+    def test_gauge_copy_is_none_when_no_thermal_zone_is_readable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A host with no CPU thermal zone omits the reading rather than
+        reporting 0 °C, which the dashboard would colour as healthy."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        empty_thermal = tmp_path / "thermal"
+        empty_thermal.mkdir()
+
+        facts = read_host_facts(
+            thermal_base=empty_thermal, watchdog_device=tmp_path / "absent"
+        )
+
+        assert facts.cpu_temp_c is None
+        assert facts.thermal_source is None
+        assert "cpu_temp_c" not in facts.to_dict()
+
+    def test_carries_power_draw_and_battery_pack(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Power rides the keepalive too, so the dashboard's host row keeps the
+        same field set once drivers stop the heartbeat that used to carry it."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setenv("CYBERWAVE_BATTERY_WH", "86.7")
+        _write_sysfs_file(tmp_path / "class/hwmon/hwmon2/power1_input", "12300000")
+
+        facts = read_host_facts(
+            thermal_base=tmp_path / "no-thermal",
+            watchdog_device=tmp_path / "absent",
+            power_sysfs_base=tmp_path,
+        )
+
+        assert facts.power_mw == pytest.approx(12300.0)
+        assert facts.battery_wh == pytest.approx(86.7)
+        assert facts.to_dict()["power_mw"] == pytest.approx(12300.0)
+        assert facts.to_dict()["battery_wh"] == pytest.approx(86.7)
+
+    def test_omits_power_and_battery_when_unreadable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """No rail and an unparseable pack size drop out rather than reporting 0,
+        which the dashboard would render as a board drawing no power."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setenv("CYBERWAVE_BATTERY_WH", "not-a-float")
+
+        facts = read_host_facts(
+            thermal_base=tmp_path / "no-thermal",
+            watchdog_device=tmp_path / "absent",
+            power_sysfs_base=tmp_path / "no-power",
+        )
+
+        assert facts.power_mw is None
+        assert facts.battery_wh is None
+        assert "power_mw" not in facts.to_dict()
+        assert "battery_wh" not in facts.to_dict()
+
+    @pytest.mark.parametrize("raw", ["nan", "inf", "-inf", "1e400"])
+    def test_omits_non_finite_battery_pack(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, raw: str
+    ) -> None:
+        """``float()`` accepts these without raising, but they serialise as bare
+        ``NaN``/``Infinity`` tokens that PostgreSQL's jsonb rejects -- which would
+        fail the whole /discover POST, and with it the ``last_seen_at`` bump that
+        keeps a healthy edge out of "Offline"."""
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.setenv("CYBERWAVE_BATTERY_WH", raw)
+
+        facts = read_host_facts(
+            thermal_base=tmp_path / "no-thermal",
+            watchdog_device=tmp_path / "absent",
+            power_sysfs_base=tmp_path / "no-power",
+        )
+
+        assert facts.battery_wh is None
+        assert "battery_wh" not in facts.to_dict()
+        # The payload has to survive a strict encoder, not just Python's.
+        json.dumps(facts.to_dict(), allow_nan=False)
 
     def test_parses_arm_hardware_field_when_no_model_name(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

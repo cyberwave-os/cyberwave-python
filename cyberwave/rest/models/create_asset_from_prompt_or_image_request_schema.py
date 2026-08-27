@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from cyberwave.rest.models.image_bytes1 import ImageBytes1
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,11 +30,12 @@ class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
     asset_name: StrictStr
     prompt: Optional[StrictStr] = None
     image_url: Optional[StrictStr] = None
-    image_bytes: Optional[ImageBytes1] = None
+    image_bytes: Optional[StrictStr] = None
+    texture: Optional[StrictBool] = False
     description: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
-    __properties: ClassVar[List[str]] = ["asset_name", "prompt", "image_url", "image_bytes", "description", "workspace_uuid", "visibility"]
+    __properties: ClassVar[List[str]] = ["asset_name", "prompt", "image_url", "image_bytes", "texture", "description", "workspace_uuid", "visibility"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,9 +76,6 @@ class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of image_bytes
-        if self.image_bytes:
-            _dict['image_bytes'] = self.image_bytes.to_dict()
         # set to None if prompt (nullable) is None
         # and model_fields_set contains the field
         if self.prompt is None and "prompt" in self.model_fields_set:
@@ -119,7 +116,8 @@ class CreateAssetFromPromptOrImageRequestSchema(BaseModel):
             "asset_name": obj.get("asset_name"),
             "prompt": obj.get("prompt"),
             "image_url": obj.get("image_url"),
-            "image_bytes": ImageBytes1.from_dict(obj["image_bytes"]) if obj.get("image_bytes") is not None else None,
+            "image_bytes": obj.get("image_bytes"),
+            "texture": obj.get("texture") if obj.get("texture") is not None else False,
             "description": obj.get("description"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private'

@@ -33,12 +33,12 @@ class MapDataSchema(BaseModel):
     environment_uuid: Optional[StrictStr] = None
     map_type: StrictStr
     resolution: Optional[Union[StrictFloat, StrictInt]] = None
-    origin_x: Union[StrictFloat, StrictInt]
-    origin_y: Union[StrictFloat, StrictInt]
-    origin_z: Union[StrictFloat, StrictInt]
-    origin_roll: Union[StrictFloat, StrictInt]
-    origin_pitch: Union[StrictFloat, StrictInt]
-    origin_yaw: Union[StrictFloat, StrictInt]
+    origin_x: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_y: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_z: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_roll: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_pitch: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_yaw: Optional[Union[StrictFloat, StrictInt]] = None
     data_file_uuid: StrictStr
     image_width: Optional[StrictInt] = None
     image_height: Optional[StrictInt] = None
@@ -100,6 +100,36 @@ class MapDataSchema(BaseModel):
         # and model_fields_set contains the field
         if self.resolution is None and "resolution" in self.model_fields_set:
             _dict['resolution'] = None
+
+        # set to None if origin_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_x is None and "origin_x" in self.model_fields_set:
+            _dict['origin_x'] = None
+
+        # set to None if origin_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_y is None and "origin_y" in self.model_fields_set:
+            _dict['origin_y'] = None
+
+        # set to None if origin_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_z is None and "origin_z" in self.model_fields_set:
+            _dict['origin_z'] = None
+
+        # set to None if origin_roll (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_roll is None and "origin_roll" in self.model_fields_set:
+            _dict['origin_roll'] = None
+
+        # set to None if origin_pitch (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_pitch is None and "origin_pitch" in self.model_fields_set:
+            _dict['origin_pitch'] = None
+
+        # set to None if origin_yaw (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_yaw is None and "origin_yaw" in self.model_fields_set:
+            _dict['origin_yaw'] = None
 
         # set to None if image_width (nullable) is None
         # and model_fields_set contains the field

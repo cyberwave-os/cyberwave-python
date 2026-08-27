@@ -38,7 +38,8 @@ class AgentSetupAndDraftSchema(BaseModel):
     simulation_backend: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
     node_hints: Optional[List[WorkflowNodeHintSchema]] = None
-    __properties: ClassVar[List[str]] = ["prompt", "confirmed_actions", "agent_plan", "mlmodel_uuid", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "visibility", "node_hints"]
+    setup_mode: Optional[StrictStr] = 'explicit'
+    __properties: ClassVar[List[str]] = ["prompt", "confirmed_actions", "agent_plan", "mlmodel_uuid", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "visibility", "node_hints", "setup_mode"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -48,6 +49,16 @@ class AgentSetupAndDraftSchema(BaseModel):
 
         if value not in set(['simulation', 'live', 'preview']):
             raise ValueError("must be one of enum values ('simulation', 'live', 'preview')")
+        return value
+
+    @field_validator('setup_mode')
+    def setup_mode_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['explicit', 'auto']):
+            raise ValueError("must be one of enum values ('explicit', 'auto')")
         return value
 
     model_config = ConfigDict(
@@ -142,7 +153,8 @@ class AgentSetupAndDraftSchema(BaseModel):
             "mode": obj.get("mode") if obj.get("mode") is not None else 'simulation',
             "simulation_backend": obj.get("simulation_backend"),
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
-            "node_hints": [WorkflowNodeHintSchema.from_dict(_item) for _item in obj["node_hints"]] if obj.get("node_hints") is not None else None
+            "node_hints": [WorkflowNodeHintSchema.from_dict(_item) for _item in obj["node_hints"]] if obj.get("node_hints") is not None else None,
+            "setup_mode": obj.get("setup_mode") if obj.get("setup_mode") is not None else 'explicit'
         })
         return _obj
 

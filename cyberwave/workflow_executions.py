@@ -344,11 +344,33 @@ class WorkflowExecutionReporter:
             logger.warning(message)
 
 
+CANCELED_EXECUTIONS_CACHE_SIZE = 64
+"""FIFO bound on :attr:`WorkflowExecutionManager._canceled_executions` — a
+long-running worker must not accumulate this set forever."""
+
+
 class WorkflowExecutionManager:
     """Manager accessed as ``client.workflow_executions``."""
 
     def __init__(self, client: "Cyberwave") -> None:
         self._client = client
+        self._canceled_executions: Dict[str, None] = {}
+
+    def mark_canceled(self, execution_uuid: Optional[str]) -> None:
+        """Record that ``execution_uuid`` was canceled. Idempotent; no-ops
+        on a falsy uuid rather than raising."""
+        if not execution_uuid:
+            return
+        self._canceled_executions[str(execution_uuid)] = None
+        if len(self._canceled_executions) > CANCELED_EXECUTIONS_CACHE_SIZE:
+            self._canceled_executions.pop(next(iter(self._canceled_executions)))
+
+    def is_canceled(self, execution_uuid: Optional[str]) -> bool:
+        """Local in-memory check only — no network call, since this runs on
+        every generated trigger invocation (camera-frame framerates)."""
+        if not execution_uuid:
+            return False
+        return str(execution_uuid) in self._canceled_executions
 
     def start(
         self,

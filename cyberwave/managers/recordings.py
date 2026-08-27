@@ -10,7 +10,9 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
+import threading
 import weakref
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from enum import Enum
@@ -87,17 +89,60 @@ def _materializing_message(body: RecordingMaterializingSchema) -> str:
         f"Recording assets are still materializing ({reason}). Retry in ~{retry}s."
     )
 
+#: Artifacts downloaded concurrently by one ``get()``. A recording is segmented
+#: (60s video parts, chunked pointclouds), so a serial fetch pays a connect +
+#: TLS + first-byte round trip per part; that latency, not bandwidth, is what
+#: dominates a many-part recording. Sizing beyond a handful buys little — the
+#: transfers then compete for the same link.
+DEFAULT_DOWNLOAD_WORKERS = 8
+
+#: Hard ceiling on download concurrency, whatever a caller asks for. Each worker
+#: costs a thread, a socket, a streaming buffer, and a slot in the connection
+#: pool, and the gains flatten as soon as the link saturates — while a long
+#: recording can hold hundreds of parts, so ``len(sources)`` alone is no bound.
+MAX_DOWNLOAD_WORKERS = 32
+
 # Process-wide connection pool for artifact downloads, created lazily on first
 # use. Shared (rather than one-per-download) so keep-alive sockets are recycled
 # instead of leaking until GC.
 _http_pool: urllib3.PoolManager | None = None
+_http_pool_maxsize = 0
+# Guards the two globals above: concurrent get() calls (or a caller driving
+# get() from its own threads) would otherwise both pass the resize check and
+# build a pool, orphaning one along with its established connections.
+_http_pool_lock = threading.Lock()
 
 
-def _get_http_pool() -> urllib3.PoolManager:
-    global _http_pool
-    if _http_pool is None:
-        _http_pool = urllib3.PoolManager()
-    return _http_pool
+def _get_http_pool(maxsize: int) -> urllib3.PoolManager:
+    """The shared pool, holding at least ``maxsize`` connections per host.
+
+    ``maxsize`` is the per-host keep-alive budget (PoolManager keys pools by host,
+    and signed URLs may span storage backends). It MUST cover the download
+    concurrency: at urllib3's default of 1, with ``block=False``, the surplus
+    connections are opened and then discarded on return, so every artifact past
+    the pool size re-pays the handshake that this parallelism exists to avoid.
+    A caller asking for more workers than the pool holds therefore has to grow
+    it — hence the rebuild rather than a fixed size set on first use.
+
+    ``maxsize`` is required rather than defaulted, because the pool only ever
+    grows: a caller that guesses high cannot be walked back by the next one, and a
+    caller that inherits a default it does not need will grow the pool past the
+    concurrency the fetch actually planned for.
+    """
+    global _http_pool, _http_pool_maxsize
+    with _http_pool_lock:
+        if _http_pool is None or maxsize > _http_pool_maxsize:
+            # Close the pool being replaced. Its established keep-alive sockets
+            # are otherwise orphaned until GC, which is the very leak the shared
+            # pool exists to prevent, and the next fetch re-pays a handshake for
+            # each one lost. A connection checked out by an in-flight download is
+            # unaffected: urllib3 closes it when it is released into the cleared
+            # pool instead of returning it to the queue.
+            outgrown, _http_pool = _http_pool, urllib3.PoolManager(maxsize=maxsize)
+            _http_pool_maxsize = maxsize
+            if outgrown is not None:
+                outgrown.clear()
+        return _http_pool
 
 
 class RecordingType(str, Enum):
@@ -134,6 +179,61 @@ def _filename_from(url: str, default_ext: str) -> str:
     if "." not in base:
         base = f"{base}.{default_ext}"
     return base
+
+
+def _first_int(part: dict[str, Any], keys: tuple[str, ...]) -> int | None:
+    """The first of ``keys`` present on ``part`` as an int, else ``None``."""
+    for key in keys:
+        value = part.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+    return None
+
+
+#: Per-stream ordering keys, most authoritative first. Camera parts label their
+#: window ``first_timestamp_us`` while actuation parts say ``start_timestamp_us``,
+#: hence two spellings per group. The timestamp tier is not always usable: the
+#: server coerces a missing window to ``0`` when it records the part and again
+#: when it builds the envelope, so a zero-filled tier answers for every part
+#: while carrying no order at all — see ``_ordered_parts``.
+_PART_ORDER_KEYS: tuple[tuple[str, ...], ...] = (
+    ("first_timestamp_us", "start_timestamp_us"),
+    ("chunk_index", "part_index"),
+)
+
+
+def _ordered_parts(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sort one segmented stream's parts into playback order.
+
+    Envelope order is not treated as a contract. Both server paths do sort today
+    — the finalized path by ``chunk_index``, the progressive path when it rebuilds
+    its manifest from the stored part rows — so this is defense in depth rather
+    than a repair for a live defect. Out-of-order parts would play a recording's
+    segments out of sequence and concatenate robot parquet rows against time, so
+    order them from the position each part reports rather than from the list.
+
+    A tier is used only when every part answers it AND the answers are distinct.
+    Completeness alone is not a usable test: because the server zero-fills a
+    missing timestamp, an absent window is indistinguishable from epoch zero, so
+    an "everyone answered" check passes vacuously and would claim the sort while
+    ordering nothing — leaving the index tier below it permanently unreachable.
+    Requiring a tier to discriminate is what keeps that fallback live, and when
+    no tier can order the parts, arrival order is left untouched.
+    """
+    if len(parts) < 2:
+        return parts
+    for keys in _PART_ORDER_KEYS:
+        values = [_first_int(p, keys) for p in parts]
+        if all(v is not None for v in values) and len(set(values)) == len(values):
+            # Position sits in the key to keep the dicts themselves out of the
+            # comparison; the check above already rules out ties.
+            return [
+                part
+                for _value, _position, part in sorted(
+                    zip(values, range(len(parts)), parts), key=lambda t: (t[0], t[1])
+                )
+            ]
+    return parts
 
 
 def _require(module: str) -> Any:
@@ -277,6 +377,29 @@ class RecordingListItem:
         return _classify(self.metadata)
 
     @property
+    def is_final(self) -> bool:
+        """False while the recording is still being written (progressive/active).
+
+        Active manifests carry ``is_final: False`` / ``recording_type: "active"``;
+        finalized rows omit the flag, so absence means final.
+        """
+        return (
+            self.metadata.get("is_final") is not False
+            and str(self.metadata.get("recording_type") or "") != "active"
+        )
+
+    @property
+    def processing_status(self) -> str:
+        """``"ready"`` when derived artifacts are available; ``"processing"``
+        while the recording is active or its derivatives (e.g. the full-session
+        MP4) are still being built — downloads then contain the unprocessed
+        segments available so far. Prefers the server-stamped field."""
+        status = str(self.metadata.get("processing_status") or "")
+        if status in ("ready", "processing"):
+            return status
+        return "ready" if self.is_final else "processing"
+
+    @property
     def is_playback_ready(self) -> bool:
         """Whether the server reports artifacts ready for playback.
 
@@ -298,7 +421,9 @@ class RecordingListItem:
             readiness=dict(readiness) if isinstance(readiness, dict) else None,
         )
 
-    def get(self, *, path: str | None = None) -> Any:
+    def get(
+        self, *, path: str | None = None, max_workers: int | None = None
+    ) -> Any:
         """Fetch this recording's artifacts (shortcut for ``manager.get(item)``)."""
         from ..exceptions import CyberwaveError
 
@@ -319,6 +444,7 @@ class RecordingListItem:
             environment_id=env,
             path=path,
             twin_uuid=self.twin_uuid or None,
+            max_workers=max_workers,
         )
 
 
@@ -452,8 +578,10 @@ class Recording:
         parquets = sorted(p for p in paths if str(p).endswith(".parquet"))
         if not parquets:
             raise CyberwaveError(
-                "No parquet downloaded for this stream — the server may still be "
-                "materializing it; call get() again in a few minutes."
+                "No parquet downloaded for this stream. Either this fetch used a "
+                "path filter that excluded it (get(path=...)), or the server is "
+                "still materializing it — in which case call get() again in a "
+                "few minutes."
             )
         pq = _require("pyarrow.parquet")
         pa = _require("pyarrow")
@@ -492,8 +620,10 @@ class Recording:
         parquets = sorted(p for p in paths if p.suffix.lower() == ".parquet")
         if not parquets:
             raise CyberwaveError(
-                "No robot parquet downloaded for this recording — the server may "
-                "still be materializing it; call get() again in a few minutes."
+                "No robot parquet downloaded for this recording. Either this fetch "
+                "used a path filter that excluded it (get(path=...)), or the server "
+                "is still materializing it — in which case call get() again in a "
+                "few minutes."
             )
         pq = _require("pyarrow.parquet")
         pa = _require("pyarrow")
@@ -515,7 +645,10 @@ class Recording:
         videos = self._paths_with_ext(".mp4")
         if not videos:
             raise CyberwaveError(
-                "Video stream is present but not downloaded locally for this recording."
+                "This recording has a video stream but no .mp4 was downloaded "
+                "locally. Either this fetch used a path filter that excluded it "
+                "(get(path=...)), or the server is still materializing it — in "
+                "which case call get() again in a few minutes."
             )
         return self._show_video(videos[0])
 
@@ -789,6 +922,7 @@ class RecordingManager:
         environment_id: str | None = None,
         path: str | None = None,
         twin_uuid: str | None = None,
+        max_workers: int | None = None,
     ) -> Recording:
         """Fetch a recording's signed URLs and download all artifacts locally.
 
@@ -796,6 +930,12 @@ class RecordingManager:
         twin's entry in the (possibly multi-twin) recording envelope — used by
         ``TwinRecordingsHandle.get()`` so a twin-scoped fetch never mixes in
         another twin's files from the same shared recording.
+
+        ``max_workers`` bounds how many artifacts download concurrently
+        (default :data:`DEFAULT_DOWNLOAD_WORKERS`); ``1`` restores a strictly
+        serial fetch. Concurrency helps in proportion to how many parts a
+        recording has — a single large parquet is one object on one connection
+        and gains nothing.
         """
         from ..exceptions import CyberwaveError
 
@@ -810,6 +950,14 @@ class RecordingManager:
         if not env:
             raise CyberwaveError(
                 "environment_id is required when passing a recording uuid"
+            )
+        # Reject rather than coerce: ``max_workers=0`` reads as "no concurrency"
+        # but would fall through the ``or`` below to the default and start eight
+        # threads — the opposite of what the caller asked for.
+        if max_workers is not None and max_workers < 1:
+            raise CyberwaveError(
+                f"max_workers must be at least 1 (got {max_workers}); "
+                "pass 1 for a serial download or None for the default"
             )
 
         try:
@@ -837,12 +985,90 @@ class RecordingManager:
         tempdir = tempfile.mkdtemp(prefix="cw-recording-")
         local_paths: dict[str, list[Path]] = {}
         types = set(base_types)
+        # Plan every download up front, in the main thread: the path filter is
+        # applied here, and ``idx`` still enumerates ALL sources so a filtered
+        # fetch produces the same filenames as an unfiltered one. Results are
+        # derived from this plan rather than from completion order, which keeps
+        # ``local_paths`` deterministic no matter how the threads interleave —
+        # ``_paths_with_ext`` does not sort, so completion order would otherwise
+        # decide which video ``show_video()`` plays.
+        # The index prefix is what makes filename order equal playback order, and
+        # the readers lean on it: ``_read_robot`` concatenates parquet parts in
+        # ``sorted()`` filename order with no timestamp re-sort. Three digits stop
+        # sorting lexically at a thousand artifacts ("1000_" < "999_"), which a
+        # long segmented recording can reach, so widen the pad to fit the count —
+        # while keeping the usual 3 digits so filenames stay stable for callers
+        # that cache them.
+        pad = max(3, len(str(max(len(sources) - 1, 0))))
+        plan = [
+            (source, url, Path(tempdir) / f"{idx:0{pad}d}_{name}")
+            for idx, (source, url, name) in enumerate(sources)
+            if path is None or path in url or path in name
+        ]
+        if max_workers and max_workers > MAX_DOWNLOAD_WORKERS:
+            logger.warning(
+                "max_workers=%d exceeds the %d-worker ceiling; using %d",
+                max_workers,
+                MAX_DOWNLOAD_WORKERS,
+                MAX_DOWNLOAD_WORKERS,
+            )
+        # min() also collapses an empty plan to the serial branch (max() floors it).
+        workers = max(
+            1,
+            min(
+                max_workers or DEFAULT_DOWNLOAD_WORKERS,
+                len(plan),
+                MAX_DOWNLOAD_WORKERS,
+            ),
+        )
         try:
-            for idx, (source, url, name) in enumerate(sources):
-                if path is not None and path not in url and path not in name:
-                    continue
-                dest = Path(tempdir) / f"{idx:03d}_{name}"
-                self._download(url, dest)
+            if workers == 1:
+                for _source, url, dest in plan:
+                    self._download(url, dest)
+            else:
+                logger.debug(
+                    "Downloading %d artifact(s) for recording %s with %d workers",
+                    len(plan),
+                    rec_uuid,
+                    workers,
+                )
+                # Size the shared pool BEFORE the workers start, so a caller who
+                # raised ``max_workers`` past the default does not spend the win
+                # on rebuilt connections.
+                _get_http_pool(workers)
+                cancel = threading.Event()
+                with ThreadPoolExecutor(
+                    max_workers=workers, thread_name_prefix="cw-artifact"
+                ) as pool:
+                    futures = [
+                        pool.submit(self._download, url, dest, cancel=cancel)
+                        for _source, url, dest in plan
+                    ]
+                    try:
+                        # Completion order, not plan order: it surfaces a failure
+                        # as early as possible so fewer queued parts get started.
+                        # The cost is that with several failures, which one is
+                        # reported depends on timing.
+                        for future in as_completed(futures):
+                            future.result()
+                    except BaseException:
+                        # Drop what has not started, tell what IS running to stop
+                        # at its next chunk, then wait for it. The rmtree below must
+                        # not race a worker mid-write: it would either blow up inside
+                        # the worker or let the worker recreate the directory after
+                        # the tree was removed, leaking exactly the orphan this
+                        # cleanup exists to prevent.
+                        #
+                        # The cancel flag is what keeps that wait short. urllib3's
+                        # read timeout would NOT bound it: that timer measures
+                        # inactivity and resets on every chunk, so a healthy
+                        # transfer of a large artifact would hold the wait open for
+                        # its full remaining duration — minutes on a big parquet,
+                        # which reads as a hung Ctrl-C.
+                        cancel.set()
+                        pool.shutdown(wait=True, cancel_futures=True)
+                        raise
+            for source, _url, dest in plan:
                 local_paths.setdefault(source, []).append(dest)
                 if source in _SOURCE_TO_TYPE:
                     types.add(_SOURCE_TO_TYPE[source])
@@ -852,6 +1078,22 @@ class RecordingManager:
             # Clean it up here before re-raising so the download is all-or-nothing.
             shutil.rmtree(tempdir, ignore_errors=True)
             raise
+
+        # A camera recording whose segment MP4 derivatives are not built yet
+        # yields no video file. Surface that instead of returning a silently
+        # video-less Recording. A ``path`` filter legitimately excludes streams,
+        # so only warn when the caller did not filter.
+        if (
+            path is None
+            and RecordingType.CAMERA in base_types
+            and not local_paths.get(_SOURCE_CAMERA)
+        ):
+            logger.warning(
+                "Recording %s has a camera stream but no downloadable video yet "
+                "(segments may still be converting to MP4); call get() again "
+                "in a few minutes.",
+                rec_uuid,
+            )
 
         # Prefer the list item's owning twin; otherwise keep the caller-supplied
         # twin_uuid (e.g. from TwinRecordingsHandle.get) instead of dropping it.
@@ -915,14 +1157,14 @@ class RecordingManager:
             cam = data.get(_SOURCE_CAMERA)
             if isinstance(cam, dict):
                 videos = cam.get("videos") or [{"signed_url": cam.get("signed_url")}]
-                for v in videos:
+                for v in _ordered_parts(videos):
                     url = v.get("signed_url")
                     if url:
                         out.append((_SOURCE_CAMERA, url, _filename_from(url, "mp4")))
             act = data.get(_SOURCE_ACTUATION)
             if isinstance(act, dict):
                 parts = act.get("parts") or [{"signed_url": act.get("signed_url")}]
-                for p in parts:
+                for p in _ordered_parts(parts):
                     url = p.get("signed_url")
                     if url:
                         out.append(
@@ -946,7 +1188,7 @@ class RecordingManager:
             aud = data.get(_SOURCE_AUDIO)
             if isinstance(aud, dict):
                 clips = aud.get("clips") or [{"signed_url": aud.get("signed_url")}]
-                for c in clips:
+                for c in _ordered_parts(clips):
                     url = c.get("signed_url")
                     if url:
                         out.append((_SOURCE_AUDIO, url, _filename_from(url, "mp3")))
@@ -976,14 +1218,31 @@ class RecordingManager:
                     )
 
     @staticmethod
-    def _download(url: str, dest: Path) -> None:
+    def _download(
+        url: str, dest: Path, *, cancel: threading.Event | None = None
+    ) -> None:
+        """Stream one artifact to ``dest``.
+
+        ``cancel``, when a concurrent fetch has already failed elsewhere, lets a
+        transfer abandon itself at the next chunk boundary instead of running to
+        completion into a temp dir that is about to be deleted.
+        """
         from ..exceptions import CyberwaveError
+
+        if cancel is not None and cancel.is_set():
+            raise CyberwaveError(f"Download abandoned before starting: {url}")
 
         # Reuse one process-wide pool. A fresh PoolManager per artifact never gets
         # closed, so its keep-alive socket lingers until GC — downloading many
         # streams/parts (or repeated get() calls) would accumulate open fds. The
         # shared pool bounds connections and lets release_conn() recycle them.
-        http = _get_http_pool()
+        #
+        # Ask for the minimum this transfer needs — one connection. Only the
+        # planner in ``get()`` knows a fetch's concurrency, and it sizes the pool
+        # before the workers start; asking for the default here would grow the pool
+        # straight back to 8 on the first chunk of any fetch planned with fewer
+        # workers than that, discarding the pool that call had just built.
+        http = _get_http_pool(1)
         response = http.request(
             "GET",
             url,
@@ -997,6 +1256,8 @@ class RecordingManager:
                 )
             with open(dest, "wb") as fh:
                 for chunk in response.stream(1024 * 1024):
+                    if cancel is not None and cancel.is_set():
+                        raise CyberwaveError(f"Download cancelled mid-stream: {url}")
                     fh.write(chunk)
         finally:
             response.release_conn()
@@ -1054,10 +1315,12 @@ class TwinRecordingsHandle:
         recording: "RecordingListItem | str",
         *,
         path: str | None = None,
+        max_workers: int | None = None,
     ) -> Recording:
         return self._manager().get(
             recording,
             environment_id=self._twin.environment_id,
             path=path,
             twin_uuid=str(self._twin.uuid),
+            max_workers=max_workers,
         )

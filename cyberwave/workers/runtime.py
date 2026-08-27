@@ -23,8 +23,9 @@ from cyberwave.data.keys import build_key, build_wildcard, parse_key
 from cyberwave.exceptions import CyberwaveError
 from cyberwave.workers.constants import build_monitor_stats_key
 from cyberwave.workers.context import HookContext
-from cyberwave.workers.decode import decode_sample_payload, extract_wire_metadata
+from cyberwave.workers.decode import decode_sample
 from cyberwave.workers.hooks import (
+    MANUAL_TRIGGER_SUBTOPIC,
     SENSOR_BEARING_CHANNELS,
     WILDCARD_SENSOR,
     HookRegistration,
@@ -748,8 +749,7 @@ class WorkerRuntime:
                                 entry["drops"] = drop_counter[0]
                         continue
                     last_dispatched_at = now_monotonic
-                decoded_data, wire_ts = decode_sample_payload(sample, content_hint=hint)
-                wire_meta = extract_wire_metadata(sample)
+                decoded_data, wire_ts, wire_meta = decode_sample(sample, content_hint=hint)
                 ctx = self._build_context(hook, sample, wire_ts=wire_ts, wire_metadata=wire_meta)
                 try:
                     hook.callback(decoded_data, ctx)
@@ -882,10 +882,8 @@ class WorkerRuntime:
             self._hook_stats[hook_name] = {"frames": 0, "drops": 0}
 
         # FIFO cache of execution_uuids already dispatched for this
-        # "workflow"-scoped (manual-trigger) hook. Closed over per-hook
-        # rather than stored on ``self`` since each ``_subscribe_mqtt_hook``
-        # call owns exactly one topic. Irrelevant (and untouched) for plain
-        # twin-scoped ``@cw.on_mqtt`` hooks, which have no execution_uuid.
+        # "workflow"-scoped hook ("run" or "cancel" — both carry one).
+        # Irrelevant for plain twin-scoped ``@cw.on_mqtt`` hooks.
         seen_executions: dict[str, None] = {}
 
         def _ack_manual_trigger_execution(payload: Any) -> None:
@@ -915,7 +913,9 @@ class WorkerRuntime:
                 )
 
         def dispatch(payload: Any) -> None:
-            if scope == "workflow":
+            # Gate on subtopic, not just scope: "cancel" shares
+            # scope="workflow" with "run" but must never start-ack.
+            if scope == "workflow" and subtopic == MANUAL_TRIGGER_SUBTOPIC:
                 _ack_manual_trigger_execution(payload)
             try:
                 ctx = HookContext(
@@ -961,8 +961,10 @@ class WorkerRuntime:
                         execution_uuid = str(execution_uuid)
                         if execution_uuid in seen_executions:
                             logger.info(
-                                "Dropping duplicate manual-trigger command "
-                                "execution=%s for hook '%s' (already seen)",
+                                "Dropping duplicate workflow-scoped '%s' "
+                                "command execution=%s for hook '%s' "
+                                "(already seen)",
+                                subtopic,
                                 execution_uuid,
                                 hook_name,
                             )

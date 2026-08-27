@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from cyberwave.config import CyberwaveConfig
 from cyberwave.mqtt import _UNSET
+from cyberwave.mqtt import CyberwaveMQTTClient as BaseMQTTClientImpl
 from cyberwave.mqtt_client import CyberwaveMQTTClient as WrapperMQTTClient
 
 
@@ -117,3 +118,60 @@ def test_wrapper_unsubscribe_defaults_to_remove_all() -> None:
     # Omitting subscriber_key must forward the _UNSET sentinel so the base
     # client removes every handler and tears down the broker subscription.
     assert base.unsubscribe.call_args.args[-1] is _UNSET
+
+
+def test_wrapper_forwards_publish_pointcloud() -> None:
+    # The send_depth workflow node emits ``client.mqtt.publish_pointcloud(...)``
+    # inside a try/except, so a missing passthrough surfaces only as a WARNING
+    # in an edge container log and the point cloud silently never publishes.
+    wrapper, base = _make_wrapper_with_mock_base()
+
+    cloud = object()
+    wrapper.publish_pointcloud("twin-uuid", cloud, 123.0)
+
+    base.publish_pointcloud.assert_called_once_with("twin-uuid", cloud, 123.0, stride=6)
+
+
+# Methods on the base client that the wrapper deliberately does not re-export.
+# Anything added here is a conscious decision, not an oversight — see the
+# module docstring for why silent drift is expensive.
+_WRAPPER_PASSTHROUGH_EXEMPT = frozenset(
+    {
+        # Connection lifecycle: the wrapper owns connect/disconnect and drives
+        # these internally; callers have no reason to fire them by hand.
+        "publish_connected",
+        "publish_disconnected",
+        # Superseded by the wrapper's own ``subscribe_joint_states``.
+        "subscribe_twin_joint_states",
+        # TODO(CYB-3200 follow-up): live gap, not intentional. Three unguarded
+        # call sites (cyberwave/edge/base.py, both Go2 edge bridges) reach this
+        # through ``client.mqtt`` and raise AttributeError. Pre-existing on dev
+        # since 00aa7c6e0; fixed separately to keep that change reviewable.
+        "update_twin_gps",
+    }
+)
+
+
+def test_wrapper_exposes_every_base_client_method() -> None:
+    """``Cyberwave.mqtt`` is the wrapper, so a base-only method is unreachable.
+
+    Both classes are named ``CyberwaveMQTTClient``, so "go to definition" lands
+    on the base implementation and adding a method there looks complete. The
+    wrapper is a hand-written allowlist with no ``__getattr__``, so anything not
+    echoed here is dead on arrival for every caller that goes through
+    ``client.mqtt``.
+    """
+    base_api = {
+        name
+        for name in vars(BaseMQTTClientImpl)
+        if not name.startswith("_")
+        and callable(getattr(BaseMQTTClientImpl, name, None))
+    }
+    missing = sorted(
+        base_api - set(dir(WrapperMQTTClient)) - _WRAPPER_PASSTHROUGH_EXEMPT
+    )
+    assert not missing, (
+        "these base MQTT client methods are unreachable via Cyberwave.mqtt: "
+        f"{missing}. Add a passthrough in cyberwave/mqtt_client.py, or add the "
+        "name to _WRAPPER_PASSTHROUGH_EXEMPT with a reason."
+    )

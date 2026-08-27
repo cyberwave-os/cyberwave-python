@@ -1356,13 +1356,105 @@ class CyberwaveMQTTClient:
         depth_data: Dict[str, Any],
         timestamp: Optional[float] = None,
     ):
-        """Publish depth frame data via MQTT."""
+        """Publish depth frame data via MQTT.
+
+        Publishes **only** the depth frame. Producers that also want a 3-D
+        cloud call :meth:`publish_pointcloud` themselves (the
+        ``send_depth`` workflow node does) — deriving one here would fan every
+        depth publisher out onto ``twin/{uuid}/pointcloud``, which already has a
+        backend producer (``point_cloud_tasks.process_colored_point_cloud``,
+        using the twin's real calibration) and a Vector→Postgres ingestion sink.
+        """
         self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/depth"
+        ts = timestamp or time.time()
         message = {
             "type": "depth_data",
             "data": depth_data,
-            "timestamp": timestamp or time.time(),
+            "timestamp": ts,
+        }
+        self.publish(topic, message)
+
+    def publish_pointcloud(
+        self,
+        twin_uuid: str,
+        point_cloud_data: Any,
+        timestamp: Optional[float] = None,
+        *,
+        stride: int = 6,
+    ):
+        """Publish a point-cloud frame via MQTT.
+
+        ``point_cloud_data`` is a ``float32`` ``numpy.ndarray`` holding either
+        ``[x, y, z]`` or ``[x, y, z, r, g, b]`` per point, in one of two shapes:
+
+        * ``(N, 3)`` / ``(N, 6)`` — self-describing, ``stride`` is ignored;
+        * flat ``(N * stride,)`` interleaved — what
+          :func:`cyberwave.utils.depth.depth_to_colored_pointcloud` returns (it
+          fills a flat buffer directly to avoid a copy).  A flat buffer cannot
+          say whether it is 3- or 6-wide, so ``stride`` supplies it; the default
+          of ``6`` matches that helper.
+
+        The array is base64-encoded and published to
+        ``cyberwave/twin/{twin_uuid}/pointcloud`` in the wire format expected by
+        the frontend ``ColoredPointCloud`` component.
+
+        ``rows``/``cols``/``source_type``/``source_subtype`` mirror the backend
+        producer's payload (``build_colored_pointcloud_payload``) so the Vector
+        sink records these frames with the right shape and provenance instead of
+        falling back to its "lean producer" defaults, which would label an
+        edge-published cloud as backend-generated.
+
+        ``point_stride`` carries the same dimensionality as ``cols``: the topic
+        multiplexes 3- and 6-wide clouds, Vector reads ``cols`` while the SDK
+        consumer (:func:`cyberwave.twin.sensors.pointcloud._decode_pointcloud`)
+        reads ``point_stride``, and without it that consumer falls back to a
+        heuristic that can silently drop or duplicate points.  We know the
+        stride exactly here, so both are stamped.
+        """
+        import base64
+
+        import numpy as np
+
+        arr = np.ascontiguousarray(np.asarray(point_cloud_data, dtype=np.float32))
+        if arr.ndim == 2:
+            # 2-D carries its own stride; a caller-supplied one cannot disagree.
+            stride = int(arr.shape[1])
+            if stride not in (3, 6):
+                raise ValueError(
+                    "point_cloud_data must be (N, 3) [x,y,z] or (N, 6) "
+                    f"[x,y,z,r,g,b], got shape {arr.shape}"
+                )
+        elif arr.ndim == 1:
+            stride = int(stride)
+            if stride not in (3, 6):
+                raise ValueError(f"stride must be 3 or 6, got {stride!r}")
+            if arr.size % stride:
+                raise ValueError(
+                    f"flat point_cloud_data of size {arr.size} is not divisible "
+                    f"by stride {stride}"
+                )
+            arr = arr.reshape(-1, stride)
+        else:
+            raise ValueError(
+                "point_cloud_data must be a flat interleaved array or 2-D "
+                f"(N, 3) / (N, 6), got shape {arr.shape}"
+            )
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/pointcloud"
+        ts = timestamp or time.time()
+        message = {
+            "type": "pointcloud",
+            "data": base64.b64encode(arr.tobytes()).decode("utf-8"),
+            "timestamp": ts,
+            "timestamp_us": int(ts * 1e6),
+            "twin_uuid": str(twin_uuid),
+            "rows": int(arr.shape[0]),
+            "cols": stride,
+            "point_stride": stride,
+            "source_type": SOURCE_TYPE_EDGE,
+            "source_subtype": "edge",
         }
         self.publish(topic, message)
 

@@ -403,13 +403,16 @@ class EdgeHealthCheck:
         def _build_stream_entry(stream_id: str) -> Dict[str, Any]:
             entry: Dict[str, Any] = {
                 "camera_id": stream_id,
-                "connection_state": "disconnected" if is_stale else "connected",
-                # ``_has_alive_signal`` flips on the first
-                # ``update_frame_count`` or ``mark_alive`` call.  Using
-                # the flag rather than ``frame_count > 0`` lets audio
-                # publishers (which use ``mark_alive`` to avoid wire
-                # pollution — see :meth:`mark_alive`) still surface as
-                # ``connected`` once their first frame has been seen.
+                # Not ``frame_count > 0``: ``mark_alive`` callers never bump it.
+                # Before the flag flips this is ``connecting``, not
+                # ``connected`` — ``last_frame_time`` is seeded at ``__init__``,
+                # so a publisher that never produced would otherwise claim
+                # frames are flowing until the stale timeout.
+                "connection_state": (
+                    "disconnected"
+                    if is_stale
+                    else ("connected" if self._has_alive_signal else "connecting")
+                ),
                 "ice_connection_state": (
                     "connected" if self._has_alive_signal else "new"
                 ),

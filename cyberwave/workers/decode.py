@@ -22,7 +22,7 @@ import os
 from typing import Any
 
 from cyberwave.data.backend import Sample
-from cyberwave.data.header import decode
+from cyberwave.data.header import CONTENT_TYPE_NUMPY, decode
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +141,61 @@ def decode_sample_payload(sample: Sample, *, content_hint: str = "") -> tuple[An
             pass
 
     return raw, ts_fallback
+
+
+def decode_sample(
+    sample: Sample, *, content_hint: str = ""
+) -> tuple[Any, float, dict[str, Any]]:
+    """Decode a raw ``Sample`` into ``(decoded_data, timestamp, wire_metadata)``.
+
+    One :func:`~cyberwave.data.header.decode` call for both the payload and
+    the header fields.  ``decode()`` slices the payload out of the wire
+    buffer (``raw[header_end:]``), which copies the whole frame — calling
+    it twice per sample copies a raw BGR frame twice and throws one copy
+    away.  Falls back to the standalone helpers for the non-SDK wire
+    formats (raw JPEG from native C++ drivers, bare JSON), which carry no
+    header metadata anyway.
+
+    Never raises.  ``dispatch_loop`` calls this outside the ``try`` that
+    guards the hook callback, so an escaping exception would kill the
+    hook's dispatch thread for the life of the worker with no error alert.
+    The whole decode therefore sits inside one ``except``, matching
+    :func:`decode_sample_payload` — a valid header whose *payload* fails to
+    decode (shape/payload disagreement, unknown dtype, a non-JSON body under
+    a JSON content type, or a ``_maybe_resize`` that OpenCV rejects) falls
+    back to raw bytes rather than propagating.
+    """
+    meta: dict[str, Any] = {}
+    try:
+        header, payload = decode(sample.payload)
+        # Populated before the payload decode so a payload-level failure
+        # still surfaces the header fields, as extract_wire_metadata did.
+        if header.metadata:
+            meta.update(header.metadata)
+        if header.content_type:
+            meta.setdefault("content_type", header.content_type)
+        if header.dtype:
+            meta.setdefault("dtype", header.dtype)
+
+        if (
+            content_hint == "numpy"
+            and header.content_type == CONTENT_TYPE_NUMPY
+            and header.shape
+            and header.dtype
+        ):
+            import numpy as np
+
+            arr = np.frombuffer(payload, dtype=header.dtype).reshape(header.shape)
+            return _maybe_resize(arr), header.ts, meta
+
+        return _maybe_resize(_decode_payload(header, payload)), header.ts, meta
+    except Exception:
+        logger.debug("SDK wire decode failed; falling back", exc_info=True)
+
+    # Cold path only — the hot path above still decodes once.  Delegating
+    # keeps the JPEG / bare-JSON / raw-bytes fallbacks byte-identical to the
+    # decode_sample_payload + extract_wire_metadata pair this replaced.
+    return (*decode_sample_payload(sample, content_hint=content_hint), meta)
 
 
 def extract_wire_metadata(sample: Sample) -> dict[str, Any]:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 MANIFEST_VERSION = "1"
 
@@ -66,7 +66,9 @@ class ManifestSchema(BaseModel):
     mqtt_use_tls: bool | None = None
     mqtt_tls_ca_certs: str | None = None
     mqtt_username: str | None = None
-    mqtt_password: str | None = None  # Prefer env var substitution (e.g. ${MQTT_PASSWORD}) to avoid committing secrets to source control.
+    # Prefer env var substitution (e.g. ${MQTT_PASSWORD}) to avoid committing
+    # secrets. repr=False: pydantic's __repr__ prints every field.
+    mqtt_password: str | None = Field(default=None, repr=False)
 
     model_config = {"extra": "forbid"}
 

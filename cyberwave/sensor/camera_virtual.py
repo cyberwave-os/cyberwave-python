@@ -50,6 +50,9 @@ class VirtualVideoTrack(BaseVideoTrack):
         placeholder_image: Optional RGB placeholder image when get_frame returns None
     """
 
+    # Default for tracks built without ``__init__``; ``+=`` rebinds per instance.
+    captured_frame_count: int = 0
+
     def __init__(
         self,
         get_frame: Callable[[], Optional[np.ndarray]],
@@ -72,6 +75,9 @@ class VirtualVideoTrack(BaseVideoTrack):
         self._frames_since_keyframe = 0
         self._last_time = None
         self.time_reference = time_reference
+
+        # Only advances on a real frame, unlike ``frame_count``.
+        self.captured_frame_count: int = 0
 
         if placeholder_image is not None:
             self._placeholder = np.ascontiguousarray(placeholder_image, dtype=np.uint8)
@@ -126,8 +132,11 @@ class VirtualVideoTrack(BaseVideoTrack):
         except Exception as e:
             logger.warning("Virtual frame provider error: %s", e)
 
-        # Use placeholder if no frame available
-        if frame is None:
+        # Use placeholder if no frame available. Placeholder ticks do not count
+        # as captures, so a provider that stops delivering goes stale.
+        if frame is not None:
+            self.captured_frame_count += 1
+        else:
             if self._placeholder is not None:
                 # Modulate placeholder brightness with 2-second period
                 t = time.time()

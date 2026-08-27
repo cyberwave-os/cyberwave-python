@@ -1,10 +1,10 @@
 """Tests for cyberwave.models.runtimes.torch_rt — PyTorch native backend."""
 
+import numpy as np
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from cyberwave.models.runtimes.torch_rt import TorchRuntime
+from cyberwave.models.types import ClassificationResult, CustomResult
 from tests.test_runtime_conformance import RuntimeConformanceMixin
 
 
@@ -58,12 +58,62 @@ class TestTorchRuntimeLoad:
 
 
 class TestTorchRuntimePredict:
-    def test_predict_raises_not_implemented(self):
-        rt = TorchRuntime()
-        with pytest.raises(NotImplementedError, match="not yet implemented"):
-            rt.predict(MagicMock(), MagicMock())
+    def test_predict_dispatches_classification_output(self):
+        mock_torch = MagicMock()
+        mock_model = MagicMock()
+
+        tensor_out = MagicMock()
+        tensor_out.cpu.return_value.float.return_value.numpy.return_value = np.array(
+            [[0.1, 0.7, 0.2]], dtype=np.float32
+        )
+        # Assigning __call__ on a MagicMock *instance* has no effect — dunder
+        # lookup goes through the type — so the model has to be wired via
+        # return_value or the forward pass silently yields a bare MagicMock.
+        mock_model.return_value = tensor_out
+        mock_torch.from_numpy.return_value.unsqueeze.return_value.to.return_value = (
+            MagicMock()
+        )
+        mock_torch.no_grad.return_value.__enter__ = MagicMock(return_value=None)
+        mock_torch.no_grad.return_value.__exit__ = MagicMock(return_value=False)
+        mock_torch.Tensor = type(tensor_out)
+
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            rt = TorchRuntime()
+            img = np.zeros((4, 4, 3), dtype=np.uint8)
+            result = rt.predict(mock_model, img)
+            assert isinstance(result, ClassificationResult)
+
+    def test_predict_returns_custom_result_for_3d_output(self):
+        """A 3-D tensor must NOT be guessed as YOLO detections.
+
+        This runtime is the catch-all for arbitrary user checkpoints, where
+        (B, C, N) is equally consistent with segmentation logits, per-token
+        embeddings or batched depth. Decoding boxes from those produced
+        confidently-wrong detections, so the raw tensor is handed back instead.
+        """
+        mock_torch = MagicMock()
+        mock_model = MagicMock()
+
+        tensor_out = MagicMock()
+        tensor_out.cpu.return_value.float.return_value.numpy.return_value = np.zeros(
+            (1, 84, 8400), dtype=np.float32
+        )
+        mock_model.return_value = tensor_out
+        mock_torch.from_numpy.return_value.unsqueeze.return_value.to.return_value = (
+            MagicMock()
+        )
+        mock_torch.no_grad.return_value.__enter__ = MagicMock(return_value=None)
+        mock_torch.no_grad.return_value.__exit__ = MagicMock(return_value=False)
+        mock_torch.Tensor = type(tensor_out)
+
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            rt = TorchRuntime()
+            img = np.zeros((4, 4, 3), dtype=np.uint8)
+            result = rt.predict(mock_model, img)
+            assert isinstance(result, CustomResult)
+            assert result.data.shape == (1, 84, 8400)
 
 
 class TestTorchSupportsPredictFlag:
-    def test_supports_predict_is_false(self):
-        assert TorchRuntime().supports_predict is False
+    def test_supports_predict_is_true(self):
+        assert TorchRuntime().supports_predict is True

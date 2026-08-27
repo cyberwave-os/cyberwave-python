@@ -15,29 +15,7 @@ from typing import Any
 
 import pytest
 
-
-def _rest_module_is_real() -> bool:
-    """Return True if the auto-generated REST client is available.
-
-    Scans ``sys.path`` directly for the ``cyberwave/rest/__init__.py`` file
-    rather than importing the module, to avoid triggering the parent package's
-    ``__init__.py`` (which would cause a circular import chain before the stub
-    modules are pre-seeded).
-    """
-    from pathlib import Path
-
-    for search_path in sys.path:
-        candidate = Path(search_path) / "cyberwave" / "rest" / "__init__.py"
-        try:
-            if candidate.exists() and candidate.stat().st_size > 0:
-                # Read only the first 4 KB — the import of DefaultApi always
-                # appears near the top of the generated __init__.py.
-                with candidate.open(encoding="utf-8", errors="ignore") as fh:
-                    head = fh.read(4096)
-                return "DefaultApi" in head
-        except OSError:
-            continue
-    return False
+from _rest_probe import rest_module_is_real
 
 
 def _to_plain_value(value: Any) -> Any:
@@ -157,7 +135,7 @@ def _make_stub_module(name: str) -> types.ModuleType:
 
 def _inject_rest_stubs() -> None:
     """Pre-seed ``sys.modules`` with stubs for ``cyberwave.rest.*``."""
-    if _rest_module_is_real():
+    if rest_module_is_real():
         return
 
     _REST_MODULES = [

@@ -44,7 +44,8 @@ class EnvironmentSchema(BaseModel):
     is_template: Optional[StrictBool] = False
     total_monthly_cost: Optional[Union[StrictFloat, StrictInt]] = None
     total_purchase_cost: Optional[Union[StrictFloat, StrictInt]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "universal_schema", "visibility", "thumbnail", "tags", "is_template", "total_monthly_cost", "total_purchase_cost"]
+    has_running_simulation: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "universal_schema", "visibility", "thumbnail", "tags", "is_template", "total_monthly_cost", "total_purchase_cost", "has_running_simulation"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -157,7 +158,8 @@ class EnvironmentSchema(BaseModel):
             "tags": obj.get("tags"),
             "is_template": obj.get("is_template") if obj.get("is_template") is not None else False,
             "total_monthly_cost": obj.get("total_monthly_cost"),
-            "total_purchase_cost": obj.get("total_purchase_cost")
+            "total_purchase_cost": obj.get("total_purchase_cost"),
+            "has_running_simulation": obj.get("has_running_simulation") if obj.get("has_running_simulation") is not None else False
         })
         return _obj
 

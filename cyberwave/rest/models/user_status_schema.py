@@ -39,9 +39,10 @@ class UserStatusSchema(BaseModel):
     waitlist_position: Optional[StrictInt] = None
     banned: StrictBool
     onboarded: StrictBool
+    completed_tours: List[StrictStr]
     user_status: StrictStr
     client_compatible_version: StrictStr
-    __properties: ClassVar[List[str]] = ["uuid", "username", "email", "first_name", "last_name", "full_name", "profile_picture", "is_staff", "waitlist", "waitlist_position", "banned", "onboarded", "user_status", "client_compatible_version"]
+    __properties: ClassVar[List[str]] = ["uuid", "username", "email", "first_name", "last_name", "full_name", "profile_picture", "is_staff", "waitlist", "waitlist_position", "banned", "onboarded", "completed_tours", "user_status", "client_compatible_version"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -116,6 +117,7 @@ class UserStatusSchema(BaseModel):
             "waitlist_position": obj.get("waitlist_position"),
             "banned": obj.get("banned"),
             "onboarded": obj.get("onboarded"),
+            "completed_tours": obj.get("completed_tours"),
             "user_status": obj.get("user_status"),
             "client_compatible_version": obj.get("client_compatible_version")
         })

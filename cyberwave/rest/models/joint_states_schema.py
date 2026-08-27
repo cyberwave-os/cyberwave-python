@@ -25,14 +25,15 @@ from pydantic_core import to_jsonable_python
 
 class JointStatesSchema(BaseModel):
     """
-    ROS-style ``sensor_msgs/JointState`` projection.  ``velocity`` / ``effort`` arrays follow ROS semantics: an empty array means the channel is not measured/commanded for any joint. They are only populated when every reported joint carries an explicit value.
+    ROS-style ``sensor_msgs/JointState`` projection.  ``velocity`` / ``effort`` arrays follow ROS semantics: an empty array means the channel is not measured/commanded for any joint. They are only populated when every reported joint carries an explicit value.  ``position_source`` is a Cyberwave extension parallel to ``name``, and the only way a caller can tell a measured pose from a fabricated one. Every controllable joint is reported, and a joint with no recorded runtime state falls back to its authored ``home_position`` and then to the geometric zero — which on the wire is indistinguishable from a robot that really is at home or at zero. A client that treats a ``home``/``default`` row as a live reading will show a never-moved joint as measured, and (in teleop) will step from a pose nothing ever observed. Consumers that need a live pose must filter on ``state``; consumers that only need *a* pose can ignore it.
     """ # noqa: E501
     header: Dict[str, StrictStr]
     name: List[StrictStr]
     position: List[Union[StrictFloat, StrictInt]]
     velocity: Optional[List[Union[StrictFloat, StrictInt]]] = None
     effort: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    __properties: ClassVar[List[str]] = ["header", "name", "position", "velocity", "effort"]
+    position_source: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["header", "name", "position", "velocity", "effort", "position_source"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -89,7 +90,8 @@ class JointStatesSchema(BaseModel):
             "name": obj.get("name"),
             "position": obj.get("position"),
             "velocity": obj.get("velocity"),
-            "effort": obj.get("effort")
+            "effort": obj.get("effort"),
+            "position_source": obj.get("position_source")
         })
         return _obj
 

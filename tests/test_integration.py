@@ -34,6 +34,22 @@ from cyberwave import Cyberwave
 from cyberwave.exceptions import CyberwaveAPIError, CyberwaveInsufficientCreditsError
 
 
+def _delete_resource_best_effort(kind: str, resource_uuid: str, delete_fn) -> None:
+    """Best-effort teardown of a resource created by a regression test.
+
+    ``delete_fn`` failures used to be swallowed with a bare ``except Exception:
+    pass``, which is why regression-test artifacts (e.g. three "Regression Test
+    Asset" rows) survived nightly CI runs and became permanent catalog entries —
+    the cleanup call was failing silently with nothing in the CI log to catch it.
+    Printing the failure at least makes it discoverable in the nightly run's
+    output instead of leaving the row as an invisible leak.
+    """
+    try:
+        delete_fn()
+    except Exception as exc:
+        print(f"  WARNING: failed to clean up {kind} {resource_uuid}: {exc}")
+
+
 @pytest.fixture(scope="module")
 def cyberwave_client():
     """
@@ -460,23 +476,26 @@ class TestIntegrationRegressions:
 
         finally:
             if created_resources["asset"]:
-                try:
-                    client.assets.delete(created_resources["asset"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "asset",
+                    created_resources["asset"].uuid,
+                    lambda: client.assets.delete(created_resources["asset"].uuid),
+                )
             if created_resources["environment"] and created_resources["project"]:
-                try:
-                    client.environments.delete(
+                _delete_resource_best_effort(
+                    "environment",
+                    created_resources["environment"].uuid,
+                    lambda: client.environments.delete(
                         created_resources["environment"].uuid,
                         created_resources["project"].uuid,
-                    )
-                except Exception:
-                    pass
+                    ),
+                )
             if created_resources["project"]:
-                try:
-                    client.projects.delete(created_resources["project"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "project",
+                    created_resources["project"].uuid,
+                    lambda: client.projects.delete(created_resources["project"].uuid),
+                )
 
         print("=" * 70 + "\n")
 
@@ -562,23 +581,26 @@ class TestIntegrationRegressions:
 
         finally:
             if created_resources["asset"]:
-                try:
-                    client.assets.delete(created_resources["asset"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "asset",
+                    created_resources["asset"].uuid,
+                    lambda: client.assets.delete(created_resources["asset"].uuid),
+                )
             if created_resources["environment"] and created_resources["project"]:
-                try:
-                    client.environments.delete(
+                _delete_resource_best_effort(
+                    "environment",
+                    created_resources["environment"].uuid,
+                    lambda: client.environments.delete(
                         created_resources["environment"].uuid,
                         created_resources["project"].uuid,
-                    )
-                except Exception:
-                    pass
+                    ),
+                )
             if created_resources["project"]:
-                try:
-                    client.projects.delete(created_resources["project"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "project",
+                    created_resources["project"].uuid,
+                    lambda: client.projects.delete(created_resources["project"].uuid),
+                )
 
         print("=" * 70 + "\n")
 

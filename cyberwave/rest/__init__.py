@@ -47,6 +47,8 @@ __all__ = [
     "AddMemberByEmailRequest",
     "AddMemberByEmailResponse",
     "AddMemberUserSchema",
+    "AddWorkspaceMemberByEmailRequest",
+    "AddWorkspaceMemberByEmailResponse",
     "AgentApplyWorkflowPlanSchema",
     "AgentControlAction",
     "AgentControlActionSpecSchema",
@@ -156,6 +158,7 @@ __all__ = [
     "ContactSubmissionUpdateSchema",
     "ControlRuntimeTargetSchema",
     "ControllerBundleManifestSchema",
+    "ControllerFromDriverYamlInput",
     "ControllerPolicyCreateSchema",
     "ControllerPolicyExecuteResponseSchema",
     "ControllerPolicyExecuteSchema",
@@ -239,6 +242,7 @@ __all__ = [
     "ExecuteTaskSchema",
     "FeatureMetadataSchema",
     "FeatureStatusSchema",
+    "FiducialMarkerSchema",
     "FinalizeTopupRequestSchema",
     "FinalizeTopupResponseSchema",
     "HardwareOrderCreateSchema",
@@ -248,14 +252,13 @@ __all__ = [
     "HistoryTurnSchema",
     "IOSchemaPortSchema",
     "IOSchemaSchema",
-    "ImageBytes",
-    "ImageBytes1",
     "ImportResultSchema",
     "InitiateLargeUploadResponse",
     "InitiateLargeUploadSchema",
     "InvitationResponseSchema",
     "JointCalibrationSchema",
     "JointSchema",
+    "JointSchemaLimitsValue",
     "JointStateSchema",
     "JointStateUpdateSchema",
     "JointStatesSchema",
@@ -264,7 +267,9 @@ __all__ = [
     "KeybindingUpdateSchema",
     "LLMGenerationSchema",
     "LLMResponseSchema",
+    "LabAccessRequestSchema",
     "LabAccessResponseSchema",
+    "LabKind",
     "LabStatusResponseSchema",
     "LinkShareCreateSchema",
     "LinkShareRevokeSchema",
@@ -301,17 +306,19 @@ __all__ = [
     "MLTrainingUpdateSchema",
     "MapCreateSchema",
     "MapDataSchema",
+    "MapStreamAbortSchema",
     "MapStreamFinalizeSchema",
     "MapStreamStartSchema",
     "MapStreamStopSchema",
-    "Metadata",
     "MetricsWindowSchema",
+    "MimicJointSchema",
     "MissionExecutionSchema",
     "MissionSchema",
     "MotionEpisodeSchema",
     "MotionPlanSchema",
     "MotionPlanStepSchema",
     "MyFeaturesResponseSchema",
+    "MyLabSessionSchema",
     "NavigationRotationSchema",
     "NavigationWaypointActionSchema",
     "NavigationWaypointSchema",
@@ -333,6 +340,7 @@ __all__ = [
     "OrganizationCreditAccountSchema",
     "OrganizationSchema",
     "OrganizationUpdateSchema",
+    "OrganizationWithWorkspacesSchema",
     "OrganizationWorkspaceSchema",
     "PairTwinSchema",
     "PasswordChangeSchema",
@@ -346,6 +354,7 @@ __all__ = [
     "PopularTagSchema",
     "PopularTagsResponseSchema",
     "Position",
+    "ProceduralPrimitiveCatalogPreviewSchema",
     "ProceduralPrimitiveTemplateSchema",
     "ProcessedDatasetSchema",
     "ProfileResponseSchema",
@@ -414,12 +423,15 @@ __all__ = [
     "ReplayTimelineEventSchema",
     "ReplayTimelineWindowEventsResponseSchema",
     "ReplayTimelineWindowSchema",
+    "ResetJointHomesSchema",
     "ResourceMetricsSchema",
     "Response",
     "RobotContextSchema",
     "RobotDescriptionSchema",
     "RobotStateSchema",
     "Rotation",
+    "SendDepthTwinEntry",
+    "SensorMergePatchSchema",
     "SetupIntentResponseSchema",
     "ShareSchema",
     "SharesResponseSchema",
@@ -457,6 +469,7 @@ __all__ = [
     "ThresholdCredits",
     "TopupIntentRequestSchema",
     "TopupIntentResponseSchema",
+    "TourCompletionSchema",
     "TrajectoryActionSchema",
     "TrajectoryFromActionRequestSchema",
     "TrajectoryInitialStateSchema",
@@ -477,6 +490,8 @@ __all__ = [
     "TwinMotionResponseSchema",
     "TwinNavigationCaptureUploadResponseSchema",
     "TwinNavigationCommandSchema",
+    "TwinObservationCreateSchema",
+    "TwinObservationResponseSchema",
     "TwinRelationshipSchema",
     "TwinSchema",
     "TwinStateUpdateSchema",
@@ -484,9 +499,11 @@ __all__ = [
     "TwinTelemetryMetadataSchema",
     "TwinTelemetryQueryResponseSchema",
     "TwinTelemetryRecordSchema",
+    "TwinUniversalSchemaBatchPatchSchema",
     "TwinUniversalSchemaPatchSchema",
     "URDFProjectCreateSchema",
     "URDFProjectSchema",
+    "UniversalSchemaBatchPatchSchema",
     "UniversalSchemaPatchSchema",
     "UpdateAlertSchema",
     "UpdateMemberRoleRequest",
@@ -510,6 +527,7 @@ __all__ = [
     "WorkflowDayBucket",
     "WorkflowExecuteSchema",
     "WorkflowExecutionSchema",
+    "WorkflowInboundEmailSchema",
     "WorkflowMetricsSection",
     "WorkflowNodeCategorySchema",
     "WorkflowNodeCreateSchema",
@@ -517,9 +535,11 @@ __all__ = [
     "WorkflowNodeHintSchema",
     "WorkflowNodeSchema",
     "WorkflowNodeUpdateSchema",
+    "WorkflowObjectiveSchema",
     "WorkflowRunSchema",
     "WorkflowSchema",
     "WorkflowStrategySchema",
+    "WorkflowSuggestionsResponseSchema",
     "WorkflowSummaryEntry",
     "WorkflowSyncToEdgeResponseSchema",
     "WorkflowTemplateSchema",
@@ -570,6 +590,8 @@ from cyberwave.rest.models.ai_usage_totals import AIUsageTotals as AIUsageTotals
 from cyberwave.rest.models.add_member_by_email_request import AddMemberByEmailRequest as AddMemberByEmailRequest
 from cyberwave.rest.models.add_member_by_email_response import AddMemberByEmailResponse as AddMemberByEmailResponse
 from cyberwave.rest.models.add_member_user_schema import AddMemberUserSchema as AddMemberUserSchema
+from cyberwave.rest.models.add_workspace_member_by_email_request import AddWorkspaceMemberByEmailRequest as AddWorkspaceMemberByEmailRequest
+from cyberwave.rest.models.add_workspace_member_by_email_response import AddWorkspaceMemberByEmailResponse as AddWorkspaceMemberByEmailResponse
 from cyberwave.rest.models.agent_apply_workflow_plan_schema import AgentApplyWorkflowPlanSchema as AgentApplyWorkflowPlanSchema
 from cyberwave.rest.models.agent_control_action import AgentControlAction as AgentControlAction
 from cyberwave.rest.models.agent_control_action_spec_schema import AgentControlActionSpecSchema as AgentControlActionSpecSchema
@@ -679,6 +701,7 @@ from cyberwave.rest.models.contact_submission_schema import ContactSubmissionSch
 from cyberwave.rest.models.contact_submission_update_schema import ContactSubmissionUpdateSchema as ContactSubmissionUpdateSchema
 from cyberwave.rest.models.control_runtime_target_schema import ControlRuntimeTargetSchema as ControlRuntimeTargetSchema
 from cyberwave.rest.models.controller_bundle_manifest_schema import ControllerBundleManifestSchema as ControllerBundleManifestSchema
+from cyberwave.rest.models.controller_from_driver_yaml_input import ControllerFromDriverYamlInput as ControllerFromDriverYamlInput
 from cyberwave.rest.models.controller_policy_create_schema import ControllerPolicyCreateSchema as ControllerPolicyCreateSchema
 from cyberwave.rest.models.controller_policy_execute_response_schema import ControllerPolicyExecuteResponseSchema as ControllerPolicyExecuteResponseSchema
 from cyberwave.rest.models.controller_policy_execute_schema import ControllerPolicyExecuteSchema as ControllerPolicyExecuteSchema
@@ -762,6 +785,7 @@ from cyberwave.rest.models.event_metrics_totals import EventMetricsTotals as Eve
 from cyberwave.rest.models.execute_task_schema import ExecuteTaskSchema as ExecuteTaskSchema
 from cyberwave.rest.models.feature_metadata_schema import FeatureMetadataSchema as FeatureMetadataSchema
 from cyberwave.rest.models.feature_status_schema import FeatureStatusSchema as FeatureStatusSchema
+from cyberwave.rest.models.fiducial_marker_schema import FiducialMarkerSchema as FiducialMarkerSchema
 from cyberwave.rest.models.finalize_topup_request_schema import FinalizeTopupRequestSchema as FinalizeTopupRequestSchema
 from cyberwave.rest.models.finalize_topup_response_schema import FinalizeTopupResponseSchema as FinalizeTopupResponseSchema
 from cyberwave.rest.models.hardware_order_create_schema import HardwareOrderCreateSchema as HardwareOrderCreateSchema
@@ -771,14 +795,13 @@ from cyberwave.rest.models.hardware_order_schema import HardwareOrderSchema as H
 from cyberwave.rest.models.history_turn_schema import HistoryTurnSchema as HistoryTurnSchema
 from cyberwave.rest.models.io_schema_port_schema import IOSchemaPortSchema as IOSchemaPortSchema
 from cyberwave.rest.models.io_schema_schema import IOSchemaSchema as IOSchemaSchema
-from cyberwave.rest.models.image_bytes import ImageBytes as ImageBytes
-from cyberwave.rest.models.image_bytes1 import ImageBytes1 as ImageBytes1
 from cyberwave.rest.models.import_result_schema import ImportResultSchema as ImportResultSchema
 from cyberwave.rest.models.initiate_large_upload_response import InitiateLargeUploadResponse as InitiateLargeUploadResponse
 from cyberwave.rest.models.initiate_large_upload_schema import InitiateLargeUploadSchema as InitiateLargeUploadSchema
 from cyberwave.rest.models.invitation_response_schema import InvitationResponseSchema as InvitationResponseSchema
 from cyberwave.rest.models.joint_calibration_schema import JointCalibrationSchema as JointCalibrationSchema
 from cyberwave.rest.models.joint_schema import JointSchema as JointSchema
+from cyberwave.rest.models.joint_schema_limits_value import JointSchemaLimitsValue as JointSchemaLimitsValue
 from cyberwave.rest.models.joint_state_schema import JointStateSchema as JointStateSchema
 from cyberwave.rest.models.joint_state_update_schema import JointStateUpdateSchema as JointStateUpdateSchema
 from cyberwave.rest.models.joint_states_schema import JointStatesSchema as JointStatesSchema
@@ -787,7 +810,9 @@ from cyberwave.rest.models.keybinding_schema import KeybindingSchema as Keybindi
 from cyberwave.rest.models.keybinding_update_schema import KeybindingUpdateSchema as KeybindingUpdateSchema
 from cyberwave.rest.models.llm_generation_schema import LLMGenerationSchema as LLMGenerationSchema
 from cyberwave.rest.models.llm_response_schema import LLMResponseSchema as LLMResponseSchema
+from cyberwave.rest.models.lab_access_request_schema import LabAccessRequestSchema as LabAccessRequestSchema
 from cyberwave.rest.models.lab_access_response_schema import LabAccessResponseSchema as LabAccessResponseSchema
+from cyberwave.rest.models.lab_kind import LabKind as LabKind
 from cyberwave.rest.models.lab_status_response_schema import LabStatusResponseSchema as LabStatusResponseSchema
 from cyberwave.rest.models.link_share_create_schema import LinkShareCreateSchema as LinkShareCreateSchema
 from cyberwave.rest.models.link_share_revoke_schema import LinkShareRevokeSchema as LinkShareRevokeSchema
@@ -824,17 +849,19 @@ from cyberwave.rest.models.ml_training_schema import MLTrainingSchema as MLTrain
 from cyberwave.rest.models.ml_training_update_schema import MLTrainingUpdateSchema as MLTrainingUpdateSchema
 from cyberwave.rest.models.map_create_schema import MapCreateSchema as MapCreateSchema
 from cyberwave.rest.models.map_data_schema import MapDataSchema as MapDataSchema
+from cyberwave.rest.models.map_stream_abort_schema import MapStreamAbortSchema as MapStreamAbortSchema
 from cyberwave.rest.models.map_stream_finalize_schema import MapStreamFinalizeSchema as MapStreamFinalizeSchema
 from cyberwave.rest.models.map_stream_start_schema import MapStreamStartSchema as MapStreamStartSchema
 from cyberwave.rest.models.map_stream_stop_schema import MapStreamStopSchema as MapStreamStopSchema
-from cyberwave.rest.models.metadata import Metadata as Metadata
 from cyberwave.rest.models.metrics_window_schema import MetricsWindowSchema as MetricsWindowSchema
+from cyberwave.rest.models.mimic_joint_schema import MimicJointSchema as MimicJointSchema
 from cyberwave.rest.models.mission_execution_schema import MissionExecutionSchema as MissionExecutionSchema
 from cyberwave.rest.models.mission_schema import MissionSchema as MissionSchema
 from cyberwave.rest.models.motion_episode_schema import MotionEpisodeSchema as MotionEpisodeSchema
 from cyberwave.rest.models.motion_plan_schema import MotionPlanSchema as MotionPlanSchema
 from cyberwave.rest.models.motion_plan_step_schema import MotionPlanStepSchema as MotionPlanStepSchema
 from cyberwave.rest.models.my_features_response_schema import MyFeaturesResponseSchema as MyFeaturesResponseSchema
+from cyberwave.rest.models.my_lab_session_schema import MyLabSessionSchema as MyLabSessionSchema
 from cyberwave.rest.models.navigation_rotation_schema import NavigationRotationSchema as NavigationRotationSchema
 from cyberwave.rest.models.navigation_waypoint_action_schema import NavigationWaypointActionSchema as NavigationWaypointActionSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema as NavigationWaypointSchema
@@ -856,6 +883,7 @@ from cyberwave.rest.models.organization_create_schema import OrganizationCreateS
 from cyberwave.rest.models.organization_credit_account_schema import OrganizationCreditAccountSchema as OrganizationCreditAccountSchema
 from cyberwave.rest.models.organization_schema import OrganizationSchema as OrganizationSchema
 from cyberwave.rest.models.organization_update_schema import OrganizationUpdateSchema as OrganizationUpdateSchema
+from cyberwave.rest.models.organization_with_workspaces_schema import OrganizationWithWorkspacesSchema as OrganizationWithWorkspacesSchema
 from cyberwave.rest.models.organization_workspace_schema import OrganizationWorkspaceSchema as OrganizationWorkspaceSchema
 from cyberwave.rest.models.pair_twin_schema import PairTwinSchema as PairTwinSchema
 from cyberwave.rest.models.password_change_schema import PasswordChangeSchema as PasswordChangeSchema
@@ -869,6 +897,7 @@ from cyberwave.rest.models.plan_schema import PlanSchema as PlanSchema
 from cyberwave.rest.models.popular_tag_schema import PopularTagSchema as PopularTagSchema
 from cyberwave.rest.models.popular_tags_response_schema import PopularTagsResponseSchema as PopularTagsResponseSchema
 from cyberwave.rest.models.position import Position as Position
+from cyberwave.rest.models.procedural_primitive_catalog_preview_schema import ProceduralPrimitiveCatalogPreviewSchema as ProceduralPrimitiveCatalogPreviewSchema
 from cyberwave.rest.models.procedural_primitive_template_schema import ProceduralPrimitiveTemplateSchema as ProceduralPrimitiveTemplateSchema
 from cyberwave.rest.models.processed_dataset_schema import ProcessedDatasetSchema as ProcessedDatasetSchema
 from cyberwave.rest.models.profile_response_schema import ProfileResponseSchema as ProfileResponseSchema
@@ -937,12 +966,15 @@ from cyberwave.rest.models.remove_member_response import RemoveMemberResponse as
 from cyberwave.rest.models.replay_timeline_event_schema import ReplayTimelineEventSchema as ReplayTimelineEventSchema
 from cyberwave.rest.models.replay_timeline_window_events_response_schema import ReplayTimelineWindowEventsResponseSchema as ReplayTimelineWindowEventsResponseSchema
 from cyberwave.rest.models.replay_timeline_window_schema import ReplayTimelineWindowSchema as ReplayTimelineWindowSchema
+from cyberwave.rest.models.reset_joint_homes_schema import ResetJointHomesSchema as ResetJointHomesSchema
 from cyberwave.rest.models.resource_metrics_schema import ResourceMetricsSchema as ResourceMetricsSchema
 from cyberwave.rest.models.response import Response as Response
 from cyberwave.rest.models.robot_context_schema import RobotContextSchema as RobotContextSchema
 from cyberwave.rest.models.robot_description_schema import RobotDescriptionSchema as RobotDescriptionSchema
 from cyberwave.rest.models.robot_state_schema import RobotStateSchema as RobotStateSchema
 from cyberwave.rest.models.rotation import Rotation as Rotation
+from cyberwave.rest.models.send_depth_twin_entry import SendDepthTwinEntry as SendDepthTwinEntry
+from cyberwave.rest.models.sensor_merge_patch_schema import SensorMergePatchSchema as SensorMergePatchSchema
 from cyberwave.rest.models.setup_intent_response_schema import SetupIntentResponseSchema as SetupIntentResponseSchema
 from cyberwave.rest.models.share_schema import ShareSchema as ShareSchema
 from cyberwave.rest.models.shares_response_schema import SharesResponseSchema as SharesResponseSchema
@@ -980,6 +1012,7 @@ from cyberwave.rest.models.template_workflow_summary_schema import TemplateWorkf
 from cyberwave.rest.models.threshold_credits import ThresholdCredits as ThresholdCredits
 from cyberwave.rest.models.topup_intent_request_schema import TopupIntentRequestSchema as TopupIntentRequestSchema
 from cyberwave.rest.models.topup_intent_response_schema import TopupIntentResponseSchema as TopupIntentResponseSchema
+from cyberwave.rest.models.tour_completion_schema import TourCompletionSchema as TourCompletionSchema
 from cyberwave.rest.models.trajectory_action_schema import TrajectoryActionSchema as TrajectoryActionSchema
 from cyberwave.rest.models.trajectory_from_action_request_schema import TrajectoryFromActionRequestSchema as TrajectoryFromActionRequestSchema
 from cyberwave.rest.models.trajectory_initial_state_schema import TrajectoryInitialStateSchema as TrajectoryInitialStateSchema
@@ -1000,6 +1033,8 @@ from cyberwave.rest.models.twin_metrics_query_schema import TwinMetricsQuerySche
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema as TwinMotionResponseSchema
 from cyberwave.rest.models.twin_navigation_capture_upload_response_schema import TwinNavigationCaptureUploadResponseSchema as TwinNavigationCaptureUploadResponseSchema
 from cyberwave.rest.models.twin_navigation_command_schema import TwinNavigationCommandSchema as TwinNavigationCommandSchema
+from cyberwave.rest.models.twin_observation_create_schema import TwinObservationCreateSchema as TwinObservationCreateSchema
+from cyberwave.rest.models.twin_observation_response_schema import TwinObservationResponseSchema as TwinObservationResponseSchema
 from cyberwave.rest.models.twin_relationship_schema import TwinRelationshipSchema as TwinRelationshipSchema
 from cyberwave.rest.models.twin_schema import TwinSchema as TwinSchema
 from cyberwave.rest.models.twin_state_update_schema import TwinStateUpdateSchema as TwinStateUpdateSchema
@@ -1007,9 +1042,11 @@ from cyberwave.rest.models.twin_sync_workflows_response_schema import TwinSyncWo
 from cyberwave.rest.models.twin_telemetry_metadata_schema import TwinTelemetryMetadataSchema as TwinTelemetryMetadataSchema
 from cyberwave.rest.models.twin_telemetry_query_response_schema import TwinTelemetryQueryResponseSchema as TwinTelemetryQueryResponseSchema
 from cyberwave.rest.models.twin_telemetry_record_schema import TwinTelemetryRecordSchema as TwinTelemetryRecordSchema
+from cyberwave.rest.models.twin_universal_schema_batch_patch_schema import TwinUniversalSchemaBatchPatchSchema as TwinUniversalSchemaBatchPatchSchema
 from cyberwave.rest.models.twin_universal_schema_patch_schema import TwinUniversalSchemaPatchSchema as TwinUniversalSchemaPatchSchema
 from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSchema as URDFProjectCreateSchema
 from cyberwave.rest.models.urdf_project_schema import URDFProjectSchema as URDFProjectSchema
+from cyberwave.rest.models.universal_schema_batch_patch_schema import UniversalSchemaBatchPatchSchema as UniversalSchemaBatchPatchSchema
 from cyberwave.rest.models.universal_schema_patch_schema import UniversalSchemaPatchSchema as UniversalSchemaPatchSchema
 from cyberwave.rest.models.update_alert_schema import UpdateAlertSchema as UpdateAlertSchema
 from cyberwave.rest.models.update_member_role_request import UpdateMemberRoleRequest as UpdateMemberRoleRequest
@@ -1033,6 +1070,7 @@ from cyberwave.rest.models.workflow_create_schema import WorkflowCreateSchema as
 from cyberwave.rest.models.workflow_day_bucket import WorkflowDayBucket as WorkflowDayBucket
 from cyberwave.rest.models.workflow_execute_schema import WorkflowExecuteSchema as WorkflowExecuteSchema
 from cyberwave.rest.models.workflow_execution_schema import WorkflowExecutionSchema as WorkflowExecutionSchema
+from cyberwave.rest.models.workflow_inbound_email_schema import WorkflowInboundEmailSchema as WorkflowInboundEmailSchema
 from cyberwave.rest.models.workflow_metrics_section import WorkflowMetricsSection as WorkflowMetricsSection
 from cyberwave.rest.models.workflow_node_category_schema import WorkflowNodeCategorySchema as WorkflowNodeCategorySchema
 from cyberwave.rest.models.workflow_node_create_schema import WorkflowNodeCreateSchema as WorkflowNodeCreateSchema
@@ -1040,9 +1078,11 @@ from cyberwave.rest.models.workflow_node_execution_schema import WorkflowNodeExe
 from cyberwave.rest.models.workflow_node_hint_schema import WorkflowNodeHintSchema as WorkflowNodeHintSchema
 from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema as WorkflowNodeSchema
 from cyberwave.rest.models.workflow_node_update_schema import WorkflowNodeUpdateSchema as WorkflowNodeUpdateSchema
+from cyberwave.rest.models.workflow_objective_schema import WorkflowObjectiveSchema as WorkflowObjectiveSchema
 from cyberwave.rest.models.workflow_run_schema import WorkflowRunSchema as WorkflowRunSchema
 from cyberwave.rest.models.workflow_schema import WorkflowSchema as WorkflowSchema
 from cyberwave.rest.models.workflow_strategy_schema import WorkflowStrategySchema as WorkflowStrategySchema
+from cyberwave.rest.models.workflow_suggestions_response_schema import WorkflowSuggestionsResponseSchema as WorkflowSuggestionsResponseSchema
 from cyberwave.rest.models.workflow_summary_entry import WorkflowSummaryEntry as WorkflowSummaryEntry
 from cyberwave.rest.models.workflow_sync_to_edge_response_schema import WorkflowSyncToEdgeResponseSchema as WorkflowSyncToEdgeResponseSchema
 from cyberwave.rest.models.workflow_template_schema import WorkflowTemplateSchema as WorkflowTemplateSchema

@@ -19,7 +19,6 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
-from cyberwave.rest.models.metadata import Metadata
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -32,13 +31,13 @@ class MapCreateSchema(BaseModel):
     environment_uuid: Optional[StrictStr] = None
     map_type: StrictStr
     resolution: Optional[Union[StrictFloat, StrictInt]] = None
-    origin_x: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_y: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_z: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_roll: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_pitch: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    origin_yaw: Optional[Union[StrictFloat, StrictInt]] = 0.0
-    metadata: Optional[Metadata] = None
+    origin_x: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_y: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_z: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_roll: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_pitch: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_yaw: Optional[Union[StrictFloat, StrictInt]] = None
+    metadata: Optional[StrictStr] = None
     __properties: ClassVar[List[str]] = ["twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "metadata"]
 
     @field_validator('map_type')
@@ -87,9 +86,6 @@ class MapCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of metadata
-        if self.metadata:
-            _dict['metadata'] = self.metadata.to_dict()
         # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
@@ -104,6 +100,36 @@ class MapCreateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.resolution is None and "resolution" in self.model_fields_set:
             _dict['resolution'] = None
+
+        # set to None if origin_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_x is None and "origin_x" in self.model_fields_set:
+            _dict['origin_x'] = None
+
+        # set to None if origin_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_y is None and "origin_y" in self.model_fields_set:
+            _dict['origin_y'] = None
+
+        # set to None if origin_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_z is None and "origin_z" in self.model_fields_set:
+            _dict['origin_z'] = None
+
+        # set to None if origin_roll (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_roll is None and "origin_roll" in self.model_fields_set:
+            _dict['origin_roll'] = None
+
+        # set to None if origin_pitch (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_pitch is None and "origin_pitch" in self.model_fields_set:
+            _dict['origin_pitch'] = None
+
+        # set to None if origin_yaw (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_yaw is None and "origin_yaw" in self.model_fields_set:
+            _dict['origin_yaw'] = None
 
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
@@ -126,13 +152,13 @@ class MapCreateSchema(BaseModel):
             "environment_uuid": obj.get("environment_uuid"),
             "map_type": obj.get("map_type"),
             "resolution": obj.get("resolution"),
-            "origin_x": obj.get("origin_x") if obj.get("origin_x") is not None else 0.0,
-            "origin_y": obj.get("origin_y") if obj.get("origin_y") is not None else 0.0,
-            "origin_z": obj.get("origin_z") if obj.get("origin_z") is not None else 0.0,
-            "origin_roll": obj.get("origin_roll") if obj.get("origin_roll") is not None else 0.0,
-            "origin_pitch": obj.get("origin_pitch") if obj.get("origin_pitch") is not None else 0.0,
-            "origin_yaw": obj.get("origin_yaw") if obj.get("origin_yaw") is not None else 0.0,
-            "metadata": Metadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None
+            "origin_x": obj.get("origin_x"),
+            "origin_y": obj.get("origin_y"),
+            "origin_z": obj.get("origin_z"),
+            "origin_roll": obj.get("origin_roll"),
+            "origin_pitch": obj.get("origin_pitch"),
+            "origin_yaw": obj.get("origin_yaw"),
+            "metadata": obj.get("metadata")
         })
         return _obj
 

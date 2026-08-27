@@ -246,6 +246,10 @@ class CV2VideoTrack(BaseVideoTrack):
     frame (a freeze-frame fallback) so the encoder keeps a valid input. See
     ``_reconnect_loop``.
 
+    Freezing is unbounded on purpose: ``None`` from ``recv()`` makes aiortc's
+    encoder raise and permanently stops the sender. ``captured_frame_count`` is
+    what makes the outage visible instead.
+
     Example:
         >>> # Local USB camera
         >>> track = CV2VideoTrack(camera_id=0, fps=30, resolution=Resolution.HD)
@@ -270,6 +274,12 @@ class CV2VideoTrack(BaseVideoTrack):
     _RECONNECT_TRIGGER_FAILURES = 3
     _RECONNECT_BACKOFF_INITIAL_S = 0.5
     _RECONNECT_BACKOFF_MAX_S = 8.0
+
+    # Pacing rate for the degraded loop when the configured fps is unusable.
+    _DEGRADED_FALLBACK_FPS = 30.0
+
+    # Default for tracks built without ``__init__``; ``+=`` rebinds per instance.
+    captured_frame_count: int = 0
 
     @staticmethod
     def _is_url_stream(camera_id: Union[int, str]) -> bool:
@@ -367,6 +377,10 @@ class CV2VideoTrack(BaseVideoTrack):
         self._consecutive_read_failures = 0
         self._last_good_frame_bgr: Optional[np.ndarray] = None
         self._reconnect_task: Optional[asyncio.Task] = None
+
+        # Only moves on a successful ``cap.read()``, unlike ``frame_count``,
+        # which the freeze fallback keeps advancing.
+        self.captured_frame_count: int = 0
 
         # Parse resolution
         if isinstance(resolution, Resolution):
@@ -1026,14 +1040,21 @@ class CV2VideoTrack(BaseVideoTrack):
         and return a freeze frame (last good capture) so the aiortc encoder
         does not crash on ``None``. See ``_RECONNECT_TRIGGER_FAILURES`` and
         ``_reconnect_loop``.
+
+        Freeze ticks do not advance ``captured_frame_count``, so health still
+        goes stale even though the WebRTC pipeline keeps ticking.
         """
         ret, frame = self.cap.read()
 
         if ret:
             self._consecutive_read_failures = 0
+            self.captured_frame_count += 1
         else:
             self._consecutive_read_failures += 1
             self._maybe_schedule_reconnect()
+            # A dead ``cap.read()`` fails instantly where a healthy one blocks,
+            # so without this the loop free-runs. Also covers ``return None``.
+            await self._sleep_one_frame_interval()
             if self._last_good_frame_bgr is None:
                 if self._consecutive_read_failures == 1:
                     logger.error(
@@ -1154,6 +1175,18 @@ class CV2VideoTrack(BaseVideoTrack):
         self.frame_count += 1
 
         return video_frame
+
+    async def _sleep_one_frame_interval(self) -> None:
+        """Stand in for the blocking time a healthy ``cap.read()`` would take.
+
+        Same rate ``time_base`` is built from: freeze ticks bump ``frame_count``,
+        which is ``pts``, so emitting faster than the declared rate runs the
+        media timeline fast for the length of the outage.
+        """
+        fps = self.actual_fps or self.fps
+        if not isinstance(fps, (int, float)) or fps <= 0:
+            fps = self._DEGRADED_FALLBACK_FPS
+        await asyncio.sleep(1.0 / float(fps))
 
     def _maybe_schedule_reconnect(self) -> None:
         """Kick off a background source-reopen task if not already running.

@@ -10,6 +10,10 @@ Supports all Ultralytics task types:
 * **obb** — each :class:`Detection` carries an :class:`OrientedBoundingBox`
   in ``.obb``; ``.bbox`` is the tightest axis-aligned bounding box.
 * **classify** — :class:`ClassificationResult` (top-K class scores).
+* **depth** — :class:`DepthResult` with **metric** depth in metres
+  (``yolo26*-depth``). Unlike the detection tasks this returns on the first
+  result rather than accumulating, since a depth map is per-frame and has no
+  cross-frame aggregation.
 """
 
 from __future__ import annotations
@@ -19,11 +23,14 @@ import os
 from pathlib import Path, PurePath
 from typing import Any
 
+import numpy as np
+
 from cyberwave.models.runtimes.base import ModelRuntime
 from cyberwave.models.types import (
     BoundingBox,
     ClassificationCandidate,
     ClassificationResult,
+    DepthResult,
     Detection,
     DetectionResult,
     InstanceSegmentationResult,
@@ -363,6 +370,14 @@ class UltralyticsRuntime(ModelRuntime):
         call_kwargs: dict[str, Any] = {"conf": confidence, "verbose": False}
         if effective_device:
             call_kwargs["device"] = effective_device
+        # Forward caller extras (``imgsz``, ``iou``, ``max_det``, ``half``, …)
+        # last, so an explicit value wins over the defaults above — the same
+        # precedence Ultralytics itself uses. These used to be accepted by the
+        # signature and then silently dropped, so ``predict(frame, imgsz=512)``
+        # was a no-op. Unknown keys are Ultralytics' to reject: ``get_cfg``
+        # raises with a "Similar arguments are..." hint, which beats guessing
+        # here at a list that drifts with every release.
+        call_kwargs.update(kwargs)
         results = model_handle(input_data, **call_kwargs)
         detections: list[Detection] = []
         class_result: ClassificationResult | None = None
@@ -372,6 +387,22 @@ class UltralyticsRuntime(ModelRuntime):
         for result in results:
             frame_h, frame_w = result.orig_shape or (0, 0)
             frame_area = frame_h * frame_w
+
+            # Depth is checked first and returns immediately. A depth result
+            # carries no boxes, so without this it falls through every branch
+            # below to ``result.boxes is None -> continue`` and the caller gets
+            # an empty DetectionResult — a silent no-op rather than an error.
+            depth_map = _depth_array(result, frame_h, frame_w)
+            if depth_map is not None:
+                return DepthResult(
+                    depth_map=depth_map,
+                    # yolo26*-depth predicts absolute metres (~0.02-150 m), so
+                    # unlike the relative Depth-Anything checkpoints this needs
+                    # no disparity inversion and may feed object_pose.
+                    metric=True,
+                    h=frame_h or int(depth_map.shape[0]),
+                    w=frame_w or int(depth_map.shape[1]),
+                )
 
             if getattr(result, "probs", None) is not None:
                 task = "classify"
@@ -396,12 +427,18 @@ class UltralyticsRuntime(ModelRuntime):
             elif mask_data is not None:
                 task = "segment"
 
-            for i, box in enumerate(result.boxes):
-                label = names.get(_box_cls(box), str(_box_cls(box)))
+            box_cls, box_conf, box_xyxy = _boxes_arrays(result.boxes)
+
+            for i in range(len(box_cls)):
+                cls_i = int(box_cls[i])
+                label = names.get(cls_i, str(cls_i))
                 if classes and label not in classes:
                     continue
 
-                bbox = _box_bbox(box)
+                x1, y1, x2, y2 = box_xyxy[i]
+                bbox = BoundingBox(
+                    x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2)
+                )
 
                 msk: Mask | None = None
                 if mask_data is not None and i < len(mask_data):
@@ -416,7 +453,7 @@ class UltralyticsRuntime(ModelRuntime):
                 detections.append(
                     Detection(
                         label=label,
-                        confidence=_box_conf(box),
+                        confidence=float(box_conf[i]),
                         bbox=bbox,
                         area_ratio=bbox.area / frame_area if frame_area else 0.0,
                         mask=msk,
@@ -440,6 +477,51 @@ class UltralyticsRuntime(ModelRuntime):
 # ---------------------------------------------------------------------------
 # Module-level helpers (same convention as onnxruntime_rt.py)
 # ---------------------------------------------------------------------------
+
+
+def _depth_array(result: Any, frame_h: int, frame_w: int) -> Any | None:
+    """Return the ``(H, W)`` float32 metric depth map, or ``None``.
+
+    Resized back to the original frame when the head emits at the network
+    resolution (models are trained at ``imgsz=768``). Depth pixel ``(u, v)``
+    has to correspond to camera pixel ``(u, v)`` or the pinhole
+    back-projection downstream lands every point in the wrong place — the
+    same guard the Depth-Anything V2 runtime applies.
+    """
+    depth = getattr(result, "depth", None)
+    if depth is None:
+        return None
+    data = getattr(depth, "data", depth)
+    try:
+        arr = data.cpu().numpy()
+    except AttributeError:
+        arr = np.asarray(data)
+    arr = np.asarray(arr, dtype=np.float32).squeeze()
+    if arr.ndim != 2:
+        _logger.warning(
+            "Ultralytics depth head returned shape %s; expected a 2-D map. "
+            "Ignoring so the caller does not consume a malformed depth frame.",
+            arr.shape,
+        )
+        return None
+
+    if frame_h and frame_w and arr.shape != (frame_h, frame_w):
+        try:
+            import cv2
+
+            arr = cv2.resize(
+                arr, (frame_w, frame_h), interpolation=cv2.INTER_LINEAR
+            )
+        except ImportError:
+            from PIL import Image as _PIL_Image
+
+            arr = np.asarray(
+                _PIL_Image.fromarray(arr).resize(
+                    (frame_w, frame_h), _PIL_Image.BILINEAR
+                ),
+                dtype=np.float32,
+            )
+    return arr
 
 
 def _tensor_attr(obj: Any, attr: str, sub: str) -> Any | None:
@@ -477,6 +559,30 @@ def _box_conf(box: Any) -> float:
         return float(box.conf[0])
     except (IndexError, TypeError):
         return float(box.conf)
+
+
+def _boxes_arrays(boxes: Any) -> tuple[Any, Any, Any]:
+    """Pull ``(cls, conf, xyxy)`` off a ``Boxes`` object as host numpy arrays.
+
+    One device->host transfer per attribute for the whole batch, instead of
+    one per box. On a GPU worker every ``float(box.conf[0])`` is a separate
+    ``cudaMemcpy`` + implicit sync; ``_parse_obb`` below already uses this
+    bulk form. Falls back to the per-box helpers when the runtime hands back
+    something that isn't a tensor batch (mocked handles in tests).
+    """
+    try:
+        return (
+            boxes.cls.cpu().numpy(),
+            boxes.conf.cpu().numpy(),
+            boxes.xyxy.cpu().numpy(),
+        )
+    except AttributeError:
+        cls = [_box_cls(b) for b in boxes]
+        conf = [_box_conf(b) for b in boxes]
+        xyxy = [
+            (bb.x1, bb.y1, bb.x2, bb.y2) for bb in (_box_bbox(b) for b in boxes)
+        ]
+        return cls, conf, xyxy
 
 
 def _box_bbox(box: Any) -> BoundingBox:

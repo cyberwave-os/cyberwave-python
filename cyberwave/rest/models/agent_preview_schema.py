@@ -34,7 +34,8 @@ class AgentPreviewSchema(BaseModel):
     mode: Optional[StrictStr] = 'preview'
     simulation_backend: Optional[StrictStr] = None
     node_hints: Optional[List[WorkflowNodeHintSchema]] = None
-    __properties: ClassVar[List[str]] = ["prompt", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "node_hints"]
+    setup_mode: Optional[StrictStr] = 'explicit'
+    __properties: ClassVar[List[str]] = ["prompt", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "node_hints", "setup_mode"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -44,6 +45,16 @@ class AgentPreviewSchema(BaseModel):
 
         if value not in set(['simulation', 'live', 'preview']):
             raise ValueError("must be one of enum values ('simulation', 'live', 'preview')")
+        return value
+
+    @field_validator('setup_mode')
+    def setup_mode_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['explicit', 'auto']):
+            raise ValueError("must be one of enum values ('explicit', 'auto')")
         return value
 
     model_config = ConfigDict(
@@ -124,7 +135,8 @@ class AgentPreviewSchema(BaseModel):
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "mode": obj.get("mode") if obj.get("mode") is not None else 'preview',
             "simulation_backend": obj.get("simulation_backend"),
-            "node_hints": [WorkflowNodeHintSchema.from_dict(_item) for _item in obj["node_hints"]] if obj.get("node_hints") is not None else None
+            "node_hints": [WorkflowNodeHintSchema.from_dict(_item) for _item in obj["node_hints"]] if obj.get("node_hints") is not None else None,
+            "setup_mode": obj.get("setup_mode") if obj.get("setup_mode") is not None else 'explicit'
         })
         return _obj
 

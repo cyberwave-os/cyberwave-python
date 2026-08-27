@@ -28,9 +28,10 @@ class EnvironmentAgentResponseSchema(BaseModel):
     Response schema for the environment MCP agent.
     """ # noqa: E501
     answer: StrictStr
+    assistant_session_id: StrictStr
     tool_calls: Optional[List[StrictStr]] = None
     structured_results: Optional[List[Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["answer", "tool_calls", "structured_results"]
+    __properties: ClassVar[List[str]] = ["answer", "assistant_session_id", "tool_calls", "structured_results"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -84,6 +85,7 @@ class EnvironmentAgentResponseSchema(BaseModel):
 
         _obj = cls.model_validate({
             "answer": obj.get("answer"),
+            "assistant_session_id": obj.get("assistant_session_id"),
             "tool_calls": obj.get("tool_calls"),
             "structured_results": obj.get("structured_results")
         })

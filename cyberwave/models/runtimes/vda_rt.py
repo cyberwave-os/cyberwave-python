@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from cyberwave.models.runtimes.base import ModelRuntime
+from cyberwave.models.runtimes.base import ModelRuntime, resolve_torch_device
 from cyberwave.models.types import DepthResult, PredictionResult
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_REPOSITORY_PATH = "/opt/video-depth-anything"
 DEFAULT_CHECKPOINT_DIR = "/app/checkpoints"
 DEFAULT_INPUT_SIZE = 518
+DINOV2_PATCH_SIZE = 14
 
 _ENCODER_CONFIGS: dict[str, dict[str, Any]] = {
     "vits": {"encoder": "vits", "features": 64, "out_channels": [48, 96, 192, 384]},
@@ -139,13 +140,15 @@ class VideoDepthAnythingRuntime(ModelRuntime):
             _download_checkpoint(resolved_path, encoder=encoder, metric=metric)
 
         effective_device = _resolve_device(device, _torch)
+        effective_input_size = _resolve_input_size(input_size)
 
         logger.info(
             "Loading Video-Depth-Anything (encoder=%s, metric=%s, device=%s, "
-            "checkpoint=%s)",
+            "input_size=%d, checkpoint=%s)",
             encoder,
             metric,
             effective_device,
+            effective_input_size,
             resolved_path,
         )
 
@@ -161,7 +164,7 @@ class VideoDepthAnythingRuntime(ModelRuntime):
             device=effective_device,
             encoder=encoder,
             metric=metric,
-            input_size=int(input_size),
+            input_size=effective_input_size,
             fp32=bool(fp32),
         )
 
@@ -184,10 +187,35 @@ class VideoDepthAnythingRuntime(ModelRuntime):
                 f"VDA predict expects HWC BGR image, got shape {frame_bgr.shape}"
             )
 
+        frame_h, frame_w = frame_bgr.shape[:2]
+
         # BGR -> RGB (VDA vendored library is trained on RGB inputs).
         frame_rgb = frame_bgr[:, :, :3][:, :, ::-1]
         with handle.lock:
-            depth = handle.model.infer_video_depth_one(
+            # VDA is a stateful video model: it initialises its temporal cache
+            # (frame_height, frame_width, transform, frame_cache_list, …) on
+            # the first call and hard-asserts the size stays constant.  If the
+            # camera resolution changes — or the warmup used a synthetic frame
+            # with a different resolution — we must reset the temporal state so
+            # the next call is treated as a fresh "first frame".
+            model = handle.model
+            stored_h = getattr(model, "frame_height", None)
+            if stored_h is not None and (
+                stored_h != frame_h or getattr(model, "frame_width", None) != frame_w
+            ):
+                logger.debug(
+                    "VDA frame size changed (%dx%d → %dx%d); resetting temporal state",
+                    getattr(model, "frame_width", "?"),
+                    stored_h,
+                    frame_w,
+                    frame_h,
+                )
+                model.transform = None
+                model.frame_id_list = []
+                model.frame_cache_list = []
+                model.id = -1
+
+            depth = model.infer_video_depth_one(
                 frame_rgb,
                 input_size=handle.input_size,
                 device=handle.device,
@@ -195,7 +223,7 @@ class VideoDepthAnythingRuntime(ModelRuntime):
             )
 
         depth = np.asarray(depth, dtype=np.float32)
-        h, w = int(frame_bgr.shape[0]), int(frame_bgr.shape[1])
+        h, w = frame_h, frame_w
 
         return DepthResult(
             depth_map=depth,
@@ -219,14 +247,23 @@ def _resolve_checkpoint_path(
 
 
 def _resolve_device(device: str | None, torch_mod: Any) -> str:
-    requested = (device or "auto").strip().lower()
-    if requested == "auto":
-        return "cuda" if torch_mod.cuda.is_available() else "cpu"
-    if requested in {"cpu", "cuda"}:
-        return requested
-    raise ValueError(
-        f"Unsupported VDA device '{device}'. Use 'auto', 'cpu' or 'cuda'."
-    )
+    return resolve_torch_device(device, torch_mod, runtime_label="VDA")
+
+
+def _resolve_input_size(input_size: int) -> int:
+    """Validate the DINOv2 inference resolution.
+
+    VDA shares the DA2 backbone, so the same patch-grid constraint and the same
+    quadratic cost curve apply — see the twin in ``depth_anything_v2_rt``.
+    """
+    size = int(input_size)
+    if size <= 0 or size % DINOV2_PATCH_SIZE != 0:
+        raise ValueError(
+            f"VDA input_size must be a positive multiple of {DINOV2_PATCH_SIZE} "
+            f"(the DINOv2 patch size), got {input_size!r}. "
+            f"Common values: 518 (default), 392, 322, 266."
+        )
+    return size
 
 
 def _download_checkpoint(target_path: str, *, encoder: str, metric: bool) -> None:

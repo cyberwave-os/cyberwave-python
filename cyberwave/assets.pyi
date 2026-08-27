@@ -1223,10 +1223,10 @@ class KinovaRoboticskortexGen37dofVisionRobotiq2f85Twin(Twin):
         """Controller for robot joints"""
         ...
 
-class KinovaRoboticskinovaGen3LitTwin(Twin):
+class KinovaRoboticskinovaGen3LiteTwin(Twin):
     """
     Digital twin for Kortex Gen3 Lite
-    Registry ID: kinova-robotics/kinova-gen-3-lit
+    Registry ID: kinova-robotics/kinova-gen3-lite
     """
     @property
     def joints(self) -> JointsHandle:
@@ -1346,6 +1346,1480 @@ class Unitreed1TTwin(Twin):
         """Controller for robot joints"""
         ...
 
+class UniversalRobotsur10Twin(Twin):
+    """
+    Digital twin for UR10
+    Registry ID: universal_robots/ur10
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class FrankaRoboticsfr3Twin(Twin):
+    """
+    Digital twin for Franka Research 3 (FR3)
+    Registry ID: franka_robotics/fr3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsm1013Twin(Twin):
+    """
+    Digital twin for Doosan M1013
+    Registry ID: doosan_robotics/m1013
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp12Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP12
+    Registry ID: yaskawa_motoman/gp12
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class FrankaRoboticspandaTwin(Twin):
+    """
+    Digital twin for Franka Emika Panda
+    Registry ID: franka_robotics/panda
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Mirmir100Twin(Twin):
+    """
+    Digital twin for MiR100
+    Registry ID: mir/mir100
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsa0912Twin(Twin):
+    """
+    Digital twin for Doosan A0912
+    Registry ID: doosan_robotics/a0912
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsh2017Twin(Twin):
+    """
+    Digital twin for Doosan H2017
+    Registry ID: doosan_robotics/h2017
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomansia10dTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman SIA10D
+    Registry ID: yaskawa_motoman/sia10d
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboI5Twin(Twin):
+    """
+    Digital twin for AUBO i5
+    Registry ID: aubo_robotics/aubo_i5
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur3Twin(Twin):
+    """
+    Digital twin for Universal Robots UR3
+    Registry ID: universal_robots/ur3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur3eTwin(Twin):
+    """
+    Digital twin for Universal Robots UR3e
+    Registry ID: universal_robots/ur3e
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur10eTwin(Twin):
+    """
+    Digital twin for Universal Robots UR10e
+    Registry ID: universal_robots/ur10e
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur12eTwin(Twin):
+    """
+    Digital twin for Universal Robots UR12e
+    Registry ID: universal_robots/ur12e
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur16eTwin(Twin):
+    """
+    Digital twin for Universal Robots UR16e
+    Registry ID: universal_robots/ur16e
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur20Twin(Twin):
+    """
+    Digital twin for Universal Robots UR20
+    Registry ID: universal_robots/ur20
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UniversalRobotsur30Twin(Twin):
+    """
+    Digital twin for Universal Robots UR30
+    Registry ID: universal_robots/ur30
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp7Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP7
+    Registry ID: yaskawa_motoman/gp7
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp8Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP8
+    Registry ID: yaskawa_motoman/gp8
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp25Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP25
+    Registry ID: yaskawa_motoman/gp25
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanhc10Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman HC10
+    Registry ID: yaskawa_motoman/hc10
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class PalRoboticstiagoTwin(Twin):
+    """
+    Digital twin for PAL Robotics TIAGo
+    Registry ID: pal_robotics/tiago
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class RobotnikAutomationsummitXlTwin(Twin):
+    """
+    Digital twin for Robotnik Summit XL
+    Registry ID: robotnik_automation/summit_xl
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HusarionrosbotXlTwin(Twin):
+    """
+    Digital twin for Husarion ROSbot XL
+    Registry ID: husarion/rosbot_xl
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class RainbowRoboticsrbY1Twin(Twin):
+    """
+    Digital twin for Rainbow Robotics RB-Y1
+    Registry ID: rainbow_robotics/rb_y1
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class FlexivRoboticsrizon4Twin(Twin):
+    """
+    Digital twin for Flexiv Rizon 4
+    Registry ID: flexiv_robotics/rizon_4
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DensoRoboticscobottaTwin(Twin):
+    """
+    Digital twin for DENSO COBOTTA
+    Registry ID: denso_robotics/cobotta
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HusarionpantherTwin(Twin):
+    """
+    Digital twin for Husarion Panther
+    Registry ID: husarion/panther
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HusarionlynxTwin(Twin):
+    """
+    Digital twin for Husarion Lynx
+    Registry ID: husarion/lynx
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DensoRoboticsvs060Twin(Twin):
+    """
+    Digital twin for DENSO VS-060
+    Registry ID: denso_robotics/vs_060
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanmh5Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman MH5
+    Registry ID: yaskawa_motoman/mh5
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class StaubliRoboticsrx160Twin(Twin):
+    """
+    Digital twin for Stäubli RX160
+    Registry ID: staubli_robotics/rx160
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsrs007nTwin(Twin):
+    """
+    Digital twin for Kawasaki RS007N
+    Registry ID: kawasaki_robotics/rs007n
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DobotRoboticscr3Twin(Twin):
+    """
+    Digital twin for Dobot CR3
+    Registry ID: dobot_robotics/cr3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DobotRoboticscr5Twin(Twin):
+    """
+    Digital twin for Dobot CR5
+    Registry ID: dobot_robotics/cr5
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DobotRoboticscr7Twin(Twin):
+    """
+    Digital twin for Dobot CR7
+    Registry ID: dobot_robotics/cr7
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DobotRoboticscr10Twin(Twin):
+    """
+    Digital twin for Dobot CR10
+    Registry ID: dobot_robotics/cr10
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DobotRoboticsmagicianTwin(Twin):
+    """
+    Digital twin for Dobot Magician
+    Registry ID: dobot_robotics/magician
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Husarionrosbot2rTwin(Twin):
+    """
+    Digital twin for Husarion ROSbot 2R
+    Registry ID: husarion/rosbot_2r
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Husarionrosbot3Twin(Twin):
+    """
+    Digital twin for Husarion ROSbot 3
+    Registry ID: husarion/rosbot_3
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class FlexivRoboticsrizon10Twin(Twin):
+    """
+    Digital twin for Flexiv Rizon 10
+    Registry ID: flexiv_robotics/rizon_10
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsh2515Twin(Twin):
+    """
+    Digital twin for Doosan H2515
+    Registry ID: doosan_robotics/h2515
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsm0617Twin(Twin):
+    """
+    Digital twin for Doosan M0617
+    Registry ID: doosan_robotics/m0617
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticse0509Twin(Twin):
+    """
+    Digital twin for Doosan E0509
+    Registry ID: doosan_robotics/e0509
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsm0609Twin(Twin):
+    """
+    Digital twin for Doosan M0609
+    Registry ID: doosan_robotics/m0609
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsm1509Twin(Twin):
+    """
+    Digital twin for Doosan M1509
+    Registry ID: doosan_robotics/m1509
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DoosanRoboticsp3020Twin(Twin):
+    """
+    Digital twin for Doosan P3020
+    Registry ID: doosan_robotics/p3020
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboE3Twin(Twin):
+    """
+    Digital twin for AUBO E3
+    Registry ID: aubo_robotics/aubo_e3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboE5Twin(Twin):
+    """
+    Digital twin for AUBO E5
+    Registry ID: aubo_robotics/aubo_e5
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboI3Twin(Twin):
+    """
+    Digital twin for AUBO i3
+    Registry ID: aubo_robotics/aubo_i3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboI7Twin(Twin):
+    """
+    Digital twin for AUBO i7
+    Registry ID: aubo_robotics/aubo_i7
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboI10Twin(Twin):
+    """
+    Digital twin for AUBO i10
+    Registry ID: aubo_robotics/aubo_i10
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboI16Twin(Twin):
+    """
+    Digital twin for AUBO i16
+    Registry ID: aubo_robotics/aubo_i16
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboI20Twin(Twin):
+    """
+    Digital twin for AUBO i20
+    Registry ID: aubo_robotics/aubo_i20
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuboRoboticsauboIs7Twin(Twin):
+    """
+    Digital twin for AUBO iS7
+    Registry ID: aubo_robotics/aubo_is7
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp20hlTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP20HL
+    Registry ID: yaskawa_motoman/gp20hl
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp50Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP50
+    Registry ID: yaskawa_motoman/gp50
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp88Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP88
+    Registry ID: yaskawa_motoman/gp88
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanhc20Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman HC20
+    Registry ID: yaskawa_motoman/hc20
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanmh12Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman MH12
+    Registry ID: yaskawa_motoman/mh12
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanmh50Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman MH50
+    Registry ID: yaskawa_motoman/mh50
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsrs020nTwin(Twin):
+    """
+    Digital twin for Kawasaki RS020N
+    Registry ID: kawasaki_robotics/rs020n
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsduaroTwin(Twin):
+    """
+    Digital twin for Kawasaki duAro
+    Registry ID: kawasaki_robotics/duaro
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsrs013nTwin(Twin):
+    """
+    Digital twin for Kawasaki RS013N
+    Registry ID: kawasaki_robotics/rs013n
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsrs007lTwin(Twin):
+    """
+    Digital twin for Kawasaki RS007L
+    Registry ID: kawasaki_robotics/rs007l
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsrs025nTwin(Twin):
+    """
+    Digital twin for Kawasaki RS025N
+    Registry ID: kawasaki_robotics/rs025n
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsrs030nTwin(Twin):
+    """
+    Digital twin for Kawasaki RS030N
+    Registry ID: kawasaki_robotics/rs030n
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KawasakiRoboticsrs080nTwin(Twin):
+    """
+    Digital twin for Kawasaki RS080N
+    Registry ID: kawasaki_robotics/rs080n
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class StaubliRoboticsrx160lTwin(Twin):
+    """
+    Digital twin for Stäubli RX160L
+    Registry ID: staubli_robotics/rx160l
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp4Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP4
+    Registry ID: yaskawa_motoman/gp4
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp8lTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP8L
+    Registry ID: yaskawa_motoman/gp8l
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp35lTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP35L
+    Registry ID: yaskawa_motoman/gp35l
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp70lTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP70L
+    Registry ID: yaskawa_motoman/gp70l
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp110Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP110
+    Registry ID: yaskawa_motoman/gp110
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp165rTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP165R
+    Registry ID: yaskawa_motoman/gp165r
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp180Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP180
+    Registry ID: yaskawa_motoman/gp180
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomangp200rTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman GP200R
+    Registry ID: yaskawa_motoman/gp200r
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanar2010Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman AR2010
+    Registry ID: yaskawa_motoman/ar2010
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanmotominiTwin(Twin):
+    """
+    Digital twin for Yaskawa MotoMini
+    Registry ID: yaskawa_motoman/motomini
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomanma2010Twin(Twin):
+    """
+    Digital twin for Yaskawa Motoman MA2010
+    Registry ID: yaskawa_motoman/ma2010
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class YaskawaMotomansda10fTwin(Twin):
+    """
+    Digital twin for Yaskawa Motoman SDA10F
+    Registry ID: yaskawa_motoman/sda10f
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ClearpathRoboticsjackalJ100Twin(Twin):
+    """
+    Digital twin for Clearpath Jackal J100
+    Registry ID: clearpath_robotics/jackal_j100
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Agibotg2Twin(Twin):
+    """
+    Digital twin for Agibot G2
+    Registry ID: agibot/g2
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ClearpathRoboticsdingoTwin(Twin):
+    """
+    Digital twin for Clearpath Dingo
+    Registry ID: clearpath_robotics/dingo
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ClearpathRoboticshuskyA200Twin(Twin):
+    """
+    Digital twin for Clearpath Husky A200
+    Registry ID: clearpath_robotics/husky_a200
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ClearpathRoboticsridgebackTwin(Twin):
+    """
+    Digital twin for Clearpath Ridgeback
+    Registry ID: clearpath_robotics/ridgeback
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ClearpathRoboticsboxerTwin(Twin):
+    """
+    Digital twin for Clearpath Boxer
+    Registry ID: clearpath_robotics/boxer
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class FetchRoboticsfetchTwin(Twin):
+    """
+    Digital twin for Fetch Mobile Manipulator
+    Registry ID: fetch_robotics/fetch
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class SoftbankRoboticspepperTwin(Twin):
+    """
+    Digital twin for SoftBank Pepper
+    Registry ID: softbank_robotics/pepper
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class PalRoboticstalosTwin(Twin):
+    """
+    Digital twin for PAL Robotics TALOS
+    Registry ID: pal_robotics/talos
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class NasaJscRoboticsvalkyrieTwin(Twin):
+    """
+    Digital twin for NASA Valkyrie
+    Registry ID: nasa_jsc_robotics/valkyrie
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class NasaJscRoboticsrobonaut2Twin(Twin):
+    """
+    Digital twin for NASA Robonaut 2
+    Registry ID: nasa_jsc_robotics/robonaut_2
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class BostonDynamicsatlasV4Twin(Twin):
+    """
+    Digital twin for Boston Dynamics Atlas v4
+    Registry ID: boston-dynamics/atlas_v4
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class IitRoboticsicubTwin(Twin):
+    """
+    Digital twin for IIT iCub
+    Registry ID: iit_robotics/icub
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class MitBiomimeticRoboticsminiCheetahTwin(Twin):
+    """
+    Digital twin for MIT Mini Cheetah
+    Registry ID: mit_biomimetic_robotics/mini_cheetah
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class OpenDynamicRobotInitiativesolo12Twin(Twin):
+    """
+    Digital twin for ODRI Solo12
+    Registry ID: open_dynamic_robot_initiative/solo12
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class IitRoboticshyqTwin(Twin):
+    """
+    Digital twin for IIT HyQ
+    Registry ID: iit_robotics/hyq
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class NasaJplperseveranceTwin(Twin):
+    """
+    Digital twin for NASA Perseverance Rover
+    Registry ID: nasa_jpl/perseverance
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Asset3dRoboticsirisTwin(Twin):
+    """
+    Digital twin for 3DR Iris Quadrotor
+    Registry ID: 3d_robotics/iris
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AldebaranRoboticsromeoTwin(Twin):
+    """
+    Digital twin for Aldebaran Romeo
+    Registry ID: aldebaran_robotics/romeo
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class NasaJplingenuityTwin(Twin):
+    """
+    Digital twin for NASA Ingenuity Mars Helicopter
+    Registry ID: nasa_jpl/ingenuity
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HaradukaRoboticsmevius2Twin(Twin):
+    """
+    Digital twin for MEVIUS2
+    Registry ID: haraduka-robotics/mevius2
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class SigroboticsUiuclekiwiTwin(Twin):
+    """
+    Digital twin for LeKiwi
+    Registry ID: sigrobotics-uiuc/lekiwi
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HumanComputerLableLampTwin(Twin):
+    """
+    Digital twin for Le Lamp
+    Registry ID: human-computer-lab/le_lamp
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class OpenDuckProjectopenDuckMiniTwin(Twin):
+    """
+    Digital twin for Open Duck Mini
+    Registry ID: open-duck-project/open_duck_mini
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class RobolabsAirbotTwin(Twin):
+    """
+    Digital twin for Robolabs rbot
+    Registry ID: robolabs-ai/rbot
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KScaleLabskbotV2Twin(Twin):
+    """
+    Digital twin for K-Bot v2
+    Registry ID: k-scale-labs/kbot_v2
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class RobopartyrpoTwin(Twin):
+    """
+    Digital twin for RoboParty RPO
+    Registry ID: roboparty/rpo
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class RealdavyRoboticsalohaminiTwin(Twin):
+    """
+    Digital twin for AlohaMini
+    Registry ID: realdavy-robotics/alohamini
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class RobotisopenManipulatorXTwin(Twin):
+    """
+    Digital twin for ROBOTIS OpenMANIPULATOR-X
+    Registry ID: robotis/open_manipulator_x
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HelloRobotstretch4Twin(Twin):
+    """
+    Digital twin for Hello Robot Stretch 4
+    Registry ID: hello-robot/stretch_4
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class PollenreachyTwin(Twin):
+    """
+    Digital twin for Reachy
+    Registry ID: pollen/reachy
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class PoppyProjectpoppyHumanoidTwin(Twin):
+    """
+    Digital twin for Poppy Humanoid
+    Registry ID: poppy-project/poppy_humanoid
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class NiryoRoboticsned2Twin(Twin):
+    """
+    Digital twin for Niryo Ned2
+    Registry ID: niryo-robotics/ned2
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ClearpathRoboticsturtlebot4StandardTwin(Twin):
+    """
+    Digital twin for TurtleBot 4 Standard
+    Registry ID: clearpath-robotics/turtlebot4_standard
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AgileXRoboticsscout2Twin(Twin):
+    """
+    Digital twin for AgileX Scout 2.0
+    Registry ID: agile-x-robotics/scout_2
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HaochenShitoddlerbot2xcTwin(Twin):
+    """
+    Digital twin for ToddlerBot 2XC
+    Registry ID: haochen-shi/toddlerbot_2xc
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class MangdangRoboticsminiPupperTwin(Twin):
+    """
+    Digital twin for Mini Pupper
+    Registry ID: mangdang-robotics/mini_pupper
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class GLevinepupperV3Twin(Twin):
+    """
+    Digital twin for Pupper v3
+    Registry ID: g-levine/pupper_v3
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AnyboticsanymalDTwin(Twin):
+    """
+    Digital twin for ANYmal D
+    Registry ID: anybotics/anymal_d
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class UnitreeunitreeB2Twin(Twin):
+    """
+    Digital twin for Unitree B2
+    Registry ID: unitree/unitree_b2
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -1459,7 +2933,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "kinova-robotics/kortex-gen3-6dof-vision": KinovaRoboticskortexGen36dofVisionTwin,
     "kinova-robotics/kortex-gen3-7dof-vision": KinovaRoboticskortexGen37dofVisionTwin,
     "kinova-robotics/kortex-gen3-7dof-vision-robotiq2f85": KinovaRoboticskortexGen37dofVisionRobotiq2f85Twin,
-    "kinova-robotics/kinova-gen-3-lit": KinovaRoboticskinovaGen3LitTwin,
+    "kinova-robotics/kinova-gen3-lite": KinovaRoboticskinovaGen3LiteTwin,
     "cyberwave/electric-substation": CyberwaveelectricSubstationTwin,
     "mls-team/obsbot-tiny-3": MlsTeamobsbotTiny3Twin,
     "cyberwave/go2-backpack": Cyberwavego2BackpackTwin,
@@ -1475,4 +2949,125 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "vishal-krishnaa-rs-workspace/screwdriver": VishalKrishnaaRsWorkspacescrewdriverTwin,
     "srijitos-workspace/chai_glass": SrijitosWorkspacechaiGlassTwin,
     "unitree/d1-t": Unitreed1TTwin,
+    "universal_robots/ur10": UniversalRobotsur10Twin,
+    "franka_robotics/fr3": FrankaRoboticsfr3Twin,
+    "doosan_robotics/m1013": DoosanRoboticsm1013Twin,
+    "yaskawa_motoman/gp12": YaskawaMotomangp12Twin,
+    "franka_robotics/panda": FrankaRoboticspandaTwin,
+    "mir/mir100": Mirmir100Twin,
+    "doosan_robotics/a0912": DoosanRoboticsa0912Twin,
+    "doosan_robotics/h2017": DoosanRoboticsh2017Twin,
+    "yaskawa_motoman/sia10d": YaskawaMotomansia10dTwin,
+    "aubo_robotics/aubo_i5": AuboRoboticsauboI5Twin,
+    "universal_robots/ur3": UniversalRobotsur3Twin,
+    "universal_robots/ur3e": UniversalRobotsur3eTwin,
+    "universal_robots/ur10e": UniversalRobotsur10eTwin,
+    "universal_robots/ur12e": UniversalRobotsur12eTwin,
+    "universal_robots/ur16e": UniversalRobotsur16eTwin,
+    "universal_robots/ur20": UniversalRobotsur20Twin,
+    "universal_robots/ur30": UniversalRobotsur30Twin,
+    "yaskawa_motoman/gp7": YaskawaMotomangp7Twin,
+    "yaskawa_motoman/gp8": YaskawaMotomangp8Twin,
+    "yaskawa_motoman/gp25": YaskawaMotomangp25Twin,
+    "yaskawa_motoman/hc10": YaskawaMotomanhc10Twin,
+    "pal_robotics/tiago": PalRoboticstiagoTwin,
+    "robotnik_automation/summit_xl": RobotnikAutomationsummitXlTwin,
+    "husarion/rosbot_xl": HusarionrosbotXlTwin,
+    "rainbow_robotics/rb_y1": RainbowRoboticsrbY1Twin,
+    "flexiv_robotics/rizon_4": FlexivRoboticsrizon4Twin,
+    "denso_robotics/cobotta": DensoRoboticscobottaTwin,
+    "husarion/panther": HusarionpantherTwin,
+    "husarion/lynx": HusarionlynxTwin,
+    "denso_robotics/vs_060": DensoRoboticsvs060Twin,
+    "yaskawa_motoman/mh5": YaskawaMotomanmh5Twin,
+    "staubli_robotics/rx160": StaubliRoboticsrx160Twin,
+    "kawasaki_robotics/rs007n": KawasakiRoboticsrs007nTwin,
+    "dobot_robotics/cr3": DobotRoboticscr3Twin,
+    "dobot_robotics/cr5": DobotRoboticscr5Twin,
+    "dobot_robotics/cr7": DobotRoboticscr7Twin,
+    "dobot_robotics/cr10": DobotRoboticscr10Twin,
+    "dobot_robotics/magician": DobotRoboticsmagicianTwin,
+    "husarion/rosbot_2r": Husarionrosbot2rTwin,
+    "husarion/rosbot_3": Husarionrosbot3Twin,
+    "flexiv_robotics/rizon_10": FlexivRoboticsrizon10Twin,
+    "doosan_robotics/h2515": DoosanRoboticsh2515Twin,
+    "doosan_robotics/m0617": DoosanRoboticsm0617Twin,
+    "doosan_robotics/e0509": DoosanRoboticse0509Twin,
+    "doosan_robotics/m0609": DoosanRoboticsm0609Twin,
+    "doosan_robotics/m1509": DoosanRoboticsm1509Twin,
+    "doosan_robotics/p3020": DoosanRoboticsp3020Twin,
+    "aubo_robotics/aubo_e3": AuboRoboticsauboE3Twin,
+    "aubo_robotics/aubo_e5": AuboRoboticsauboE5Twin,
+    "aubo_robotics/aubo_i3": AuboRoboticsauboI3Twin,
+    "aubo_robotics/aubo_i7": AuboRoboticsauboI7Twin,
+    "aubo_robotics/aubo_i10": AuboRoboticsauboI10Twin,
+    "aubo_robotics/aubo_i16": AuboRoboticsauboI16Twin,
+    "aubo_robotics/aubo_i20": AuboRoboticsauboI20Twin,
+    "aubo_robotics/aubo_is7": AuboRoboticsauboIs7Twin,
+    "yaskawa_motoman/gp20hl": YaskawaMotomangp20hlTwin,
+    "yaskawa_motoman/gp50": YaskawaMotomangp50Twin,
+    "yaskawa_motoman/gp88": YaskawaMotomangp88Twin,
+    "yaskawa_motoman/hc20": YaskawaMotomanhc20Twin,
+    "yaskawa_motoman/mh12": YaskawaMotomanmh12Twin,
+    "yaskawa_motoman/mh50": YaskawaMotomanmh50Twin,
+    "kawasaki_robotics/rs020n": KawasakiRoboticsrs020nTwin,
+    "kawasaki_robotics/duaro": KawasakiRoboticsduaroTwin,
+    "kawasaki_robotics/rs013n": KawasakiRoboticsrs013nTwin,
+    "kawasaki_robotics/rs007l": KawasakiRoboticsrs007lTwin,
+    "kawasaki_robotics/rs025n": KawasakiRoboticsrs025nTwin,
+    "kawasaki_robotics/rs030n": KawasakiRoboticsrs030nTwin,
+    "kawasaki_robotics/rs080n": KawasakiRoboticsrs080nTwin,
+    "staubli_robotics/rx160l": StaubliRoboticsrx160lTwin,
+    "yaskawa_motoman/gp4": YaskawaMotomangp4Twin,
+    "yaskawa_motoman/gp8l": YaskawaMotomangp8lTwin,
+    "yaskawa_motoman/gp35l": YaskawaMotomangp35lTwin,
+    "yaskawa_motoman/gp70l": YaskawaMotomangp70lTwin,
+    "yaskawa_motoman/gp110": YaskawaMotomangp110Twin,
+    "yaskawa_motoman/gp165r": YaskawaMotomangp165rTwin,
+    "yaskawa_motoman/gp180": YaskawaMotomangp180Twin,
+    "yaskawa_motoman/gp200r": YaskawaMotomangp200rTwin,
+    "yaskawa_motoman/ar2010": YaskawaMotomanar2010Twin,
+    "yaskawa_motoman/motomini": YaskawaMotomanmotominiTwin,
+    "yaskawa_motoman/ma2010": YaskawaMotomanma2010Twin,
+    "yaskawa_motoman/sda10f": YaskawaMotomansda10fTwin,
+    "clearpath_robotics/jackal_j100": ClearpathRoboticsjackalJ100Twin,
+    "agibot/g2": Agibotg2Twin,
+    "clearpath_robotics/dingo": ClearpathRoboticsdingoTwin,
+    "clearpath_robotics/husky_a200": ClearpathRoboticshuskyA200Twin,
+    "clearpath_robotics/ridgeback": ClearpathRoboticsridgebackTwin,
+    "clearpath_robotics/boxer": ClearpathRoboticsboxerTwin,
+    "fetch_robotics/fetch": FetchRoboticsfetchTwin,
+    "softbank_robotics/pepper": SoftbankRoboticspepperTwin,
+    "pal_robotics/talos": PalRoboticstalosTwin,
+    "nasa_jsc_robotics/valkyrie": NasaJscRoboticsvalkyrieTwin,
+    "nasa_jsc_robotics/robonaut_2": NasaJscRoboticsrobonaut2Twin,
+    "boston-dynamics/atlas_v4": BostonDynamicsatlasV4Twin,
+    "iit_robotics/icub": IitRoboticsicubTwin,
+    "mit_biomimetic_robotics/mini_cheetah": MitBiomimeticRoboticsminiCheetahTwin,
+    "open_dynamic_robot_initiative/solo12": OpenDynamicRobotInitiativesolo12Twin,
+    "iit_robotics/hyq": IitRoboticshyqTwin,
+    "nasa_jpl/perseverance": NasaJplperseveranceTwin,
+    "3d_robotics/iris": Asset3dRoboticsirisTwin,
+    "aldebaran_robotics/romeo": AldebaranRoboticsromeoTwin,
+    "nasa_jpl/ingenuity": NasaJplingenuityTwin,
+    "haraduka-robotics/mevius2": HaradukaRoboticsmevius2Twin,
+    "sigrobotics-uiuc/lekiwi": SigroboticsUiuclekiwiTwin,
+    "human-computer-lab/le_lamp": HumanComputerLableLampTwin,
+    "open-duck-project/open_duck_mini": OpenDuckProjectopenDuckMiniTwin,
+    "robolabs-ai/rbot": RobolabsAirbotTwin,
+    "k-scale-labs/kbot_v2": KScaleLabskbotV2Twin,
+    "roboparty/rpo": RobopartyrpoTwin,
+    "realdavy-robotics/alohamini": RealdavyRoboticsalohaminiTwin,
+    "robotis/open_manipulator_x": RobotisopenManipulatorXTwin,
+    "hello-robot/stretch_4": HelloRobotstretch4Twin,
+    "pollen/reachy": PollenreachyTwin,
+    "poppy-project/poppy_humanoid": PoppyProjectpoppyHumanoidTwin,
+    "niryo-robotics/ned2": NiryoRoboticsned2Twin,
+    "clearpath-robotics/turtlebot4_standard": ClearpathRoboticsturtlebot4StandardTwin,
+    "agile-x-robotics/scout_2": AgileXRoboticsscout2Twin,
+    "haochen-shi/toddlerbot_2xc": HaochenShitoddlerbot2xcTwin,
+    "mangdang-robotics/mini_pupper": MangdangRoboticsminiPupperTwin,
+    "g-levine/pupper_v3": GLevinepupperV3Twin,
+    "anybotics/anymal_d": AnyboticsanymalDTwin,
+    "unitree/unitree_b2": UnitreeunitreeB2Twin,
 }

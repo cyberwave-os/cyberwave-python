@@ -15,8 +15,9 @@ from pydantic import validate_call, Field, StrictFloat, StrictStr, StrictInt
 from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
-from pydantic import StrictInt, StrictStr
+from pydantic import Field, StrictStr
 from typing import Any, Dict, List, Optional
+from typing_extensions import Annotated
 from cyberwave.rest.models.cloud_node_failed_request import CloudNodeFailedRequest
 from cyberwave.rest.models.cloud_node_failed_response import CloudNodeFailedResponse
 from cyberwave.rest.models.cloud_node_instance_create_request import CloudNodeInstanceCreateRequest
@@ -328,7 +329,7 @@ class CloudNodeApi:
         self,
         uuid: StrictStr,
         log_type: Optional[StrictStr] = None,
-        limit: Optional[StrictInt] = None,
+        limit: Optional[Annotated[int, Field(le=1000, strict=True, ge=1)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -403,7 +404,7 @@ class CloudNodeApi:
         self,
         uuid: StrictStr,
         log_type: Optional[StrictStr] = None,
-        limit: Optional[StrictInt] = None,
+        limit: Optional[Annotated[int, Field(le=1000, strict=True, ge=1)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -478,7 +479,7 @@ class CloudNodeApi:
         self,
         uuid: StrictStr,
         log_type: Optional[StrictStr] = None,
-        limit: Optional[StrictInt] = None,
+        limit: Optional[Annotated[int, Field(le=1000, strict=True, ge=1)]] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],

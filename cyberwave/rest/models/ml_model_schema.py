@@ -71,8 +71,10 @@ class MLModelSchema(BaseModel):
     weights_url: Optional[StrictStr] = None
     required_inputs: Optional[List[Any]] = None
     has_credential: Optional[StrictBool] = False
+    credential_auth_type: Optional[StrictStr] = None
+    credential_header_name: Optional[StrictStr] = None
     io_schema: Optional[IOSchemaSchema] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs", "has_credential", "io_schema"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs", "has_credential", "credential_auth_type", "credential_header_name", "io_schema"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -196,6 +198,16 @@ class MLModelSchema(BaseModel):
         if self.weights_url is None and "weights_url" in self.model_fields_set:
             _dict['weights_url'] = None
 
+        # set to None if credential_auth_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.credential_auth_type is None and "credential_auth_type" in self.model_fields_set:
+            _dict['credential_auth_type'] = None
+
+        # set to None if credential_header_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.credential_header_name is None and "credential_header_name" in self.model_fields_set:
+            _dict['credential_header_name'] = None
+
         # set to None if io_schema (nullable) is None
         # and model_fields_set contains the field
         if self.io_schema is None and "io_schema" in self.model_fields_set:
@@ -255,6 +267,8 @@ class MLModelSchema(BaseModel):
             "weights_url": obj.get("weights_url"),
             "required_inputs": obj.get("required_inputs"),
             "has_credential": obj.get("has_credential") if obj.get("has_credential") is not None else False,
+            "credential_auth_type": obj.get("credential_auth_type"),
+            "credential_header_name": obj.get("credential_header_name"),
             "io_schema": IOSchemaSchema.from_dict(obj["io_schema"]) if obj.get("io_schema") is not None else None
         })
         return _obj

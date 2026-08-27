@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class EdgeRegisterSchema(BaseModel):
     """
-    Schema for registering an edge.  ``host_facts`` is an optional free-form dict carrying static host information (total RAM, CPU model, ``/dev/watchdog`` presence, kernel, …). When provided, it is merged into ``Edge.metadata['host_facts']`` so the dashboard can render a \"what hardware is this\" row without having to ride MQTT for data that effectively never changes.  See :class:`cyberwave.edge.host_metrics.HostFacts` in the SDK for the canonical producer.
+    Schema for registering an edge.  ``host_facts`` is an optional free-form dict carrying host information (total RAM, CPU model, ``/dev/watchdog`` presence, kernel, …). When provided, it is merged into ``Edge.metadata['host_facts']`` so the dashboard can render a \"what hardware is this\" row without having to ride MQTT for data that effectively never changes.  Mostly-static, but not entirely: the producer also folds in the current network interfaces and the CPU-temperature / memory gauges, because the MQTT ``edge_health`` heartbeat that normally carries those stops once drivers take over on the edge. Treat those keys as ~30 s stale rather than live. See :class:`cyberwave.edge.host_metrics.HostFacts` in the SDK for the canonical producer and the full key list.
     """ # noqa: E501
     fingerprint: StrictStr
     hostname: Optional[StrictStr] = ''

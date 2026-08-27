@@ -17,6 +17,8 @@ to recover. The contract tested here:
 4. When the reopen executor returns a fresh capture, the track swaps it in,
    resets the failure counter, and releases the old capture.
 5. ``close()`` cancels the in-flight reconnect task.
+6. Freeze ticks do not count as liveness (``captured_frame_count`` holds) and
+   are paced to the configured frame interval.
 """
 
 from __future__ import annotations
@@ -59,6 +61,7 @@ def _patched_track(
     track._consecutive_read_failures = 0
     track._last_good_frame_bgr = None
     track._reconnect_task = None
+    track.captured_frame_count = 0
     track._negotiated_fourcc_ascii = None
     track._capture_timestamp = lambda _ref: (0.0, 0.0)
     track._normalize_frame = lambda f: f
@@ -263,6 +266,137 @@ def test_reopen_then_immediate_failure_reaccumulates_and_can_rearm(monkeypatch):
     )
     assert schedule_calls, "gate should have re-fired after threshold re-cross"
     assert schedule_calls[-1] == CV2VideoTrack._RECONNECT_TRIGGER_FAILURES
+
+
+def _record_sleeps(monkeypatch) -> list[float]:
+    """Swap ``asyncio.sleep`` for a recorder that still yields to the loop."""
+    real_sleep = asyncio.sleep
+    seen: list[float] = []
+
+    async def _recording(seconds):
+        seen.append(seconds)
+        await real_sleep(0)
+
+    monkeypatch.setattr("cyberwave.sensor.camera_cv2.asyncio.sleep", _recording)
+    return seen
+
+
+def test_captured_frame_count_ignores_freeze_frames(monkeypatch):
+    """Liveness must track captures, not emitted frames.
+
+    ``frame_count`` keeps climbing on freeze ticks, so ``captured_frame_count``
+    has to freeze with the device for ``EdgeHealthCheck`` to go stale.
+    """
+    _stub_videoframe(monkeypatch)
+    _record_sleeps(monkeypatch)
+    track, _ = _patched_track()
+
+    asyncio.run(track.recv())
+    assert (track.frame_count, track.captured_frame_count) == (1, 1)
+
+    track.cap.read.return_value = (False, None)
+    for _ in range(5):
+        assert asyncio.run(track.recv()) is not None  # freeze frames keep flowing
+
+    # Emitted frames advanced (the WebRTC pipeline is still alive on purpose)
+    # but the capture counter did not.
+    assert track.frame_count == 6
+    assert track.captured_frame_count == 1
+
+
+def test_captured_frame_count_resumes_after_blip(monkeypatch):
+    """A blip shorter than ``stale_timeout`` must not cost the stream its health.
+
+    The freeze fallback exists for exactly this case (ffmpeg restart,
+    IP-camera flake).
+    """
+    _stub_videoframe(monkeypatch)
+    _record_sleeps(monkeypatch)
+    track, original = _patched_track()
+
+    asyncio.run(track.recv())
+    track.cap.read.return_value = (False, None)
+    asyncio.run(track.recv())
+    asyncio.run(track.recv())
+    assert track.captured_frame_count == 1
+
+    track.cap.read.return_value = (True, original.copy())
+    asyncio.run(track.recv())
+
+    assert track.captured_frame_count == 2
+    assert track._consecutive_read_failures == 0
+
+
+def test_degraded_path_is_paced_to_the_frame_interval(monkeypatch):
+    """The freeze loop must not free-run.
+
+    ``recv()`` has no clock: on a healthy device the rate comes from
+    ``cap.read()`` blocking, and a dead one returns instantly.
+    """
+    _stub_videoframe(monkeypatch)
+    sleeps = _record_sleeps(monkeypatch)
+    track, _ = _patched_track()
+    track.fps = 30
+    track.actual_fps = 30
+
+    asyncio.run(track.recv())
+    assert sleeps == [], "a successful read must not add latency"
+
+    track.cap.read.return_value = (False, None)
+    asyncio.run(track.recv())
+
+    assert sleeps == [pytest.approx(1 / 30)]
+
+
+def test_degraded_path_is_paced_before_the_no_cached_frame_return(monkeypatch):
+    """Cold start against a dead source spins just as hard without pacing."""
+    _stub_videoframe(monkeypatch)
+    sleeps = _record_sleeps(monkeypatch)
+    track, _ = _patched_track()
+    track.cap.read.return_value = (False, None)
+
+    assert asyncio.run(track.recv()) is None
+    assert sleeps == [pytest.approx(1 / 30)]
+
+
+@pytest.mark.parametrize(
+    "actual_fps, fps", [(None, 0), (0, None), (None, None), (None, -1)]
+)
+def test_degraded_pacing_survives_unusable_fps(monkeypatch, actual_fps, fps):
+    """A misconfigured rate must degrade to a default, not divide by zero.
+
+    A negative rate is the quiet one: ``asyncio.sleep`` accepts it and returns
+    immediately, so the loop free-runs with no error to point at.
+    """
+    _stub_videoframe(monkeypatch)
+    sleeps = _record_sleeps(monkeypatch)
+    track, _ = _patched_track()
+    track.actual_fps = actual_fps
+    track.fps = fps
+    track.cap.read.return_value = (False, None)
+
+    asyncio.run(track.recv())
+
+    assert sleeps == [pytest.approx(1 / CV2VideoTrack._DEGRADED_FALLBACK_FPS)]
+
+
+def test_degraded_pacing_follows_the_rate_time_base_declares(monkeypatch):
+    """Freeze ticks must be emitted at the rate ``time_base`` is built from.
+
+    ``pts`` is ``frame_count`` against ``1/(actual_fps or fps)``, and freeze
+    ticks bump ``frame_count``. Pacing on the configured 30 while the camera
+    negotiated 15 would run the media clock at 2x for the whole outage.
+    """
+    _stub_videoframe(monkeypatch)
+    sleeps = _record_sleeps(monkeypatch)
+    track, _ = _patched_track()
+    track.actual_fps = 15.0
+    track.fps = 30
+    track.cap.read.return_value = (False, None)
+
+    asyncio.run(track.recv())
+
+    assert sleeps == [pytest.approx(1 / 15)]
 
 
 def test_close_cancels_pending_reconnect(monkeypatch):

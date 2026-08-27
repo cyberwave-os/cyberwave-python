@@ -32,7 +32,7 @@ class SimulationStreamProfileSchema(BaseModel):
     joint_velocities: Optional[StrictBool] = True
     joint_efforts: Optional[StrictBool] = True
     camera_streams: Optional[StrictBool] = True
-    pose: Optional[StrictStr] = 'none'
+    pose: Optional[StrictStr] = 'base_link'
     velocity: Optional[StrictStr] = 'none'
     __properties: ClassVar[List[str]] = ["version", "joint_positions", "joint_velocities", "joint_efforts", "camera_streams", "pose", "velocity"]
 
@@ -112,7 +112,7 @@ class SimulationStreamProfileSchema(BaseModel):
             "joint_velocities": obj.get("joint_velocities") if obj.get("joint_velocities") is not None else True,
             "joint_efforts": obj.get("joint_efforts") if obj.get("joint_efforts") is not None else True,
             "camera_streams": obj.get("camera_streams") if obj.get("camera_streams") is not None else True,
-            "pose": obj.get("pose") if obj.get("pose") is not None else 'none',
+            "pose": obj.get("pose") if obj.get("pose") is not None else 'base_link',
             "velocity": obj.get("velocity") if obj.get("velocity") is not None else 'none'
         })
         return _obj

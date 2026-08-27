@@ -200,6 +200,7 @@ def test_workflow_agent_uses_plan_preview_draft_and_apply_routes():
         "env-uuid",
         "draft inspection",
         confirmed_actions=[{"action": "select_existing_twin"}],
+        setup_mode="auto",
     )
     agents.workflow.apply_plan(
         "env-uuid",
@@ -224,6 +225,7 @@ def test_workflow_agent_uses_plan_preview_draft_and_apply_routes():
         "confirmed_actions": [{"action": "select_existing_twin"}],
         "mode": "simulation",
         "visibility": "private",
+        "setup_mode": "auto",
     }
     assert api_client.serialized[3]["path_params"] == {
         "environment_uuid": "env-uuid",

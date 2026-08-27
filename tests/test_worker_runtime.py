@@ -35,11 +35,14 @@ def _always_due_prev_fire(_cron, local_now):
 
 class FakeWorkflowExecutionManager:
     """Records ``client.workflow_executions.start(...)`` calls (the
-    manual-trigger execution-start ack) without touching MQTT/HTTP."""
+    manual-trigger execution-start ack) without touching MQTT/HTTP. Also
+    stubs the local cancel-tracking cache (``mark_canceled``/``is_canceled``)
+    the same shape as the real ``WorkflowExecutionManager``."""
 
     def __init__(self):
         self.started: list[dict] = []
         self._lock = threading.Lock()
+        self._canceled: set[str] = set()
 
     def start(self, *, workflow_uuid, execution_uuid=None, source_type="edge", **_):
         with self._lock:
@@ -51,6 +54,17 @@ class FakeWorkflowExecutionManager:
                 }
             )
         return None
+
+    def mark_canceled(self, execution_uuid):
+        if execution_uuid:
+            with self._lock:
+                self._canceled.add(str(execution_uuid))
+
+    def is_canceled(self, execution_uuid):
+        if not execution_uuid:
+            return False
+        with self._lock:
+            return str(execution_uuid) in self._canceled
 
 
 class FakeCw:
@@ -712,6 +726,124 @@ def test_runtime_subscribes_manual_trigger_hook_on_workflow_topic():
         assert ctx.twin_uuid == TEST_TWIN_UUID
         # ...even though it is absent from the topic itself.
         assert ctx.twin_uuid not in topic
+    finally:
+        runtime.stop()
+
+
+def test_runtime_subscribes_workflow_cancel_hook_on_workflow_topic():
+    """``@cw.on_workflow_cancel`` subscribes under the workflow base topic,
+    mirroring ``on_manual_trigger`` but on the ``.../cancel`` subtopic."""
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    received = []
+
+    def handler(payload, topic, ctx):
+        received.append((payload, topic, ctx))
+        execution_uuid = payload.get("execution_uuid") if isinstance(payload, dict) else None
+        fake_cw.workflow_executions.mark_canceled(execution_uuid)
+
+    fake_cw._hook_registry.on_workflow_cancel(
+        TEST_TWIN_UUID, workflow_uuid="wf-123"
+    )(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        assert len(fake_mqtt.subscriptions) == 1
+        topic, registered_handler, qos = fake_mqtt.subscriptions[0]
+        assert topic == "localcyberwave/workflow/wf-123/cancel"
+        assert qos == 1
+
+        registered_handler({"execution_uuid": "exec-1", "requested_at": "now"})
+
+        assert len(received) == 1
+        payload, recv_topic, ctx = received[0]
+        assert payload == {"execution_uuid": "exec-1", "requested_at": "now"}
+        assert recv_topic == topic
+
+        # The callback's mark_canceled call actually registers.
+        assert fake_cw.workflow_executions.is_canceled("exec-1") is True
+
+        # Critical: a cancel must not trigger the run's start-ack
+        # (dispatch() gates on subtopic, not just scope).
+        assert fake_cw.workflow_executions.started == []
+    finally:
+        runtime.stop()
+
+
+def test_manual_trigger_ack_does_not_fire_for_a_cancel_message_on_shared_dedup_cache():
+    """Belt-and-suspenders regression: even when both hooks share the same
+    workflow_uuid (and thus the same execution_uuid dedup keying concept),
+    dispatching a cancel must never populate ``workflow_executions.started``.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+
+    run_received = []
+    cancel_received = []
+
+    fake_cw._hook_registry.on_manual_trigger(
+        TEST_TWIN_UUID, workflow_uuid="wf-123"
+    )(lambda payload, topic, ctx: run_received.append(payload))
+    fake_cw._hook_registry.on_workflow_cancel(
+        TEST_TWIN_UUID, workflow_uuid="wf-123"
+    )(lambda payload, topic, ctx: cancel_received.append(payload))
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        assert len(fake_mqtt.subscriptions) == 2
+        by_topic = {topic: handler for topic, handler, _qos in fake_mqtt.subscriptions}
+        run_handler = by_topic["localcyberwave/workflow/wf-123/run"]
+        cancel_handler = by_topic["localcyberwave/workflow/wf-123/cancel"]
+
+        # Fire the cancel first, in isolation.
+        cancel_handler({"execution_uuid": "exec-1"})
+        assert cancel_received == [{"execution_uuid": "exec-1"}]
+        assert run_received == []
+        assert fake_cw.workflow_executions.started == []
+
+        # Now fire an actual run command (different execution) -- this one
+        # *should* ack.
+        run_handler({"execution_uuid": "exec-2", "inputs": {}})
+        assert run_received == [{"execution_uuid": "exec-2", "inputs": {}}]
+        assert fake_cw.workflow_executions.started == [
+            {
+                "workflow_uuid": "wf-123",
+                "execution_uuid": "exec-2",
+                "source_type": "edge",
+            }
+        ]
     finally:
         runtime.stop()
 

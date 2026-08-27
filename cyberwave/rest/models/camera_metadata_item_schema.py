@@ -28,7 +28,7 @@ class CameraMetadataItemSchema(BaseModel):
     CameraMetadataItemSchema
     """ # noqa: E501
     column: StrictStr
-    role: StrictStr
+    role: Optional[StrictStr] = None
     twin_uuid: Optional[StrictStr] = None
     sensor_id: Optional[StrictStr] = None
     __properties: ClassVar[List[str]] = ["column", "role", "twin_uuid", "sensor_id"]
@@ -72,6 +72,11 @@ class CameraMetadataItemSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if role (nullable) is None
+        # and model_fields_set contains the field
+        if self.role is None and "role" in self.model_fields_set:
+            _dict['role'] = None
+
         # set to None if twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:

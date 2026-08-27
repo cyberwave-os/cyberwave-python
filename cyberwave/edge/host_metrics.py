@@ -12,22 +12,32 @@ Design notes:
   :func:`read_host_cpu_temperature`) are Linux-only — they parse procfs
   and sysfs.  Callers should treat absence as "metric unknown", not as an
   error.
-- The *static* reader (:func:`read_host_facts`) is cross-platform: on
+- The *facts* reader (:func:`read_host_facts`) is cross-platform: on
   macOS it falls back to ``sysctl`` for RAM, CPU model and (logical)
-  CPU count.  Thermal source is left ``None`` on macOS since no live
-  publisher samples it there.
+  CPU count, and to ``ifconfig`` for network interfaces.  Thermal source
+  is left ``None`` on macOS since no live publisher samples it there.
+- :func:`read_host_facts` also carries a *copy* of the memory and
+  temperature gauges (see :class:`HostFacts`).  This is deliberate
+  redundancy: the 5 s heartbeat that normally publishes them is stopped
+  once drivers take over, and without the copy the dashboard loses those
+  readings entirely for the rest of the session.
 """
 
 from __future__ import annotations
 
+import math
+import os
 import platform
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Optional
+from uuid import getnode
 
 
 # ---------------------------------------------------------------------------
@@ -85,14 +95,40 @@ class HostPowerDraw:
 
 
 @dataclass(frozen=True)
-class HostFacts:
-    """Static host-level facts about the edge device.
+class NetworkInterfaceFacts:
+    """A single non-loopback network interface (sysfs on Linux, ``ifconfig`` on macOS).
 
-    These properties change rarely (RAM never, CPU model never, kernel only
-    on upgrade) so they belong on the device's persistent identity record
-    rather than on every ~5 s MQTT heartbeat.  The companion dynamic
-    readers (:func:`read_host_memory`, :func:`read_host_cpu_temperature`)
-    carry the values that actually move.
+    ``ipv4_address`` is ``None`` when the interface has no IPv4 address
+    bound (typically because it's down). Surfaced so a support engineer
+    can find the current LAN-facing IP of a device without needing to
+    scan the network — see :func:`read_network_interfaces`.
+
+    ``mac_address`` stays populated on a down interface: it is a hardware
+    property, and it is what a DHCP reservation keys on to give that
+    interface a stable address in the first place.
+    """
+
+    name: str
+    ipv4_address: Optional[str]
+    mac_address: Optional[str]
+    is_up: bool
+
+
+@dataclass(frozen=True)
+class HostFacts:
+    """Host-level facts about the edge device, plus a coarse gauge copy.
+
+    Most of these properties change rarely (RAM never, CPU model never,
+    kernel only on upgrade) so they belong on the device's persistent
+    identity record rather than on every ~5 s MQTT heartbeat.
+
+    Some fields are exceptions and are marked as such below:
+    ``network_interfaces`` (DHCP/WiFi changes), and the ``cpu_temp_c`` /
+    ``memory_used_percent`` / ``memory_available_mb`` / ``power_mw`` gauges, which
+    duplicate what the dynamic readers (:func:`read_host_memory`,
+    :func:`read_host_cpu_temperature`) publish on the heartbeat.  The
+    duplication exists because that heartbeat is not always running; see
+    the field comment for the full rationale.
 
     Optional fields may be ``None`` when the underlying source is
     unavailable on the current platform.  Coverage matrix:
@@ -100,14 +136,25 @@ class HostFacts:
     - Linux: every field is populated when the corresponding
       procfs/sysfs source is readable.  ``cpu_count`` is the logical
       CPU count (one ``processor:`` entry per SMT thread).
+      ``network_interfaces`` lists non-loopback interfaces discovered
+      under ``/sys/class/net`` (see :func:`read_network_interfaces`).
+      ``device_serial`` comes from ``/proc/cpuinfo`` (Raspberry Pi) or
+      the device tree (Jetson).
     - macOS: ``memory_total_mb``, ``cpu_model`` and ``cpu_count``
-      (logical, from ``hw.logicalcpu``) come from ``sysctl``.
-      ``thermal_source`` is always ``None`` — there is no live
-      temperature publisher on Darwin, and a "would-be source" string
-      would be misleading.  ``has_hardware_watchdog`` is always
-      ``False``.
+      (logical, from ``hw.logicalcpu``) come from ``sysctl``, while
+      ``network_interfaces`` comes from ``ifconfig``.
+      ``thermal_source`` and ``cpu_temp_c`` are always ``None`` — there
+      is no temperature reader on Darwin, and a "would-be source" string
+      would be misleading.  ``memory_used_percent`` and
+      ``memory_available_mb`` are also ``None``: ``sysctl`` gives the
+      total but not the free/available split, which needs
+      ``vm_stat``-style accounting we do not do yet.
+      ``has_hardware_watchdog`` is always ``False``, and
+      ``device_serial`` is always ``None``.
     - Other platforms: only ``platform``, ``kernel`` and
-      ``has_hardware_watchdog`` are guaranteed.
+      ``has_hardware_watchdog`` are guaranteed; ``primary_mac_address``
+      may be available from :func:`uuid.getnode`, and
+      ``network_interfaces`` is ``()``.
 
     ``platform`` is always populated since :mod:`platform` works
     cross-platform.
@@ -141,6 +188,56 @@ class HostFacts:
     # previous SDK/edge-core release").
     sdk_version: Optional[str]
     edge_core_version: Optional[str]
+    # Non-loopback network interfaces (Linux only). Unlike the fields
+    # above, this one legitimately changes over the device's lifetime
+    # (DHCP renewal, switching WiFi networks) -- it rides the same 30 s
+    # keepalive cadence as everything else here so a changed IP is
+    # reflected within one cycle. Defaults to `()` on platforms/kernels
+    # where sysfs enumeration isn't available.
+    network_interfaces: tuple["NetworkInterfaceFacts", ...] = ()
+    # Hardware identity. Unlike ``network_interfaces`` these are single
+    # values an operator copies somewhere else -- a DHCP reservation, an
+    # RMA form, a support thread -- so they are surfaced independently of
+    # per-interface enumeration and survive its absence.
+    #
+    # ``primary_mac_address`` is the MAC of the interface the kernel would
+    # actually route out of (see :func:`read_primary_interface`), so it is
+    # the one to put in a DHCP reservation and consumers need no selection
+    # logic of their own. ``primary_interface_name`` names that interface.
+    #
+    # When nothing was enumerated it falls back to :func:`uuid.getnode`,
+    # which is not tied to a reachable interface -- on macOS it routinely
+    # returns an Apple-internal NIC that routes nothing. That case is
+    # distinguishable: ``primary_interface_name`` is ``None``.
+    # ``None`` when no hardware address is readable at all.
+    primary_mac_address: Optional[str] = None
+    # Name of the interface ``primary_mac_address`` was taken from, so a
+    # consumer can render one authoritative ``name ip (mac)`` entry instead
+    # of the whole inventory. ``None`` when the MAC came from the
+    # ``uuid.getnode()`` last resort and belongs to no enumerated interface.
+    primary_interface_name: Optional[str] = None
+    # Board serial: Raspberry Pi via ``/proc/cpuinfo``, Jetson via the
+    # device tree. ``None`` everywhere else, including macOS.
+    device_serial: Optional[str] = None
+    # Live gauges, duplicated from the dynamic readers. Not facts, and
+    # not here for convenience: edge-core stops its bootstrap edge_health
+    # publisher as soon as the first driver starts, and a containerised
+    # driver cannot read the host's thermal sysfs or /proc/meminfo. So
+    # after that handover these readings have no other route off the
+    # device, and the dashboard would show a gap for the rest of the
+    # session. They ride the 30 s keepalive instead of the 5 s heartbeat,
+    # so treat them as a trend, not a sample. Consumers that may have
+    # both should prefer whichever is fresher: the heartbeat's copy only
+    # while heartbeats are still arriving, since a consumer holding the
+    # last-received payload keeps those numbers frozen once they stop.
+    cpu_temp_c: Optional[float] = None
+    memory_used_percent: Optional[float] = None
+    memory_available_mb: Optional[float] = None
+    # Same handover rationale as the gauges above: a reading that vanishes
+    # when the first driver starts reads as a fault. ``battery_wh`` is static
+    # pack config, carried because it is only useful paired with ``power_mw``.
+    power_mw: Optional[float] = None
+    battery_wh: Optional[float] = None
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-friendly dict, omitting keys whose source was unavailable.
@@ -164,10 +261,36 @@ class HostFacts:
             out["cpu_count"] = self.cpu_count
         if self.thermal_source is not None:
             out["thermal_source"] = self.thermal_source
+        if self.cpu_temp_c is not None:
+            out["cpu_temp_c"] = self.cpu_temp_c
+        if self.memory_used_percent is not None:
+            out["memory_used_percent"] = self.memory_used_percent
+        if self.memory_available_mb is not None:
+            out["memory_available_mb"] = self.memory_available_mb
+        if self.power_mw is not None:
+            out["power_mw"] = self.power_mw
+        if self.battery_wh is not None:
+            out["battery_wh"] = self.battery_wh
         if self.sdk_version is not None:
             out["sdk_version"] = self.sdk_version
         if self.edge_core_version is not None:
             out["edge_core_version"] = self.edge_core_version
+        if self.primary_mac_address is not None:
+            out["primary_mac_address"] = self.primary_mac_address
+        if self.primary_interface_name is not None:
+            out["primary_interface_name"] = self.primary_interface_name
+        if self.device_serial is not None:
+            out["device_serial"] = self.device_serial
+        if self.network_interfaces:
+            out["network_interfaces"] = [
+                {
+                    "name": nic.name,
+                    "ipv4_address": nic.ipv4_address,
+                    "mac_address": nic.mac_address,
+                    "is_up": nic.is_up,
+                }
+                for nic in self.network_interfaces
+            ]
         return out
 
 
@@ -392,6 +515,409 @@ def read_host_power_draw(
 #: module attribute so tests can monkeypatch it via :class:`pathlib.Path`.
 HARDWARE_WATCHDOG_DEVICE = "/dev/watchdog"
 
+#: Interface names never worth reporting -- loopback has no bearing on
+#: reaching a device over the network.
+_NETWORK_INTERFACE_SKIP = frozenset({"lo"})
+
+#: Interface *name prefixes* to drop on Darwin.  A stock Mac lists ~30
+#: interfaces where Linux lists two or three: VPN tunnels (``utun``),
+#: AirDrop/AWDL, Thunderbolt bridges, and Apple-internal NICs (``anpi``)
+#: that carry a real MAC but never route traffic anywhere.  None of them
+#: help an operator reach the device, and enumerating them all would bury
+#: the one or two physical NICs that matter.
+#:
+#: This covers only the families Apple names consistently.  The internal
+#: ``anpi`` *peers* and the Thunderbolt *ports* are called ``en2``-``en9``
+#: -- the same prefix as the real NICs -- so they cannot be excluded here;
+#: :func:`_read_darwin_network_interfaces` drops those on ``media: none``
+#: and bridge membership instead.
+_DARWIN_VIRTUAL_INTERFACE_PREFIXES = (
+    "anpi",
+    "ap",
+    "awdl",
+    "bridge",
+    "gif",
+    "llw",
+    "lo",
+    "stf",
+    "utun",
+    "vlan",
+    "vmenet",
+)
+
+#: Serial-number sources, in precedence order.  Raspberry Pi kernels put a
+#: ``Serial`` line in ``/proc/cpuinfo``; Tegra (Jetson) kernels do not and
+#: expose it through the device tree instead.
+_CPUINFO_PATH = "/proc/cpuinfo"
+_DEVICE_TREE_SERIAL_PATH = "/sys/firmware/devicetree/base/serial-number"
+
+#: Serials some boards emit instead of omitting the field. Treated as absent.
+_PLACEHOLDER_SERIALS = frozenset({"", "0", "0000000000000000"})
+
+#: ``SIOCGIFADDR`` ioctl request number (Linux ``<linux/sockios.h>``), used
+#: by :func:`_read_ipv4_address` to read an interface's IPv4 address
+#: without shelling out or adding a third-party dependency.
+_SIOCGIFADDR = 0x8915
+
+
+def _read_ipv4_address(ifname: str) -> Optional[str]:
+    """Return the IPv4 address bound to ``ifname``, or ``None``.
+
+    ``None`` covers both "interface is down" and "interface has no IPv4
+    address" -- callers shouldn't distinguish those cases, since either
+    way there's nothing to SSH to.
+    """
+    try:
+        import fcntl  # POSIX-only; deferred so importing this module never
+
+        # fails on a non-POSIX platform that merely calls unrelated readers.
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            packed = fcntl.ioctl(
+                sock.fileno(),
+                _SIOCGIFADDR,
+                struct.pack("256s", ifname[:15].encode("utf-8")),
+            )
+        finally:
+            sock.close()
+        return socket.inet_ntoa(packed[20:24])
+    except (ImportError, OSError):
+        return None
+
+
+def _read_network_interface_facts(
+    ifname: str, net_base: Path
+) -> NetworkInterfaceFacts:
+    """Build :class:`NetworkInterfaceFacts` for a single ``/sys/class/net`` entry."""
+    mac_address: Optional[str] = None
+    try:
+        mac_address = (net_base / ifname / "address").read_text().strip() or None
+    except OSError:
+        mac_address = None
+
+    is_up = False
+    try:
+        is_up = (net_base / ifname / "operstate").read_text().strip().lower() == "up"
+    except OSError:
+        is_up = False
+
+    return NetworkInterfaceFacts(
+        name=ifname,
+        ipv4_address=_read_ipv4_address(ifname),
+        mac_address=mac_address,
+        is_up=is_up,
+    )
+
+
+def _ifconfig() -> Optional[str]:
+    """Return raw ``ifconfig -a`` output on Darwin.  ``None`` on any error.
+
+    Guarded with :func:`shutil.which` for the same reason as :func:`_sysctl`:
+    a stripped-down environment must degrade, not raise.  This is the test
+    seam for :func:`_read_darwin_network_interfaces`.
+    """
+    if not shutil.which("ifconfig"):
+        return None
+    try:
+        out = subprocess.run(
+            ["ifconfig", "-a"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout or None
+
+
+def _read_darwin_network_interfaces() -> tuple[NetworkInterfaceFacts, ...]:
+    """Parse ``ifconfig -a`` into the same shape the Linux sysfs reader returns.
+
+    Darwin has no ``/sys/class/net``, and reaching link-layer addresses
+    through ``getifaddrs`` would mean ``ctypes`` struct layouts that differ
+    per architecture.  ``ifconfig`` is stable, always present on macOS, and
+    already the thing an operator would run by hand.
+
+    Only interfaces with an ``ether`` line are reported: an interface with
+    no link layer (a VPN tunnel) is not something you can pin a DHCP
+    reservation for, which is the reason this data is collected.
+
+    Three signals in the output narrow ~30 interfaces down to the real NICs,
+    all of them read from the text rather than guessed from names:
+
+    - a name prefix, for the families Apple names consistently
+      (:data:`_DARWIN_VIRTUAL_INTERFACE_PREFIXES`);
+    - ``media: none``, meaning no physical layer at all.  That is what
+      Apple's internal peers report (``en6``-``en9`` on an M-series Mac,
+      sharing the ``anpi`` MAC block).  An *unplugged* real NIC reports
+      ``media: autoselect (none)`` instead -- a media layer with no link --
+      so it survives, which matters because its MAC is exactly what a DHCP
+      reservation keys on;
+    - membership of a ``bridge*``, which drops the Thunderbolt ports
+      (``en2``-``en5``).  The bridge stanza enumerates its own members, so
+      this needs no assumption about their names.
+    """
+    raw = _ifconfig()
+    if not raw:
+        return ()
+
+    interfaces: list[NetworkInterfaceFacts] = []
+    # Collected across the whole scan and applied at the end: the ``bridge0``
+    # stanza that names its members appears *after* the members themselves.
+    bridge_members: set[str] = set()
+    name: Optional[str] = None
+    mac: Optional[str] = None
+    ipv4: Optional[str] = None
+    # macOS reports link state two ways and they disagree: the ``RUNNING``
+    # flag is pinned on for Apple's internal NICs, while ``status:``
+    # tracks the actual link.  Prefer ``status:`` and fall back to the flag
+    # for interface families that omit it.
+    status: Optional[str] = None
+    media: Optional[str] = None
+    running_flag = False
+
+    def flush() -> None:
+        if name is None or mac is None:
+            return
+        if name.startswith(_DARWIN_VIRTUAL_INTERFACE_PREFIXES):
+            return
+        if media == "none":
+            return
+        is_up = status == "active" if status is not None else running_flag
+        interfaces.append(
+            NetworkInterfaceFacts(
+                name=name, ipv4_address=ipv4, mac_address=mac, is_up=is_up
+            )
+        )
+
+    for line in raw.splitlines():
+        if line and not line[0].isspace():
+            flush()
+            header, _, rest = line.partition(":")
+            name = header.strip() or None
+            mac, ipv4, status, media = None, None, None, None
+            running_flag = "RUNNING" in rest
+            continue
+        fields = line.split()
+        if len(fields) < 2:
+            continue
+        # ``inet6`` must not match here -- it shares the ``inet`` prefix but
+        # carries an address this schema has no field for.
+        if fields[0] == "ether":
+            mac = fields[1].lower()
+        elif fields[0] == "member:":
+            bridge_members.add(fields[1])
+        elif fields[0] == "media:":
+            media = fields[1]
+        elif fields[0] == "inet" and ipv4 is None:
+            ipv4 = fields[1]
+        elif fields[0] == "status:":
+            status = fields[1]
+
+    flush()
+    return tuple(nic for nic in interfaces if nic.name not in bridge_members)
+
+
+def read_network_interfaces(
+    net_base: Optional[Path] = None,
+) -> tuple[NetworkInterfaceFacts, ...]:
+    """Enumerate non-loopback network interfaces (Linux and macOS).
+
+    Returns ``()`` on platforms with no reader, or when the underlying
+    source is unreadable -- same "unavailable, not an error" degradation as
+    every other reader in this module. Exists so a device's current
+    LAN-facing IP(s) and MAC(s) can be surfaced without SSHing in or
+    scanning the network first (the whole point being that neither may be
+    possible).
+
+    ``net_base`` is a test seam for the Linux path (defaults to
+    ``/sys/class/net``); the macOS path is seamed on :func:`_ifconfig`.
+    """
+    system = platform.system()
+    if system == "Darwin":
+        return _read_darwin_network_interfaces()
+    if system != "Linux":
+        return ()
+
+    base = net_base if net_base is not None else Path("/sys/class/net")
+    if not base.exists():
+        return ()
+
+    try:
+        ifnames = sorted(p.name for p in base.iterdir() if p.name not in _NETWORK_INTERFACE_SKIP)
+    except OSError:
+        return ()
+
+    return tuple(_read_network_interface_facts(ifname, base) for ifname in ifnames)
+
+
+#: Address the primary-interface probe "connects" to.  TEST-NET-1
+#: (RFC 5737) is reserved for documentation and is never routed, and a UDP
+#: ``connect()`` transmits nothing -- so this never touches the network.
+_ROUTE_PROBE_ADDRESS = ("192.0.2.1", 9)
+
+
+def _route_source_address() -> Optional[str]:
+    """Return the source IPv4 the kernel would use to reach the internet.
+
+    A UDP ``connect()`` performs no handshake and transmits nothing -- it
+    only binds the socket, which makes the kernel run its routing decision
+    and pick a source address.  Reading it back names the interface holding
+    the default route without parsing a route table, shelling out, or adding
+    a dependency, identically on Linux and Darwin.
+
+    ``None`` when the host has no route at all (an edge on an isolated LAN,
+    or one that booted before DHCP answered).  This is the test seam for
+    :func:`read_primary_interface`.
+    """
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect(_ROUTE_PROBE_ADDRESS)
+            address = sock.getsockname()[0]
+        finally:
+            sock.close()
+    except OSError:
+        return None
+    return address if address and address != "0.0.0.0" else None
+
+
+def _is_physical_interface(ifname: str, net_base: Optional[Path] = None) -> bool:
+    """True when ``ifname`` is backed by real hardware (Linux).
+
+    ``/sys/class/net/<if>/device`` is a symlink into the device tree that
+    exists only for hardware-backed interfaces.  Bridges, ``veth`` pairs,
+    bonds, ``dummy*`` and every kernel tunnel pseudo-device lack it, so this
+    is the kernel's own answer to "is this a real NIC" -- which does not rot
+    the way a list of name prefixes does as new interface families appear.
+
+    Returns ``True`` on non-Linux platforms: Darwin has no sysfs, and its
+    ``ifconfig`` reader already drops the pseudo-interfaces it can name.
+    """
+    if platform.system() != "Linux":
+        return True
+    base = net_base if net_base is not None else Path("/sys/class/net")
+    return (base / ifname / "device").exists()
+
+
+def read_primary_interface(
+    interfaces: Optional[tuple[NetworkInterfaceFacts, ...]] = None,
+    net_base: Optional[Path] = None,
+) -> Optional[NetworkInterfaceFacts]:
+    """Return the one interface this host actually reaches the network on.
+
+    Asks the kernel instead of guessing.  A UDP ``connect()`` to
+    :data:`_ROUTE_PROBE_ADDRESS` sends no packet -- it only makes the kernel
+    resolve which source address it *would* use, i.e. the address on the
+    interface holding the default route.  Matching that address back against
+    the enumerated interfaces yields the NIC whose MAC a DHCP reservation
+    has to key on.
+
+    This is structural rather than heuristic, and that is the whole point:
+    ``docker0``, a ``br-*`` compose bridge and a ``veth*`` peer *cannot*
+    hold the default route, so no name blocklist is needed to keep the
+    answer correct.  Picking "the first enumerated interface that is up"
+    instead selects a container bridge on any edge running driver
+    containers, because sysfs enumeration is alphabetical and ``br-`` and
+    ``docker0`` sort before ``eth0``.
+
+    Falls back to a physical interface that is up when the host has no
+    usable route at all -- an edge on an isolated LAN, or one that booted
+    before DHCP answered.  Returns ``None`` when nothing was enumerated.
+
+    ``interfaces`` and ``net_base`` are test seams; production callers pass
+    the tuple they already read so the probe costs no extra enumeration.
+    """
+    nics = (
+        read_network_interfaces(net_base=net_base) if interfaces is None else interfaces
+    )
+    if not nics:
+        return None
+
+    source_ip = _route_source_address()
+    if source_ip is not None:
+        for nic in nics:
+            if nic.ipv4_address == source_ip:
+                return nic
+
+    physical = [nic for nic in nics if _is_physical_interface(nic.name, net_base)]
+    if not physical:
+        return None
+    return next((nic for nic in physical if nic.is_up), physical[0])
+
+
+def read_primary_mac_address() -> Optional[str]:
+    """Return a MAC from :func:`uuid.getnode` as ``aa:bb:cc:dd:ee:ff``, or ``None``.
+
+    Last-resort fallback behind :func:`read_primary_interface`: this reads
+    the same source the device fingerprint is derived from, so it is
+    populated on platforms where interface enumeration finds nothing, but it
+    is *not* necessarily a reachable interface -- ``getnode()`` takes
+    whichever address the OS reports first, which on macOS is routinely an
+    Apple-internal NIC. Prefer :func:`read_primary_interface`.
+
+    Returns ``None`` when ``getnode()`` could not read any hardware address
+    and fabricated a random node ID instead.  RFC 4122 has it set the
+    multicast bit to flag exactly that, and uploading the value anyway
+    would put a MAC-shaped string on the dashboard that matches no NIC in
+    existence -- worse than showing nothing, because an operator would
+    paste it into a DHCP reservation that can never match.
+    """
+    try:
+        node = getnode()
+    except Exception:
+        return None
+    if node >> 40 & 1:
+        return None
+    hex_digits = f"{node:012x}"
+    return ":".join(hex_digits[i : i + 2] for i in range(0, 12, 2))
+
+
+def read_device_serial(
+    cpuinfo_path: Optional[Path] = None,
+    device_tree_serial: Optional[Path] = None,
+) -> Optional[str]:
+    """Return the board serial number (Linux only), or ``None``.
+
+    Raspberry Pi kernels expose it as a ``Serial`` line in
+    ``/proc/cpuinfo``; Tegra (Jetson) kernels omit that line and carry it
+    in the device tree instead, so both are consulted in that order.
+
+    Both arguments are test seams; production code leaves them at their
+    defaults.
+    """
+    if platform.system() != "Linux":
+        return None
+
+    cpuinfo = cpuinfo_path if cpuinfo_path is not None else Path(_CPUINFO_PATH)
+    try:
+        with open(cpuinfo) as f:
+            for line in f:
+                key, _, value = line.partition(":")
+                if key.strip().lower() == "serial":
+                    serial = value.strip().lower()
+                    if serial not in _PLACEHOLDER_SERIALS:
+                        return serial
+                    break
+    except OSError:
+        pass
+
+    dt_path = (
+        device_tree_serial
+        if device_tree_serial is not None
+        else Path(_DEVICE_TREE_SERIAL_PATH)
+    )
+    try:
+        # Device-tree string properties are NUL-terminated; the sentinel
+        # would otherwise ride along into JSON and the dashboard.
+        serial = dt_path.read_text(errors="replace").strip().strip("\x00").strip()
+    except OSError:
+        return None
+    return serial if serial and serial not in _PLACEHOLDER_SERIALS else None
+
 
 def _read_cpu_model_from_cpuinfo() -> tuple[Optional[str], Optional[int]]:
     """Parse ``/proc/cpuinfo`` and return ``(model_name, cpu_count)``.
@@ -595,35 +1121,51 @@ def read_host_facts(
     *,
     thermal_base: Optional[Path] = None,
     watchdog_device: Optional[Path] = None,
+    net_base: Optional[Path] = None,
+    power_sysfs_base: Optional[Path] = None,
 ) -> HostFacts:
-    """Collect static host facts for upload to the edge device's persistent
+    """Collect host facts for upload to the edge device's persistent
     identity record.
 
-    Designed to be called once at edge-core startup.  All readers degrade
-    silently on missing sources: ``platform.platform()`` always returns
-    something, so :class:`HostFacts` is always constructible.
+    Re-read on every tick of edge-core's host-facts keepalive (30 s), not
+    once at startup — the gauge and network fields depend on that.  All
+    readers degrade silently on missing sources: ``platform.platform()``
+    always returns something, so :class:`HostFacts` is always
+    constructible.
 
     Coverage:
 
-    - Linux: memory total comes from ``/proc/meminfo``; CPU model/count
-      from ``/proc/cpuinfo``; thermal source from
-      ``/sys/class/thermal/thermal_zone*``; hardware watchdog from
-      ``/dev/watchdog``.
+    - Linux: memory total/used/available comes from ``/proc/meminfo``;
+      CPU model/count from ``/proc/cpuinfo``; thermal source and the
+      temperature reading from ``/sys/class/thermal/thermal_zone*``;
+      hardware watchdog from ``/dev/watchdog``.
     - macOS (Darwin): memory total, CPU model and (logical) CPU count
-      come from ``sysctl``.  ``thermal_source`` is always ``None`` —
-      the heartbeat publisher does not currently sample temperature
-      on macOS, and setting the field would falsely imply a live
-      reading.  ``has_hardware_watchdog`` is always ``False``.
+      come from ``sysctl``.  ``thermal_source`` and ``cpu_temp_c`` are
+      always ``None`` — there is no temperature reader on Darwin, and
+      setting the source alone would falsely imply a live reading.
+      ``memory_used_percent`` / ``memory_available_mb`` are ``None`` too
+      (``sysctl`` gives the total, not the split).  ``power_mw`` is
+      ``None``: :func:`read_host_power_draw` is sysfs-only.
+      ``has_hardware_watchdog`` is always ``False``.
     - Other platforms: only ``platform`` and ``kernel`` are populated.
 
-    ``thermal_base`` and ``watchdog_device`` are test seams; production
-    code should leave them at their defaults.
+    ``thermal_base``, ``watchdog_device``, ``net_base`` and
+    ``power_sysfs_base`` are test seams; production code should leave them
+    at their defaults.
     """
     system = platform.system()
+
+    memory_used_percent: Optional[float] = None
+    memory_available_mb: Optional[float] = None
 
     if system == "Linux":
         memory = read_host_memory()
         memory_total_mb = memory.total_mb if memory is not None else None
+        if memory is not None:
+            # Same single /proc/meminfo read as the total above -- the
+            # gauge copy costs no extra syscall.
+            memory_used_percent = memory.used_percent
+            memory_available_mb = memory.available_mb
         cpu_model, cpu_count = _read_cpu_model_from_cpuinfo()
     elif system == "Darwin":
         memory_total_mb, cpu_model, cpu_count = _read_darwin_facts()
@@ -652,12 +1194,61 @@ def read_host_facts(
                 zone_dir.name if not zone_type else f"{zone_dir.name}:{zone_type}"
             )
 
+    # Deliberately a separate read rather than reusing ``thermal_zones``
+    # above: ``thermal_source`` names the *first* CPU zone, while the
+    # reading we want is the *hottest* one across all of them. Collapsing
+    # the two would silently change what ``thermal_source`` means.
+    cpu_temp_c: Optional[float] = None
+    if system == "Linux":
+        cpu_temp = read_host_cpu_temperature(thermal_base=thermal_base)
+        if cpu_temp is not None:
+            cpu_temp_c = cpu_temp.celsius
+
+    power_mw: Optional[float] = None
+    if system == "Linux":
+        power = read_host_power_draw(power_sysfs_base=power_sysfs_base)
+        if power is not None:
+            power_mw = power.milliwatts
+
+    # Same env var edge-core reads for the heartbeat copy, rejected on the
+    # same terms (it does the warning; this runs every ~30 s).  ``nan`` /
+    # ``inf`` parse fine but serialise as bare JSON tokens that jsonb
+    # refuses, failing the whole /discover POST -- and with it the
+    # ``last_seen_at`` bump that keeps the edge out of "Offline".
+    battery_wh: Optional[float] = None
+    battery_wh_raw = os.environ.get("CYBERWAVE_BATTERY_WH", "").strip()
+    if battery_wh_raw:
+        try:
+            parsed = float(battery_wh_raw)
+        except ValueError:
+            parsed = None
+        battery_wh = parsed if parsed is not None and math.isfinite(parsed) else None
+
     wd_path = (
         watchdog_device if watchdog_device is not None else Path(HARDWARE_WATCHDOG_DEVICE)
     )
     has_hardware_watchdog = system == "Linux" and wd_path.exists()
 
     sdk_version, edge_core_version = _read_software_versions()
+    network_interfaces = read_network_interfaces(net_base=net_base)
+
+    # One MAC, resolved the same way on every platform: the interface the
+    # kernel would actually route out of.  ``read_primary_mac_address()``
+    # (``uuid.getnode()``) stays as the last resort for hosts where nothing
+    # was enumerated -- it is the only MAC available there, but it is not
+    # tied to a named interface, so ``primary_interface_name`` stays ``None``
+    # and consumers can tell the two provenances apart.
+    primary_interface = read_primary_interface(
+        interfaces=network_interfaces, net_base=net_base
+    )
+    primary_mac_address = (
+        primary_interface.mac_address if primary_interface is not None else None
+    ) or read_primary_mac_address()
+    primary_interface_name = (
+        primary_interface.name
+        if primary_interface is not None and primary_interface.mac_address
+        else None
+    )
 
     return HostFacts(
         platform=platform.platform(),
@@ -669,6 +1260,15 @@ def read_host_facts(
         has_hardware_watchdog=has_hardware_watchdog,
         sdk_version=sdk_version,
         edge_core_version=edge_core_version,
+        network_interfaces=network_interfaces,
+        primary_mac_address=primary_mac_address,
+        primary_interface_name=primary_interface_name,
+        device_serial=read_device_serial(),
+        cpu_temp_c=cpu_temp_c,
+        memory_used_percent=memory_used_percent,
+        memory_available_mb=memory_available_mb,
+        power_mw=power_mw,
+        battery_wh=battery_wh,
     )
 
 
@@ -679,10 +1279,15 @@ __all__ = [
     "HostFacts",
     "HostMemoryInfo",
     "HostPowerDraw",
+    "NetworkInterfaceFacts",
     "discover_cpu_thermal_zones",
+    "read_device_serial",
     "read_host_cpu_temperature",
     "read_host_facts",
     "read_host_memory",
     "read_host_power_draw",
+    "read_network_interfaces",
+    "read_primary_interface",
+    "read_primary_mac_address",
     "read_thermal_zone_celsius",
 ]

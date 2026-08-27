@@ -34,8 +34,9 @@ class AgentCreateEnvironmentResponseSchema(BaseModel):
     tool_calls: Optional[List[StrictStr]] = None
     creation_validation: Optional[Dict[str, Any]] = None
     workflow_result: Optional[Dict[str, Any]] = None
+    agent_metrics: Optional[Dict[str, Any]] = None
     proposal: Optional[AgentProposalSchema] = None
-    __properties: ClassVar[List[str]] = ["environment", "answer", "tool_calls", "creation_validation", "workflow_result", "proposal"]
+    __properties: ClassVar[List[str]] = ["environment", "answer", "tool_calls", "creation_validation", "workflow_result", "agent_metrics", "proposal"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -109,6 +110,7 @@ class AgentCreateEnvironmentResponseSchema(BaseModel):
             "tool_calls": obj.get("tool_calls"),
             "creation_validation": obj.get("creation_validation"),
             "workflow_result": obj.get("workflow_result"),
+            "agent_metrics": obj.get("agent_metrics"),
             "proposal": AgentProposalSchema.from_dict(obj["proposal"]) if obj.get("proposal") is not None else None
         })
         return _obj

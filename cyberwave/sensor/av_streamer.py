@@ -44,7 +44,7 @@ from . import (
     SDK_EDGE_HEALTH_INTERVAL_SECONDS,
     SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
 )
-from .base_video import _strip_vp8_video
+from .base_video import _strip_vp8_video, read_liveness_counter
 from .microphone import BaseAudioTrack, _strip_non_opus_audio
 
 if TYPE_CHECKING:
@@ -610,7 +610,7 @@ class MultimediaStreamer:
         while self._is_running or self.pc is not None:
             try:
                 if self.video_track and self._health_check:
-                    current = getattr(self.video_track, "frame_count", 0)
+                    current = read_liveness_counter(self.video_track)
                     if current < self._last_frame_count:
                         self._last_frame_count = current
                     if current > self._last_frame_count:

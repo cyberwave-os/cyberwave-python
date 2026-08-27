@@ -37,9 +37,10 @@ class EpisodeSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: Optional[StrictStr] = None
+    created_by_name: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     audio: Optional[List[Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "task_name", "twins", "started_at", "finished_at", "metadata", "created_at", "updated_at", "created_by", "updated_by", "audio"]
+    __properties: ClassVar[List[str]] = ["uuid", "task_name", "twins", "started_at", "finished_at", "metadata", "created_at", "updated_at", "created_by", "created_by_name", "updated_by", "audio"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -85,6 +86,11 @@ class EpisodeSchema(BaseModel):
         if self.created_by is None and "created_by" in self.model_fields_set:
             _dict['created_by'] = None
 
+        # set to None if created_by_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.created_by_name is None and "created_by_name" in self.model_fields_set:
+            _dict['created_by_name'] = None
+
         # set to None if updated_by (nullable) is None
         # and model_fields_set contains the field
         if self.updated_by is None and "updated_by" in self.model_fields_set:
@@ -111,6 +117,7 @@ class EpisodeSchema(BaseModel):
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),
+            "created_by_name": obj.get("created_by_name"),
             "updated_by": obj.get("updated_by"),
             "audio": obj.get("audio")
         })

@@ -38,6 +38,9 @@ class CallbackVideoTrack(BaseVideoTrack):
         placeholder_color: RGB tuple for placeholder if no image provided.
     """
 
+    # Default for tracks built without ``__init__``; ``+=`` rebinds per instance.
+    captured_frame_count: int = 0
+
     def __init__(
         self,
         get_frame: Callable[[], Optional[np.ndarray]],
@@ -56,6 +59,9 @@ class CallbackVideoTrack(BaseVideoTrack):
         self.fps = fps
         self.time_reference = time_reference
         self._last_time: Optional[float] = None
+
+        # Only advances on a usable frame, unlike ``frame_count``.
+        self.captured_frame_count: int = 0
 
         if placeholder_image is not None:
             self._placeholder = np.ascontiguousarray(placeholder_image, dtype=np.uint8)
@@ -90,6 +96,9 @@ class CallbackVideoTrack(BaseVideoTrack):
         except Exception as e:
             logger.warning("Callback frame provider error: %s", e)
 
+        # Placeholder ticks do not count as captures, so a provider that stops
+        # delivering (or only delivers garbage) goes stale.
+        captured = frame is not None
         if frame is None:
             frame = self._placeholder
 
@@ -97,6 +106,10 @@ class CallbackVideoTrack(BaseVideoTrack):
         if arr.ndim != 3 or arr.shape[2] != 3:
             logger.warning("Invalid frame format; expected HxWx3 RGB, got %s", arr.shape)
             arr = self._placeholder
+            captured = False
+
+        if captured:
+            self.captured_frame_count += 1
 
         if self.time_reference is not None:
             timestamp, timestamp_monotonic = self.time_reference.read()
@@ -110,9 +123,17 @@ class CallbackVideoTrack(BaseVideoTrack):
 
         video_frame = VideoFrame.from_ndarray(arr, format="rgb24")
         video_frame.pts = self.frame_count
-        video_frame.time_base = fractions.Fraction(1, int(self.fps))
+        time_base = fractions.Fraction(1, int(self.fps))
+        video_frame.time_base = time_base
 
-        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        self._capture_sync_frame(
+            timestamp,
+            timestamp_monotonic,
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+        )
         self.frame_count += 1
 
         return video_frame
