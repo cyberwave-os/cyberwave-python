@@ -2820,6 +2820,23 @@ class UnitreeunitreeB2Twin(Twin):
         """Controller for robot joints"""
         ...
 
+class MinidspLtduma16Twin(Twin):
+    """
+    Digital twin for UMA-16 v2
+    Registry ID: minidsp-ltd/uma-16
+    """
+    pass
+
+class Amcrestamcrest4mpProhdIndoorRgbCamTwin(Twin):
+    """
+    Digital twin for Amcrest 4MP ProHD Indoor RGB CAM
+    Registry ID: amcrest/amcrest-4mp-prohd-indoor-rgb-cam
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -3070,4 +3087,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "g-levine/pupper_v3": GLevinepupperV3Twin,
     "anybotics/anymal_d": AnyboticsanymalDTwin,
     "unitree/unitree_b2": UnitreeunitreeB2Twin,
+    "minidsp-ltd/uma-16": MinidspLtduma16Twin,
+    "amcrest/amcrest-4mp-prohd-indoor-rgb-cam": Amcrestamcrest4mpProhdIndoorRgbCamTwin,
 }

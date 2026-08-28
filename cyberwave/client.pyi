@@ -1603,6 +1603,24 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["minidsp-ltd/uma-16"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> CameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["amcrest/amcrest-4mp-prohd-indoor-rgb-cam"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> CameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["rethink-robotics/baxter"],
         environment_id: str | None = None,
         twin_id: str | None = None,

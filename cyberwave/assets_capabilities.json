@@ -11276,5 +11276,118 @@
     },
     "registry_id": "unitree/unitree_b2",
     "registry_id_alias": null
+  },
+  "minidsp-ltd/uma-16": {
+    "uuid": "2e78694d-a7e5-4876-a49e-ed26ce9767cf",
+    "name": "UMA-16 v2",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "Knowles SPH1668LM4H.",
+          "name": "Knowles SPH1668LM4H.",
+          "type": "audio_mono",
+          "model": "SPH1668LM4H",
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0.0218,
+              "z": 0.0123
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "update_rate": null
+          }
+        }
+      ]
+    },
+    "registry_id": "minidsp-ltd/uma-16",
+    "registry_id_alias": null
+  },
+  "amcrest/amcrest-4mp-prohd-indoor-rgb-cam": {
+    "uuid": "7c3027a3-8975-48c0-aee7-0f24d08eaa95",
+    "name": "Amcrest 4MP ProHD Indoor RGB CAM",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "Main",
+          "name": "Main",
+          "type": "rgb",
+          "model": "1/3\" 4MP Progressive Scan CMOS,",
+          "fov_degrees": 90.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -0.0441,
+              "y": 0,
+              "z": 0.0983
+            },
+            "rotation": {
+              "w": 0.5147,
+              "x": 0.4809,
+              "y": 0.4942,
+              "z": 0.5095
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fovy": 90,
+            "vfov_rad": 1.5707963267948966
+          }
+        }
+      ]
+    },
+    "registry_id": "amcrest/amcrest-4mp-prohd-indoor-rgb-cam",
+    "registry_id_alias": null
   }
 }

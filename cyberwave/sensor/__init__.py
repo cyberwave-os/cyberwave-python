@@ -123,7 +123,7 @@ if _HAS_MUJOCO:
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "BaseVideoTrack": (".base_video", "BaseVideoTrack"),
     "BaseVideoStreamer": (".base_video", "BaseVideoStreamer"),
-    "DEFAULT_TURN_SERVERS": (".base_video", "DEFAULT_TURN_SERVERS"),
+    "DEFAULT_TURN_SERVERS": (".ice", "DEFAULT_TURN_SERVERS"),
     "CONNECTION_LOSS_CONFIRMATION_CHECKS": (".base_video", "CONNECTION_LOSS_CONFIRMATION_CHECKS"),
     "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS": (".base_video", "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS"),
     "SDK_EDGE_HEALTH_INTERVAL_SECONDS": (".base_video", "SDK_EDGE_HEALTH_INTERVAL_SECONDS"),
