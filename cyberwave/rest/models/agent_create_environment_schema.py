@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
+from cyberwave.rest.models.agent_reference_image_schema import AgentReferenceImageSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,15 +30,28 @@ class AgentCreateEnvironmentSchema(BaseModel):
     Request schema for agent-created environments.
     """ # noqa: E501
     prompt: StrictStr
+    context_refs: Optional[Annotated[List[Optional[Dict[str, Any]]], Field(max_length=20)]] = None
     cyberwave_api_key: StrictStr
     workspace_uuid: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr] = None
+    visibility: Optional[StrictStr] = 'private'
     mlmodel_uuid: Optional[StrictStr] = None
     assistant_session_id: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
     image_base64: Optional[Annotated[str, Field(strict=True, max_length=7000000)]] = None
     image_mime_type: Optional[StrictStr] = None
     image_name: Optional[Annotated[str, Field(strict=True, max_length=255)]] = None
-    __properties: ClassVar[List[str]] = ["prompt", "cyberwave_api_key", "workspace_uuid", "project_uuid", "mlmodel_uuid", "assistant_session_id", "image_base64", "image_mime_type", "image_name"]
+    additional_images: Optional[Annotated[List[AgentReferenceImageSchema], Field(max_length=3)]] = None
+    __properties: ClassVar[List[str]] = ["prompt", "context_refs", "cyberwave_api_key", "workspace_uuid", "project_uuid", "visibility", "mlmodel_uuid", "assistant_session_id", "image_base64", "image_mime_type", "image_name", "additional_images"]
+
+    @field_validator('visibility')
+    def visibility_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['private', 'workspace', 'org', 'public']):
+            raise ValueError("must be one of enum values ('private', 'workspace', 'org', 'public')")
+        return value
 
     @field_validator('image_mime_type')
     def image_mime_type_validate_enum(cls, value):
@@ -88,6 +102,13 @@ class AgentCreateEnvironmentSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in additional_images (list)
+        _items = []
+        if self.additional_images:
+            for _item_additional_images in self.additional_images:
+                if _item_additional_images:
+                    _items.append(_item_additional_images.to_dict())
+            _dict['additional_images'] = _items
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -136,14 +157,17 @@ class AgentCreateEnvironmentSchema(BaseModel):
 
         _obj = cls.model_validate({
             "prompt": obj.get("prompt"),
+            "context_refs": obj.get("context_refs"),
             "cyberwave_api_key": obj.get("cyberwave_api_key"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "project_uuid": obj.get("project_uuid"),
+            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
             "mlmodel_uuid": obj.get("mlmodel_uuid"),
             "assistant_session_id": obj.get("assistant_session_id"),
             "image_base64": obj.get("image_base64"),
             "image_mime_type": obj.get("image_mime_type"),
-            "image_name": obj.get("image_name")
+            "image_name": obj.get("image_name"),
+            "additional_images": [AgentReferenceImageSchema.from_dict(_item) for _item in obj["additional_images"]] if obj.get("additional_images") is not None else None
         })
         return _obj
 

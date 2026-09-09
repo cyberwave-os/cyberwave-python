@@ -1153,6 +1153,14 @@ class CyberwaveMQTTClient:
         robot state. When False (default) the payload describes measured state
         and uses ``positions`` / ``velocities`` / ``efforts``.
 
+        Commands may omit positions (pass ``joint_positions={}``) when sending
+        only velocity or effort targets. Unspecified channels are not filled
+        with zeros. Measured-state updates still require positions.
+
+        Targets do not start or take ownership of a telemetry session. The
+        plant/driver producing measured state owns that lifecycle; ending a
+        command-only client must not disconnect its cameras or recordings.
+
         Supports two formats based on provided parameters:
 
         1. **Flat format** (joint_positions only, no velocities/efforts/timestamp):
@@ -1201,10 +1209,11 @@ class CyberwaveMQTTClient:
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
-        if not joint_positions:
+        if not joint_positions and not (as_targets and (velocities or efforts)):
             raise ValueError("joint_positions cannot be empty")
 
-        self._handle_twin_update_with_telemetry(twin_uuid)
+        if not as_targets:
+            self._handle_twin_update_with_telemetry(twin_uuid)
 
         topic = f"{self.topic_prefix}cyberwave/joint/{twin_uuid}/update"
 
@@ -1229,9 +1238,10 @@ class CyberwaveMQTTClient:
             efforts_key = "target_efforts" if as_targets else "efforts"
             message: Dict[str, Any] = {
                 "source_type": effective_source_type,
-                positions_key: joint_positions,
                 "timestamp": timestamp if timestamp is not None else time.time(),
             }
+            if joint_positions:
+                message[positions_key] = joint_positions
             if velocities:
                 message[velocities_key] = velocities
             if efforts:

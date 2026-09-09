@@ -157,7 +157,6 @@ Class | Method | HTTP request | Description
 *DefaultApi* | [**src_app_api_twins_delete_twin**](docs/DefaultApi.md#src_app_api_twins_delete_twin) | **DELETE** /api/v1/twins/{uuid} | Delete Twin
 *DefaultApi* | [**src_app_api_twins_get_actuation_data**](docs/DefaultApi.md#src_app_api_twins_get_actuation_data) | **GET** /api/v1/twins/{uuid}/telemetry | Get Actuation Data
 *DefaultApi* | [**src_app_api_twins_get_twin**](docs/DefaultApi.md#src_app_api_twins_get_twin) | **GET** /api/v1/twins/{uuid} | Get Twin
-*DefaultApi* | [**src_app_api_twins_get_twin_relationships**](docs/DefaultApi.md#src_app_api_twins_get_twin_relationships) | **GET** /api/v1/twins/{uuid}/relationships | Get Twin Relationships
 *DefaultApi* | [**src_app_api_twins_list_all_twins**](docs/DefaultApi.md#src_app_api_twins_list_all_twins) | **GET** /api/v1/twins | List All Twins
 *DefaultApi* | [**src_app_api_twins_save_actuation_data**](docs/DefaultApi.md#src_app_api_twins_save_actuation_data) | **POST** /api/v1/twins/{uuid}/telemetry | Save Actuation Data
 *DefaultApi* | [**src_app_api_twins_update_twin**](docs/DefaultApi.md#src_app_api_twins_update_twin) | **PUT** /api/v1/twins/{uuid} | Update Twin
@@ -232,7 +231,6 @@ Class | Method | HTTP request | Description
  - [TeamMemberResponse](docs/TeamMemberResponse.md)
  - [TeamShareSchema](docs/TeamShareSchema.md)
  - [TwinCreateSchema](docs/TwinCreateSchema.md)
- - [TwinRelationshipSchema](docs/TwinRelationshipSchema.md)
  - [TwinSchema](docs/TwinSchema.md)
  - [TwinStateUpdateSchema](docs/TwinStateUpdateSchema.md)
  - [TwinTelemetrySchema](docs/TwinTelemetrySchema.md)

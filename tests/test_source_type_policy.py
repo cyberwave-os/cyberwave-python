@@ -1,14 +1,18 @@
 """Tests for the driver source-type policy (publish edge/sim, listen tele; relaxed)."""
 
+import pytest
+
 from cyberwave.constants import (
     SOURCE_TYPE_EDGE,
     SOURCE_TYPE_EDGE_LEADER,
     SOURCE_TYPE_EDIT,
+    SOURCE_TYPE_SIM,
     SOURCE_TYPE_SIM_TELE,
     SOURCE_TYPE_TELE,
 )
 from cyberwave.driver.interface.source_type_policy import (
     COMMAND_SOURCE_TYPES,
+    accepts_navigation_command,
     accepts_inbound,
     filtered_listener,
 )
@@ -84,3 +88,45 @@ def test_filtered_listener_preserves_async_callback_result():
     assert asyncio.run(coro) == "ok"
     # Dropped messages return None (not a coroutine) so the dispatcher no-ops cleanly.
     assert wrapped({"source_type": SOURCE_TYPE_EDGE}) is None
+
+
+def test_navigation_command_is_owned_by_exact_runtime():
+    assert accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_EDGE}, "live"
+    )
+    assert accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_TELE}, "live"
+    )
+    assert not accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_SIM}, "live"
+    )
+    assert not accepts_navigation_command({"command": "path"}, "live")
+
+    assert accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_SIM}, "simulation"
+    )
+    assert accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_SIM_TELE}, "simulation"
+    )
+    assert not accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_TELE}, "simulation"
+    )
+
+
+def test_navigation_stop_is_cross_runtime_fail_safe():
+    assert accepts_navigation_command(
+        {"command": "stop", "source_type": SOURCE_TYPE_SIM}, "live"
+    )
+    assert accepts_navigation_command({"command": "stop"}, "live")
+
+
+@pytest.mark.parametrize("runtime_mode", [None, "", "sim", "typo"])
+def test_navigation_command_rejects_unknown_runtime_mode(
+    runtime_mode: str | None,
+) -> None:
+    assert not accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_EDGE}, runtime_mode
+    )
+    assert not accepts_navigation_command(
+        {"command": "path", "source_type": SOURCE_TYPE_SIM}, runtime_mode
+    )

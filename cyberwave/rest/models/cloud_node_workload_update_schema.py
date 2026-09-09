@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -35,7 +35,8 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
     exit_code: Optional[StrictInt] = None
     rejection_reason: Optional[StrictStr] = None
     rejecting_instance_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid"]
+    simulation_ready: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid", "simulation_ready"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -116,6 +117,11 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
         if self.rejecting_instance_uuid is None and "rejecting_instance_uuid" in self.model_fields_set:
             _dict['rejecting_instance_uuid'] = None
 
+        # set to None if simulation_ready (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_ready is None and "simulation_ready" in self.model_fields_set:
+            _dict['simulation_ready'] = None
+
         return _dict
 
     @classmethod
@@ -135,7 +141,8 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
             "stderr": obj.get("stderr"),
             "exit_code": obj.get("exit_code"),
             "rejection_reason": obj.get("rejection_reason"),
-            "rejecting_instance_uuid": obj.get("rejecting_instance_uuid")
+            "rejecting_instance_uuid": obj.get("rejecting_instance_uuid"),
+            "simulation_ready": obj.get("simulation_ready")
         })
         return _obj
 

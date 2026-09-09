@@ -44,6 +44,7 @@ class RLTaskCreateSchema(BaseModel):
     runtime_accelerator: Optional[StrictStr] = None
     runtime_versions: Optional[Dict[str, Any]] = None
     policy_interface: Optional[Dict[str, Any]] = None
+    task_spec: Optional[Dict[str, Any]] = None
     action_spec: Optional[Dict[str, Any]] = None
     observation_spec: Optional[Dict[str, Any]] = None
     rl_config_spec: Optional[Dict[str, Any]] = None
@@ -52,7 +53,7 @@ class RLTaskCreateSchema(BaseModel):
     training_command_setup_enabled: Optional[StrictBool] = None
     inference_command_setup_enabled: Optional[StrictBool] = None
     initial_source_files: Optional[List[RLTaskInitialSourceFileSchema]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "environment_uuid", "workspace_uuid", "project_uuid", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "action_spec", "observation_spec", "rl_config_spec", "training_command_spec", "inference_command_spec", "training_command_setup_enabled", "inference_command_setup_enabled", "initial_source_files"]
+    __properties: ClassVar[List[str]] = ["name", "description", "environment_uuid", "workspace_uuid", "project_uuid", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "task_spec", "action_spec", "observation_spec", "rl_config_spec", "training_command_spec", "inference_command_spec", "training_command_setup_enabled", "inference_command_setup_enabled", "initial_source_files"]
 
     @field_validator('runtime_target')
     def runtime_target_validate_enum(cls, value):
@@ -185,6 +186,11 @@ class RLTaskCreateSchema(BaseModel):
         if self.policy_interface is None and "policy_interface" in self.model_fields_set:
             _dict['policy_interface'] = None
 
+        # set to None if task_spec (nullable) is None
+        # and model_fields_set contains the field
+        if self.task_spec is None and "task_spec" in self.model_fields_set:
+            _dict['task_spec'] = None
+
         # set to None if action_spec (nullable) is None
         # and model_fields_set contains the field
         if self.action_spec is None and "action_spec" in self.model_fields_set:
@@ -253,6 +259,7 @@ class RLTaskCreateSchema(BaseModel):
             "runtime_accelerator": obj.get("runtime_accelerator"),
             "runtime_versions": obj.get("runtime_versions"),
             "policy_interface": obj.get("policy_interface"),
+            "task_spec": obj.get("task_spec"),
             "action_spec": obj.get("action_spec"),
             "observation_spec": obj.get("observation_spec"),
             "rl_config_spec": obj.get("rl_config_spec"),

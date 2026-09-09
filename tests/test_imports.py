@@ -196,12 +196,46 @@ def test_camera_streaming():
             BaseVideoStreamer,
         )
     except ImportError:
-        print("✓ Camera streaming imports handled gracefully (dependencies not installed)")
+        print(
+            "✓ Camera streaming imports handled gracefully (dependencies not installed)"
+        )
         return
 
     if CameraStreamer is not None and CV2CameraStreamer is not None:
         assert CameraStreamer is CV2CameraStreamer  # Legacy alias
+    for camera_class in (
+        CV2VideoTrack,
+        VirtualVideoTrack,
+        VirtualCameraStreamer,
+        CallbackVideoTrack,
+        CallbackCameraStreamer,
+        RealSenseVideoTrack,
+        RealSenseStreamer,
+        BaseVideoTrack,
+        BaseVideoStreamer,
+    ):
+        assert camera_class is None or callable(camera_class)
     print("✓ Camera streaming imports successful")
+
+
+def test_captured_video_frame_needs_no_optional_camera_stack(monkeypatch):
+    import importlib
+
+    import numpy as np
+    import cyberwave.sensor as sensor
+
+    monkeypatch.delitem(vars(sensor), "CapturedVideoFrame", raising=False)
+    monkeypatch.delitem(sys.modules, "cyberwave.sensor.frame", raising=False)
+    for module in ("aiortc", "av", "cv2", "mujoco"):
+        monkeypatch.setitem(sys.modules, module, None)
+
+    frame_class = sensor.CapturedVideoFrame
+    assert (
+        frame_class
+        is importlib.import_module("cyberwave.sensor.frame").CapturedVideoFrame
+    )
+    sample = frame_class(np.zeros((8, 8, 3), dtype=np.uint8), 1700000000.0, 12.0, 0)
+    assert not sample.image.flags.writeable
 
 
 def test_utils_and_constants():

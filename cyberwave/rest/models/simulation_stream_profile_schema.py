@@ -27,14 +27,16 @@ class SimulationStreamProfileSchema(BaseModel):
     """
     Per-twin selection of which simulated state surfaces are streamed.  Mirrors ``src.lib.simulation_stream_profile``. The main source of truth is each twin's ``metadata[\"simulation_stream_profile\"]``; this schema only lets a start request pin an explicit per-twin override.
     """ # noqa: E501
-    version: Optional[StrictInt] = 1
+    version: Optional[StrictInt] = 3
     joint_positions: Optional[StrictBool] = True
     joint_velocities: Optional[StrictBool] = True
     joint_efforts: Optional[StrictBool] = True
     camera_streams: Optional[StrictBool] = True
+    camera_sensor_ids: Optional[List[StrictStr]] = None
+    audio_streams: Optional[StrictBool] = True
     pose: Optional[StrictStr] = 'base_link'
     velocity: Optional[StrictStr] = 'none'
-    __properties: ClassVar[List[str]] = ["version", "joint_positions", "joint_velocities", "joint_efforts", "camera_streams", "pose", "velocity"]
+    __properties: ClassVar[List[str]] = ["version", "joint_positions", "joint_velocities", "joint_efforts", "camera_streams", "camera_sensor_ids", "audio_streams", "pose", "velocity"]
 
     @field_validator('pose')
     def pose_validate_enum(cls, value):
@@ -95,6 +97,11 @@ class SimulationStreamProfileSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if camera_sensor_ids (nullable) is None
+        # and model_fields_set contains the field
+        if self.camera_sensor_ids is None and "camera_sensor_ids" in self.model_fields_set:
+            _dict['camera_sensor_ids'] = None
+
         return _dict
 
     @classmethod
@@ -107,11 +114,13 @@ class SimulationStreamProfileSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "version": obj.get("version") if obj.get("version") is not None else 1,
+            "version": obj.get("version") if obj.get("version") is not None else 3,
             "joint_positions": obj.get("joint_positions") if obj.get("joint_positions") is not None else True,
             "joint_velocities": obj.get("joint_velocities") if obj.get("joint_velocities") is not None else True,
             "joint_efforts": obj.get("joint_efforts") if obj.get("joint_efforts") is not None else True,
             "camera_streams": obj.get("camera_streams") if obj.get("camera_streams") is not None else True,
+            "camera_sensor_ids": obj.get("camera_sensor_ids"),
+            "audio_streams": obj.get("audio_streams") if obj.get("audio_streams") is not None else True,
             "pose": obj.get("pose") if obj.get("pose") is not None else 'base_link',
             "velocity": obj.get("velocity") if obj.get("velocity") is not None else 'none'
         })

@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
+from cyberwave.rest.models.environment_agent_interaction_intent import EnvironmentAgentInteractionIntent
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,27 +30,40 @@ class EnvironmentAgentRequestSchema(BaseModel):
     Request schema for the environment MCP agent.
     """ # noqa: E501
     message: StrictStr
+    assistant_mode: Optional[StrictStr] = 'edit'
+    control_mode: Optional[StrictStr] = None
+    simulation_backend: Optional[Annotated[str, Field(strict=True, max_length=64)]] = None
     cyberwave_api_key: StrictStr
     assistant_session_id: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
-    interaction_intent: Optional[StrictStr] = None
+    interaction_intent: Optional[EnvironmentAgentInteractionIntent] = None
     history: Optional[List[Dict[str, StrictStr]]] = None
     pending_confirmation: Optional[Dict[str, Any]] = None
     current_twins: Optional[List[Optional[Dict[str, Any]]]] = None
-    context_refs: Optional[List[Optional[Dict[str, Any]]]] = None
+    context_refs: Optional[Annotated[List[Dict[str, Any]], Field(max_length=20)]] = None
     mlmodel_uuid: Optional[StrictStr] = None
     image_base64: Optional[StrictStr] = None
     image_mime_type: Optional[StrictStr] = None
     image_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["message", "cyberwave_api_key", "assistant_session_id", "interaction_intent", "history", "pending_confirmation", "current_twins", "context_refs", "mlmodel_uuid", "image_base64", "image_mime_type", "image_name"]
+    __properties: ClassVar[List[str]] = ["message", "assistant_mode", "control_mode", "simulation_backend", "cyberwave_api_key", "assistant_session_id", "interaction_intent", "history", "pending_confirmation", "current_twins", "context_refs", "mlmodel_uuid", "image_base64", "image_mime_type", "image_name"]
 
-    @field_validator('interaction_intent')
-    def interaction_intent_validate_enum(cls, value):
+    @field_validator('assistant_mode')
+    def assistant_mode_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
             return value
 
-        if value not in set(['workflow_context']):
-            raise ValueError("must be one of enum values ('workflow_context')")
+        if value not in set(['edit', 'monitor', 'control']):
+            raise ValueError("must be one of enum values ('edit', 'monitor', 'control')")
+        return value
+
+    @field_validator('control_mode')
+    def control_mode_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['simulation', 'live']):
+            raise ValueError("must be one of enum values ('simulation', 'live')")
         return value
 
     model_config = ConfigDict(
@@ -91,6 +105,16 @@ class EnvironmentAgentRequestSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if control_mode (nullable) is None
+        # and model_fields_set contains the field
+        if self.control_mode is None and "control_mode" in self.model_fields_set:
+            _dict['control_mode'] = None
+
+        # set to None if simulation_backend (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_backend is None and "simulation_backend" in self.model_fields_set:
+            _dict['simulation_backend'] = None
+
         # set to None if assistant_session_id (nullable) is None
         # and model_fields_set contains the field
         if self.assistant_session_id is None and "assistant_session_id" in self.model_fields_set:
@@ -139,6 +163,9 @@ class EnvironmentAgentRequestSchema(BaseModel):
 
         _obj = cls.model_validate({
             "message": obj.get("message"),
+            "assistant_mode": obj.get("assistant_mode") if obj.get("assistant_mode") is not None else 'edit',
+            "control_mode": obj.get("control_mode"),
+            "simulation_backend": obj.get("simulation_backend"),
             "cyberwave_api_key": obj.get("cyberwave_api_key"),
             "assistant_session_id": obj.get("assistant_session_id"),
             "interaction_intent": obj.get("interaction_intent"),

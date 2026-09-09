@@ -45,7 +45,9 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     visible: Optional[StrictBool] = None
     locked: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["template_key", "template_version", "primitive_type", "name", "color", "material", "style", "parameters", "json_patch", "pose", "position", "rotation", "metadata", "visible", "locked"]
+    fixed_base: Optional[StrictBool] = None
+    expected_revision: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["template_key", "template_version", "primitive_type", "name", "color", "material", "style", "parameters", "json_patch", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "expected_revision"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -170,6 +172,16 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
         if self.locked is None and "locked" in self.model_fields_set:
             _dict['locked'] = None
 
+        # set to None if fixed_base (nullable) is None
+        # and model_fields_set contains the field
+        if self.fixed_base is None and "fixed_base" in self.model_fields_set:
+            _dict['fixed_base'] = None
+
+        # set to None if expected_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_revision is None and "expected_revision" in self.model_fields_set:
+            _dict['expected_revision'] = None
+
         return _dict
 
     @classmethod
@@ -196,7 +208,9 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
             "rotation": Rotation.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
             "metadata": obj.get("metadata"),
             "visible": obj.get("visible"),
-            "locked": obj.get("locked")
+            "locked": obj.get("locked"),
+            "fixed_base": obj.get("fixed_base"),
+            "expected_revision": obj.get("expected_revision")
         })
         return _obj
 

@@ -92,16 +92,36 @@ def run_streamer_in_background(
                 await asyncio.sleep(0.3)
             async_stop.set()
 
-        asyncio.create_task(_watch_stop())
-
-        # 3. Run with auto-reconnect until stopped
-        try:
-            await streamer.run_with_auto_reconnect(
+        watcher = asyncio.create_task(_watch_stop())
+        runner = asyncio.create_task(
+            streamer.run_with_auto_reconnect(
                 stop_event=async_stop,
                 subscribe_to_commands=subscribe_to_commands,
             )
+        )
+
+        # A stop must also interrupt a pending WebRTC offer/reconnect, not only
+        # the steady-state streaming loop (the SFU may be unreachable).
+        try:
+            done, _ = await asyncio.wait(
+                {watcher, runner}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if watcher in done:
+                try:
+                    await asyncio.wait_for(asyncio.shield(runner), timeout=3.0)
+                except asyncio.TimeoutError:
+                    runner.cancel()
+                    await asyncio.gather(runner, return_exceptions=True)
+                    # Startup can be cancelled before the reconnect loop's
+                    # finally block is entered. Public stop closes a partial PC.
+                    await streamer.stop()
+            else:
+                await runner
         except Exception:
             logger.exception("run_with_auto_reconnect error (%r)", thread_name)
+        finally:
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
 
     t = threading.Thread(target=_target, name=thread_name, daemon=True)
     t.start()

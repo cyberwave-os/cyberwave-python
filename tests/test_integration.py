@@ -616,7 +616,7 @@ class TestIntegrationCredits:
     """
 
     def test_workflow_trigger_raises_insufficient_credits(
-        self, cyberwave_client, cyberwave_client_no_credits
+        self, cyberwave_client_no_credits
     ):
         """
         Triggering a workflow on a no-credits account must raise
@@ -626,11 +626,30 @@ class TestIntegrationCredits:
         print("Testing Credits: trigger raises CyberwaveInsufficientCreditsError")
         print("=" * 70)
 
-        # Discover an active workflow UUID using the credited account.
-        workflows = cyberwave_client.workflows.list()
-        active = [wf for wf in workflows if wf.is_active]
+        # The workflow has to be one the no-credits account *owns*. Credit
+        # enforcement charges the organization that owns the workflow, not the
+        # caller's, so triggering someone else's workflow bills their org and
+        # never returns 402 no matter how blocked the caller is. Listing is
+        # visibility-scoped rather than ownership-scoped — it also returns
+        # public and org-visible workflows from other tenants — so filter down
+        # to this account's own workspaces explicitly.
+        own_workspaces = {
+            ws.uuid for ws in cyberwave_client_no_credits.workspaces.list()
+        }
+        active = [
+            wf
+            for wf in cyberwave_client_no_credits.workflows.list()
+            if wf.is_active and wf.workspace_uuid in own_workspaces
+        ]
         if not active:
-            pytest.skip("No active workflows found — skipping credits test")
+            # A skip here would hide the gap indefinitely, and CI has already
+            # committed to running this test by providing the key.
+            pytest.fail(
+                "The no-credits account owns no active workflow, so a 402 on "
+                "trigger cannot be provoked. CI provisions one in "
+                "`.github/scripts/setup_credit_state.py`; reaching this means "
+                "that step did not run or its workflow was removed."
+            )
 
         wf = active[0]
         print(f"  Using workflow: {wf.name} ({wf.uuid})")

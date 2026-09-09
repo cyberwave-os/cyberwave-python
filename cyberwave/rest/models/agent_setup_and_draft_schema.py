@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from cyberwave.rest.models.workflow_node_hint_schema import WorkflowNodeHintSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -37,7 +38,7 @@ class AgentSetupAndDraftSchema(BaseModel):
     mode: Optional[StrictStr] = 'simulation'
     simulation_backend: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
-    node_hints: Optional[List[WorkflowNodeHintSchema]] = None
+    node_hints: Optional[Annotated[List[WorkflowNodeHintSchema], Field(max_length=12)]] = None
     setup_mode: Optional[StrictStr] = 'explicit'
     __properties: ClassVar[List[str]] = ["prompt", "confirmed_actions", "agent_plan", "mlmodel_uuid", "twin_uuid", "controller_policy_uuid", "mode", "simulation_backend", "visibility", "node_hints", "setup_mode"]
 

@@ -357,6 +357,7 @@ class _FileAudioSource(_AudioSource):
             (s for s in self._container.streams if s.type == "audio"), None
         )
         if self._stream is None:
+            self._container.close()
             raise RuntimeError(f"No audio stream found in {self._path!r}")
         self._iter = self._container.decode(self._stream)
 
@@ -471,6 +472,18 @@ class _FileAudioSource(_AudioSource):
         if self._producer.is_alive() and self._producer is not threading.current_thread():
             self._producer.join(timeout=2.0)
         self.eof.set()
+
+
+def open_file_audio_source(
+    path: str, *, sample_rate: int, channels: int, loop: bool = False
+) -> _AudioSource:
+    """Open *path* as a non-blocking, 20 ms-chunked PCM source.
+
+    Public factory around ``_FileAudioSource`` for callers outside this module.
+    """
+    return _FileAudioSource(
+        path, target_sample_rate=sample_rate, target_channels=channels, loop=loop
+    )
 
 
 class _QueueAudioSource(_AudioSource):
@@ -1199,15 +1212,30 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
             if self._mix_source is not None:
                 self._mix_source.remove_input(self._webrtc_mix_key)
 
-    def _ensure_mixer(self) -> _MixingAudioSource:
-        """Install the shared mixer as the playback source if not already there."""
+    def _ensure_mixer(self, *, force: bool = False) -> _MixingAudioSource:
+        """Install the shared mixer as the playback source if not already there.
+
+        ``force=False`` (the default, from ``_on_remote_track``'s
+        opportunistic call on every new track) only takes over when nothing
+        else is playing, so it can't silently steal playback from an
+        explicitly configured source (e.g. a looping WAV). ``set_webrtc_source``
+        passes ``force=True`` to switch deliberately regardless. The mixer
+        itself is always created/returned either way, so callers can always
+        ``add_input(...)``.
+        """
         if self._mix_source is None:
             out_rate, out_channels = self._playback_output_format()
             self._mix_source = _MixingAudioSource(
                 target_channels=out_channels,
                 frames_per_chunk=int(AUDIO_PTIME * out_rate),
             )
-        if self.playback._get_active_source() is not self._mix_source:
+        active = self.playback._get_active_source()
+        if active is not None and active is not self._mix_source and not force:
+            logger.info(
+                "Speaker has an active non-mixer playback source; leaving it in "
+                "place instead of switching to the WebRTC mixer for this remote track"
+            )
+        elif active is not self._mix_source:
             self.playback.set_source(self._mix_source)
         return self._mix_source
 
@@ -1282,10 +1310,12 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
 
     def set_webrtc_source(self) -> None:
         """Prepare the host speaker for incoming WebRTC audio. Idempotent and
-        source-preserving — does not tear down active Zenoh subscriptions."""
+        source-preserving — does not tear down active Zenoh subscriptions.
+        The explicit "use WebRTC now" call; see ``_ensure_mixer``'s ``force``.
+        """
         if not self.playback.is_running:
             self.playback.start()
-        self._ensure_mixer()
+        self._ensure_mixer(force=True)
 
     def set_zenoh_source(
         self,
@@ -1318,7 +1348,9 @@ class SpeakerAudioStreamer(BaseAudioStreamer):
 
         if not self.playback.is_running:
             self.playback.start()
-        mixer = self._ensure_mixer()
+        # Explicit call site (the caller asked to subscribe this speaker to a
+        # Zenoh channel) -- same reasoning as set_webrtc_source's force=True.
+        mixer = self._ensure_mixer(force=True)
         mix_key = object()
         push = mixer.add_input(mix_key)
         self._zenoh_mix_keys.append(mix_key)
@@ -1482,6 +1514,7 @@ __all__ = [
     "check_host_speaker_settings",
     "create_linux_speaker_monitor",
     "list_host_sound_devices",
+    "open_file_audio_source",
     "play_file",
     "query_supported_output_sample_rates",
 ]

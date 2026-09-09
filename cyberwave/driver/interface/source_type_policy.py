@@ -30,6 +30,13 @@ COMMAND_SOURCE_TYPES: frozenset[str] = frozenset(
     {SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, SOURCE_TYPE_SIM_TELE}
 )
 
+PHYSICAL_NAVIGATION_SOURCE_TYPES: frozenset[str] = frozenset(
+    {SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE}
+)
+SIMULATION_NAVIGATION_SOURCE_TYPES: frozenset[str] = frozenset(
+    {SOURCE_TYPE_SIM, SOURCE_TYPE_SIM_TELE}
+)
+
 #: Default outbound source type for a driver's published state.
 DEFAULT_PUBLISH_SOURCE_TYPE: str = SOURCE_TYPE_EDGE
 
@@ -47,6 +54,30 @@ def accepts_inbound(allowed: frozenset[str], source_type: str | None) -> bool:
         return False
     if source_type is None:
         return True
+    return source_type in allowed
+
+
+def accepts_navigation_command(
+    envelope: dict[str, Any],
+    runtime_mode: str | None,
+) -> bool:
+    """Return whether this runtime owns a navigation command.
+
+    Navigation is a server-owned command channel, so ``edge`` is a valid live
+    source. Missing and unknown sources fail closed. ``stop`` remains
+    cross-runtime because it can only reduce motion.
+    """
+
+    if str(envelope.get("command") or "").strip().lower() == "stop":
+        return True
+    mode = str(runtime_mode or "").strip().lower()
+    if mode == "simulation":
+        allowed = SIMULATION_NAVIGATION_SOURCE_TYPES
+    elif mode == "live":
+        allowed = PHYSICAL_NAVIGATION_SOURCE_TYPES
+    else:
+        return False
+    source_type = str(envelope.get("source_type") or "").strip().lower()
     return source_type in allowed
 
 

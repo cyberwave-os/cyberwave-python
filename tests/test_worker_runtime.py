@@ -13,12 +13,28 @@ import pytest
 import cyberwave.workers.runtime as worker_runtime
 from cyberwave.workers.hooks import HookRegistry
 from cyberwave.workers.runtime import (
+    MQTT_DISPATCH_QUEUE_MAX_SIZE,
+    PENDING_MQTT_BUFFER_MAX_SIZE,
     WorkerRuntime,
     _resolve_worker_workflow_uuid,
 )
 
 
 TEST_TWIN_UUID = "00000000-0000-0000-0000-000000000001"
+
+
+def _eventually(predicate, timeout=5.0):
+    """Wait for an MQTT hook dispatch, which lands on the hook's own thread."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and not predicate():
+        time.sleep(0.01)
+    return predicate()
+
+
+def _stays(predicate, settle=0.2):
+    """Assert *predicate* holds and still holds after any pending dispatch."""
+    time.sleep(settle)
+    return predicate()
 
 
 def _always_due_prev_fire(_cron, local_now):
@@ -657,7 +673,7 @@ def test_runtime_subscribes_mqtt_hook_via_client_mqtt():
         assert qos == 1
 
         registered_handler({"alert_type": "motor_overheat"})
-        assert len(received) == 1
+        assert _eventually(lambda: len(received) == 1)
         payload, recv_topic, ctx = received[0]
         assert payload == {"alert_type": "motor_overheat"}
         assert recv_topic == topic
@@ -717,7 +733,7 @@ def test_runtime_subscribes_manual_trigger_hook_on_workflow_topic():
         assert qos == 1
 
         registered_handler({"inputs": {"speed": 0.5}})
-        assert len(received) == 1
+        assert _eventually(lambda: len(received) == 1)
         payload, recv_topic, ctx = received[0]
         assert payload == {"inputs": {"speed": 0.5}}
         assert recv_topic == topic
@@ -771,7 +787,7 @@ def test_runtime_subscribes_workflow_cancel_hook_on_workflow_topic():
 
         registered_handler({"execution_uuid": "exec-1", "requested_at": "now"})
 
-        assert len(received) == 1
+        assert _eventually(lambda: len(received) == 1)
         payload, recv_topic, ctx = received[0]
         assert payload == {"execution_uuid": "exec-1", "requested_at": "now"}
         assert recv_topic == topic
@@ -829,14 +845,16 @@ def test_manual_trigger_ack_does_not_fire_for_a_cancel_message_on_shared_dedup_c
 
         # Fire the cancel first, in isolation.
         cancel_handler({"execution_uuid": "exec-1"})
-        assert cancel_received == [{"execution_uuid": "exec-1"}]
-        assert run_received == []
+        assert _eventually(lambda: cancel_received == [{"execution_uuid": "exec-1"}])
+        assert _stays(lambda: run_received == [])
         assert fake_cw.workflow_executions.started == []
 
         # Now fire an actual run command (different execution) -- this one
         # *should* ack.
         run_handler({"execution_uuid": "exec-2", "inputs": {}})
-        assert run_received == [{"execution_uuid": "exec-2", "inputs": {}}]
+        assert _eventually(
+            lambda: run_received == [{"execution_uuid": "exec-2", "inputs": {}}]
+        )
         assert fake_cw.workflow_executions.started == [
             {
                 "workflow_uuid": "wf-123",
@@ -910,14 +928,14 @@ def test_runtime_buffers_mqtt_message_received_during_warm_up():
         # A message delivered now must be buffered, not dropped and not
         # dispatched concurrently with the in-flight warm-up.
         registered_handler({"inputs": {"speed": 0.5}})
-        assert received == []
+        assert _stays(lambda: received == [])
 
         release_warm_up.set()
         start_thread.join(timeout=5)
         assert not start_thread.is_alive()
 
         # Once warm-up finishes, the buffered message is replayed.
-        assert received == [{"inputs": {"speed": 0.5}}]
+        assert _eventually(lambda: received == [{"inputs": {"speed": 0.5}}])
     finally:
         release_warm_up.set()
         start_thread.join(timeout=5)
@@ -984,7 +1002,7 @@ def test_duplicate_run_commands_during_warm_up_dispatch_once():
         # all landing while the worker is still warming up.
         for _ in range(5):
             registered_handler(run_command)
-        assert received == []
+        assert _stays(lambda: received == [])
 
         release_warm_up.set()
         start_thread.join(timeout=5)
@@ -992,7 +1010,7 @@ def test_duplicate_run_commands_during_warm_up_dispatch_once():
 
         # Only the first copy is buffered/dispatched -- the rest are
         # dropped as duplicates of an already-seen execution_uuid.
-        assert received == [run_command]
+        assert _eventually(lambda: received == [run_command])
         assert fake_cw.workflow_executions.started == [
             {
                 "workflow_uuid": "wf-123",
@@ -1048,7 +1066,8 @@ def test_duplicate_run_command_after_warm_up_is_dropped():
         registered_handler(run_command)
         registered_handler(run_command)
 
-        assert received == [run_command]
+        assert _eventually(lambda: received == [run_command])
+        assert _stays(lambda: received == [run_command])
         assert len(fake_cw.workflow_executions.started) == 1
     finally:
         runtime.stop()
@@ -1341,4 +1360,203 @@ def test_runtime_scheduled_workflow_error_sends_alert(tmp_path, monkeypatch):
         assert alert["description"] == "Hook 'schedule:fail-node' failed while running."
         assert "RuntimeError" in alert["metadata"]["technical_detail"]
     finally:
+        runtime.stop()
+
+
+def test_mqtt_hook_callback_does_not_block_inbound_delivery():
+    """A hook that waits on another MQTT message must not deadlock itself.
+
+    The compiled workflow body is a hook callback and it blocks on
+    ``navigation.wait_for_completion``, which resolves only when an inbound
+    ``navigate/status`` is delivered. While dispatch ran inline on paho's
+    network thread, that callback was occupying the one thread able to
+    deliver what it was waiting for, so the wait could only ever time out.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+
+    released = threading.Event()
+    finished = threading.Event()
+
+    def run_callback(payload, topic, ctx):
+        released.wait(timeout=5)
+        finished.set()
+
+    def cancel_callback(payload, topic, ctx):
+        released.set()
+
+    fake_cw._hook_registry.on_manual_trigger(
+        TEST_TWIN_UUID, workflow_uuid="wf-block"
+    )(run_callback)
+    fake_cw._hook_registry.on_workflow_cancel(
+        TEST_TWIN_UUID, workflow_uuid="wf-block"
+    )(cancel_callback)
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        by_topic = {topic: handler for topic, handler, _qos in fake_mqtt.subscriptions}
+        run_handler = by_topic["localcyberwave/workflow/wf-block/run"]
+        cancel_handler = by_topic["localcyberwave/workflow/wf-block/cancel"]
+
+        started_at = time.monotonic()
+        run_handler({"execution_uuid": "exec-block", "inputs": {}})
+        # Delivery hands off and returns even though the callback is still
+        # blocked; inline dispatch would not return until it unblocked.
+        assert time.monotonic() - started_at < 1.0
+        assert not finished.is_set()
+
+        cancel_handler({"execution_uuid": "exec-block"})
+        assert finished.wait(timeout=5)
+    finally:
+        released.set()
+        runtime.stop()
+
+
+def test_mqtt_hook_queue_overflow_drops_without_blocking_delivery():
+    """Overflow must be dropped and counted, never pushed back on the socket.
+
+    ``enqueue`` runs on paho's network thread, so a full queue can only be
+    handled by dropping — blocking there would reinstate exactly the stall
+    this hook's drain thread exists to prevent.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+
+    released = threading.Event()
+    occupied = threading.Event()
+
+    def handler(payload, topic, ctx):
+        occupied.set()
+        released.wait(timeout=10)
+
+    fake_cw._hook_registry.on_mqtt(TEST_TWIN_UUID, subtopic="status", qos=1)(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        _topic, registered_handler, _qos = fake_mqtt.subscriptions[0]
+
+        # Park one message in the (blocked) callback and WAIT for it to get
+        # there, so the queue below is known-empty. Publishing MAX+overflow in
+        # one burst and assuming the drain thread had already taken exactly one
+        # makes the drop count a scheduling race: the burst completes inside a
+        # single GIL switch interval, so the drain thread often has not reached
+        # its first ``get`` and the queue fills one message early.
+        registered_handler({"seq": -1})
+        assert occupied.wait(timeout=5)
+
+        overflow = 5
+        started_at = time.monotonic()
+        for i in range(MQTT_DISPATCH_QUEUE_MAX_SIZE + overflow):
+            registered_handler({"seq": i})
+        assert time.monotonic() - started_at < 1.0
+
+        def dropped():
+            return runtime._hook_stats["handler"]["drops"]
+
+        assert _eventually(lambda: dropped() == overflow)
+        assert _stays(lambda: dropped() == overflow)
+    finally:
+        released.set()
+        runtime.stop()
+
+
+def test_mqtt_hook_warm_up_backlog_is_not_dropped_by_the_dispatch_queue():
+    """A warm-up backlog deeper than the dispatch queue must not lose messages.
+
+    ``_pending_mqtt_messages`` holds up to ``PENDING_MQTT_BUFFER_MAX_SIZE`` (256)
+    and drops OLDEST-first, deliberately keeping the freshest. The per-hook
+    dispatch queue holds ``MQTT_DISPATCH_QUEUE_MAX_SIZE`` (64) and its overflow
+    drops NEWEST-first. Replaying the buffer through the non-blocking ``enqueue``
+    therefore discarded exactly what the buffer had preserved: measured 200 in /
+    65 dispatched, and for 300 in only sequence numbers 44..109 arrived. Replay
+    runs on ``start()``'s thread, not paho's, so it hands over with a blocking
+    put instead.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = True
+            self.topic_prefix = "local"
+            self.subscriptions = []
+
+        def connect(self):
+            self.connected = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append((topic, handler, qos))
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    received = []
+
+    def handler(payload, topic, ctx):
+        received.append(payload["seq"])
+
+    fake_cw._hook_registry.on_mqtt(TEST_TWIN_UUID, subtopic="status", qos=1)(handler)
+
+    runtime = WorkerRuntime(fake_cw)
+    release_warm_up = threading.Event()
+
+    def blocking_warm_up() -> None:
+        release_warm_up.wait(timeout=10)
+
+    runtime._warm_up_models = blocking_warm_up  # type: ignore[method-assign]
+
+    start_thread = threading.Thread(target=runtime.start, daemon=True)
+    start_thread.start()
+    try:
+        assert _eventually(lambda: bool(fake_mqtt.subscriptions))
+        _topic, registered_handler, _qos = fake_mqtt.subscriptions[0]
+
+        # Comfortably past the 64-deep queue, still inside the 256 buffer.
+        sent = MQTT_DISPATCH_QUEUE_MAX_SIZE * 3
+        assert sent < PENDING_MQTT_BUFFER_MAX_SIZE
+        for seq in range(sent):
+            registered_handler({"seq": seq})
+        assert _stays(lambda: received == [])
+
+        release_warm_up.set()
+        start_thread.join(timeout=10)
+        assert not start_thread.is_alive()
+
+        # Every buffered message, in order, and none counted as a drop.
+        assert _eventually(lambda: len(received) == sent, timeout=10)
+        assert received == list(range(sent))
+        assert runtime._hook_stats["handler"]["drops"] == 0
+    finally:
+        release_warm_up.set()
+        start_thread.join(timeout=5)
         runtime.stop()

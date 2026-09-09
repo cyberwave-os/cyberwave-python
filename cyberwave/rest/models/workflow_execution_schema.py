@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.workflow_execution_progress_schema import WorkflowExecutionProgressSchema
 from cyberwave.rest.models.workflow_node_execution_schema import WorkflowNodeExecutionSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -39,7 +40,10 @@ class WorkflowExecutionSchema(BaseModel):
     error_message: StrictStr
     metadata: Dict[str, Any]
     node_executions: Optional[List[WorkflowNodeExecutionSchema]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "workflow_uuid", "status", "triggered_by", "trigger_data", "started_at", "finished_at", "error_message", "metadata", "node_executions"]
+    workflow_name: Optional[StrictStr] = ''
+    workflow_slug: Optional[StrictStr] = ''
+    progress: Optional[WorkflowExecutionProgressSchema] = None
+    __properties: ClassVar[List[str]] = ["uuid", "workflow_uuid", "status", "triggered_by", "trigger_data", "started_at", "finished_at", "error_message", "metadata", "node_executions", "workflow_name", "workflow_slug", "progress"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -87,6 +91,9 @@ class WorkflowExecutionSchema(BaseModel):
                 if _item_node_executions:
                     _items.append(_item_node_executions.to_dict())
             _dict['node_executions'] = _items
+        # override the default output from pydantic by calling `to_dict()` of progress
+        if self.progress:
+            _dict['progress'] = self.progress.to_dict()
         # set to None if triggered_by (nullable) is None
         # and model_fields_set contains the field
         if self.triggered_by is None and "triggered_by" in self.model_fields_set:
@@ -101,6 +108,11 @@ class WorkflowExecutionSchema(BaseModel):
         # and model_fields_set contains the field
         if self.node_executions is None and "node_executions" in self.model_fields_set:
             _dict['node_executions'] = None
+
+        # set to None if progress (nullable) is None
+        # and model_fields_set contains the field
+        if self.progress is None and "progress" in self.model_fields_set:
+            _dict['progress'] = None
 
         return _dict
 
@@ -123,7 +135,10 @@ class WorkflowExecutionSchema(BaseModel):
             "finished_at": obj.get("finished_at"),
             "error_message": obj.get("error_message"),
             "metadata": obj.get("metadata"),
-            "node_executions": [WorkflowNodeExecutionSchema.from_dict(_item) for _item in obj["node_executions"]] if obj.get("node_executions") is not None else None
+            "node_executions": [WorkflowNodeExecutionSchema.from_dict(_item) for _item in obj["node_executions"]] if obj.get("node_executions") is not None else None,
+            "workflow_name": obj.get("workflow_name") if obj.get("workflow_name") is not None else '',
+            "workflow_slug": obj.get("workflow_slug") if obj.get("workflow_slug") is not None else '',
+            "progress": WorkflowExecutionProgressSchema.from_dict(obj["progress"]) if obj.get("progress") is not None else None
         })
         return _obj
 

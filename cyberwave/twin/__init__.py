@@ -18,6 +18,8 @@ from .classes import (
     GripperJointDepthCameraTwin,
     GripperJointTwin,
     GripperTwin,
+    JointCameraTwin,
+    JointDepthCameraTwin,
     JointTwin,
     LocomoteCameraTwin,
     LocomoteDepthCameraTwin,
@@ -62,4 +64,7 @@ __all__ = [
     "GripperDepthCameraTwin",
     "GripperJointCameraTwin",
     "GripperJointDepthCameraTwin",
+    "GripperJointTwin",
+    "JointCameraTwin",
+    "JointDepthCameraTwin",
 ]

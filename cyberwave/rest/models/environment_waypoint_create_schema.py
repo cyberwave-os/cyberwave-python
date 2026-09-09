@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.environment_waypoint_frame_schema import EnvironmentWaypointFrameSchema
 from cyberwave.rest.models.quaternion_schema import QuaternionSchema
@@ -33,11 +33,22 @@ class EnvironmentWaypointCreateSchema(BaseModel):
     id: Optional[StrictStr] = None
     name: Optional[StrictStr] = None
     collection: Optional[StrictStr] = None
+    motion_space: Optional[StrictStr] = None
     position: Optional[Vector3Schema] = None
     rotation: Optional[QuaternionSchema] = None
     metadata: Optional[Dict[str, Any]] = None
     frame: Optional[EnvironmentWaypointFrameSchema] = None
-    __properties: ClassVar[List[str]] = ["id", "name", "collection", "position", "rotation", "metadata", "frame"]
+    __properties: ClassVar[List[str]] = ["id", "name", "collection", "motion_space", "position", "rotation", "metadata", "frame"]
+
+    @field_validator('motion_space')
+    def motion_space_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['surface', 'free_space']):
+            raise ValueError("must be one of enum values ('surface', 'free_space')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -102,6 +113,11 @@ class EnvironmentWaypointCreateSchema(BaseModel):
         if self.collection is None and "collection" in self.model_fields_set:
             _dict['collection'] = None
 
+        # set to None if motion_space (nullable) is None
+        # and model_fields_set contains the field
+        if self.motion_space is None and "motion_space" in self.model_fields_set:
+            _dict['motion_space'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -127,6 +143,7 @@ class EnvironmentWaypointCreateSchema(BaseModel):
             "id": obj.get("id"),
             "name": obj.get("name"),
             "collection": obj.get("collection"),
+            "motion_space": obj.get("motion_space"),
             "position": Vector3Schema.from_dict(obj["position"]) if obj.get("position") is not None else None,
             "rotation": QuaternionSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
             "metadata": obj.get("metadata"),

@@ -50,7 +50,28 @@ class ActionsClient:
                 auth_settings=["CustomTokenAuthentication"],
             )
             response_data = self._api_client.call_api(*_param)
+            # ``call_api`` only raises for connection-level failures: the
+            # generated client checks the HTTP status in ``response_deserialize``,
+            # which this path deliberately skips. Without this check an error
+            # body decodes into a dict with no ``status`` key, which every
+            # caller below reads as "not finished yet".
+            status_code = getattr(response_data, "status", None)
+            if status_code is not None and not 200 <= status_code <= 299:
+                detail = ""
+                try:
+                    detail = str(
+                        _decode_json_response(response_data).get("detail") or ""
+                    )
+                except Exception:
+                    # An unparseable body is fine — the status code is the signal.
+                    detail = ""
+                raise CyberwaveAPIError(
+                    f"Action status request failed with HTTP {status_code}"
+                    + (f": {detail}" if detail else "")
+                )
             return _decode_json_response(response_data)
+        except CyberwaveAPIError:
+            raise
         except Exception as exc:
             raise CyberwaveAPIError(f"Failed to get action status: {exc}") from exc
 
@@ -71,8 +92,19 @@ class ActionsClient:
 
         deadline = time.monotonic() + timeout
         last_status: dict[str, Any] | None = None
+        last_error: CyberwaveAPIError | None = None
         while time.monotonic() < deadline:
-            last_status = self.get_status(action_id, twin_uuid=twin_uuid)
+            # A single failed poll must not end the wait: callers hold a robot
+            # in motion for the whole timeout, and their recovery is written
+            # against TimeoutError. Keep polling and report the last failure
+            # in the timeout message so the cause is not lost.
+            try:
+                last_status = self.get_status(action_id, twin_uuid=twin_uuid)
+            except CyberwaveAPIError as exc:
+                last_error = exc
+                time.sleep(poll_interval)
+                continue
+            last_error = None
             status = str(last_status.get("status") or "").lower()
             if status in TERMINAL_STATUSES:
                 if raise_on_failure and status != "completed":
@@ -83,6 +115,9 @@ class ActionsClient:
                 return last_status
             time.sleep(poll_interval)
 
-        raise TimeoutError(
+        message = (
             f"action {action_id} did not reach a terminal status within {timeout}s"
         )
+        if last_error is not None:
+            message += f" (last status poll failed: {last_error})"
+        raise TimeoutError(message)

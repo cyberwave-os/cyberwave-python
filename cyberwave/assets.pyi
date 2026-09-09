@@ -1131,10 +1131,6 @@ class Djimini4ProTwin(Twin):
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
         ...
-    @property
-    def joints(self) -> JointsHandle:
-        """Controller for robot joints"""
-        ...
 
 class CyberwaveepalTwin(Twin):
     """
@@ -2820,6 +2816,61 @@ class UnitreeunitreeB2Twin(Twin):
         """Controller for robot joints"""
         ...
 
+class MinidspLtduma16Twin(Twin):
+    """
+    Digital twin for UMA-16 v2
+    Registry ID: minidsp-ltd/uma-16
+    """
+    pass
+
+class CyberwaveblackFrameTwin(Twin):
+    """
+    Digital twin for Frame
+    Registry ID: cyberwave/black-frame
+    """
+    pass
+
+class Flirax8Twin(Twin):
+    """
+    Digital twin for AX8
+    Registry ID: flir/ax8
+    """
+    pass
+
+class Amcrestipm41041Twin(Twin):
+    """
+    Digital twin for IPM4-1041
+    Registry ID: amcrest/ipm4-1041
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class TobiasSurjasWorkspaceminingHaulTruckTwin(Twin):
+    """
+    Digital twin for Mining Haul Truck
+    Registry ID: tobias-surjas-workspace/mining-haul-truck
+    """
+    pass
+
+class CyberwaverailBogieTwin(Twin):
+    """
+    Digital twin for Rail Bogie
+    Registry ID: cyberwave/rail-bogie
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class IntelrealsenseL515Twin(Twin):
+    """
+    Digital twin for RealSense L515
+    Registry ID: intel/realsense-l515
+    """
+    pass
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -3070,4 +3121,11 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "g-levine/pupper_v3": GLevinepupperV3Twin,
     "anybotics/anymal_d": AnyboticsanymalDTwin,
     "unitree/unitree_b2": UnitreeunitreeB2Twin,
+    "minidsp-ltd/uma-16": MinidspLtduma16Twin,
+    "cyberwave/black-frame": CyberwaveblackFrameTwin,
+    "flir/ax8": Flirax8Twin,
+    "amcrest/ipm4-1041": Amcrestipm41041Twin,
+    "tobias-surjas-workspace/mining-haul-truck": TobiasSurjasWorkspaceminingHaulTruckTwin,
+    "cyberwave/rail-bogie": CyberwaverailBogieTwin,
+    "intel/realsense-l515": IntelrealsenseL515Twin,
 }

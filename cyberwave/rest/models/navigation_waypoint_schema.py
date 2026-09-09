@@ -30,14 +30,16 @@ class NavigationWaypointSchema(BaseModel):
     @sync cyberwave-frontend/lib/types/navigation-types.ts:NavigationWaypoint
     """ # noqa: E501
     id: Optional[StrictStr] = None
-    position: Dict[str, Union[StrictFloat, StrictInt]]
+    position: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None
+    geodetic_position: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None
     rotation: Optional[NavigationRotationSchema] = None
+    orientation: Optional[Dict[str, Any]] = None
     yaw: Optional[Union[StrictFloat, StrictInt]] = None
     duration_seconds: Optional[Union[StrictFloat, StrictInt]] = None
     actions: Optional[List[NavigationWaypointActionSchema]] = None
     metadata: Optional[Dict[str, Any]] = None
     target_frame: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "position", "rotation", "yaw", "duration_seconds", "actions", "metadata", "target_frame"]
+    __properties: ClassVar[List[str]] = ["id", "position", "geodetic_position", "rotation", "orientation", "yaw", "duration_seconds", "actions", "metadata", "target_frame"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -93,10 +95,25 @@ class NavigationWaypointSchema(BaseModel):
         if self.id is None and "id" in self.model_fields_set:
             _dict['id'] = None
 
+        # set to None if position (nullable) is None
+        # and model_fields_set contains the field
+        if self.position is None and "position" in self.model_fields_set:
+            _dict['position'] = None
+
+        # set to None if geodetic_position (nullable) is None
+        # and model_fields_set contains the field
+        if self.geodetic_position is None and "geodetic_position" in self.model_fields_set:
+            _dict['geodetic_position'] = None
+
         # set to None if rotation (nullable) is None
         # and model_fields_set contains the field
         if self.rotation is None and "rotation" in self.model_fields_set:
             _dict['rotation'] = None
+
+        # set to None if orientation (nullable) is None
+        # and model_fields_set contains the field
+        if self.orientation is None and "orientation" in self.model_fields_set:
+            _dict['orientation'] = None
 
         # set to None if yaw (nullable) is None
         # and model_fields_set contains the field
@@ -137,7 +154,9 @@ class NavigationWaypointSchema(BaseModel):
         _obj = cls.model_validate({
             "id": obj.get("id"),
             "position": obj.get("position"),
+            "geodetic_position": obj.get("geodetic_position"),
             "rotation": NavigationRotationSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
+            "orientation": obj.get("orientation"),
             "yaw": obj.get("yaw"),
             "duration_seconds": obj.get("duration_seconds"),
             "actions": [NavigationWaypointActionSchema.from_dict(_item) for _item in obj["actions"]] if obj.get("actions") is not None else None,

@@ -31,6 +31,7 @@ class EnvironmentCreateSchema(BaseModel):
     slug: Optional[StrictStr] = None
     description: StrictStr
     settings: Optional[Dict[str, Any]] = None
+    settings_base: Optional[Dict[str, Any]] = None
     universal_schema: Optional[Dict[str, Any]] = None
     asset_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
@@ -38,9 +39,10 @@ class EnvironmentCreateSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = None
+    expected_object_revisions: Optional[Dict[str, Dict[str, StrictStr]]] = None
     twin_asset_uuid: Optional[StrictStr] = None
     mlmodel_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template", "twin_asset_uuid", "mlmodel_uuid"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "settings_base", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template", "expected_object_revisions", "twin_asset_uuid", "mlmodel_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -91,6 +93,11 @@ class EnvironmentCreateSchema(BaseModel):
         if self.settings is None and "settings" in self.model_fields_set:
             _dict['settings'] = None
 
+        # set to None if settings_base (nullable) is None
+        # and model_fields_set contains the field
+        if self.settings_base is None and "settings_base" in self.model_fields_set:
+            _dict['settings_base'] = None
+
         # set to None if universal_schema (nullable) is None
         # and model_fields_set contains the field
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
@@ -126,6 +133,11 @@ class EnvironmentCreateSchema(BaseModel):
         if self.is_template is None and "is_template" in self.model_fields_set:
             _dict['is_template'] = None
 
+        # set to None if expected_object_revisions (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_object_revisions is None and "expected_object_revisions" in self.model_fields_set:
+            _dict['expected_object_revisions'] = None
+
         # set to None if twin_asset_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.twin_asset_uuid is None and "twin_asset_uuid" in self.model_fields_set:
@@ -152,6 +164,7 @@ class EnvironmentCreateSchema(BaseModel):
             "slug": obj.get("slug"),
             "description": obj.get("description"),
             "settings": obj.get("settings"),
+            "settings_base": obj.get("settings_base"),
             "universal_schema": obj.get("universal_schema"),
             "asset_uuid": obj.get("asset_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
@@ -159,6 +172,7 @@ class EnvironmentCreateSchema(BaseModel):
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),
             "is_template": obj.get("is_template"),
+            "expected_object_revisions": obj.get("expected_object_revisions"),
             "twin_asset_uuid": obj.get("twin_asset_uuid"),
             "mlmodel_uuid": obj.get("mlmodel_uuid")
         })

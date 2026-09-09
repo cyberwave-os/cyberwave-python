@@ -52,6 +52,7 @@ from cyberwave.sensor.speaker import (  # noqa: E402
     check_host_speaker_settings,
     create_linux_speaker_monitor,
     list_host_sound_devices,
+    open_file_audio_source,
     play_file as top_level_play_file,
     query_supported_output_sample_rates,
 )
@@ -714,6 +715,23 @@ class TestFileAudioSource:
                 target_channels=1,
             )
 
+    def test_no_audio_stream_closes_the_container_before_raising(self, monkeypatch):
+        # Unlike the test above (av.open() itself fails), this container opens
+        # fine but has no audio track -- must still be closed or a repeated
+        # bad upload leaks file descriptors in a long-running simulator.
+        fake_container = MagicMock()
+        fake_container.streams = []
+        monkeypatch.setattr(av, "open", lambda path: fake_container)
+
+        with pytest.raises(RuntimeError, match="No audio stream"):
+            _FileAudioSource(
+                "irrelevant.mp4",
+                target_sample_rate=48000,
+                target_channels=1,
+            )
+
+        fake_container.close.assert_called_once()
+
     def test_eof_event_fires_after_drain(self, wav_file_mono):
         src = _FileAudioSource(
             wav_file_mono,
@@ -762,6 +780,60 @@ class TestFileAudioSource:
         flat = np.array([1, 2, 3, 4], dtype=np.int16)
         out = _FileAudioSource._normalize_frame(flat, target_channels=1)
         assert out.shape == (4, 1)
+
+
+# ===========================================================================
+# open_file_audio_source — public factory used by SimulatedSpeakerPlayback
+# ===========================================================================
+
+
+class TestOpenFileAudioSource:
+    """``_FileAudioSource`` itself is covered above; this only confirms the
+    public wrapper (the one a simulated speaker actually calls, since it must
+    not reach into a private class) constructs an equivalent, working source.
+    """
+
+    def test_returns_a_file_audio_source(self, wav_file_mono):
+        src = open_file_audio_source(wav_file_mono, sample_rate=48000, channels=1)
+        try:
+            assert isinstance(src, _FileAudioSource)
+        finally:
+            src.close()
+
+    def test_decodes_and_reaches_eof(self, wav_file_mono):
+        src = open_file_audio_source(wav_file_mono, sample_rate=48000, channels=1)
+        n = _drain_file_source(src)
+        assert n > 0
+        assert src.eof.is_set()
+        src.close()
+
+    def test_loop_flag_is_forwarded(self, wav_file_mono):
+        src = open_file_audio_source(
+            wav_file_mono, sample_rate=48000, channels=1, loop=True
+        )
+        chunks = 0
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline and chunks < 30:
+            chunk = src.read()
+            if chunk is not None:
+                chunks += 1
+            else:
+                time.sleep(0.005)
+        src.close()
+        assert chunks >= 25, f"loop only produced {chunks} chunks"
+
+    def test_stereo_to_mono_downmix(self, wav_file_stereo):
+        src = open_file_audio_source(wav_file_stereo, sample_rate=48000, channels=1)
+        deadline = time.monotonic() + 2.0
+        chunk = None
+        while time.monotonic() < deadline:
+            chunk = src.read()
+            if chunk is not None:
+                break
+            time.sleep(0.005)
+        src.close()
+        assert chunk is not None
+        assert chunk.shape[1] == 1
 
 
 # ===========================================================================
@@ -1339,6 +1411,43 @@ class TestStreamerMixer:
         out = mixer.read()
         assert out is not None
         assert (out[:4] == 100).all()
+
+    def test_ensure_mixer_does_not_clobber_an_active_explicit_source(self, monkeypatch):
+        """An incoming remote WebRTC track must not silently steal playback
+        away from a source someone explicitly configured (e.g. a simulated
+        speaker's looping WAV via set_file_source) -- _on_remote_track calls
+        _ensure_mixer() opportunistically on every new track, unlike
+        set_webrtc_source's deliberate force=True call."""
+        monkeypatch.setattr(
+            speaker_module, "_get_sounddevice_module", lambda: _make_fake_sd()
+        )
+        s = _make_streamer()
+        s.playback.start()
+        explicit_source = MagicMock()
+        s.playback.set_source(explicit_source)
+
+        mixer = s._ensure_mixer()  # force=False, the _on_remote_track default
+
+        assert s.playback._get_active_source() is explicit_source
+        # The mixer object itself is still created/returned so add_input(...)
+        # never fails for the caller -- it just isn't audible yet.
+        assert mixer is not None
+
+    def test_set_webrtc_source_still_switches_away_from_an_explicit_source(
+        self, monkeypatch
+    ):
+        """The deliberate, explicit call must still win -- only the
+        opportunistic _on_remote_track path is guarded."""
+        monkeypatch.setattr(
+            speaker_module, "_get_sounddevice_module", lambda: _make_fake_sd()
+        )
+        s = _make_streamer()
+        s.playback.start()
+        s.playback.set_source(MagicMock())
+
+        s.set_webrtc_source()
+
+        assert s.playback._get_active_source() is s._mix_source
 
 
 # ===========================================================================

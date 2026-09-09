@@ -285,7 +285,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         },
@@ -313,7 +312,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         },
@@ -341,7 +339,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         },
@@ -369,7 +366,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         },
@@ -397,7 +393,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         },
@@ -425,7 +420,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         },
@@ -453,7 +447,6 @@
             "width": 3840,
             "height": 2160,
             "update_rate": 60.0,
-            "fovy": 26.86,
             "vfov_rad": 0.4687954370856769
           }
         }
@@ -473,6 +466,11 @@
       "has_legs": true,
       "has_wheels": false,
       "locomotion_mode": "legged",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": true,
       "manipulator_count": 2,
       "payload_capacity_kg": 2,
@@ -497,18 +495,17 @@
               "z": 0.4783
             },
             "rotation": {
-              "w": -0.6796,
-              "x": -0.2843,
-              "y": 0.2966,
-              "z": 0.6078
+              "w": -0.4801,
+              "x": -0.4978,
+              "y": 0.4792,
+              "z": 0.5404
             }
           },
           "parameters": {
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         },
         {
@@ -516,7 +513,7 @@
           "name": "Unitree G1 camera2",
           "type": "depth",
           "model": null,
-          "fov_degrees": 59.99999999999999,
+          "fov_degrees": 90.0,
           "parent_link": "d455_link",
           "offset": {
             "position": {
@@ -536,8 +533,6 @@
             "height": 480,
             "update_rate": 30,
             "fov_degrees": 90,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
             "min_depth": 0.1,
             "max_depth": 10
           }
@@ -579,7 +574,7 @@
             "position": {
               "x": 0.0,
               "y": 0.0,
-              "z": 0.0
+              "z": -0.15
             },
             "rotation": {
               "w": 1.0,
@@ -590,8 +585,6 @@
           },
           "parameters": {
             "update_rate": 10.0,
-            "fov_horizontal": 360.0,
-            "fov_vertical": 90.0,
             "vfov_rad": 1.5707963267948966,
             "hfov_rad": 6.283185307179586,
             "min_range": 0.05,
@@ -624,7 +617,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 88.5072,
             "vfov_rad": 1.5447420517211252
           }
         }
@@ -823,7 +815,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112
           }
         },
@@ -851,7 +842,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.4,
             "max_depth": 20.0
@@ -875,42 +865,387 @@
       "locomotion_mode": "legged",
       "locomotion_config": {
         "dof": 0,
-        "max_linear_velocity": 1.6,
+        "max_linear_velocity": 0.0,
         "max_angular_velocity": 0.0
       },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 14.0,
+      "payload_capacity_kg": 14,
       "power_source": "tethered",
-      "power_capacity_wh": -1.0,
+      "power_capacity_wh": -1,
       "navigation_autonomy_level": "fully_autonomous",
       "navigation_obstacle_avoidance": true,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
       "sensors": [
         {
-          "id": "Boston Dynamics Spot camera",
-          "name": "Boston Dynamics Spot camera",
+          "id": "frontleft_fisheye_image",
+          "name": "frontleft_fisheye_image",
           "type": "rgb",
           "model": null,
+          "fov_degrees": 88.0,
           "parent_link": "body",
           "offset": {
             "position": {
-              "x": 0.4203,
-              "y": 0.6943,
+              "x": 0.42,
+              "y": -2.5000423192977905e-05,
+              "z": -1.9886493682896855e-06
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": 0.5,
+              "y": -0.5,
+              "z": -0.5
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "visual",
+              "image_source": "frontleft_fisheye_image",
+              "service_name": "image",
+              "physical_module": "frontleft"
+            }
+          }
+        },
+        {
+          "id": "frontleft_depth_in_visual_frame",
+          "name": "frontleft_depth_in_visual_frame",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": 0.42,
+              "y": 0.0,
               "z": 0.0
             },
             "rotation": {
-              "w": 1.0,
-              "x": 0.0,
+              "w": 0.5,
+              "x": 0.5,
+              "y": -0.5,
+              "z": -0.5
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501,
+            "min_depth": 0.1,
+            "max_depth": 10.0,
+            "color_mode": "grayscale"
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "depth",
+              "aligned_to": "frontleft_fisheye_image",
+              "image_source": "frontleft_depth_in_visual_frame",
+              "service_name": "image",
+              "physical_module": "frontleft"
+            }
+          }
+        },
+        {
+          "id": "frontright_fisheye_image",
+          "name": "frontright_fisheye_image",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": 0.422,
+              "y": 0.0271,
+              "z": -1.988649368067641e-06
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": 0.5,
+              "y": -0.5,
+              "z": -0.5
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "visual",
+              "image_source": "frontright_fisheye_image",
+              "service_name": "image",
+              "physical_module": "frontright"
+            }
+          }
+        },
+        {
+          "id": "frontright_depth_in_visual_frame",
+          "name": "frontright_depth_in_visual_frame",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": 0.422,
+              "y": 0.0271,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": 0.5,
+              "y": -0.5,
+              "z": -0.5
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501,
+            "min_depth": 0.1,
+            "max_depth": 10.0,
+            "color_mode": "grayscale"
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "depth",
+              "aligned_to": "frontright_fisheye_image",
+              "image_source": "frontright_depth_in_visual_frame",
+              "service_name": "image",
+              "physical_module": "frontright"
+            }
+          }
+        },
+        {
+          "id": "left_fisheye_image",
+          "name": "left_fisheye_image",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": -0.1003,
+              "y": 0.1258,
+              "z": 0.0412
+            },
+            "rotation": {
+              "w": 0.7071067811865476,
+              "x": 0.7071067811865476,
               "y": 0.0,
               "z": 0.0
             }
           },
           "parameters": {
-            "width": null,
-            "height": null,
-            "update_rate": null
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "visual",
+              "image_source": "left_fisheye_image",
+              "service_name": "image",
+              "physical_module": "left"
+            }
+          }
+        },
+        {
+          "id": "left_depth_in_visual_frame",
+          "name": "left_depth_in_visual_frame",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": -0.1003,
+              "y": 0.1258,
+              "z": 0.0412
+            },
+            "rotation": {
+              "w": 0.7071067811865476,
+              "x": 0.7071067811865476,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501,
+            "min_depth": 0.1,
+            "max_depth": 10.0,
+            "color_mode": "grayscale"
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "depth",
+              "aligned_to": "left_fisheye_image",
+              "image_source": "left_depth_in_visual_frame",
+              "service_name": "image",
+              "physical_module": "left"
+            }
+          }
+        },
+        {
+          "id": "right_fisheye_image",
+          "name": "right_fisheye_image",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": -0.1513,
+              "y": -0.1261,
+              "z": 0.0408
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 0.0,
+              "y": -0.7071067811865476,
+              "z": -0.7071067811865476
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "visual",
+              "image_source": "right_fisheye_image",
+              "service_name": "image",
+              "physical_module": "right"
+            }
+          }
+        },
+        {
+          "id": "right_depth_in_visual_frame",
+          "name": "right_depth_in_visual_frame",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": -0.1513,
+              "y": -0.1261,
+              "z": 0.0408
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 0.0,
+              "y": -0.7071067811865476,
+              "z": -0.7071067811865476
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501,
+            "min_depth": 0.1,
+            "max_depth": 10.0,
+            "color_mode": "grayscale"
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "depth",
+              "aligned_to": "right_fisheye_image",
+              "image_source": "right_depth_in_visual_frame",
+              "service_name": "image",
+              "physical_module": "right"
+            }
+          }
+        },
+        {
+          "id": "back_fisheye_image",
+          "name": "back_fisheye_image",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": -0.4295,
+              "y": 0.0393,
+              "z": 0.0094
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": 0.5,
+              "y": 0.5,
+              "z": 0.5
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "visual",
+              "image_source": "back_fisheye_image",
+              "service_name": "image",
+              "physical_module": "back"
+            }
+          }
+        },
+        {
+          "id": "back_depth_in_visual_frame",
+          "name": "back_depth_in_visual_frame",
+          "type": "depth",
+          "model": null,
+          "fov_degrees": 88.0,
+          "parent_link": "body",
+          "offset": {
+            "position": {
+              "x": -0.4295,
+              "y": 0.0393,
+              "z": 0.0094
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": 0.5,
+              "y": 0.5,
+              "z": 0.5
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30.0,
+            "vfov_rad": 1.53588974175501,
+            "min_depth": 0.1,
+            "max_depth": 10.0,
+            "color_mode": "grayscale"
+          },
+          "extensions": {
+            "boston_dynamics": {
+              "modality": "depth",
+              "aligned_to": "back_fisheye_image",
+              "image_source": "back_depth_in_visual_frame",
+              "service_name": "image",
+              "physical_module": "back"
+            }
           }
         }
       ]
@@ -1079,7 +1414,6 @@
             "width": 640,
             "height": 480,
             "update_rate": 30.0,
-            "fovy": 41.41,
             "vfov_rad": 0.7227408432508519
           }
         }
@@ -1364,8 +1698,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         }
       ]
@@ -1549,8 +1882,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         }
       ]
@@ -1603,8 +1935,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         },
         {
@@ -1631,8 +1962,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         }
       ]
@@ -1690,7 +2020,6 @@
             "width": 640,
             "height": 480,
             "update_rate": 15.0,
-            "fovy": 90.0,
             "vfov_rad": 1.5707963267948966
           }
         },
@@ -1797,8 +2126,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         }
       ]
@@ -1876,8 +2204,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "vfov_rad": 1.0471975511965976,
             "min_depth": 0.1,
             "max_depth": 10
           }
@@ -1932,8 +2259,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         }
       ]
@@ -1986,7 +2312,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 30.0,
-            "fovy": 42.5,
             "vfov_rad": 0.7417649320975901
           }
         },
@@ -2014,7 +2339,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.2,
             "max_depth": 10.0
@@ -2070,7 +2394,6 @@
             "width": 640,
             "height": 480,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.1,
             "max_depth": 10.0
@@ -2100,7 +2423,6 @@
             "width": 640,
             "height": 480,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112
           }
         }
@@ -2274,7 +2596,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 30.0,
-            "fovy": 43.0,
             "vfov_rad": 0.7504915783575618
           }
         },
@@ -2302,7 +2623,6 @@
             "width": 640,
             "height": 480,
             "update_rate": 30.0,
-            "fovy": 46.0,
             "vfov_rad": 0.8028514559173916,
             "min_depth": 0.5,
             "max_depth": 10.0
@@ -2358,8 +2678,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         }
       ]
@@ -2462,8 +2781,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "vfov_rad": 1.0471975511965976
           }
         }
       ]
@@ -2521,7 +2839,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.2,
             "max_depth": 10.0
@@ -2551,7 +2868,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.2,
             "max_depth": 10.0
@@ -2581,7 +2897,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.2,
             "max_depth": 10.0
@@ -2611,7 +2926,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.2,
             "max_depth": 10.0
@@ -2641,7 +2955,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.0,
             "vfov_rad": 1.0122909661567112,
             "min_depth": 0.2,
             "max_depth": 10.0
@@ -3018,7 +3331,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fovy": 65.0,
             "vfov_rad": 1.1344640137963142
           }
         },
@@ -3046,7 +3358,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 57.0,
             "vfov_rad": 0.9948376736367679,
             "min_depth": 0.4,
             "max_depth": 20.0,
@@ -3108,7 +3419,6 @@
             "width": 4024,
             "height": 3036,
             "update_rate": 8.0,
-            "fovy": 45.0,
             "vfov_rad": 0.7853981633974483
           }
         }
@@ -3167,7 +3477,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 28.6341,
             "vfov_rad": 0.4997593233453083
           }
         }
@@ -3226,7 +3535,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 50.0,
-            "fovy": 41.0,
             "vfov_rad": 0.7155849933176751
           }
         }
@@ -3280,7 +3588,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         }
@@ -3334,7 +3641,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.72,
             "vfov_rad": 1.0248573367710703
           }
         }
@@ -3393,7 +3699,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 58.7155,
             "vfov_rad": 1.0247787969547306
           }
         }
@@ -3560,9 +3865,7 @@
             "height": 3040,
             "update_rate": 30,
             "fov_degrees": 100,
-            "fovy": 100,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "fovy": 100
           }
         },
         {
@@ -3591,8 +3894,6 @@
             "update_rate": 30,
             "fov_degrees": 46,
             "fovy": 46,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
             "min_depth": 0.3,
             "max_depth": 10
           }
@@ -3738,7 +4039,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 30.0,
-            "fovy": 43.3,
             "vfov_rad": 0.7557275661135446
           }
         }
@@ -3808,7 +4108,7 @@
           "name": "front_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 153.5398,
+          "fov_degrees": 124.49999999999999,
           "parent_link": "camera_link",
           "offset": {
             "position": {
@@ -3827,8 +4127,8 @@
             "width": 640,
             "height": 480,
             "update_rate": 15.0,
-            "fovy": 153.5398,
-            "vfov_rad": 2.67977504285359
+            "fovy": 124.5,
+            "vfov_rad": 2.17293491873294
           }
         }
       ]
@@ -4061,7 +4361,6 @@
           },
           "parameters": {
             "update_rate": 12.5,
-            "fov_horizontal": 270.0,
             "hfov_rad": 4.71238898038469,
             "min_range": 0.05,
             "max_range": 29.0,
@@ -4092,7 +4391,6 @@
           },
           "parameters": {
             "update_rate": 12.5,
-            "fov_horizontal": 270.0,
             "hfov_rad": 4.71238898038469,
             "min_range": 0.05,
             "max_range": 29.0,
@@ -4212,7 +4510,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 60.0,
             "vfov_rad": 1.0471975511965976,
             "min_depth": 0.1,
             "max_depth": 20.0
@@ -4303,7 +4600,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 60.0,
-            "fovy": 68.0,
             "vfov_rad": 1.1868238913561442
           }
         },
@@ -4331,7 +4627,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fovy": 65.0,
             "vfov_rad": 1.1344640137963142,
             "min_depth": 0.17,
             "max_depth": 20.0
@@ -4392,7 +4687,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 60.0,
-            "fovy": 68.0,
             "vfov_rad": 1.1868238913561442
           }
         },
@@ -4420,7 +4714,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fovy": 65.0,
             "vfov_rad": 1.1344640137963142,
             "min_depth": 0.17,
             "max_depth": 20.0
@@ -4714,7 +5007,6 @@
           },
           "parameters": {
             "update_rate": 10.0,
-            "fov_degrees": 60,
             "vfov_rad": 1.0471975511965976
           }
         }
@@ -4766,7 +5058,6 @@
           },
           "parameters": {
             "update_rate": 5.0,
-            "fov_degrees": 120,
             "vfov_rad": 2.0943951023931953
           }
         }
@@ -4850,7 +5141,6 @@
             "width": 640,
             "height": 480,
             "update_rate": 30.0,
-            "fovy": 70.0,
             "vfov_rad": 1.2217304763960306
           }
         }
@@ -4943,6 +5233,62 @@
               }
             },
             "vfov_rad": 0.9901008155892083
+          },
+          "gimbal": {
+            "stabilized_axes": [
+              "tilt",
+              "roll",
+              "pan"
+            ],
+            "pan_controllable": false,
+            "roll_controllable": false,
+            "tilt_controllable": true,
+            "mechanical_range_degrees": {
+              "pan": [
+                -27.0,
+                27.0
+              ],
+              "roll": [
+                -45.0,
+                45.0
+              ],
+              "tilt": [
+                -135.0,
+                100.0
+              ]
+            },
+            "controllable_range_degrees": {
+              "tilt": [
+                -90.0,
+                35.0
+              ]
+            },
+            "max_control_speed_degrees_per_s": {
+              "tilt": 100.0
+            }
+          }
+        },
+        {
+          "id": "gnss",
+          "name": "gnss",
+          "type": "gps",
+          "model": null,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": 1.0
           }
         }
       ]
@@ -4992,8 +5338,7 @@
           },
           "parameters": {
             "update_rate": 10,
-            "fov_degrees": 360,
-            "fov_horizontal": 270,
+            "hfov_rad": 4.71238898038469,
             "min_range": 0.1,
             "max_range": 30,
             "points_per_second": 1000
@@ -5049,8 +5394,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "vfov_rad": 1.0471975511965976,
             "min_depth": 0.1,
             "max_depth": 10
           }
@@ -5105,8 +5449,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60,
+            "vfov_rad": 1.0471975511965976,
             "min_depth": 0.1,
             "max_depth": 10
           }
@@ -5120,20 +5463,39 @@
     "uuid": "b49a1592-00dc-44e7-b55f-720525b1afb1",
     "name": "DJI Mini 4 Pro",
     "capabilities": {
-      "has_joints": true,
+      "has_joints": false,
       "can_actuate": false,
       "can_locomote": true,
       "can_fly": true,
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "aerial",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": false,
       "manipulator_count": 0,
-      "payload_capacity_kg": 0,
-      "power_source": "battery",
+      "payload_capacity_kg": 0.0,
+      "power_source": "none",
       "power_capacity_wh": -1,
       "navigation_autonomy_level": "waypoint",
-      "navigation_obstacle_avoidance": false,
+      "navigation_obstacle_avoidance": true,
+      "navigation_coordinate_frames": [
+        "geodetic"
+      ],
+      "navigation_orientation": {
+        "commandable": [
+          "heading"
+        ],
+        "provider_managed": [
+          "roll",
+          "pitch"
+        ],
+        "heading_reference": "true_north"
+      },
+      "navigation_requires_runtime_probe": true,
       "maximum_frequency_hz": 30,
       "minimum_frequency_hz": 0,
       "sensors": [
@@ -5158,11 +5520,33 @@
             }
           },
           "parameters": {
-            "width": 640,
-            "height": 480,
-            "update_rate": 30,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "width": 4096,
+            "height": 2160,
+            "update_rate": 30.0,
+            "vfov_rad": 1.0471975511965976
+          }
+        },
+        {
+          "id": "gnss",
+          "name": "gnss",
+          "type": "gps",
+          "model": null,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": 1.0
           }
         }
       ]
@@ -5221,7 +5605,7 @@
           "name": "main_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 59.99999999999999,
+          "fov_degrees": 85.0,
           "parent_link": "camera_gimbal",
           "offset": {
             "position": {
@@ -5240,9 +5624,7 @@
             "width": 640,
             "height": 480,
             "update_rate": 30,
-            "fov_degrees": 85,
-            "fov_horizontal": 90,
-            "fov_vertical": 60
+            "fov_degrees": 85
           }
         }
       ]
@@ -5295,7 +5677,33 @@
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 30,
       "minimum_frequency_hz": 0,
-      "sensors": []
+      "sensors": [
+        {
+          "id": "audio",
+          "name": "audio",
+          "type": "audio",
+          "model": null,
+          "parent_link": "generic_microphone_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": null,
+            "audio_channels": 1,
+            "audio_sample_rate": 48000
+          }
+        }
+      ]
     },
     "registry_id": "cyberwave/generic-microphone",
     "registry_id_alias": null
@@ -5320,7 +5728,34 @@
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 30,
       "minimum_frequency_hz": 0,
-      "sensors": []
+      "sensors": [
+        {
+          "id": "audio",
+          "name": "audio",
+          "type": "speaker",
+          "model": null,
+          "parent_link": "generic_speaker_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": null,
+            "audio_channels": 1,
+            "audio_sample_rate": 48000,
+            "audio_bit_depth": 16
+          }
+        }
+      ]
     },
     "registry_id": "cyberwave/generic-speaker",
     "registry_id_alias": null
@@ -5375,7 +5810,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 30.0,
-            "fovy": 69.0,
             "vfov_rad": 1.2042771838760873
           }
         },
@@ -5403,7 +5837,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 40.0,
             "vfov_rad": 0.6981317007977318,
             "min_depth": 0.2,
             "max_depth": 6.0,
@@ -5465,7 +5898,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 30.0,
-            "fovy": 69.0,
             "vfov_rad": 1.2042771838760873
           }
         },
@@ -5493,7 +5925,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 40.0,
             "vfov_rad": 0.6981317007977318,
             "min_depth": 0.2,
             "max_depth": 6.0,
@@ -5555,7 +5986,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 30.0,
-            "fovy": 69.0,
             "vfov_rad": 1.2042771838760873
           }
         },
@@ -5583,7 +6013,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 40.0,
             "vfov_rad": 0.6981317007977318,
             "min_depth": 0.2,
             "max_depth": 6.0,
@@ -5645,7 +6074,6 @@
             "width": 1920,
             "height": 1080,
             "update_rate": 30.0,
-            "fovy": 69.0,
             "vfov_rad": 1.2042771838760873
           }
         },
@@ -5673,7 +6101,6 @@
             "width": 1280,
             "height": 720,
             "update_rate": 30.0,
-            "fovy": 40.0,
             "vfov_rad": 0.6981317007977318,
             "min_depth": 0.2,
             "max_depth": 6.0,
@@ -5883,7 +6310,6 @@
             "width": 4056,
             "height": 3040,
             "update_rate": 30.0,
-            "fov_degrees": 79.0,
             "vfov_rad": 1.3788101090755203
           }
         },
@@ -5911,7 +6337,6 @@
             "width": 4056,
             "height": 3040,
             "update_rate": 30.0,
-            "fov_degrees": 79.0,
             "vfov_rad": 1.3788101090755203
           }
         },
@@ -5939,7 +6364,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fov_degrees": 150.0,
             "vfov_rad": 2.6179938779914944
           }
         },
@@ -5967,7 +6391,6 @@
             "width": 160,
             "height": 120,
             "update_rate": 30.0,
-            "fov_degrees": 57.0,
             "vfov_rad": 0.9948376736367679
           }
         },
@@ -5995,7 +6418,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fov_degrees": 150.0,
             "vfov_rad": 2.6179938779914944
           }
         }
@@ -6049,7 +6471,6 @@
             "width": 4056,
             "height": 3040,
             "update_rate": 30.0,
-            "fov_degrees": 79.0,
             "vfov_rad": 1.3788101090755203
           }
         },
@@ -6077,7 +6498,6 @@
             "width": 4056,
             "height": 3040,
             "update_rate": 30.0,
-            "fov_degrees": 79.0,
             "vfov_rad": 1.3788101090755203
           }
         },
@@ -6105,7 +6525,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fov_degrees": 150.0,
             "vfov_rad": 2.6179938779914944
           }
         },
@@ -6133,7 +6552,6 @@
             "width": 160,
             "height": 120,
             "update_rate": 30.0,
-            "fov_degrees": 57.0,
             "vfov_rad": 0.9948376736367679
           }
         },
@@ -6161,7 +6579,6 @@
             "width": 1280,
             "height": 800,
             "update_rate": 30.0,
-            "fov_degrees": 150.0,
             "vfov_rad": 2.6179938779914944
           }
         }
@@ -11275,6 +11692,425 @@
       "sensors": []
     },
     "registry_id": "unitree/unitree_b2",
+    "registry_id_alias": null
+  },
+  "minidsp-ltd/uma-16": {
+    "uuid": "2e78694d-a7e5-4876-a49e-ed26ce9767cf",
+    "name": "UMA-16 v2",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "Knowles SPH1668LM4H.",
+          "name": "Knowles SPH1668LM4H.",
+          "type": "audio_mono",
+          "model": "SPH1668LM4H",
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0,
+              "y": 0.0218,
+              "z": 0.0123
+            },
+            "rotation": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          },
+          "parameters": {
+            "update_rate": null
+          }
+        }
+      ]
+    },
+    "registry_id": "minidsp-ltd/uma-16",
+    "registry_id_alias": null
+  },
+  "cyberwave/black-frame": {
+    "uuid": "23fcc818-e615-4d8b-962f-ed464a7c8932",
+    "name": "Frame",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/black-frame",
+    "registry_id_alias": null
+  },
+  "flir/ax8": {
+    "uuid": "8d9fc650-b410-412f-9cc5-6c2d3c07ac7d",
+    "name": "AX8",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "default",
+          "name": "default",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 58.00000000000001,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": 0.0164,
+              "y": 0,
+              "z": 0.0693
+            },
+            "rotation": {
+              "w": 0.459,
+              "x": 0.4885,
+              "y": -0.5082,
+              "z": -0.5408
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "vfov_rad": 1.0122909661567112
+          }
+        }
+      ]
+    },
+    "registry_id": "flir/ax8",
+    "registry_id_alias": null
+  },
+  "amcrest/ipm4-1041": {
+    "uuid": "879981cf-ebf5-4b09-bef7-a4fc092f6756",
+    "name": "IPM4-1041",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0.0,
+      "power_source": "tethered",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "main_camera",
+          "name": "main_camera",
+          "type": "rgb",
+          "model": "Amcrest IP4M-1041",
+          "fov_degrees": 58.97425937391807,
+          "parent_link": "amcrest_camera_optical_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.0,
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "width": 1280,
+            "height": 720,
+            "update_rate": 20.0,
+            "vfov_rad": 1.029295
+          }
+        },
+        {
+          "id": "builtin_mic",
+          "name": "builtin_mic",
+          "type": "audio_mono",
+          "model": "Amcrest IP4M-1041 built-in microphone",
+          "parent_link": "amcrest_camera_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": null,
+            "audio_channels": 1,
+            "audio_sample_rate": 8000,
+            "audio_bit_depth": 16
+          }
+        },
+        {
+          "id": "builtin_speaker",
+          "name": "builtin_speaker",
+          "type": "speaker",
+          "model": "Amcrest IP4M-1041 built-in speaker",
+          "parent_link": "amcrest_camera_frame",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": null,
+            "audio_channels": 1,
+            "audio_sample_rate": 8000,
+            "audio_bit_depth": 16
+          }
+        }
+      ]
+    },
+    "registry_id": "amcrest/ipm4-1041",
+    "registry_id_alias": null
+  },
+  "tobias-surjas-workspace/mining-haul-truck": {
+    "uuid": "06e4ad23-0639-4364-b103-97f66dee412b",
+    "name": "Mining Haul Truck",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "tobias-surjas-workspace/mining-haul-truck",
+    "registry_id_alias": null
+  },
+  "cyberwave/rail-bogie": {
+    "uuid": "454a162a-9967-45f4-aa43-a2f0491f7a88",
+    "name": "Rail Bogie",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": true,
+      "locomotion_mode": "wheeled",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0.0,
+      "power_source": "rails",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": "none",
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "bogie_speaker",
+          "name": "bogie_speaker",
+          "type": "speaker",
+          "model": "Rail bogie warning speaker (simulated)",
+          "parent_link": "bogie_frame_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": null,
+            "audio_channels": 1,
+            "audio_sample_rate": 48000,
+            "audio_bit_depth": 16
+          }
+        }
+      ]
+    },
+    "registry_id": "cyberwave/rail-bogie",
+    "registry_id_alias": null
+  },
+  "intel/realsense-l515": {
+    "uuid": "f127e351-1bed-4ad9-9806-162f7d96b2fa",
+    "name": "RealSense L515",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "default",
+          "name": "default",
+          "type": "rgb",
+          "model": null,
+          "fov_degrees": 55.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -0.0131,
+              "y": 0.0023,
+              "z": 0.0564
+            },
+            "rotation": {
+              "w": 0.4898,
+              "x": -0.5226,
+              "y": 0.4772,
+              "z": -0.5091
+            }
+          },
+          "parameters": {
+            "width": 640,
+            "height": 480,
+            "update_rate": 30,
+            "fovy": 55,
+            "vfov_rad": 0.9599310885968813
+          }
+        },
+        {
+          "id": "lidar",
+          "name": "lidar",
+          "type": "lidar_3d",
+          "model": null,
+          "fov_degrees": 55.0,
+          "parent_link": "base_link",
+          "offset": {
+            "position": {
+              "x": -0.0131,
+              "y": 0.0023,
+              "z": 0.0564
+            },
+            "rotation": {
+              "w": 0.4898,
+              "x": -0.5226,
+              "y": 0.4772,
+              "z": -0.5091
+            }
+          },
+          "parameters": {
+            "update_rate": 10,
+            "fov_horizontal": 360,
+            "fov_vertical": 55,
+            "vfov_rad": 0.9599310885968813,
+            "hfov_rad": 6.283185307179586,
+            "min_range": 0.1,
+            "max_range": 100,
+            "points_per_second": 10000
+          }
+        }
+      ]
+    },
+    "registry_id": "intel/realsense-l515",
     "registry_id_alias": null
   }
 }

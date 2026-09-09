@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -36,7 +37,7 @@ class ControllerPolicyExecuteSchema(BaseModel):
     simulation_backend: Optional[StrictStr] = None
     payload: Optional[Dict[str, Any]] = None
     instruction: Optional[StrictStr] = None
-    max_steps: Optional[StrictInt] = None
+    max_steps: Optional[Annotated[int, Field(strict=True, gt=0)]] = None
     device: Optional[StrictStr] = None
     velocity_command: Optional[Dict[str, Any]] = None
     linear_x: Optional[Union[StrictFloat, StrictInt]] = None
@@ -60,8 +61,8 @@ class ControllerPolicyExecuteSchema(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['live', 'simulation']):
-            raise ValueError("must be one of enum values ('live', 'simulation')")
+        if value not in set(['simulation', 'live']):
+            raise ValueError("must be one of enum values ('simulation', 'live')")
         return value
 
     @field_validator('transport')

@@ -6,6 +6,7 @@ import builtins
 import json
 import logging
 import os
+import queue
 import signal
 import socket
 import sys
@@ -60,6 +61,16 @@ completes). Applies to every MQTT hook, including a chatty twin-scoped
 ``@cw.on_mqtt`` subtopic that has no execution_uuid to dedup on, so the buffer
 can't grow unbounded for the duration of a slow warm-up. Oldest entries are
 dropped first; a message this deep in a warm-up backlog is already very stale."""
+
+MQTT_DISPATCH_QUEUE_MAX_SIZE = 64
+"""Cap on a single MQTT hook's pending-dispatch queue. A FIFO rather than the
+latest-wins slot the data-bus hooks use for frames: dropping a manual "run now"
+strands the execution, so backlog is bounded but ordering is kept. paho acks a
+QoS 1 message once the handler returns, and the handler is now only the enqueue,
+so an overflow drop is acked like any other message and never redelivered — it is
+counted in the hook's ``drops`` stat and logged. This caps LIVE backlog only —
+the warm-up replay is deeper than 64 by design and hands over with a blocking put
+instead of dropping (see ``enqueue``)."""
 
 
 @dataclass(frozen=True)
@@ -188,6 +199,10 @@ class WorkerRuntime:
         self._registry: HookRegistry = cw_client._hook_registry
         self._subscriptions: list[Any] = []
         self._dispatch_threads: list[threading.Thread] = []
+        # One drain thread per MQTT hook, so a hook callback never runs on
+        # paho's network thread — anything in it that waits on an inbound
+        # MQTT message would otherwise be waiting on its own deliverer.
+        self._mqtt_dispatch_threads: list[threading.Thread] = []
         self._stop_event = threading.Event()
         self._worker_modules: list[object] = []
         self._schedule_registrations: list[_ScheduleRegistration] = []
@@ -339,6 +354,21 @@ class WorkerRuntime:
         for t in self._dispatch_threads:
             t.join(timeout=5.0)
         self._dispatch_threads.clear()
+
+        # Bounded like the schedule-run join below: a hook callback is user
+        # code and may be a whole workflow body, so we can't wait on it
+        # indefinitely. Disconnecting under one cuts its MQTT reporting, and
+        # the execution is left RUNNING for the backend sweeper to reap.
+        for t in self._mqtt_dispatch_threads:
+            t.join(timeout=5.0)
+        stalled = [t.name for t in self._mqtt_dispatch_threads if t.is_alive()]
+        if stalled:
+            logger.warning(
+                "Stopping runtime with %d MQTT hook callback(s) still active: %s",
+                len(stalled),
+                ", ".join(stalled),
+            )
+        self._mqtt_dispatch_threads.clear()
 
         if self._schedule_thread is not None:
             self._schedule_thread.join(timeout=3.0)
@@ -946,6 +976,71 @@ class WorkerRuntime:
                     node_uuid=hook.options.get("node_uuid"),
                 )
 
+        pending_dispatch: queue.Queue[Any] = queue.Queue(
+            maxsize=MQTT_DISPATCH_QUEUE_MAX_SIZE
+        )
+
+        drop_counter = [0]
+
+        def enqueue(payload: Any, block: bool = False) -> None:
+            """Hand *payload* to this hook's drain thread.
+
+            Never blocks by default: the caller is paho's network thread, which
+            must return promptly or it stops reading the socket — the stall this
+            whole indirection exists to remove.
+
+            ``block=True`` is for the warm-up replay only. That runs on
+            ``start()``'s thread, so waiting there is safe, and it has to wait:
+            the replay hands over a backlog of up to
+            ``PENDING_MQTT_BUFFER_MAX_SIZE`` (256) entries into a queue holding
+            ``MQTT_DISPATCH_QUEUE_MAX_SIZE`` (64), and ``put_nowait`` would drop
+            the excess newest-first — discarding exactly the freshest messages
+            the buffer dropped oldest-first to preserve.
+            """
+            try:
+                if block:
+                    pending_dispatch.put(payload)
+                    return
+                pending_dispatch.put_nowait(payload)
+            except queue.Full:
+                drop_counter[0] += 1
+                with self._hook_stats_lock:
+                    entry = self._hook_stats.get(hook_name)
+                    if entry is not None:
+                        entry["drops"] = drop_counter[0]
+                # First drop, then every 100th: a hook wired to a chatty
+                # topic would otherwise log at the topic's line rate.
+                if drop_counter[0] == 1 or drop_counter[0] % 100 == 0:
+                    logger.error(
+                        "Hook '%s' has dropped %d message(s) on %s: %d already "
+                        "queued and the callback is not keeping up",
+                        hook_name,
+                        drop_counter[0],
+                        full_topic,
+                        MQTT_DISPATCH_QUEUE_MAX_SIZE,
+                    )
+
+        def dispatch_loop() -> None:
+            while not self._stop_event.is_set():
+                try:
+                    payload = pending_dispatch.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+                dispatch(payload)
+            # Shutdown abandons whatever is still queued, and those messages
+            # were acked to the broker on receipt, so this line is the only
+            # record they existed. Deliberately NOT folded into ``drops``:
+            # that stat is published as a "callback is not keeping up"
+            # backpressure signal, and shutdown discards are not that.
+            abandoned = pending_dispatch.qsize()
+            if abandoned:
+                logger.warning(
+                    "Hook '%s' stopped with %d undispatched message(s) on %s",
+                    hook_name,
+                    abandoned,
+                    full_topic,
+                )
+
         def on_message(payload: Any) -> None:
             # Subscriptions go live before model warm-up (see ``start()``)
             # so a message can arrive before it's safe to dispatch. Buffer
@@ -979,7 +1074,9 @@ class WorkerRuntime:
                         hook_name,
                         full_topic,
                     )
-                    self._pending_mqtt_messages.append(lambda p=payload: dispatch(p))
+                    self._pending_mqtt_messages.append(
+                        lambda p=payload: enqueue(p, block=True)
+                    )
                     if len(self._pending_mqtt_messages) > PENDING_MQTT_BUFFER_MAX_SIZE:
                         dropped = self._pending_mqtt_messages.pop(0)
                         del dropped
@@ -989,10 +1086,17 @@ class WorkerRuntime:
                             PENDING_MQTT_BUFFER_MAX_SIZE,
                         )
                     return
-            dispatch(payload)
+            enqueue(payload)
 
         try:
             mqtt_client.subscribe(full_topic, on_message, qos=qos)
+            drain = threading.Thread(
+                target=dispatch_loop,
+                name=f"cw-mqtt-{hook_name[:20]}",
+                daemon=True,
+            )
+            drain.start()
+            self._mqtt_dispatch_threads.append(drain)
             logger.info(
                 "Subscribed MQTT hook '%s' to topic %s (qos=%d)",
                 hook_name,

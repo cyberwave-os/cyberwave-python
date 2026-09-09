@@ -44,8 +44,10 @@ class EnvironmentProceduralPrimitiveSchema(BaseModel):
     compiled: Optional[Dict[str, Any]] = None
     visible: Optional[StrictBool] = True
     locked: Optional[StrictBool] = False
+    fixed_base: Optional[StrictBool] = True
+    revision: Optional[StrictStr] = None
     validation_warnings: Optional[List[Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["id", "name", "primitive_type", "template_key", "template_version", "parameters", "position", "size", "rotation", "color", "material", "style", "metadata", "compiled", "visible", "locked", "validation_warnings"]
+    __properties: ClassVar[List[str]] = ["id", "name", "primitive_type", "template_key", "template_version", "parameters", "position", "size", "rotation", "color", "material", "style", "metadata", "compiled", "visible", "locked", "fixed_base", "revision", "validation_warnings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -129,6 +131,11 @@ class EnvironmentProceduralPrimitiveSchema(BaseModel):
         if self.compiled is None and "compiled" in self.model_fields_set:
             _dict['compiled'] = None
 
+        # set to None if revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.revision is None and "revision" in self.model_fields_set:
+            _dict['revision'] = None
+
         return _dict
 
     @classmethod
@@ -157,6 +164,8 @@ class EnvironmentProceduralPrimitiveSchema(BaseModel):
             "compiled": obj.get("compiled"),
             "visible": obj.get("visible") if obj.get("visible") is not None else True,
             "locked": obj.get("locked") if obj.get("locked") is not None else False,
+            "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else True,
+            "revision": obj.get("revision"),
             "validation_warnings": obj.get("validation_warnings")
         })
         return _obj

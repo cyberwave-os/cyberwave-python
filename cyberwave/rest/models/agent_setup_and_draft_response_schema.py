@@ -43,7 +43,10 @@ class AgentSetupAndDraftResponseSchema(BaseModel):
     proposed_environment_changes: Optional[List[Dict[str, Any]]] = None
     applied_setup_changes: Optional[List[Optional[Dict[str, Any]]]] = None
     proposal: Optional[AgentProposalSchema] = None
-    __properties: ClassVar[List[str]] = ["workflow", "strategy", "template_kind", "template_summary", "preview_kind", "preview", "embodiment_context", "execution_readiness", "missing_requirements", "proposed_environment_changes", "applied_setup_changes", "proposal"]
+    composition_strategy: Optional[StrictStr] = None
+    resolved_node_hints: Optional[List[Dict[str, Any]]] = None
+    dropped_node_hints: Optional[List[Dict[str, Any]]] = None
+    __properties: ClassVar[List[str]] = ["workflow", "strategy", "template_kind", "template_summary", "preview_kind", "preview", "embodiment_context", "execution_readiness", "missing_requirements", "proposed_environment_changes", "applied_setup_changes", "proposal", "composition_strategy", "resolved_node_hints", "dropped_node_hints"]
 
     @field_validator('preview_kind')
     def preview_kind_validate_enum(cls, value):
@@ -123,6 +126,11 @@ class AgentSetupAndDraftResponseSchema(BaseModel):
         if self.proposal is None and "proposal" in self.model_fields_set:
             _dict['proposal'] = None
 
+        # set to None if composition_strategy (nullable) is None
+        # and model_fields_set contains the field
+        if self.composition_strategy is None and "composition_strategy" in self.model_fields_set:
+            _dict['composition_strategy'] = None
+
         return _dict
 
     @classmethod
@@ -146,7 +154,10 @@ class AgentSetupAndDraftResponseSchema(BaseModel):
             "missing_requirements": obj.get("missing_requirements"),
             "proposed_environment_changes": obj.get("proposed_environment_changes"),
             "applied_setup_changes": obj.get("applied_setup_changes"),
-            "proposal": AgentProposalSchema.from_dict(obj["proposal"]) if obj.get("proposal") is not None else None
+            "proposal": AgentProposalSchema.from_dict(obj["proposal"]) if obj.get("proposal") is not None else None,
+            "composition_strategy": obj.get("composition_strategy"),
+            "resolved_node_hints": obj.get("resolved_node_hints"),
+            "dropped_node_hints": obj.get("dropped_node_hints")
         })
         return _obj
 

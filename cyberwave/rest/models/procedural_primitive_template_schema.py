@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -45,7 +45,8 @@ class ProceduralPrimitiveTemplateSchema(BaseModel):
     validation: Optional[Dict[str, Any]] = None
     examples: Optional[List[Optional[Dict[str, Any]]]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["key", "version", "category", "name", "description", "keywords", "legacy_registry_ids", "aliases", "generator", "coordinate_frame", "parameter_schema", "parameters_schema", "defaults", "outputs", "derived_values", "validation", "examples", "metadata"]
+    default_fixed_base: Optional[StrictBool] = True
+    __properties: ClassVar[List[str]] = ["key", "version", "category", "name", "description", "keywords", "legacy_registry_ids", "aliases", "generator", "coordinate_frame", "parameter_schema", "parameters_schema", "defaults", "outputs", "derived_values", "validation", "examples", "metadata", "default_fixed_base"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -115,7 +116,8 @@ class ProceduralPrimitiveTemplateSchema(BaseModel):
             "derived_values": obj.get("derived_values"),
             "validation": obj.get("validation"),
             "examples": obj.get("examples"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "default_fixed_base": obj.get("default_fixed_base") if obj.get("default_fixed_base") is not None else True
         })
         return _obj
 

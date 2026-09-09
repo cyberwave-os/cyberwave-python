@@ -62,7 +62,7 @@ def test_namespaced_global_when_unset():
 
 
 def test_namespaced_under_twin_namespace():
-    assert _NS("/CW_abc").namespaced("enable_srv") == "/CW_abc/enable_srv"
+    assert _NS("/twin_abc").namespaced("enable_srv") == "/twin_abc/enable_srv"
 
 
 def test_destroy_publishers_for_topic_removes_only_matching():

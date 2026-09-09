@@ -43,9 +43,10 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     visible: Optional[StrictBool] = True
     locked: Optional[StrictBool] = False
+    fixed_base: Optional[StrictBool] = None
     auto_place: Optional[StrictBool] = False
     near: Optional[Near] = None
-    __properties: ClassVar[List[str]] = ["id", "primitive_id", "template_key", "template_version", "primitive_type", "name", "parameters", "pose", "position", "rotation", "metadata", "visible", "locked", "auto_place", "near"]
+    __properties: ClassVar[List[str]] = ["id", "primitive_id", "template_key", "template_version", "primitive_type", "name", "parameters", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "auto_place", "near"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -145,6 +146,11 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if fixed_base (nullable) is None
+        # and model_fields_set contains the field
+        if self.fixed_base is None and "fixed_base" in self.model_fields_set:
+            _dict['fixed_base'] = None
+
         # set to None if near (nullable) is None
         # and model_fields_set contains the field
         if self.near is None and "near" in self.model_fields_set:
@@ -175,6 +181,7 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
             "metadata": obj.get("metadata"),
             "visible": obj.get("visible") if obj.get("visible") is not None else True,
             "locked": obj.get("locked") if obj.get("locked") is not None else False,
+            "fixed_base": obj.get("fixed_base"),
             "auto_place": obj.get("auto_place") if obj.get("auto_place") is not None else False,
             "near": Near.from_dict(obj["near"]) if obj.get("near") is not None else None
         })

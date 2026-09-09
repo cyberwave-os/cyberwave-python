@@ -31,10 +31,11 @@ class SimulationRuntimeOptionsSchema(BaseModel):
     device: Optional[StrictStr] = None
     physics_device: Optional[StrictStr] = None
     controller_device: Optional[StrictStr] = None
+    robot_stack: Optional[StrictStr] = None
     num_envs: Optional[StrictInt] = None
     task_id: Optional[StrictStr] = None
     checkpoint_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["interface", "device", "physics_device", "controller_device", "num_envs", "task_id", "checkpoint_uuid"]
+    __properties: ClassVar[List[str]] = ["interface", "device", "physics_device", "controller_device", "robot_stack", "num_envs", "task_id", "checkpoint_uuid"]
 
     @field_validator('interface')
     def interface_validate_enum(cls, value):
@@ -74,6 +75,16 @@ class SimulationRuntimeOptionsSchema(BaseModel):
 
         if value not in set(['cpu', 'gpu']):
             raise ValueError("must be one of enum values ('cpu', 'gpu')")
+        return value
+
+    @field_validator('robot_stack')
+    def robot_stack_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['auto', 'physics_only']):
+            raise ValueError("must be one of enum values ('auto', 'physics_only')")
         return value
 
     model_config = ConfigDict(
@@ -135,6 +146,11 @@ class SimulationRuntimeOptionsSchema(BaseModel):
         if self.controller_device is None and "controller_device" in self.model_fields_set:
             _dict['controller_device'] = None
 
+        # set to None if robot_stack (nullable) is None
+        # and model_fields_set contains the field
+        if self.robot_stack is None and "robot_stack" in self.model_fields_set:
+            _dict['robot_stack'] = None
+
         # set to None if num_envs (nullable) is None
         # and model_fields_set contains the field
         if self.num_envs is None and "num_envs" in self.model_fields_set:
@@ -166,6 +182,7 @@ class SimulationRuntimeOptionsSchema(BaseModel):
             "device": obj.get("device"),
             "physics_device": obj.get("physics_device"),
             "controller_device": obj.get("controller_device"),
+            "robot_stack": obj.get("robot_stack"),
             "num_envs": obj.get("num_envs"),
             "task_id": obj.get("task_id"),
             "checkpoint_uuid": obj.get("checkpoint_uuid")

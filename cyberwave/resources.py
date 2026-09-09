@@ -2471,6 +2471,54 @@ class TwinManager(BaseResourceManager):
             self._handle_error(e, f"update twin {twin_id}")
             raise  # For type checker
 
+    def set_flight_request(
+        self,
+        twin_id: str,
+        *,
+        hovering: bool,
+        hovering_altitude: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Record the operator's takeoff/land intent on an aerial twin.
+
+        ``POST /api/v1/twins/{uuid}/flight-request``. Use this instead of
+        ``update(metadata=...)``: ``PUT /twins`` shallow-merges only TOP-LEVEL
+        metadata keys, so sending ``status`` replaces the whole dict — wiping
+        ``status.is_flying`` / ``is_flying_at`` / ``flight_mode``, which only the
+        edge may write and which the redundant-takeoff guard reads. This endpoint
+        merges server-side under a row lock, so operator intent and aircraft
+        truth can be written concurrently by their respective owners.
+
+        Called by raw path via ``param_serialize`` rather than a generated
+        ``src_app_api_*`` stub: ``cyberwave/rest/`` is regenerated from a live
+        backend in CI, so a not-yet-generated stub would raise ``AttributeError``
+        for anyone on an older generated client.
+        """
+        body: Dict[str, Any] = {"hovering": hovering}
+        if hovering_altitude is not None:
+            body["hovering_altitude"] = hovering_altitude
+
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/twins/{uuid}/flight-request",
+                path_params={"uuid": twin_id},
+                body=body,
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"set flight request for twin {twin_id}")
+            raise  # For type checker
+
     def set_driver_schema(
         self,
         twin_id: str,

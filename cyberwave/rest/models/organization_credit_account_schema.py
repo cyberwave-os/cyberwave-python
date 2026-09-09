@@ -37,7 +37,10 @@ class OrganizationCreditAccountSchema(BaseModel):
     rates: Dict[str, Dict[str, RatesValueValue]]
     manual_block: Optional[StrictBool] = False
     manual_block_reason: Optional[StrictStr] = ''
-    __properties: ClassVar[List[str]] = ["organization_uuid", "balance_credits", "status", "warning_threshold_credits", "enforcement_enabled", "rates", "manual_block", "manual_block_reason"]
+    billing_provider: Optional[StrictStr] = 'stripe'
+    billing_provider_label: Optional[StrictStr] = 'Direct billing'
+    billing_status: Optional[StrictStr] = ''
+    __properties: ClassVar[List[str]] = ["organization_uuid", "balance_credits", "status", "warning_threshold_credits", "enforcement_enabled", "rates", "manual_block", "manual_block_reason", "billing_provider", "billing_provider_label", "billing_status"]
 
     @field_validator('balance_credits')
     def balance_credits_validate_regular_expression(cls, value):
@@ -131,7 +134,10 @@ class OrganizationCreditAccountSchema(BaseModel):
             if obj.get("rates") is not None
             else None,
             "manual_block": obj.get("manual_block") if obj.get("manual_block") is not None else False,
-            "manual_block_reason": obj.get("manual_block_reason") if obj.get("manual_block_reason") is not None else ''
+            "manual_block_reason": obj.get("manual_block_reason") if obj.get("manual_block_reason") is not None else '',
+            "billing_provider": obj.get("billing_provider") if obj.get("billing_provider") is not None else 'stripe',
+            "billing_provider_label": obj.get("billing_provider_label") if obj.get("billing_provider_label") is not None else 'Direct billing',
+            "billing_status": obj.get("billing_status") if obj.get("billing_status") is not None else ''
         })
         return _obj
 

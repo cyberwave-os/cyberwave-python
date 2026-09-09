@@ -38,6 +38,29 @@ except ImportError:
     _has_zenoh = False
 
 
+_THREAD_JOIN_TIMEOUT_S = 2.0
+"""How long ``close()`` waits for each thread it spawned to return.
+
+Returning while one is still inside zenoh's native code lets the interpreter
+finalize underneath it.  CPython then kills the daemon thread mid-call, and on
+glibc the forced unwind through zenoh's Rust frames aborts the process with
+``FATAL: exception not rethrown`` instead of exiting cleanly.
+"""
+
+
+def _join_thread(thread: threading.Thread | None) -> None:
+    """Wait for a thread spawned by this backend to finish."""
+    if thread is None or thread is threading.current_thread():
+        return
+    thread.join(timeout=_THREAD_JOIN_TIMEOUT_S)
+    if thread.is_alive():
+        logger.warning(
+            "Zenoh thread '%s' still running %.1fs after close()",
+            thread.name,
+            _THREAD_JOIN_TIMEOUT_S,
+        )
+
+
 class ZenohSubscription(Subscription):
     """Subscription handle backed by a Zenoh subscriber."""
 
@@ -46,10 +69,12 @@ class ZenohSubscription(Subscription):
         subscriber: Any,
         *,
         stop_event: threading.Event | None = None,
+        recv_thread: threading.Thread | None = None,
         on_close: Callable[[], None] | None = None,
     ) -> None:
         self._subscriber = subscriber
         self._stop_event = stop_event
+        self._recv_thread = recv_thread
         self._closed = False
         self._on_close = on_close
 
@@ -59,6 +84,9 @@ class ZenohSubscription(Subscription):
         self._closed = True
         if self._stop_event is not None:
             self._stop_event.set()
+        # Join before undeclaring: a thread inside ``try_recv()`` holds a
+        # borrow on the subscriber, which makes ``undeclare()`` raise.
+        _join_thread(self._recv_thread)
         try:
             self._subscriber.undeclare()
         except Exception:
@@ -215,6 +243,7 @@ class ZenohBackend(DataBackend):
         self._latest_store: dict[str, Sample] = {}
         self._store_lock = threading.Lock()
         self._queryables: dict[str, Any] = {}
+        self._queryable_threads: dict[str, threading.Thread] = {}
 
         # Per-channel message counters for monitoring.  We use defaultdict
         # and skip locking on the hot path — the GIL makes individual dict
@@ -698,10 +727,13 @@ class ZenohBackend(DataBackend):
             t = threading.Thread(
                 target=_recv_loop,
                 args=(sub, stop_event, channel, callback),
+                name=f"zenoh-recv-{channel}",
                 daemon=True,
             )
             t.start()
-            handle = ZenohSubscription(sub, stop_event=stop_event, on_close=on_close)
+            handle = ZenohSubscription(
+                sub, stop_event=stop_event, recv_thread=t, on_close=on_close
+            )
         else:
 
             def _on_sample_fifo(zenoh_sample: Any) -> None:
@@ -847,14 +879,23 @@ class ZenohBackend(DataBackend):
             self._subscriptions.clear()
         for qable in self._queryables.values():
             try:
+                # Raises "Already borrowed" whenever _serve is parked in
+                # recv() on this queryable, which is the usual case.
                 qable.undeclare()
             except Exception:
                 pass
         self._queryables.clear()
+        _join_thread(self._watchdog_thread)
         try:
             self._session.close()
         except Exception:
             pass
+        # Only closing the session unblocks a queryable parked in recv().  Wait
+        # for those threads here: letting the caller exit while one is still
+        # unwinding out of zenoh is what aborts the process on glibc.
+        for thread in self._queryable_threads.values():
+            _join_thread(thread)
+        self._queryable_threads.clear()
 
     # -- internal helpers -----------------------------------------------------
 
@@ -866,7 +907,14 @@ class ZenohBackend(DataBackend):
             qable = self._session.declare_queryable(channel, complete=True)
 
             def _serve(q_channel: str, queryable: Any) -> None:
-                """Serve queries in a background thread."""
+                """Serve queries in a background thread.
+
+                Blocks in ``recv()`` -- polling instead would wake this thread
+                hundreds of times a second per channel for the whole life of
+                the publisher, which perturbs delivery timing and leaves a
+                spinning thread behind if the backend is never closed.
+                ``close()`` retires it by closing the session under it.
+                """
                 while True:
                     try:
                         query = queryable.recv()
@@ -880,8 +928,14 @@ class ZenohBackend(DataBackend):
                         except Exception:
                             pass
 
-            t = threading.Thread(target=_serve, args=(channel, qable), daemon=True)
+            t = threading.Thread(
+                target=_serve,
+                args=(channel, qable),
+                name=f"zenoh-queryable-{channel}",
+                daemon=True,
+            )
             t.start()
             self._queryables[channel] = qable
+            self._queryable_threads[channel] = t
         except Exception:
             logger.debug("Failed to declare queryable for '%s'", channel, exc_info=True)

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,7 +30,8 @@ class ProceduralPrimitiveCatalogPreviewSchema(BaseModel):
     template_key: StrictStr
     template_version: Optional[StrictStr] = None
     parameters: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["template_key", "template_version", "parameters"]
+    fixed_base: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["template_key", "template_version", "parameters", "fixed_base"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +82,11 @@ class ProceduralPrimitiveCatalogPreviewSchema(BaseModel):
         if self.parameters is None and "parameters" in self.model_fields_set:
             _dict['parameters'] = None
 
+        # set to None if fixed_base (nullable) is None
+        # and model_fields_set contains the field
+        if self.fixed_base is None and "fixed_base" in self.model_fields_set:
+            _dict['fixed_base'] = None
+
         return _dict
 
     @classmethod
@@ -95,7 +101,8 @@ class ProceduralPrimitiveCatalogPreviewSchema(BaseModel):
         _obj = cls.model_validate({
             "template_key": obj.get("template_key"),
             "template_version": obj.get("template_version"),
-            "parameters": obj.get("parameters")
+            "parameters": obj.get("parameters"),
+            "fixed_base": obj.get("fixed_base")
         })
         return _obj
 

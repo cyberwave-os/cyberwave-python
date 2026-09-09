@@ -31,7 +31,9 @@ class SimulationTimingOptionsSchema(BaseModel):
     realtime: Optional[StrictBool] = None
     simulation_speed: Optional[Union[StrictFloat, StrictInt]] = None
     stream_frequency_hz: Optional[Union[StrictFloat, StrictInt]] = None
-    __properties: ClassVar[List[str]] = ["dt", "realtime", "simulation_speed", "stream_frequency_hz"]
+    range_stream_frequency_hz: Optional[Union[StrictFloat, StrictInt]] = None
+    range_self_hit_fallback: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["dt", "realtime", "simulation_speed", "stream_frequency_hz", "range_stream_frequency_hz", "range_self_hit_fallback"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -92,6 +94,16 @@ class SimulationTimingOptionsSchema(BaseModel):
         if self.stream_frequency_hz is None and "stream_frequency_hz" in self.model_fields_set:
             _dict['stream_frequency_hz'] = None
 
+        # set to None if range_stream_frequency_hz (nullable) is None
+        # and model_fields_set contains the field
+        if self.range_stream_frequency_hz is None and "range_stream_frequency_hz" in self.model_fields_set:
+            _dict['range_stream_frequency_hz'] = None
+
+        # set to None if range_self_hit_fallback (nullable) is None
+        # and model_fields_set contains the field
+        if self.range_self_hit_fallback is None and "range_self_hit_fallback" in self.model_fields_set:
+            _dict['range_self_hit_fallback'] = None
+
         return _dict
 
     @classmethod
@@ -107,7 +119,9 @@ class SimulationTimingOptionsSchema(BaseModel):
             "dt": obj.get("dt"),
             "realtime": obj.get("realtime"),
             "simulation_speed": obj.get("simulation_speed"),
-            "stream_frequency_hz": obj.get("stream_frequency_hz")
+            "stream_frequency_hz": obj.get("stream_frequency_hz"),
+            "range_stream_frequency_hz": obj.get("range_stream_frequency_hz"),
+            "range_self_hit_fallback": obj.get("range_self_hit_fallback")
         })
         return _obj
 

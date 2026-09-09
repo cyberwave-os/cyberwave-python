@@ -624,10 +624,13 @@ class TwinNavigationHandle:
 
     def goto(
         self,
-        position: Sequence[float],
+        position: Optional[Sequence[float]] = None,
         *,
         rotation: Optional[Sequence[float]] = None,
         yaw: Optional[float] = None,
+        geodetic_position: Optional[Dict[str, Any]] = None,
+        orientation: Optional[Dict[str, Any]] = None,
+        coordinate_frame: Optional[Dict[str, Any]] = None,
         controller_policy_uuid: Optional[str] = None,
         environment_uuid: Optional[str] = None,
         source_type: Optional[str] = None,
@@ -640,10 +643,27 @@ class TwinNavigationHandle:
         """
         Navigate the twin to a specific position.
 
+        Two coordinate representations are supported, selected by
+        ``coordinate_frame`` (omitted == the legacy Cartesian contract):
+
+        * Cartesian (default): pass ``position`` ``[x, y, z]`` and optionally
+          ``rotation``/``yaw``.
+        * Geodetic (GPS): pass ``geodetic_position``
+          ``{"latitude", "longitude", "altitude"}``, ``orientation``
+          ``{"heading": <deg clockwise from true north>}`` and a
+          ``coordinate_frame`` with ``kind="geodetic"``. Consumed by GPS
+          drivers (e.g. a DJI aircraft executing a Wayline mission).
+
         Args:
-            position: Target [x, y, z] coordinates
-            rotation: Target rotation as quaternion [w, x, y, z]
-            yaw: Target yaw angle in radians (alternative to rotation)
+            position: Target ``[x, y, z]`` coordinates (Cartesian frame).
+            rotation: Target rotation as quaternion ``[w, x, y, z]``.
+            yaw: Target yaw angle in radians (alternative to rotation).
+            geodetic_position: GPS target ``{"latitude", "longitude",
+                "altitude"}`` (used instead of ``position``).
+            orientation: Canonical orientation, e.g. ``{"heading": 90.0}``
+                for geodetic targets.
+            coordinate_frame: Explicit coordinate semantics, e.g.
+                ``{"kind": "geodetic", ...}``. Omit for the Cartesian default.
             controller_policy_uuid: Navigation controller to use
             environment_uuid: Environment context
             source_type: Source type for tracking
@@ -667,11 +687,56 @@ class TwinNavigationHandle:
         """
         if yaw is not None and rotation is not None:
             raise ValueError("Specify either rotation or yaw, not both")
+        # orientation is the canonical replacement for rotation/yaw, so it is
+        # mutually exclusive with them — guard it locally like the pair above
+        # rather than leaving the server to 400 on the contradiction.
+        if orientation is not None and (yaw is not None or rotation is not None):
+            raise ValueError("Specify orientation, or rotation/yaw, not both")
+        if position is not None and geodetic_position is not None:
+            raise ValueError(
+                "Specify either position or geodetic_position, not both"
+            )
+        if position is None and geodetic_position is None:
+            raise ValueError("goto requires position or geodetic_position")
+        # The server decides "geodetic" solely from coordinate_frame.kind, so a
+        # geodetic_position without one is read as a malformed Cartesian goto and
+        # the position is silently ignored. Reject it locally instead.
+        if geodetic_position is not None and (
+            coordinate_frame is None
+            or coordinate_frame.get("kind") != "geodetic"
+        ):
+            raise ValueError(
+                "geodetic_position requires coordinate_frame={'kind': "
+                "'geodetic', ...}"
+            )
 
-        payload: Dict[str, Any] = {
-            "command": "goto",
-            "position": [float(value) for value in position],
-        }
+        payload: Dict[str, Any] = {"command": "goto"}
+        if geodetic_position is not None:
+            # Coerce the numeric members to float so the geodetic path forgives
+            # an editor-supplied string ("47.3") symmetrically with the
+            # Cartesian path's ``float(...)``.
+            payload["geodetic_position"] = {
+                key: (
+                    float(value)
+                    if key in ("latitude", "longitude", "altitude")
+                    else value
+                )
+                for key, value in geodetic_position.items()
+            }
+        else:
+            assert position is not None  # narrowed by the guards above
+            payload["position"] = [float(value) for value in position]
+        if orientation is not None:
+            # Forwarded on both frames — never silently dropped on the
+            # Cartesian branch — so the server stays the single authority on
+            # what a frame supports. ``heading`` is coerced like the Cartesian
+            # numeric members.
+            payload["orientation"] = {
+                key: (float(value) if key == "heading" else value)
+                for key, value in orientation.items()
+            }
+        if coordinate_frame is not None:
+            payload["coordinate_frame"] = coordinate_frame
         if yaw is not None:
             payload["yaw"] = float(yaw)
         if rotation is not None:

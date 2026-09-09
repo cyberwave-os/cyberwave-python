@@ -83,15 +83,15 @@ def test_resolve_ros_message_class_relative_topic_under_namespace(
 ) -> None:
     """A relative Ros2TopicSpec topic must resolve under the node's namespace
     before matching get_topic_names_and_types() (which is always fully-qualified) —
-    otherwise a namespaced driver (e.g. /CW_<uuid>/joint_states_single) never
+    otherwise a namespaced driver (e.g. /twin_<uuid>/joint_states_single) never
     discovers its own relative "joint_states_single" topic."""
     import sys
     from types import ModuleType
 
     node = MagicMock()
-    node.resolve_topic_name.side_effect = lambda t: f"/CW_abc123/{t}"
+    node.resolve_topic_name.side_effect = lambda t: f"/twin_abc123/{t}"
     node.get_topic_names_and_types.return_value = [
-        ("/CW_abc123/joint_states_single", ["sensor_msgs/msg/JointState"]),
+        ("/twin_abc123/joint_states_single", ["sensor_msgs/msg/JointState"]),
     ]
 
     class _JointState:

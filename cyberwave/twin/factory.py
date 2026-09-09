@@ -18,6 +18,8 @@ from .classes import (
     GripperJointDepthCameraTwin,
     GripperJointTwin,
     GripperTwin,
+    JointCameraTwin,
+    JointDepthCameraTwin,
     JointTwin,
     LocomoteCameraTwin,
     LocomoteDepthCameraTwin,
@@ -102,9 +104,9 @@ def _select_twin_class(capabilities: Dict[str, Any]) -> Type[Twin]:
     elif can_grip:
         return GripperJointTwin if _is_joint_manipulator(capabilities) else GripperTwin
     elif has_depth:
-        return DepthCameraTwin
+        return JointDepthCameraTwin if _is_joint_manipulator(capabilities) else DepthCameraTwin
     elif has_sensors:
-        return CameraTwin
+        return JointCameraTwin if _is_joint_manipulator(capabilities) else CameraTwin
     elif _is_joint_manipulator(capabilities):
         return JointTwin
     else:

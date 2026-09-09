@@ -25,14 +25,39 @@ def node_namespace_from_env() -> str:
 
     Resolution order:
     1. CW_ROS2_NAMESPACE if set (including to ""); use as-is.
-    2. If unset: CYBERWAVE_TWIN_UUID → /CW_<UUID> with dashes→underscores, uppercase.
+    2. If unset: CYBERWAVE_TWIN_UUID → /twin_<uuid>, dashes→underscores,
+       lowercase.
     3. If no twin: empty string (global ROS 2 namespace).
+
+    ``twin_`` is the prefix every Cyberwave ROS image already uses: the go2,
+    kinova, nav2, rtabmap-slam, moveit, elevation-mapping and object-pose
+    entrypoints all export ``ROS_NAMESPACE=/twin_<uuid>``, the sim proxy is
+    started with ``-r __ns:=/twin_<uuid>``, and edge-core substitutes the same
+    string into a declared Compose graph as ``${CW_TWIN_NS}``. A prefix is needed
+    at all only because a ROS 2 name segment may not start with a digit and a
+    UUID usually does.
+
+    It used to be ``/CW_<UUID>``. That was not a second convention so much as a
+    default nothing exercised: kinova and moveit both export
+    ``CW_ROS2_NAMESPACE`` from ``ROS_NAMESPACE`` specifically so their
+    ``Ros2DriverBase`` nodes land with the rest of the graph, and the
+    intelligence services are launched from a launch file with an explicit
+    ``namespace=``. The one driver with neither -- the Piper -- was therefore the
+    only one that ever ran at ``/CW_<UUID>``, which put it one namespace away
+    from any sibling in its own graph. ``move_group`` beside it would have waited
+    on a ``robot_description`` that never arrived, and nothing would have logged
+    an error.
+
+    Kept in step with the other copy of this function, ``env_params.cpp``, and
+    edge-core's ``CW_TWIN_NS``; see
+    ``drivers/tests/base/test_ros2_namespace_prefix.py``, which holds all four to
+    one answer.
     """
     if "CW_ROS2_NAMESPACE" in os.environ:
         return os.environ["CW_ROS2_NAMESPACE"]
     twin_uuid = os.environ.get("CYBERWAVE_TWIN_UUID", "")
     if twin_uuid:
-        return "/CW_" + twin_uuid.replace("-", "_").upper()
+        return "/twin_" + twin_uuid.replace("-", "_").lower()
     return ""
 
 

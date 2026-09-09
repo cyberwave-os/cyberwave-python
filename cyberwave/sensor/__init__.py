@@ -68,6 +68,7 @@ __all__ = [
     "CV2VideoTrack",
     "CV2CameraStreamer",
     # Virtual camera implementations
+    "CapturedVideoFrame",
     "VirtualCameraStreamer",
     "VirtualVideoTrack",
     # Pre-encoded H.264 passthrough (bypasses aiortc's PyAV encode step)
@@ -123,10 +124,19 @@ if _HAS_MUJOCO:
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "BaseVideoTrack": (".base_video", "BaseVideoTrack"),
     "BaseVideoStreamer": (".base_video", "BaseVideoStreamer"),
-    "DEFAULT_TURN_SERVERS": (".base_video", "DEFAULT_TURN_SERVERS"),
-    "CONNECTION_LOSS_CONFIRMATION_CHECKS": (".base_video", "CONNECTION_LOSS_CONFIRMATION_CHECKS"),
-    "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS": (".base_video", "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS"),
-    "SDK_EDGE_HEALTH_INTERVAL_SECONDS": (".base_video", "SDK_EDGE_HEALTH_INTERVAL_SECONDS"),
+    "DEFAULT_TURN_SERVERS": (".ice", "DEFAULT_TURN_SERVERS"),
+    "CONNECTION_LOSS_CONFIRMATION_CHECKS": (
+        ".base_video",
+        "CONNECTION_LOSS_CONFIRMATION_CHECKS",
+    ),
+    "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS": (
+        ".base_video",
+        "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS",
+    ),
+    "SDK_EDGE_HEALTH_INTERVAL_SECONDS": (
+        ".base_video",
+        "SDK_EDGE_HEALTH_INTERVAL_SECONDS",
+    ),
     "CameraType": (".config", "CameraType"),
     "Resolution": (".config", "Resolution"),
     "CameraConfig": (".config", "CameraConfig"),
@@ -147,6 +157,7 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "RealSenseVideoTrack": (".camera_rs", "RealSenseVideoTrack"),
     "RealSenseStreamer": (".camera_rs", "RealSenseStreamer"),
     "VirtualVideoTrack": (".camera_virtual", "VirtualVideoTrack"),
+    "CapturedVideoFrame": (".frame", "CapturedVideoFrame"),
     "VirtualCameraStreamer": (".camera_virtual", "VirtualCameraStreamer"),
     "H264PacketVideoTrack": (".camera_h264", "H264PacketVideoTrack"),
     "H264PacketCameraStreamer": (".camera_h264", "H264PacketCameraStreamer"),
@@ -159,7 +170,10 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "HostMicrophoneCapture": (".microphone", "HostMicrophoneCapture"),
     "list_host_microphone_devices": (".microphone", "list_host_microphone_devices"),
     "check_host_microphone_settings": (".microphone", "check_host_microphone_settings"),
-    "create_linux_microphone_monitor": (".microphone", "create_linux_microphone_monitor"),
+    "create_linux_microphone_monitor": (
+        ".microphone",
+        "create_linux_microphone_monitor",
+    ),
     "AUDIO_PTIME": (".microphone", "AUDIO_PTIME"),
     "DEFAULT_SAMPLE_RATE": (".microphone", "DEFAULT_SAMPLE_RATE"),
     "MultimediaStreamer": (".av_streamer", "MultimediaStreamer"),
@@ -170,7 +184,10 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "check_host_speaker_settings": (".speaker", "check_host_speaker_settings"),
     "create_linux_speaker_monitor": (".speaker", "create_linux_speaker_monitor"),
     "associate_speaker_to_microphone": (".speaker", "associate_speaker_to_microphone"),
-    "associate_speaker_to_microphones": (".speaker", "associate_speaker_to_microphones"),
+    "associate_speaker_to_microphones": (
+        ".speaker",
+        "associate_speaker_to_microphones",
+    ),
     "play_file": (".speaker", "play_file"),
 }
 

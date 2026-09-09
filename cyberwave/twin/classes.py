@@ -426,8 +426,25 @@ class DepthCameraTwin(CameraTwin):
         return f"DepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
 
 
-class JointTwin(JointsCapableMixin, PolicyCapableMixin, MotionCapableMixin, Twin):
-    """Manipulator twin with joint teleop (stationary arms — not legged locomotion)."""
+class JointTwin(
+    JointsCapableMixin,
+    PolicyCapableMixin,
+    MotionCapableMixin,
+    NavigationCapableMixin,
+    Twin,
+):
+    """Manipulator twin with joint teleop (stationary arms — not legged locomotion).
+
+    Carries :class:`NavigationCapableMixin` despite not locomoting: a stationary
+    arm reaches a Cartesian waypoint over the navigation contract, addressed
+    against one of its own links rather than a map frame. The MoveIt-based arm
+    driver plans that as a Pilz ``MoveGroupSequence``, and the workflow Move Twin
+    emitter has generated ``twin.navigation.goto(..., reference_frame=<link>,
+    skip_nav_anchor_transform=True)`` for arms since the twin-link waypoint
+    contract landed. Without the handle those generated workers raise
+    ``AttributeError`` at dispatch, so ``.navigation`` is part of a manipulator's
+    surface — ``can_locomote`` governs the *locomotion* handles, not this one.
+    """
 
     def __repr__(self) -> str:
         return f"JointTwin(uuid='{self.uuid}', name='{self.name}')"
@@ -617,22 +634,29 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
 
     def takeoff(
         self,
-        altitude: float = 1.0,
+        altitude: Optional[float] = None,
         *,
         source_type: Optional[str] = None,
     ) -> None:
         """
-        Take off to the specified altitude.
+        Take off, optionally to a specified altitude.
 
         Args:
-            altitude: Target altitude in meters (default: 1.0).
+            altitude: Target altitude in metres. Omit it for a normal
+                takeoff: the key is then left out of the payload
+                entirely, so the aircraft climbs to its own safe hover
+                height and — importantly — never *descends* to get
+                there. Passing a value makes it an exact destination.
+                A non-None default here would defeat that: it would look
+                like an explicit request on every call and could fly a
+                drone that is already higher back down to it.
             source_type: ``"sim_tele"``/``"sim"`` for simulation,
                 ``"tele"`` for the real aircraft. Falls back to the
                 client-level setting from ``cw.affect()``.
         """
         resolved = self._send_drone_command(
             "takeoff",
-            data={"altitude": altitude},
+            data={} if altitude is None else {"altitude": altitude},
             source_type=source_type,
         )
         # In live (tele) mode the edge driver owns the hovering
@@ -1003,16 +1027,21 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
         hovering_altitude: Optional[float] = None,
     ) -> None:
         """
-        Persist the hovering status to the twin's metadata on the server.
+        Persist the operator's hovering intent on the server.
 
-        This performs a deep-merge into ``twin.metadata.status`` so that
-        other metadata fields are not overwritten.
+        Sends only the intent, to ``POST /api/v1/twins/{uuid}/flight-request``,
+        which merges it server-side under a row lock. It does NOT send the
+        twin's metadata: ``PUT /twins`` shallow-merges only top-level keys, so a
+        ``status`` blob replaces the whole dict -- wiping ``is_flying`` /
+        ``is_flying_at`` / ``flight_mode``, which only the edge writes and which
+        the redundant-takeoff guard reads.
 
         Args:
             hovering: Whether the drone is currently hovering.
             hovering_altitude: Current altitude in meters. Required (or
-                strongly recommended) when ``hovering`` is True.  Pass
-                ``None`` to leave any existing value unchanged.
+                strongly recommended) when ``hovering`` is True. ``None`` leaves
+                any existing value unchanged on a takeoff, and clears it on a
+                landing so a stale hover height cannot outlive its flight.
 
         Example::
 
@@ -1040,8 +1069,18 @@ class FlyingTwin(FlightCapableMixin, LocomoteTwin):
 
         meta["status"] = status
 
+        # POST the intent, do NOT PUT the whole metadata blob. `PUT /twins`
+        # shallow-merges only top-level keys, so sending `status` replaces the
+        # entire dict -- wiping `is_flying` / `is_flying_at` / `flight_mode`,
+        # which only the edge writes and which the redundant-takeoff guard
+        # reads. `takeoff()` calls this from `sim_tele`, so the clobber raced a
+        # live aircraft report. The endpoint merges server-side under a row lock.
         try:
-            self.client.twins.update(self.uuid, metadata=meta)  # type: ignore[union-attr]
+            self.client.twins.set_flight_request(  # type: ignore[union-attr]
+                self.uuid,
+                hovering=hovering,
+                hovering_altitude=hovering_altitude,
+            )
         except Exception as exc:
             raise CyberwaveError(
                 f"Failed to update hovering status for twin {self.uuid}: {exc}"
@@ -1116,6 +1155,20 @@ class GripperJointDepthCameraTwin(GripperJointTwin, DepthCameraTwin):
 
     def __repr__(self) -> str:
         return f"GripperJointDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class JointCameraTwin(JointTwin, CameraTwin):
+    """Manipulator with joints and camera, no gripper (arm + wrist vision module)."""
+
+    def __repr__(self) -> str:
+        return f"JointCameraTwin(uuid='{self.uuid}', name='{self.name}')"
+
+
+class JointDepthCameraTwin(JointTwin, DepthCameraTwin):
+    """Manipulator with joints and depth camera, no gripper."""
+
+    def __repr__(self) -> str:
+        return f"JointDepthCameraTwin(uuid='{self.uuid}', name='{self.name}')"
 
 
 class LocomoteGripperTwin(LocomoteTwin, GripperTwin):

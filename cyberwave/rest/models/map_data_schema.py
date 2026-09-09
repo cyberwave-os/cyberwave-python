@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -45,7 +45,9 @@ class MapDataSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
-    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "data_file_uuid", "image_width", "image_height", "metadata", "created_at", "updated_at"]
+    twin_name: Optional[StrictStr] = None
+    twin_is_deleted: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "data_file_uuid", "image_width", "image_height", "metadata", "created_at", "updated_at", "twin_name", "twin_is_deleted"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -146,6 +148,11 @@ class MapDataSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if twin_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.twin_name is None and "twin_name" in self.model_fields_set:
+            _dict['twin_name'] = None
+
         return _dict
 
     @classmethod
@@ -174,7 +181,9 @@ class MapDataSchema(BaseModel):
             "image_height": obj.get("image_height"),
             "metadata": obj.get("metadata"),
             "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at")
+            "updated_at": obj.get("updated_at"),
+            "twin_name": obj.get("twin_name"),
+            "twin_is_deleted": obj.get("twin_is_deleted") if obj.get("twin_is_deleted") is not None else False
         })
         return _obj
 

@@ -82,18 +82,17 @@ def test_environment_manager_create_waypoint_posts_single_waypoint_payload():
     )
     assert environment_id == "env-uuid-1"
     assert isinstance(payload, EnvironmentWaypointBulkCreateSchema)
-    assert payload.to_dict() == {
-        "waypoints": [
-            {
-                "id": "dock-a",
-                "name": "Dock A",
-                "collection": "docks",
-                "position": {"x": 1.0, "y": 2.0, "z": 0.0},
-                "rotation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
-                "metadata": {"priority": "high"},
-                "frame": None,
-            }
-        ]
+    # Compare only the fields the SDK actually populates: the generated schema
+    # serializes every optional field it knows about as ``None``, so a new
+    # optional field on the backend waypoint schema must not break this test.
+    (waypoint,) = payload.to_dict()["waypoints"]
+    assert {key: value for key, value in waypoint.items() if value is not None} == {
+        "id": "dock-a",
+        "name": "Dock A",
+        "collection": "docks",
+        "position": {"x": 1.0, "y": 2.0, "z": 0.0},
+        "rotation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
+        "metadata": {"priority": "high"},
     }
 
 

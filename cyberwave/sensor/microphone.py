@@ -37,6 +37,8 @@ from aiortc import (
 from aiortc.mediastreams import AudioStreamTrack, MediaStreamError
 from av import AudioFrame
 
+from .ice import DEFAULT_TURN_SERVERS
+
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
 
@@ -110,17 +112,8 @@ MICROPHONE_SENSOR_TYPES = frozenset(
     {"mic", "microphone", "audio_in", "audio", "audio_mono", "audio_stereo"}
 )
 
-# Reused from sensor package to avoid circular import.
-# Must stay in sync with base_video.DEFAULT_TURN_SERVERS - see the rationale there
-# for why this is a single TURN entry on 443/TLS rather than a fallback list.
-_AUDIO_TURN_SERVERS = [
-    {"urls": ["stun:turn.cyberwave.com:3478"]},
-    {
-        "urls": "turns:tls.turn.cyberwave.com:443",
-        "username": "cyberwave-user",
-        "credential": "cyberwave-admin",
-    },
-]
+# Backwards-compatible internal name; the canonical value has no media imports.
+_AUDIO_TURN_SERVERS = DEFAULT_TURN_SERVERS
 _CONNECTION_LOSS_CONFIRMATION_CHECKS = 3
 
 
@@ -685,8 +678,13 @@ class BaseAudioStreamer:
         self,
         stop_event: asyncio.Event | None = None,
         command_callback: Callable[..., None] | None = None,
+        subscribe_to_commands: bool = True,
     ) -> None:
-        """Run audio streaming with auto-reconnect and optional start_audio/stop_audio commands."""
+        """Run audio streaming with auto-reconnect.
+
+        ``subscribe_to_commands`` may be disabled when the stream lifecycle is
+        owned by another service, such as a simulator.
+        """
         if not self.twin_uuid:
             raise ValueError("twin_uuid must be set before running")
 
@@ -695,7 +693,8 @@ class BaseAudioStreamer:
         if self._webrtc_negotiation_lock is None:
             self._webrtc_negotiation_lock = asyncio.Lock()
         stop = stop_event or asyncio.Event()
-        self._subscribe_to_commands(command_callback)
+        if subscribe_to_commands:
+            self._subscribe_to_commands(command_callback)
         if not self._subscribed_to_answer:
             self._subscribe_to_answer()
             self._subscribed_to_answer = True

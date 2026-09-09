@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.navigation_coordinate_frame_schema import NavigationCoordinateFrameSchema
 from cyberwave.rest.models.navigation_waypoint_action_schema import NavigationWaypointActionSchema
 from cyberwave.rest.models.navigation_waypoint_schema import NavigationWaypointSchema
 from cyberwave.rest.models.relative_translation import RelativeTranslation
@@ -33,7 +34,10 @@ class TwinNavigationCommandSchema(BaseModel):
     command: StrictStr
     position: Optional[List[Union[StrictFloat, StrictInt]]] = None
     rotation: Optional[List[Union[StrictFloat, StrictInt]]] = None
+    orientation: Optional[Dict[str, Any]] = None
     yaw: Optional[Union[StrictFloat, StrictInt]] = None
+    coordinate_frame: Optional[NavigationCoordinateFrameSchema] = None
+    geodetic_position: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None
     waypoints: Optional[List[NavigationWaypointSchema]] = None
     actions: Optional[List[NavigationWaypointActionSchema]] = None
     relative_translation: Optional[RelativeTranslation] = None
@@ -45,7 +49,7 @@ class TwinNavigationCommandSchema(BaseModel):
     constraints: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     skip_nav_anchor_transform: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "yaw", "waypoints", "actions", "relative_translation", "frame", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata", "skip_nav_anchor_transform"]
+    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "orientation", "yaw", "coordinate_frame", "geodetic_position", "waypoints", "actions", "relative_translation", "frame", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata", "skip_nav_anchor_transform"]
 
     @field_validator('command')
     def command_validate_enum(cls, value):
@@ -93,6 +97,9 @@ class TwinNavigationCommandSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of coordinate_frame
+        if self.coordinate_frame:
+            _dict['coordinate_frame'] = self.coordinate_frame.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in waypoints (list)
         _items = []
         if self.waypoints:
@@ -120,10 +127,25 @@ class TwinNavigationCommandSchema(BaseModel):
         if self.rotation is None and "rotation" in self.model_fields_set:
             _dict['rotation'] = None
 
+        # set to None if orientation (nullable) is None
+        # and model_fields_set contains the field
+        if self.orientation is None and "orientation" in self.model_fields_set:
+            _dict['orientation'] = None
+
         # set to None if yaw (nullable) is None
         # and model_fields_set contains the field
         if self.yaw is None and "yaw" in self.model_fields_set:
             _dict['yaw'] = None
+
+        # set to None if coordinate_frame (nullable) is None
+        # and model_fields_set contains the field
+        if self.coordinate_frame is None and "coordinate_frame" in self.model_fields_set:
+            _dict['coordinate_frame'] = None
+
+        # set to None if geodetic_position (nullable) is None
+        # and model_fields_set contains the field
+        if self.geodetic_position is None and "geodetic_position" in self.model_fields_set:
+            _dict['geodetic_position'] = None
 
         # set to None if waypoints (nullable) is None
         # and model_fields_set contains the field
@@ -190,7 +212,10 @@ class TwinNavigationCommandSchema(BaseModel):
             "command": obj.get("command"),
             "position": obj.get("position"),
             "rotation": obj.get("rotation"),
+            "orientation": obj.get("orientation"),
             "yaw": obj.get("yaw"),
+            "coordinate_frame": NavigationCoordinateFrameSchema.from_dict(obj["coordinate_frame"]) if obj.get("coordinate_frame") is not None else None,
+            "geodetic_position": obj.get("geodetic_position"),
             "waypoints": [NavigationWaypointSchema.from_dict(_item) for _item in obj["waypoints"]] if obj.get("waypoints") is not None else None,
             "actions": [NavigationWaypointActionSchema.from_dict(_item) for _item in obj["actions"]] if obj.get("actions") is not None else None,
             "relative_translation": RelativeTranslation.from_dict(obj["relative_translation"]) if obj.get("relative_translation") is not None else None,

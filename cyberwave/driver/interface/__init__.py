@@ -33,6 +33,7 @@ from .source_type_policy import (
     COMMAND_SOURCE_TYPES,
     DEFAULT_PUBLISH_SOURCE_TYPE,
     DEFAULT_SIM_PUBLISH_SOURCE_TYPE,
+    accepts_navigation_command,
     accepts_inbound,
     filtered_listener,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "COMMAND_SOURCE_TYPES",
     "DEFAULT_PUBLISH_SOURCE_TYPE",
     "DEFAULT_SIM_PUBLISH_SOURCE_TYPE",
+    "accepts_navigation_command",
     "accepts_inbound",
     "filtered_listener",
     "StreamPublishRateLimiter",

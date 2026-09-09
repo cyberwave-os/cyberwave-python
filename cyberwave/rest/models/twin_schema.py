@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.configuration_feedback_schema import ConfigurationFeedbackSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -35,10 +36,11 @@ class TwinSchema(BaseModel):
     asset_uuid: StrictStr
     environment_uuid: StrictStr
     created_at: datetime
-    updated_at: datetime
+    updated_at: StrictStr
     glb_file: Optional[StrictStr]
     splat_file: Optional[StrictStr]
     urdf_file: Optional[StrictStr]
+    visual_asset_status: Dict[str, Any]
     position_x: Union[StrictFloat, StrictInt]
     position_y: Union[StrictFloat, StrictInt]
     position_z: Union[StrictFloat, StrictInt]
@@ -54,6 +56,7 @@ class TwinSchema(BaseModel):
     joint_calibration: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any]
     capabilities: Dict[str, Any]
+    configuration_feedback: Optional[List[ConfigurationFeedbackSchema]] = None
     universal_schema: Optional[Dict[str, Any]] = None
     schema_hash: Optional[StrictStr] = None
     controller_policy_uuid: Optional[StrictStr] = None
@@ -73,7 +76,7 @@ class TwinSchema(BaseModel):
     export_warnings: Optional[List[Dict[str, StrictStr]]] = None
     mqtt_command_schema: Optional[Dict[str, Any]] = None
     controllable_joint_names: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "universal_schema", "schema_hash", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "visual_asset_status", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "configuration_feedback", "universal_schema", "schema_hash", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -114,6 +117,13 @@ class TwinSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in configuration_feedback (list)
+        _items = []
+        if self.configuration_feedback:
+            for _item_configuration_feedback in self.configuration_feedback:
+                if _item_configuration_feedback:
+                    _items.append(_item_configuration_feedback.to_dict())
+            _dict['configuration_feedback'] = _items
         # set to None if slug (nullable) is None
         # and model_fields_set contains the field
         if self.slug is None and "slug" in self.model_fields_set:
@@ -202,6 +212,7 @@ class TwinSchema(BaseModel):
             "glb_file": obj.get("glb_file"),
             "splat_file": obj.get("splat_file"),
             "urdf_file": obj.get("urdf_file"),
+            "visual_asset_status": obj.get("visual_asset_status"),
             "position_x": obj.get("position_x"),
             "position_y": obj.get("position_y"),
             "position_z": obj.get("position_z"),
@@ -217,6 +228,7 @@ class TwinSchema(BaseModel):
             "joint_calibration": obj.get("joint_calibration"),
             "metadata": obj.get("metadata"),
             "capabilities": obj.get("capabilities"),
+            "configuration_feedback": [ConfigurationFeedbackSchema.from_dict(_item) for _item in obj["configuration_feedback"]] if obj.get("configuration_feedback") is not None else None,
             "universal_schema": obj.get("universal_schema"),
             "schema_hash": obj.get("schema_hash"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),

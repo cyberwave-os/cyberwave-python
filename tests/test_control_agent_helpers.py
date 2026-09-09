@@ -4,6 +4,7 @@ import pytest
 
 from cyberwave.actions import ActionsClient
 from cyberwave.agents import AgentManager
+from cyberwave.exceptions import CyberwaveAPIError
 
 
 class FakeResponse:
@@ -295,3 +296,64 @@ def test_actions_get_status_requires_twin_uuid():
 
     with pytest.raises(ValueError, match="twin_uuid"):
         actions.get_status("action-1", twin_uuid="")
+
+
+class StatusResponse(FakeResponse):
+    """A response that carries an HTTP status, as the real REST client does."""
+
+    def __init__(self, payload, status):
+        super().__init__(payload)
+        self.status = status
+
+
+class StatusApiClient(FakeApiClient):
+    def __init__(self, *responses):
+        super().__init__()
+        self.responses = list(responses)
+
+    def call_api(self, *args):
+        self.calls.append(args)
+        # The last response repeats, so a spin-fast timeout test does not have
+        # to guess how many polls fit inside the deadline.
+        if len(self.responses) > 1:
+            return self.responses.pop(0)
+        return self.responses[0]
+
+
+def test_actions_get_status_raises_on_a_non_2xx_response():
+    # call_api does not check the HTTP status (the generated client does that
+    # in response_deserialize, which this path skips), so without an explicit
+    # check an error body reads as an action record with no status.
+    api_client = StatusApiClient(StatusResponse({"detail": "Action not found"}, 404))
+    actions = ActionsClient(api_client)
+
+    with pytest.raises(CyberwaveAPIError, match="HTTP 404: Action not found"):
+        actions.get_status("action-1", twin_uuid="twin-uuid")
+
+
+def test_actions_wait_survives_a_transient_poll_failure(monkeypatch):
+    # One bad poll must not end a wait that is holding a robot in motion.
+    api_client = StatusApiClient(
+        StatusResponse({"detail": "Service Unavailable"}, 503),
+        StatusResponse({"action_id": "action-1", "status": "completed"}, 200),
+    )
+    actions = ActionsClient(api_client)
+    monkeypatch.setattr("cyberwave.actions.time.sleep", lambda _seconds: None)
+
+    result = actions.wait(
+        "action-1", twin_uuid="twin-uuid", timeout=5, poll_interval=0.1
+    )
+
+    assert result["status"] == "completed"
+    assert len(api_client.calls) == 2
+
+
+def test_actions_wait_names_the_poll_failure_in_the_timeout(monkeypatch):
+    # A permanently failing poll still raises TimeoutError — callers' recovery
+    # paths are written against it — but the message has to say why.
+    api_client = StatusApiClient(StatusResponse({"detail": "Action not found"}, 404))
+    actions = ActionsClient(api_client)
+    monkeypatch.setattr("cyberwave.actions.time.sleep", lambda _seconds: None)
+
+    with pytest.raises(TimeoutError, match="last status poll failed.*HTTP 404"):
+        actions.wait("action-1", twin_uuid="twin-uuid", timeout=0.2, poll_interval=0.1)

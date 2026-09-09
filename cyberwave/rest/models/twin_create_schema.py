@@ -30,6 +30,8 @@ class TwinCreateSchema(BaseModel):
     name: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
     asset_uuid: Optional[StrictStr] = None
+    expected_asset_uuid: Optional[StrictStr] = None
+    expected_revision: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     position_x: Optional[Union[StrictFloat, StrictInt]] = None
     position_y: Optional[Union[StrictFloat, StrictInt]] = None
@@ -56,7 +58,7 @@ class TwinCreateSchema(BaseModel):
     attach_offset_rotation_z: Optional[Union[StrictFloat, StrictInt]] = None
     fixed_base: Optional[StrictBool] = None
     supported_simulation_backends: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "kinematics_override", "joint_calibration", "metadata", "controller_policy_uuid", "attach_to_twin_uuid", "attach_to_link", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends"]
+    __properties: ClassVar[List[str]] = ["name", "description", "asset_uuid", "expected_asset_uuid", "expected_revision", "environment_uuid", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "kinematics_override", "joint_calibration", "metadata", "controller_policy_uuid", "attach_to_twin_uuid", "attach_to_link", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -111,6 +113,16 @@ class TwinCreateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.asset_uuid is None and "asset_uuid" in self.model_fields_set:
             _dict['asset_uuid'] = None
+
+        # set to None if expected_asset_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_asset_uuid is None and "expected_asset_uuid" in self.model_fields_set:
+            _dict['expected_asset_uuid'] = None
+
+        # set to None if expected_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_revision is None and "expected_revision" in self.model_fields_set:
+            _dict['expected_revision'] = None
 
         # set to None if environment_uuid (nullable) is None
         # and model_fields_set contains the field
@@ -257,6 +269,8 @@ class TwinCreateSchema(BaseModel):
             "name": obj.get("name"),
             "description": obj.get("description"),
             "asset_uuid": obj.get("asset_uuid"),
+            "expected_asset_uuid": obj.get("expected_asset_uuid"),
+            "expected_revision": obj.get("expected_revision"),
             "environment_uuid": obj.get("environment_uuid"),
             "position_x": obj.get("position_x"),
             "position_y": obj.get("position_y"),

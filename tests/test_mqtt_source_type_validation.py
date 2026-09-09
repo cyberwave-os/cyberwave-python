@@ -136,6 +136,70 @@ def test_update_joints_state_rejects_invalid_source_type_before_publish(mqtt_cli
     mqtt_client.publish.assert_not_called()
 
 
+@pytest.mark.parametrize("channel", ["velocities", "efforts"])
+def test_target_channel_can_be_sent_without_fabricated_positions(mqtt_client, channel):
+    mqtt_client._handle_twin_update_with_telemetry = MagicMock()
+    mqtt_client.publish = MagicMock()
+    mqtt_client.update_joints_state(
+        twin_uuid="twin-uuid",
+        joint_positions={},
+        as_targets=True,
+        **{channel: {"wheel": 0.0}},
+    )
+    _, message = mqtt_client.publish.call_args.args[:2]
+    assert message[f"target_{channel}"] == {"wheel": 0.0}
+    assert set(message) == {"source_type", "timestamp", f"target_{channel}"}
+
+
+@pytest.mark.parametrize("as_targets", [False, True])
+def test_empty_joint_payload_is_rejected_before_telemetry(mqtt_client, as_targets):
+    mqtt_client._handle_twin_update_with_telemetry = MagicMock()
+    mqtt_client.publish = MagicMock()
+    with pytest.raises(ValueError, match="cannot be empty"):
+        mqtt_client.update_joints_state("twin-uuid", {}, as_targets=as_targets)
+    mqtt_client.publish.assert_not_called()
+    mqtt_client._handle_twin_update_with_telemetry.assert_not_called()
+
+
+def test_measured_state_empty_position_contract_is_unchanged(mqtt_client):
+    mqtt_client.publish = MagicMock()
+    with pytest.raises(ValueError, match="cannot be empty"):
+        mqtt_client.update_joints_state("twin-uuid", {}, efforts={"wheel": 0.5})
+    mqtt_client.publish.assert_not_called()
+
+
+@pytest.mark.parametrize("channel", ["positions", "velocities", "efforts"])
+def test_target_only_client_does_not_own_plant_telemetry(mqtt_client, channel):
+    """Stopping an external controller must not disconnect the plant's cameras."""
+    mqtt_client.publish = MagicMock()
+    positions = {"_1": 0.5} if channel == "positions" else {}
+    extra = {} if channel == "positions" else {channel: {"_1": 0.5}}
+    mqtt_client.update_joints_state("twin-uuid", positions, as_targets=True, **extra)
+
+    assert mqtt_client.twin_uuids == []
+    assert mqtt_client.twin_uuids_with_telemetry_start == []
+    mqtt_client.disconnect()
+    mqtt_client.publish.assert_called_once()
+    topic, message = mqtt_client.publish.call_args.args[:2]
+    assert topic == "cyberwave/joint/twin-uuid/update"
+    assert message[f"target_{channel}"] == {"_1": 0.5}
+
+
+def test_targets_preserve_existing_measured_producer_lifecycle(mqtt_client):
+    """A client that actually produces state still owns its normal lifecycle."""
+    mqtt_client.publish = MagicMock()
+    mqtt_client.update_joints_state("twin-uuid", {"_1": 0.2})
+    mqtt_client.update_joints_state("twin-uuid", {"_1": 0.5}, as_targets=True)
+    assert mqtt_client.twin_uuids == ["twin-uuid"]
+    assert mqtt_client.twin_uuids_with_telemetry_start == ["twin-uuid"]
+    mqtt_client.disconnect()
+    types = [call.args[1].get("type") for call in mqtt_client.publish.call_args_list]
+    assert types.count("connected") == 1
+    assert types.count("telemetry_start") == 1
+    assert types.count("disconnected") == 1
+    assert types.count("telemetry_end") == 1
+
+
 def test_publish_success_does_not_emit_debug_publish_noise(mqtt_client, caplog):
     mqtt_client.connected = True
     mqtt_client.client.publish = MagicMock(return_value=MagicMock(rc=0))

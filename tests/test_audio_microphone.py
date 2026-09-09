@@ -523,6 +523,27 @@ class TestWebRtcReconnectDedup:
         assert s.is_reconnecting is False
 
     @pytest.mark.asyncio
+    async def test_run_loop_can_skip_command_subscription(self):
+        s = self._make_streamer()
+        s.auto_reconnect = False
+        s.pc = MagicMock()
+        stop = asyncio.Event()
+        stop.set()
+
+        with (
+            patch.object(s, "_subscribe_to_commands") as subscribe_to_commands,
+            patch.object(s, "_subscribe_to_answer") as subscribe_to_answer,
+            patch.object(s, "_cleanup_run", new=AsyncMock()),
+        ):
+            await s.run_with_auto_reconnect(
+                stop_event=stop,
+                subscribe_to_commands=False,
+            )
+
+        subscribe_to_commands.assert_not_called()
+        subscribe_to_answer.assert_called_once_with()
+
+    @pytest.mark.asyncio
     async def test_run_loop_does_not_retry_after_initial_connect_succeeds(self):
         s = self._make_streamer()
         stop = asyncio.Event()

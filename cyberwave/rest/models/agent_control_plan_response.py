@@ -30,6 +30,7 @@ class AgentControlPlanResponse(BaseModel):
     """
     Validated read-only control plan.  The three action lists describe the *same* underlying plan from three angles; clients pick the one they need rather than re-deriving it:  * ``actions`` — full plan as proposed (advisory + dispatchable, in order). * ``dispatchable_actions`` — ready-to-execute actions. Live plans and   same-twin sequences stay single-action; simulation plans may expose   independent actions for different twins. * ``advisory_actions`` — actions surfaced for context only (e.g. observe   frames, setup guidance) and never directly dispatchable.
     """ # noqa: E501
+    plan_id: StrictStr
     summary: StrictStr
     mode: StrictStr
     source_type: StrictStr
@@ -46,7 +47,7 @@ class AgentControlPlanResponse(BaseModel):
     planning_scene: Optional[Dict[str, Any]] = None
     visualization_layers: Optional[List[AgentControlVisualizationLayer]] = None
     dispatch_bundle: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["summary", "mode", "source_type", "target_twin_uuid", "actions", "dispatchable_actions", "advisory_actions", "requires_confirmation", "readiness", "warnings", "missing_requirements", "embodiment_context", "control_surfaces", "planning_scene", "visualization_layers", "dispatch_bundle"]
+    __properties: ClassVar[List[str]] = ["plan_id", "summary", "mode", "source_type", "target_twin_uuid", "actions", "dispatchable_actions", "advisory_actions", "requires_confirmation", "readiness", "warnings", "missing_requirements", "embodiment_context", "control_surfaces", "planning_scene", "visualization_layers", "dispatch_bundle"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -163,6 +164,7 @@ class AgentControlPlanResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "plan_id": obj.get("plan_id"),
             "summary": obj.get("summary"),
             "mode": obj.get("mode"),
             "source_type": obj.get("source_type"),

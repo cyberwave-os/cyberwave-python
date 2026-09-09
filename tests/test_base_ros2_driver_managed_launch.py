@@ -96,7 +96,7 @@ def test_build_shell_command_empty_package_runs_launch_file_as_path() -> None:
     spec = ManifestManagedLaunch(
         package="",
         launch_file="/app/start_single_piper_namespaced.launch.py",
-        launch_args={"can_port": "can1", "cw_namespace": "/CW_ABC"},
+        launch_args={"can_port": "can1", "cw_namespace": "/twin_abc"},
         ros_setup="/opt/ros/humble/setup.bash",
     )
     cmd = ManagedRosLaunch(spec).build_shell_command()
@@ -104,4 +104,4 @@ def test_build_shell_command_empty_package_runs_launch_file_as_path() -> None:
     assert "ros2 launch /app/start_single_piper_namespaced.launch.py" in cmd
     assert "ros2 launch  " not in cmd
     assert "ros2 launch '' " not in cmd
-    assert "cw_namespace:=/CW_ABC" in cmd
+    assert "cw_namespace:=/twin_abc" in cmd

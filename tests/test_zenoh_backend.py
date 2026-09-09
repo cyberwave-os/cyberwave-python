@@ -3,6 +3,8 @@
 These are skipped when ``eclipse-zenoh`` is not installed.
 """
 
+import contextlib
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -148,3 +150,55 @@ class TestImportError:
                     zenoh_backend.ZenohBackend()
             finally:
                 zenoh_backend._has_zenoh = orig
+
+
+class TestCloseJoinsBackgroundThreads:
+    """``close()`` must not return while a thread it started is still inside
+    zenoh's native code.
+
+    Exiting in that state lets the interpreter finalize underneath the thread;
+    CPython kills it mid-call and, on glibc, the forced unwind through zenoh's
+    Rust frames aborts the process (``FATAL: exception not rethrown``, SIGABRT)
+    after the script has already produced its output.  The threads are daemons,
+    so nothing else waits for them -- ``close()`` is the only join point.
+    """
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _gil_pressure(workers: int = 4):
+        """Contend the GIL, so an unjoined thread is still runnable at close()."""
+        stop = threading.Event()
+
+        def burn() -> None:
+            x = 0
+            while not stop.is_set():
+                x = (x * 31 + 7) % 1000003
+
+        threads = [threading.Thread(target=burn, daemon=True) for _ in range(workers)]
+        for t in threads:
+            t.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            for t in threads:
+                t.join(timeout=5.0)
+
+    def test_publish_queryable_threads_are_joined(self):
+        from cyberwave.data.zenoh_backend import ZenohBackend
+
+        with self._gil_pressure():
+            before = set(threading.enumerate())
+            be = ZenohBackend()
+            # Every publish channel declares a queryable with a serve thread.
+            for ch in range(12):
+                be.publish(f"close/ch{ch}", b"x" * 8192)
+            spawned = [t for t in threading.enumerate() if t not in before]
+            assert len(spawned) >= 13, (
+                f"expected a watchdog + 12 serve threads, got {len(spawned)}"
+            )
+
+            be.close()
+
+            running = [t.name for t in spawned if t.is_alive()]
+        assert not running, f"close() returned with threads still running: {running}"

@@ -24,6 +24,7 @@ from aiortc import (
 )
 
 from .hw_encoder import apply_h264_hw_patch
+from .ice import DEFAULT_TURN_SERVERS
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
@@ -32,44 +33,6 @@ else:
     EdgeHealthCheck = None
 
 logger = logging.getLogger(__name__)
-
-# TURN relay defaults to TLS on 443.
-#
-# This is a CHOICE, not a preference list: aiortc honours only the FIRST
-# turn:/turns: URI it encounters (aiortc.rtcicetransport.connection_kwargs) and
-# ignores the rest, unlike a browser which gathers from every URL. Listing a
-# turn:3478 fallback here would therefore be dead config, so there isn't one.
-#
-# 443/TLS is the default because it is the only port that reliably survives
-# corporate and industrial firewalls, which routinely block 3478 and outbound UDP
-# to high ports. The tradeoff is deliberate and applies to every deployment: the
-# relay path is now TCP, so it carries head-of-line blocking and TCP retransmit
-# semantics instead of the loss tolerance video codecs expect. Deployments with
-# working UDP can pass turn_servers= explicitly, or set
-# CYBERWAVE_WEBRTC_TURN_URL=turn:turn.cyberwave.com:3478 on edge nodes
-# (see edge_driver_env.resolve_ice_servers).
-#
-# Note the different hostname. TLS terminates at a GCP SSL proxy load balancer on
-# its own global IP (tls.turn.cyberwave.com), while turn.cyberwave.com keeps
-# pointing at the coturn VM because STUN and the UDP relay range are UDP and that
-# load balancer is TCP-only. See devops/terraform-turn-service/gcloud-turn.tf.
-#
-# STUN stays on 3478 against the VM: aiortc silently drops any "stuns:" URI
-# (connection_kwargs only matches scheme == "stun"), so there is no TLS STUN
-# option. On a network that blocks 3478 this yields no srflx candidate, which is
-# fine - the relay candidate from turns:443 is what connects.
-DEFAULT_TURN_SERVERS = [
-    {
-        "urls": [
-            "stun:turn.cyberwave.com:3478",
-        ]
-    },
-    {
-        "urls": "turns:tls.turn.cyberwave.com:443",
-        "username": "cyberwave-user",
-        "credential": "cyberwave-admin",
-    },
-]
 
 CONNECTION_LOSS_CONFIRMATION_CHECKS = 3
 
@@ -235,8 +198,8 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
         self._current_pts: int = 0
         self._current_time_base_num: int = 1
         self._current_time_base_den: int = 30
-        self._current_capture_wall_time: float = 0.0
-        self._current_capture_monotonic: float = 0.0
+        self._current_capture_wall_time: Optional[float] = None
+        self._current_capture_monotonic: Optional[float] = None
         self._current_frame: Any = None
 
     def _store_frame_metadata_for_sync(
@@ -245,8 +208,8 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
         pts: int,
         time_base_num: int,
         time_base_den: int,
-        capture_wall_time: float,
-        capture_monotonic: float,
+        capture_wall_time: Optional[float],
+        capture_monotonic: Optional[float],
     ):
         """Store per-frame metadata for sync extension (if installed).
 
@@ -258,8 +221,8 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
             pts: Media presentation timestamp
             time_base_num: Time base numerator
             time_base_den: Time base denominator
-            capture_wall_time: Wall-clock timestamp (seconds)
-            capture_monotonic: Monotonic timestamp (seconds)
+            capture_wall_time: Acquisition wall clock, or None for a placeholder
+            capture_monotonic: Acquisition monotonic clock, or None for a placeholder
         """
         self._current_frame_index = frame_index
         self._current_pts = pts
@@ -354,6 +317,7 @@ class BaseVideoStreamer(abc.ABC):
         stream_source: Optional[str] = None,
         stream_instance_id: Optional[str] = None,
         frontend_type: Optional[str] = None,
+        record: bool = True,
     ):
         """Initialize the video streamer.
 
@@ -364,6 +328,12 @@ class BaseVideoStreamer(abc.ABC):
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
             enable_health_check: Whether to enable automatic health check reporting (default: True)
+            record: Initial value of the offer's ``recording`` flag, which is what
+                tells the SFU whether to persist this stream. Pass ``False`` for a
+                producer that must never be recorded — a stream whose ``twin_uuid``
+                is a synthetic routing key rather than a real twin has nothing for
+                a recording to belong to. An inbound ``start_video`` command still
+                overrides this per run.
             camera_name: Sensor/camera identifier used for WebRTC signaling routing
                 (MQTT offer ``sensor`` field). Omit only for non-recording or legacy
                 paths; for recording, pass :attr:`cyberwave.twin.CameraTwin.default_camera_name`
@@ -407,7 +377,7 @@ class BaseVideoStreamer(abc.ABC):
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Recording state
-        self._should_record = True
+        self._should_record = record
 
         # Health check state
         self._health_check: Optional[Any] = None
@@ -559,9 +529,7 @@ class BaseVideoStreamer(abc.ABC):
             selection = apply_h264_hw_patch()
             self._video_encoder_name = selection.codec_name
         except Exception:
-            logger.exception(
-                "H264 hardware encoder setup failed; using aiortc default"
-            )
+            logger.exception("H264 hardware encoder setup failed; using aiortc default")
             self._video_encoder_name = None
 
         self._subscribe_to_answer()

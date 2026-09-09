@@ -32,6 +32,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
+from cyberwave.constants import SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE
 from cyberwave.driver import (
     CallbackGroup,
     CommandArgs,
@@ -53,7 +54,12 @@ logger = logging.getLogger(__name__)
 IMU_PAYLOAD_SCHEMA_REF = "ImuPayload"
 DEFAULT_REGISTRY_ID = "intel/realsensed455"
 DEFAULT_SENSOR_ID = "d455_imu"
-IMU_SOURCE_TYPE = "live"
+# A driver reporting its own sensor readings, so `edge` -- state, on hardware.
+IMU_SOURCE_TYPE = SOURCE_TYPE_EDGE
+# The demo issues `rotate` as a client would, which is the opposite direction and
+# cannot reuse the constant above: `edge` is a state value, and the self-echo guard
+# in `accepts_inbound` rejects it on a command listener even when it is allowed.
+ROTATE_COMMAND_SOURCE_TYPE = SOURCE_TYPE_TELE
 
 # ``--demo``: run driver this long and sample ``twin.imu.get()`` at three checkpoints
 DEMO_RUN_SECONDS = 15.0
@@ -90,7 +96,7 @@ class ImuPayload(TypedDict, total=False):
     readers normalize those to ``gyro`` / ``accel`` without duplicating on the wire.
     """
 
-    source_type: Literal["live"]
+    source_type: Literal["edge"]
     timestamp: float
     gyro: Vector3
     accel: Vector3
@@ -288,7 +294,7 @@ class FakeImu6dDriver(BaseDriver):
         iface.add_listener(
             cmd,
             CallbackGroup(callback=self._on_rotate),
-            protocol=ProtocolArgs(source_types=["tele", "live", "edge"]),
+            protocol=ProtocolArgs(source_types=[ROTATE_COMMAND_SOURCE_TYPE]),
             command=CommandArgs(name="rotate"),
             operation_modes=all_modes,
         )
@@ -495,7 +501,7 @@ def send_demo_rotate(
         raise RuntimeError(
             "twin.commands.rotate is not bound — run twin.driver.set_schema(driver.manifest) first"
         )
-    rotate_fn(axis=axis, amount_deg=amount_deg, source_type=IMU_SOURCE_TYPE)
+    rotate_fn(axis=axis, amount_deg=amount_deg, source_type=ROTATE_COMMAND_SOURCE_TYPE)
     logger.info("Demo step 5: rotate MQTT command published")
 
 

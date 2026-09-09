@@ -67,6 +67,9 @@ def _make_client(
         twins=SimpleNamespace(
             api=None,
             update=MagicMock(return_value=SimpleNamespace(uuid="drone-uuid", metadata={})),
+            # How hovering intent is persisted now: POST /flight-request, not a
+            # PUT of the whole metadata blob (which clobbered `status.is_flying`).
+            set_flight_request=MagicMock(return_value={"uuid": "drone-uuid"}),
         ),
     )
 

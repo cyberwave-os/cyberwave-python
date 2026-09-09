@@ -41,11 +41,14 @@ class AgentPlanResponseSchema(BaseModel):
     proposed_environment_changes: Optional[List[Dict[str, Any]]] = None
     intent_assessment: Optional[Dict[str, Any]] = None
     proposal: Optional[AgentProposalSchema] = None
+    composition_strategy: Optional[StrictStr] = None
+    resolved_node_hints: Optional[List[Dict[str, Any]]] = None
+    dropped_node_hints: Optional[List[Dict[str, Any]]] = None
     engine: Dict[str, Any]
     agent_plan: Dict[str, Any]
     raw_agent_plan: StrictStr
     workflow_edit: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["strategy", "template_kind", "template_summary", "preview_kind", "preview", "embodiment_context", "execution_readiness", "missing_requirements", "proposed_environment_changes", "intent_assessment", "proposal", "engine", "agent_plan", "raw_agent_plan", "workflow_edit"]
+    __properties: ClassVar[List[str]] = ["strategy", "template_kind", "template_summary", "preview_kind", "preview", "embodiment_context", "execution_readiness", "missing_requirements", "proposed_environment_changes", "intent_assessment", "proposal", "composition_strategy", "resolved_node_hints", "dropped_node_hints", "engine", "agent_plan", "raw_agent_plan", "workflow_edit"]
 
     @field_validator('preview_kind')
     def preview_kind_validate_enum(cls, value):
@@ -122,6 +125,11 @@ class AgentPlanResponseSchema(BaseModel):
         if self.proposal is None and "proposal" in self.model_fields_set:
             _dict['proposal'] = None
 
+        # set to None if composition_strategy (nullable) is None
+        # and model_fields_set contains the field
+        if self.composition_strategy is None and "composition_strategy" in self.model_fields_set:
+            _dict['composition_strategy'] = None
+
         # set to None if workflow_edit (nullable) is None
         # and model_fields_set contains the field
         if self.workflow_edit is None and "workflow_edit" in self.model_fields_set:
@@ -150,6 +158,9 @@ class AgentPlanResponseSchema(BaseModel):
             "proposed_environment_changes": obj.get("proposed_environment_changes"),
             "intent_assessment": obj.get("intent_assessment"),
             "proposal": AgentProposalSchema.from_dict(obj["proposal"]) if obj.get("proposal") is not None else None,
+            "composition_strategy": obj.get("composition_strategy"),
+            "resolved_node_hints": obj.get("resolved_node_hints"),
+            "dropped_node_hints": obj.get("dropped_node_hints"),
             "engine": obj.get("engine"),
             "agent_plan": obj.get("agent_plan"),
             "raw_agent_plan": obj.get("raw_agent_plan"),

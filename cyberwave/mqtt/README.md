@@ -114,7 +114,7 @@ client.disconnect()
 | --------------- | ------ | -------------- | ----------------------------------------- |
 | `mqtt_broker`   | `str`  | Required       | MQTT broker hostname or IP                |
 | `mqtt_port`     | `int`  | `1883`         | MQTT broker port                          |
-| `mqtt_username` | `str`  | `"mqttcyb"`    | MQTT username placeholder                 |
+| `mqtt_username` | `str`  | `"mqttcyb"`    | Your Cyberwave username, not your email   |
 | `api_key`       | `str`  | Required       | Cyberwave API key (used as MQTT password) |
 | `use_tls`       | `bool` | `False`        | Enable TLS transport for MQTT             |
 | `tls_ca_cert`   | `str`  | `None`         | CA bundle path for broker cert validation |

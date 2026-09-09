@@ -90,7 +90,7 @@ def _resolve_topic_name(node: LifecycleNode, topic: str) -> str:
     """Fully-qualify *topic* under the node's namespace, mirroring ``create_subscription``.
 
     ``get_topic_names_and_types()`` always returns fully-qualified names (e.g.
-    ``/CW_<uuid>/joint_states_single``); comparing that against an unresolved
+    ``/twin_<uuid>/joint_states_single``); comparing that against an unresolved
     relative topic name (``joint_states_single``) never matches even though the
     topic is actually publishing under the node's namespace — the discovery scan
     would report "not found" forever. ``rclpy.node.Node.resolve_topic_name``
