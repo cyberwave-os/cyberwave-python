@@ -34,11 +34,13 @@ class WorkflowUpdateSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     run_on_edge: Optional[StrictBool] = None
+    allow_concurrent_executions: Optional[StrictBool] = None
+    concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "environment_uuid", "run_on_edge", "execution_target", "metadata", "tags", "is_template"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "environment_uuid", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "metadata", "tags", "is_template"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -114,6 +116,16 @@ class WorkflowUpdateSchema(BaseModel):
         if self.run_on_edge is None and "run_on_edge" in self.model_fields_set:
             _dict['run_on_edge'] = None
 
+        # set to None if allow_concurrent_executions (nullable) is None
+        # and model_fields_set contains the field
+        if self.allow_concurrent_executions is None and "allow_concurrent_executions" in self.model_fields_set:
+            _dict['allow_concurrent_executions'] = None
+
+        # set to None if concurrency_blocked_by_workflow_uuids (nullable) is None
+        # and model_fields_set contains the field
+        if self.concurrency_blocked_by_workflow_uuids is None and "concurrency_blocked_by_workflow_uuids" in self.model_fields_set:
+            _dict['concurrency_blocked_by_workflow_uuids'] = None
+
         # set to None if execution_target (nullable) is None
         # and model_fields_set contains the field
         if self.execution_target is None and "execution_target" in self.model_fields_set:
@@ -153,6 +165,8 @@ class WorkflowUpdateSchema(BaseModel):
             "visibility": obj.get("visibility"),
             "environment_uuid": obj.get("environment_uuid"),
             "run_on_edge": obj.get("run_on_edge"),
+            "allow_concurrent_executions": obj.get("allow_concurrent_executions"),
+            "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
             "metadata": obj.get("metadata"),
             "tags": obj.get("tags"),

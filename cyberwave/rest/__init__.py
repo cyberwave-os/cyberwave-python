@@ -553,6 +553,7 @@ __all__ = [
     "TwinMotionResponseSchema",
     "TwinNavigationCaptureUploadResponseSchema",
     "TwinNavigationCommandSchema",
+    "TwinNavigationMapSchema",
     "TwinObservationCreateSchema",
     "TwinObservationResponseSchema",
     "TwinSchema",
@@ -591,7 +592,9 @@ __all__ = [
     "WorkflowExecutionArtifactsSchema",
     "WorkflowExecutionProgressSchema",
     "WorkflowExecutionSchema",
+    "WorkflowFormatLayoutSchema",
     "WorkflowInboundEmailSchema",
+    "WorkflowLayoutNodeSizeSchema",
     "WorkflowMetricsSection",
     "WorkflowNodeCategorySchema",
     "WorkflowNodeCreateSchema",
@@ -1161,6 +1164,7 @@ from cyberwave.rest.models.twin_metrics_query_schema import TwinMetricsQuerySche
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema as TwinMotionResponseSchema
 from cyberwave.rest.models.twin_navigation_capture_upload_response_schema import TwinNavigationCaptureUploadResponseSchema as TwinNavigationCaptureUploadResponseSchema
 from cyberwave.rest.models.twin_navigation_command_schema import TwinNavigationCommandSchema as TwinNavigationCommandSchema
+from cyberwave.rest.models.twin_navigation_map_schema import TwinNavigationMapSchema as TwinNavigationMapSchema
 from cyberwave.rest.models.twin_observation_create_schema import TwinObservationCreateSchema as TwinObservationCreateSchema
 from cyberwave.rest.models.twin_observation_response_schema import TwinObservationResponseSchema as TwinObservationResponseSchema
 from cyberwave.rest.models.twin_schema import TwinSchema as TwinSchema
@@ -1199,7 +1203,9 @@ from cyberwave.rest.models.workflow_execute_schema import WorkflowExecuteSchema 
 from cyberwave.rest.models.workflow_execution_artifacts_schema import WorkflowExecutionArtifactsSchema as WorkflowExecutionArtifactsSchema
 from cyberwave.rest.models.workflow_execution_progress_schema import WorkflowExecutionProgressSchema as WorkflowExecutionProgressSchema
 from cyberwave.rest.models.workflow_execution_schema import WorkflowExecutionSchema as WorkflowExecutionSchema
+from cyberwave.rest.models.workflow_format_layout_schema import WorkflowFormatLayoutSchema as WorkflowFormatLayoutSchema
 from cyberwave.rest.models.workflow_inbound_email_schema import WorkflowInboundEmailSchema as WorkflowInboundEmailSchema
+from cyberwave.rest.models.workflow_layout_node_size_schema import WorkflowLayoutNodeSizeSchema as WorkflowLayoutNodeSizeSchema
 from cyberwave.rest.models.workflow_metrics_section import WorkflowMetricsSection as WorkflowMetricsSection
 from cyberwave.rest.models.workflow_node_category_schema import WorkflowNodeCategorySchema as WorkflowNodeCategorySchema
 from cyberwave.rest.models.workflow_node_create_schema import WorkflowNodeCreateSchema as WorkflowNodeCreateSchema

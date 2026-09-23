@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -119,11 +120,18 @@ def test_connect_mqtt_async_raises_system_exit_after_retries(
     mock_client = MagicMock()
     mock_client.mqtt.connected = False
 
+    # asyncio.sleep is mocked, so the 10s connect deadline spins on the real
+    # clock rather than sleeping -- 30s over three attempts. Jump a fake clock
+    # past each deadline instead; the retry count asserted below is unchanged.
+    clock = itertools.count(0.0, 60.0)
+    fake_time = SimpleNamespace(monotonic=lambda: next(clock))
+
     with patch("cyberwave.Cyberwave", return_value=mock_client):
-        with patch("asyncio.sleep", return_value=None):
-            with patch.object(driver._alert_manager, "raise_alert") as raise_alert:
-                with pytest.raises(SystemExit) as exc:
-                    asyncio.run(driver._connect_mqtt_async())
+        with patch("cyberwave.driver.cloud.connection.time", fake_time):
+            with patch("asyncio.sleep", return_value=None):
+                with patch.object(driver._alert_manager, "raise_alert") as raise_alert:
+                    with pytest.raises(SystemExit) as exc:
+                        asyncio.run(driver._connect_mqtt_async())
 
     assert exc.value.code == 1
     raise_alert.assert_called_once()

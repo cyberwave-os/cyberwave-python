@@ -1067,10 +1067,10 @@ class FwrroboticArmTwin(Twin):
         """Controller for robot joints"""
         ...
 
-class PollenRoboticsreachyMiniTwin(Twin):
+class PollenreachyMiniTwin(Twin):
     """
     Digital twin for Reachy Mini
-    Registry ID: pollen-robotics/reachy-mini
+    Registry ID: pollen/reachy-mini
     """
     @property
     def joints(self) -> JointsHandle:
@@ -2854,20 +2854,37 @@ class TobiasSurjasWorkspaceminingHaulTruckTwin(Twin):
     """
     pass
 
-class CyberwaverailBogieTwin(Twin):
+class IntelrealsenseL515Twin(Twin):
     """
-    Digital twin for Rail Bogie
-    Registry ID: cyberwave/rail-bogie
+    Digital twin for RealSense L515
+    Registry ID: intel/realsense-l515
+    """
+    pass
+
+class MujocofruitFlyFlybodyTwin(Twin):
+    """
+    Digital twin for Fruit Fly (FlyBody)
+    Registry ID: mujoco/fruit-fly-flybody
     """
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
         ...
 
-class IntelrealsenseL515Twin(Twin):
+class PollenmicroduckTwin(Twin):
     """
-    Digital twin for RealSense L515
-    Registry ID: intel/realsense-l515
+    Digital twin for Microduck
+    Registry ID: pollen/microduck
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class RobotiqepickTwin(Twin):
+    """
+    Digital twin for EPick
+    Registry ID: robotiq/epick
     """
     pass
 
@@ -2969,7 +2986,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "generic-drone-payloads/uwb-radar-pod": GenericDronePayloadsuwbRadarPodTwin,
     "generic-drone-payloads/rf-scanner-pod": GenericDronePayloadsrfScannerPodTwin,
     "fwr/robotic-arm": FwrroboticArmTwin,
-    "pollen-robotics/reachy-mini": PollenRoboticsreachyMiniTwin,
+    "pollen/reachy-mini": PollenreachyMiniTwin,
     "dji/mavic-3-enterprise-2": Djimavic3Enterprise2Twin,
     "sam-wilcocks-workspace/d500-lidar-2": SamWilcocksWorkspaced500Lidar2Twin,
     "neura-robotics/maira7s": NeuraRoboticsmaira7sTwin,
@@ -3126,6 +3143,8 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "flir/ax8": Flirax8Twin,
     "amcrest/ipm4-1041": Amcrestipm41041Twin,
     "tobias-surjas-workspace/mining-haul-truck": TobiasSurjasWorkspaceminingHaulTruckTwin,
-    "cyberwave/rail-bogie": CyberwaverailBogieTwin,
     "intel/realsense-l515": IntelrealsenseL515Twin,
+    "mujoco/fruit-fly-flybody": MujocofruitFlyFlybodyTwin,
+    "pollen/microduck": PollenmicroduckTwin,
+    "robotiq/epick": RobotiqepickTwin,
 }

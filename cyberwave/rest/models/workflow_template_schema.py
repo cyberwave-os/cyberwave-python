@@ -40,6 +40,8 @@ class WorkflowTemplateSchema(BaseModel):
     environment_uuid: Optional[StrictStr] = None
     environment_name: Optional[StrictStr] = None
     run_on_edge: StrictBool
+    allow_concurrent_executions: Optional[StrictBool] = False
+    concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: StrictStr
     visibility: StrictStr
     tags: Optional[List[StrictStr]] = None
@@ -53,7 +55,7 @@ class WorkflowTemplateSchema(BaseModel):
     nodes: Optional[List[WorkflowNodeSchema]] = None
     connections: Optional[List[WorkflowConnectionSchema]] = None
     node_count: Optional[StrictInt] = 0
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "execution_target", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections", "node_count"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections", "node_count"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -165,6 +167,8 @@ class WorkflowTemplateSchema(BaseModel):
             "environment_uuid": obj.get("environment_uuid"),
             "environment_name": obj.get("environment_name"),
             "run_on_edge": obj.get("run_on_edge"),
+            "allow_concurrent_executions": obj.get("allow_concurrent_executions") if obj.get("allow_concurrent_executions") is not None else False,
+            "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),

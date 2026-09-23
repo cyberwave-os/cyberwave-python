@@ -1567,7 +1567,7 @@ class Cyberwave:
     @overload
     def twin(
         self,
-        asset_key: Literal["pollen-robotics/reachy-mini"],
+        asset_key: Literal["pollen/reachy-mini"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,
@@ -1640,15 +1640,6 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["amcrest/ipm4-1041"],
-        environment_id: str | None = None,
-        twin_id: str | None = None,
-        **kwargs,
-    ) -> CameraTwin: ...
-    
-    @overload
-    def twin(
-        self,
-        asset_key: Literal["cyberwave/rail-bogie"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

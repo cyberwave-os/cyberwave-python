@@ -13,7 +13,7 @@ from av import VideoFrame
 
 from ..utils.depth import build_depth_mqtt_payload
 from . import BaseVideoTrack, BaseVideoStreamer
-from .config import Resolution, RealSenseConfig
+from .config import Resolution, RealSenseConfig, _usb_descriptor_serial
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
@@ -66,6 +66,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
         depth_publish_interval: int = 30,
         frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
         depth_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        serial_number: Optional[str] = None,
     ):
         """Initialize the RealSense video stream track.
 
@@ -87,6 +88,11 @@ class RealSenseVideoTrack(BaseVideoTrack):
             depth_callback: Optional per-frame depth callback. Same
                 contract as ``frame_callback``; only invoked when
                 ``enable_depth`` is True.
+            serial_number: Target device serial (None = first device found).
+                Required to disambiguate multiple RealSense cameras on one
+                host — without it every track binds whichever device
+                librealsense enumerates first, so a second twin races the
+                first and fails with EBUSY.
         """
         require_realsense()
         super().__init__()
@@ -96,6 +102,7 @@ class RealSenseVideoTrack(BaseVideoTrack):
         self.twin_uuid = twin_uuid
         self.frame_callback = frame_callback
         self.depth_callback = depth_callback
+        self.serial_number = serial_number
 
         # Parse color resolution
         if isinstance(color_resolution, Resolution):
@@ -166,15 +173,67 @@ class RealSenseVideoTrack(BaseVideoTrack):
 
             logger.info(f"Found {len(devices)} RealSense device(s)")
 
+            available_serials = set()
+            usb_serial_to_rs_serial: dict[str, str] = {}
             for i, device in enumerate(devices):
+                # ``get_info`` raises rather than returning None when a device
+                # cannot report the field. A unit in recovery/DFU mode or held
+                # by another process shows up here without a serial, and an
+                # unguarded read aborted enumeration before the pinned camera
+                # was ever considered.
+                if not device.supports(rs.camera_info.serial_number):
+                    logger.warning(
+                        "Skipping RealSense device %d with no readable serial "
+                        "(in recovery, or held by another process)",
+                        i,
+                    )
+                    continue
+                device_serial = device.get_info(rs.camera_info.serial_number)
+                available_serials.add(device_serial)
+                usb_serial = _usb_descriptor_serial(device)
+                if usb_serial:
+                    usb_serial_to_rs_serial[usb_serial] = device_serial
                 logger.debug(
                     f"Device {i}: {device.get_info(rs.camera_info.name)} "
-                    f"Serial: {device.get_info(rs.camera_info.serial_number)}"
+                    f"Serial: {device_serial} USB serial: {usb_serial}"
                 )
 
             # Create pipeline and configuration
             self.pipeline = rs.pipeline()
             self.config = rs.config()
+
+            # Bind to a specific device when a serial was supplied. Without
+            # this, ``pipeline.start`` takes the first enumerated device
+            # regardless of configuration, so two twins on one host both open
+            # the same camera and the second dies on EBUSY.
+            if self.serial_number:
+                target_serial = self.serial_number
+                if target_serial not in available_serials:
+                    # A D400-series camera reports two different serials: the
+                    # one librealsense uses here, and the USB descriptor's
+                    # iSerial. Only the latter is visible to udev, v4l2-ctl and
+                    # therefore to the CLI's camera discovery -- so a twin
+                    # pinned from host tooling carries a serial this process
+                    # would otherwise never match. Accept either.
+                    aliased = usb_serial_to_rs_serial.get(target_serial)
+                    if aliased:
+                        logger.info(
+                            "Serial %s is the USB descriptor serial; resolved to "
+                            "librealsense serial %s",
+                            target_serial,
+                            aliased,
+                        )
+                        target_serial = aliased
+                if target_serial not in available_serials:
+                    logger.error(
+                        "RealSense serial %r not found; available: %s (USB: %s)",
+                        self.serial_number,
+                        ", ".join(sorted(available_serials)) or "<none>",
+                        ", ".join(sorted(usb_serial_to_rs_serial)) or "<none>",
+                    )
+                    return False
+                self.config.enable_device(target_serial)
+                logger.info("Pinned RealSense device by serial: %s", target_serial)
 
             # Configure color stream
             self.config.enable_stream(
@@ -521,6 +580,7 @@ class RealSenseStreamer(BaseVideoStreamer):
         camera_name: Optional[str] = None,
         frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
         depth_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        serial_number: Optional[str] = None,
     ):
         """Initialize the RealSense camera streamer.
 
@@ -540,6 +600,8 @@ class RealSenseStreamer(BaseVideoStreamer):
             camera_name: Optional sensor identifier for multi-stream twins
             frame_callback: See :class:`RealSenseVideoTrack`.
             depth_callback: See :class:`RealSenseVideoTrack`.
+            serial_number: See :class:`RealSenseVideoTrack`. Pass this on
+                hosts with more than one RealSense attached.
         """
         require_realsense()
         super().__init__(
@@ -560,6 +622,7 @@ class RealSenseStreamer(BaseVideoStreamer):
         self.depth_publish_interval = depth_publish_interval
         self.frame_callback = frame_callback
         self.depth_callback = depth_callback
+        self.serial_number = serial_number
 
     @classmethod
     def from_config(
@@ -574,6 +637,7 @@ class RealSenseStreamer(BaseVideoStreamer):
         camera_name: Optional[str] = None,
         frame_callback: Optional[Callable[[np.ndarray, int], None]] = None,
         depth_callback: Optional[Callable[[np.ndarray, int], None]] = None,
+        serial_number: Optional[str] = None,
     ) -> "RealSenseStreamer":
         """Create streamer from RealSenseConfig.
 
@@ -587,6 +651,8 @@ class RealSenseStreamer(BaseVideoStreamer):
             validate: Whether to validate config against device capabilities (default: True)
             frame_callback: See :class:`RealSenseVideoTrack`.
             depth_callback: See :class:`RealSenseVideoTrack`.
+            serial_number: Overrides ``config.serial_number``. Normally omitted —
+                :class:`RealSenseConfig` already carries the target serial.
 
         Returns:
             Configured RealSenseStreamer instance
@@ -614,6 +680,11 @@ class RealSenseStreamer(BaseVideoStreamer):
             camera_name=camera_name,
             frame_callback=frame_callback,
             depth_callback=depth_callback,
+            # ``RealSenseConfig`` already carries the target serial (set by
+            # ``RealSenseConfig.from_device``). Honour it unless a caller
+            # overrides explicitly, so a config built with a serial cannot
+            # reach ``pipeline.start()`` unpinned.
+            serial_number=serial_number or config.serial_number,
         )
 
     @classmethod
@@ -685,5 +756,6 @@ class RealSenseStreamer(BaseVideoStreamer):
             depth_publish_interval=self.depth_publish_interval,
             frame_callback=self.frame_callback,
             depth_callback=self.depth_callback,
+            serial_number=self.serial_number,
         )
         return self.streamer

@@ -22,6 +22,7 @@ Usage:
 """
 
 import base64
+import json
 import mimetypes
 import os
 import re
@@ -946,7 +947,7 @@ class EnvironmentManager(BaseResourceManager):
         import json
 
         try:
-            response = self.api.src_app_api_environments_get_environment_universal_schema_json_with_http_info(
+            response = self.api.src_app_api_environments_exports_get_environment_universal_schema_json_with_http_info(
                 environment_id
             )
             raw = response.raw_data
@@ -985,7 +986,7 @@ class EnvironmentManager(BaseResourceManager):
         """
         try:
             # Use with_http_info to get raw response data
-            response = self.api.src_app_api_environments_get_environment_urdf_scene_zip_direct_with_http_info(
+            response = self.api.src_app_api_environments_exports_get_environment_urdf_scene_zip_direct_with_http_info(
                 environment_id
             )
 
@@ -1001,22 +1002,72 @@ class EnvironmentManager(BaseResourceManager):
             self._handle_error(e, f"export URDF scene for environment {environment_id}")
             raise
 
+    def _fetch_export_url(self, url: str) -> bytes:
+        """Download an export URL handed back by a descriptor endpoint.
+
+        The URL is whatever the backend's storage produced: an absolute signed
+        object-storage link in the cloud, or a relative ``/media/...`` path when
+        the backend runs on local filesystem storage. Relative URLs are
+        resolved against the API host and get the API credentials; absolute
+        ones already carry their own signature in the query string, so the
+        token is withheld rather than handed to a third-party origin.
+
+        For the same reason the failure message names the object without its
+        query string: that signature is a live credential for the next 24 hours,
+        and an exception message ends up in whatever the caller logs.
+        """
+        config = self.api.api_client.configuration
+        host = config.host.rstrip("/")
+        resolved = url if re.match(r"^https?://", url, re.IGNORECASE) else f"{host}{url}"
+
+        headers: Dict[str, str] = {}
+        if resolved == host or resolved.startswith(host + "/"):
+            for setting in config.auth_settings().values():
+                if setting["in"] == "header":
+                    headers[setting["key"]] = setting["value"]
+
+        response = self.api.api_client.rest_client.request("GET", resolved, headers=headers)
+        if response.status >= 400:
+            raise CyberwaveAPIError(
+                f"Failed to download export from {resolved.split('?', 1)[0]}: "
+                f"HTTP {response.status}"
+            )
+        return response.read()
+
     def export_mujoco_scene(
-        self, environment_id: str, output_path: Optional[str] = None
+        self,
+        environment_id: str,
+        output_path: Optional[str] = None,
+        *,
+        timeout: float = 120.0,
+        poll_interval: float = 2.0,
     ) -> bytes:
         """
         Export environment as MuJoCo scene ZIP file.
 
         Downloads a ZIP containing:
-        - scene.xml: The complete MuJoCo scene
-        - meshes/: Directory with all required mesh files
+        - mujoco_scene.xml: The complete MuJoCo scene
+        - assets/: Directory with all required mesh files
+
+        The archive is built by a background worker and served from object
+        storage rather than streamed out of the API, so it is not bounded by
+        the API's response size limit and a large scene exports the same way a
+        small one does. The first call for a given environment revision pays
+        the build; later calls are served from cache.
 
         Args:
             environment_id: UUID of the environment
             output_path: Optional path to save the ZIP file. If None, returns bytes.
+            timeout: Seconds to wait for the background build before giving up.
+                Defaults to 120s; a large environment can take over a minute to
+                compose, mesh, and upload on a cold cache.
+            poll_interval: Seconds between checks while the build is running.
 
         Returns:
-            ZIP file contents as bytes (if output_path is None)
+            ZIP file contents as bytes
+
+        Raises:
+            CyberwaveAPIError: if the build fails or does not finish in time.
 
         Example:
             # Save to file
@@ -1026,10 +1077,34 @@ class EnvironmentManager(BaseResourceManager):
             zip_data = cw.environments.export_mujoco_scene(env_id)
         """
         try:
-            response = self.api.src_app_api_environments_get_environment_mujoco_scene_zip_direct_with_http_info(
-                environment_id
-            )
-            zip_bytes = response.raw_data
+            deadline = time.monotonic() + timeout
+            url = ""
+            while True:
+                response = self.api.src_app_api_environments_exports_get_environment_mujoco_scene_with_http_info(
+                    str(environment_id)
+                )
+                raw = response.raw_data
+                descriptor = json.loads(
+                    raw.decode("utf-8") if isinstance(raw, bytes) else raw
+                )
+
+                if descriptor.get("status") == "failed":
+                    raise CyberwaveAPIError(
+                        f"MuJoCo scene export failed for environment {environment_id}"
+                    )
+
+                url = descriptor.get("url") or ""
+                if url:
+                    break
+
+                if time.monotonic() >= deadline:
+                    raise CyberwaveAPIError(
+                        f"Timed out after {timeout:g}s waiting for the MuJoCo scene "
+                        f"export of environment {environment_id}"
+                    )
+                time.sleep(poll_interval)
+
+            zip_bytes = self._fetch_export_url(url)
 
             if output_path:
                 with open(output_path, "wb") as f:

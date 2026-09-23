@@ -146,6 +146,13 @@ def _infer_config_from_twin(
     if sensors and isinstance(sensors[0], dict):
         camera_name = sensors[0].get("id", "default")
 
+    raw_metadata = getattr(twin, "metadata", {})
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+    raw_serial_number = metadata.get("serial_number")
+    serial_number = (
+        str(raw_serial_number).strip() if raw_serial_number is not None else None
+    ) or None
+
     config: Dict[str, Any] = {
         "twin": twin,
         "camera_id": 0,
@@ -158,6 +165,8 @@ def _infer_config_from_twin(
         "depth_resolution": None,
         "depth_publish_interval": 30,
         "keyframe_interval": None,
+        # Hardware identity for multi-camera hosts; None = first device.
+        "serial_number": serial_number,
     }
     if overrides:
         config.update(overrides)
@@ -212,6 +221,7 @@ def _run_streamer_in_thread(
     camera_name = config.get("camera_name") or "default"
     fourcc = config.get("fourcc")
     keyframe_interval = config.get("keyframe_interval")
+    serial_number = config.get("serial_number")
 
     async def _run():
         async_stop_event = asyncio.Event()
@@ -254,6 +264,7 @@ def _run_streamer_in_thread(
                 time_reference=time_reference,
                 auto_reconnect=True,
                 camera_name=camera_name,
+                serial_number=serial_number,
             )
         else:
             raise ValueError(

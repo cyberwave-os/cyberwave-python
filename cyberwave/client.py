@@ -1131,6 +1131,7 @@ class Cyberwave:
         depth_callback: Optional[Callable] = None,
         camera_name: Optional[str] = None,
         fourcc: Optional[str] = None,
+        serial_number: Optional[str] = None,
     ):
         """
         Create a camera streamer for the specified twin. DEPRECATED: Use the TwinCamera instead
@@ -1168,6 +1169,10 @@ class Cyberwave:
             fourcc: Optional FOURCC for local V4L2/USB cameras (e.g. ``'MJPG'``, ``'YUYV'``).
                 Passed to :class:`~cyberwave.sensor.camera_cv2.CV2VideoTrack`. If omitted for a
                 local device, the SDK tries ``MJPG`` by default. Ignored for RealSense and IP/RTSP cameras.
+            serial_number: RealSense hardware serial to pin (RealSense only). Answers "which
+                physical unit", where ``camera_id`` answers "what source to open". Required on
+                hosts with more than one RealSense: without it every streamer binds whichever
+                device librealsense enumerates first, so a second twin dies on EBUSY.
 
         Returns:
             Camera streamer instance (CV2CameraStreamer or RealSenseStreamer)
@@ -1268,6 +1273,7 @@ class Cyberwave:
             if auto_detect:
                 return RealSenseStreamer.from_device(
                     client=self.mqtt,
+                    serial_number=serial_number,
                     prefer_resolution=to_resolution(resolution),
                     prefer_fps=fps,
                     enable_depth=enable_depth,
@@ -1292,6 +1298,7 @@ class Cyberwave:
                     camera_name=camera_name,
                     frame_callback=frame_callback,
                     depth_callback=depth_callback,
+                    serial_number=serial_number,
                 )
         else:
             raise CyberwaveError(

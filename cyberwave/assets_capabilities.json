@@ -5096,7 +5096,7 @@
     "registry_id": "fwr/robotic-arm",
     "registry_id_alias": null
   },
-  "pollen-robotics/reachy-mini": {
+  "pollen/reachy-mini": {
     "uuid": "78ae2c0d-b9ce-4793-92dd-50025c9558e9",
     "name": "Reachy Mini",
     "capabilities": {
@@ -5146,7 +5146,7 @@
         }
       ]
     },
-    "registry_id": "pollen-robotics/reachy-mini",
+    "registry_id": "pollen/reachy-mini",
     "registry_id_alias": null
   },
   "dji/mavic-3-enterprise-2": {
@@ -11725,18 +11725,18 @@
           "name": "Knowles SPH1668LM4H.",
           "type": "audio_mono",
           "model": "SPH1668LM4H",
-          "parent_link": "base_link",
+          "parent_link": "uma16_v2_link",
           "offset": {
             "position": {
-              "x": 0,
+              "x": 0.0,
               "y": 0.0218,
               "z": 0.0123
             },
             "rotation": {
-              "w": 1,
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
@@ -11805,11 +11805,11 @@
           "type": "rgb",
           "model": null,
           "fov_degrees": 58.00000000000001,
-          "parent_link": "base_link",
+          "parent_link": "ax8_link",
           "offset": {
             "position": {
               "x": 0.0164,
-              "y": 0,
+              "y": 0.0,
               "z": 0.0693
             },
             "rotation": {
@@ -11966,63 +11966,6 @@
     "registry_id": "tobias-surjas-workspace/mining-haul-truck",
     "registry_id_alias": null
   },
-  "cyberwave/rail-bogie": {
-    "uuid": "454a162a-9967-45f4-aa43-a2f0491f7a88",
-    "name": "Rail Bogie",
-    "capabilities": {
-      "has_joints": true,
-      "can_actuate": true,
-      "can_locomote": false,
-      "can_fly": false,
-      "has_legs": false,
-      "has_wheels": true,
-      "locomotion_mode": "wheeled",
-      "locomotion_config": {
-        "dof": 0,
-        "max_linear_velocity": 0.0,
-        "max_angular_velocity": 0.0
-      },
-      "can_grip": false,
-      "manipulator_count": 0,
-      "payload_capacity_kg": 0.0,
-      "power_source": "rails",
-      "power_capacity_wh": -1,
-      "navigation_autonomy_level": "none",
-      "navigation_obstacle_avoidance": false,
-      "maximum_frequency_hz": 30,
-      "minimum_frequency_hz": 0,
-      "sensors": [
-        {
-          "id": "bogie_speaker",
-          "name": "bogie_speaker",
-          "type": "speaker",
-          "model": "Rail bogie warning speaker (simulated)",
-          "parent_link": "bogie_frame_link",
-          "offset": {
-            "position": {
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
-            },
-            "rotation": {
-              "w": 1.0,
-              "x": 0.0,
-              "y": 0.0,
-              "z": 0.0
-            }
-          },
-          "parameters": {
-            "update_rate": null,
-            "audio_channels": 1,
-            "audio_sample_rate": 48000,
-            "audio_bit_depth": 16
-          }
-        }
-      ]
-    },
-    "registry_id": "cyberwave/rail-bogie",
-    "registry_id_alias": null
-  },
   "intel/realsense-l515": {
     "uuid": "f127e351-1bed-4ad9-9806-162f7d96b2fa",
     "name": "RealSense L515",
@@ -12111,6 +12054,81 @@
       ]
     },
     "registry_id": "intel/realsense-l515",
+    "registry_id_alias": null
+  },
+  "mujoco/fruit-fly-flybody": {
+    "uuid": "01dfb6fe-6833-4316-b548-340cc1a0a4de",
+    "name": "Fruit Fly (FlyBody)",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "mujoco/fruit-fly-flybody",
+    "registry_id_alias": null
+  },
+  "pollen/microduck": {
+    "uuid": "8fab9b24-6f01-4155-ad27-3e3e98d3e493",
+    "name": "Microduck",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "pollen/microduck",
+    "registry_id_alias": null
+  },
+  "robotiq/epick": {
+    "uuid": "7fea9ed0-611f-4a4f-b692-f0831833f091",
+    "name": "EPick",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "robotiq/epick",
     "registry_id_alias": null
   }
 }

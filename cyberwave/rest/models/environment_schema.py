@@ -42,10 +42,11 @@ class EnvironmentSchema(BaseModel):
     thumbnail: Optional[StrictStr] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = False
+    control_plane_access: StrictStr
     total_monthly_cost: Optional[Union[StrictFloat, StrictInt]] = None
     total_purchase_cost: Optional[Union[StrictFloat, StrictInt]] = None
     has_running_simulation: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "universal_schema", "visibility", "thumbnail", "tags", "is_template", "total_monthly_cost", "total_purchase_cost", "has_running_simulation"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "project_uuid", "workspace_uuid", "created_at", "updated_at", "settings", "universal_schema", "visibility", "thumbnail", "tags", "is_template", "control_plane_access", "total_monthly_cost", "total_purchase_cost", "has_running_simulation"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -157,6 +158,7 @@ class EnvironmentSchema(BaseModel):
             "thumbnail": obj.get("thumbnail"),
             "tags": obj.get("tags"),
             "is_template": obj.get("is_template") if obj.get("is_template") is not None else False,
+            "control_plane_access": obj.get("control_plane_access"),
             "total_monthly_cost": obj.get("total_monthly_cost"),
             "total_purchase_cost": obj.get("total_purchase_cost"),
             "has_running_simulation": obj.get("has_running_simulation") if obj.get("has_running_simulation") is not None else False

@@ -34,12 +34,14 @@ class WorkflowCreateSchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     run_on_edge: Optional[StrictBool] = False
+    allow_concurrent_executions: Optional[StrictBool] = False
+    concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
     metadata: Optional[Dict[str, Any]] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "workspace_uuid", "environment_uuid", "run_on_edge", "execution_target", "visibility", "metadata", "tags", "is_template"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "workspace_uuid", "environment_uuid", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "visibility", "metadata", "tags", "is_template"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -134,6 +136,8 @@ class WorkflowCreateSchema(BaseModel):
             "workspace_uuid": obj.get("workspace_uuid"),
             "environment_uuid": obj.get("environment_uuid"),
             "run_on_edge": obj.get("run_on_edge") if obj.get("run_on_edge") is not None else False,
+            "allow_concurrent_executions": obj.get("allow_concurrent_executions") if obj.get("allow_concurrent_executions") is not None else False,
+            "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
             "metadata": obj.get("metadata"),

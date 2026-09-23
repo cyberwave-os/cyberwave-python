@@ -301,6 +301,7 @@ from cyberwave.rest.models.twin_metrics_query_schema import TwinMetricsQuerySche
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema
 from cyberwave.rest.models.twin_navigation_capture_upload_response_schema import TwinNavigationCaptureUploadResponseSchema
 from cyberwave.rest.models.twin_navigation_command_schema import TwinNavigationCommandSchema
+from cyberwave.rest.models.twin_navigation_map_schema import TwinNavigationMapSchema
 from cyberwave.rest.models.twin_observation_create_schema import TwinObservationCreateSchema
 from cyberwave.rest.models.twin_observation_response_schema import TwinObservationResponseSchema
 from cyberwave.rest.models.twin_schema import TwinSchema
@@ -330,6 +331,7 @@ from cyberwave.rest.models.workflow_create_schema import WorkflowCreateSchema
 from cyberwave.rest.models.workflow_execute_schema import WorkflowExecuteSchema
 from cyberwave.rest.models.workflow_execution_artifacts_schema import WorkflowExecutionArtifactsSchema
 from cyberwave.rest.models.workflow_execution_schema import WorkflowExecutionSchema
+from cyberwave.rest.models.workflow_format_layout_schema import WorkflowFormatLayoutSchema
 from cyberwave.rest.models.workflow_inbound_email_schema import WorkflowInboundEmailSchema
 from cyberwave.rest.models.workflow_node_create_schema import WorkflowNodeCreateSchema
 from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema
@@ -36344,260 +36346,6 @@ class DefaultApi:
 
 
     @validate_call
-    def src_app_api_environments_exports_get_environment_mujoco_scene_zip_direct(
-        self,
-        uuid: StrictStr,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> None:
-        """Get Environment Mujoco Scene Zip Direct
-
-        Get MuJoCo scene ZIP for an environment (direct download).  Returns a ZIP file containing: - mujoco_scene.xml at the root - assets/: Directory with all required mesh files  Composes schema from all twins and exports to MuJoCo format.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_environments_exports_get_environment_mujoco_scene_zip_direct_serialize(
-            uuid=uuid,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': None,
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        ).data
-
-
-    @validate_call
-    def src_app_api_environments_exports_get_environment_mujoco_scene_zip_direct_with_http_info(
-        self,
-        uuid: StrictStr,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[None]:
-        """Get Environment Mujoco Scene Zip Direct
-
-        Get MuJoCo scene ZIP for an environment (direct download).  Returns a ZIP file containing: - mujoco_scene.xml at the root - assets/: Directory with all required mesh files  Composes schema from all twins and exports to MuJoCo format.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_environments_exports_get_environment_mujoco_scene_zip_direct_serialize(
-            uuid=uuid,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': None,
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        response_data.read()
-        return self.api_client.response_deserialize(
-            response_data=response_data,
-            response_types_map=_response_types_map,
-        )
-
-
-    @validate_call
-    def src_app_api_environments_exports_get_environment_mujoco_scene_zip_direct_without_preload_content(
-        self,
-        uuid: StrictStr,
-        _request_timeout: Union[
-            None,
-            Annotated[StrictFloat, Field(gt=0)],
-            Tuple[
-                Annotated[StrictFloat, Field(gt=0)],
-                Annotated[StrictFloat, Field(gt=0)]
-            ]
-        ] = None,
-        _request_auth: Optional[Dict[StrictStr, Any]] = None,
-        _content_type: Optional[StrictStr] = None,
-        _headers: Optional[Dict[StrictStr, Any]] = None,
-        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> RESTResponseType:
-        """Get Environment Mujoco Scene Zip Direct
-
-        Get MuJoCo scene ZIP for an environment (direct download).  Returns a ZIP file containing: - mujoco_scene.xml at the root - assets/: Directory with all required mesh files  Composes schema from all twins and exports to MuJoCo format.
-
-        :param uuid: (required)
-        :type uuid: str
-        :param _request_timeout: timeout setting for this request. If one
-                                 number provided, it will be total request
-                                 timeout. It can also be a pair (tuple) of
-                                 (connection, read) timeouts.
-        :type _request_timeout: int, tuple(int, int), optional
-        :param _request_auth: set to override the auth_settings for an a single
-                              request; this effectively ignores the
-                              authentication in the spec for a single request.
-        :type _request_auth: dict, optional
-        :param _content_type: force content-type for the request.
-        :type _content_type: str, Optional
-        :param _headers: set to override the headers for a single
-                         request; this effectively ignores the headers
-                         in the spec for a single request.
-        :type _headers: dict, optional
-        :param _host_index: set to override the host_index for a single
-                            request; this effectively ignores the host_index
-                            in the spec for a single request.
-        :type _host_index: int, optional
-        :return: Returns the result object.
-        """ # noqa: E501
-
-        _param = self._src_app_api_environments_exports_get_environment_mujoco_scene_zip_direct_serialize(
-            uuid=uuid,
-            _request_auth=_request_auth,
-            _content_type=_content_type,
-            _headers=_headers,
-            _host_index=_host_index
-        )
-
-        _response_types_map: Dict[str, Optional[str]] = {
-            '200': None,
-        }
-        response_data = self.api_client.call_api(
-            *_param,
-            _request_timeout=_request_timeout
-        )
-        return response_data.response
-
-
-    def _src_app_api_environments_exports_get_environment_mujoco_scene_zip_direct_serialize(
-        self,
-        uuid,
-        _request_auth,
-        _content_type,
-        _headers,
-        _host_index,
-    ) -> RequestSerialized:
-
-        _host = None
-
-        _collection_formats: Dict[str, str] = {
-        }
-
-        _path_params: Dict[str, str] = {}
-        _query_params: List[Tuple[str, str]] = []
-        _header_params: Dict[str, Optional[str]] = _headers or {}
-        _form_params: List[Tuple[str, str]] = []
-        _files: Dict[
-            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
-        ] = {}
-        _body_params: Optional[bytes] = None
-
-        # process the path parameters
-        if uuid is not None:
-            _path_params['uuid'] = uuid
-        # process the query parameters
-        # process the header parameters
-        # process the form parameters
-        # process the body parameter
-
-
-
-
-        # authentication setting
-        _auth_settings: List[str] = [
-            'CustomTokenAuthentication'
-        ]
-
-        return self.api_client.param_serialize(
-            method='GET',
-            resource_path='/api/v1/environments/{uuid}/mujoco-scene.zip',
-            path_params=_path_params,
-            query_params=_query_params,
-            header_params=_header_params,
-            body=_body_params,
-            post_params=_form_params,
-            files=_files,
-            auth_settings=_auth_settings,
-            collection_formats=_collection_formats,
-            _host=_host,
-            _request_auth=_request_auth
-        )
-
-
-
-
-    @validate_call
     def src_app_api_environments_exports_get_environment_pointcloud_las(
         self,
         uuid: StrictStr,
@@ -67963,6 +67711,259 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/api/v1/maps/{uuid}/image',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_maps_get_map_occupancy_pgm(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> None:
+        """Get Map Occupancy Pgm
+
+        Return the map as the binary PGM ``nav2_map_server`` loads directly.  The edge's preloaded-map path writes these bytes to disk beside a ``map_server`` YAML that names them (see ``cyberwave-edge-runtime/PRELOADED_MAP_LOCALIZATION_PLAN.md``). It exists because the stored bytes are *not* in one format — ``map_stream_bridge`` uploads PGM, the MiR250 sim mapping bridge uploads PNG, a user upload is any Pillow-readable image, and occupancy generation writes an already-trinary PGM — while the consuming ROS image ships no Pillow and must not grow an imaging dependency to decode a format this service already decodes.  Not gzipped here: ``config.gzip_middleware.GZipMiddleware`` compresses any non-streaming response whose caller advertises ``Accept-Encoding: gzip`` (``requests`` always does), and doing it twice would be worse than once. That matters — an uncompressed grid is ~1 byte/cell, so a 100 m warehouse at 5 cm is megabytes on the wire while its deflated form is tens of kilobytes.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_maps_get_map_occupancy_pgm_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_maps_get_map_occupancy_pgm_with_http_info(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[None]:
+        """Get Map Occupancy Pgm
+
+        Return the map as the binary PGM ``nav2_map_server`` loads directly.  The edge's preloaded-map path writes these bytes to disk beside a ``map_server`` YAML that names them (see ``cyberwave-edge-runtime/PRELOADED_MAP_LOCALIZATION_PLAN.md``). It exists because the stored bytes are *not* in one format — ``map_stream_bridge`` uploads PGM, the MiR250 sim mapping bridge uploads PNG, a user upload is any Pillow-readable image, and occupancy generation writes an already-trinary PGM — while the consuming ROS image ships no Pillow and must not grow an imaging dependency to decode a format this service already decodes.  Not gzipped here: ``config.gzip_middleware.GZipMiddleware`` compresses any non-streaming response whose caller advertises ``Accept-Encoding: gzip`` (``requests`` always does), and doing it twice would be worse than once. That matters — an uncompressed grid is ~1 byte/cell, so a 100 m warehouse at 5 cm is megabytes on the wire while its deflated form is tens of kilobytes.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_maps_get_map_occupancy_pgm_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_maps_get_map_occupancy_pgm_without_preload_content(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Get Map Occupancy Pgm
+
+        Return the map as the binary PGM ``nav2_map_server`` loads directly.  The edge's preloaded-map path writes these bytes to disk beside a ``map_server`` YAML that names them (see ``cyberwave-edge-runtime/PRELOADED_MAP_LOCALIZATION_PLAN.md``). It exists because the stored bytes are *not* in one format — ``map_stream_bridge`` uploads PGM, the MiR250 sim mapping bridge uploads PNG, a user upload is any Pillow-readable image, and occupancy generation writes an already-trinary PGM — while the consuming ROS image ships no Pillow and must not grow an imaging dependency to decode a format this service already decodes.  Not gzipped here: ``config.gzip_middleware.GZipMiddleware`` compresses any non-streaming response whose caller advertises ``Accept-Encoding: gzip`` (``requests`` always does), and doing it twice would be worse than once. That matters — an uncompressed grid is ~1 byte/cell, so a 100 m warehouse at 5 cm is megabytes on the wire while its deflated form is tens of kilobytes.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_maps_get_map_occupancy_pgm_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_maps_get_map_occupancy_pgm_serialize(
+        self,
+        uuid,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/maps/{uuid}/occupancy.pgm',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -118668,6 +118669,267 @@ class DefaultApi:
 
 
     @validate_call
+    def src_app_api_twins_get_twin_navigation_map(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> TwinNavigationMapSchema:
+        """Get Twin Navigation Map
+
+        Which occupancy map this twin should navigate in.  The edge's ``preloaded_map_bridge`` calls this at boot instead of deciding for itself, because the answer depends on the twin's traversability profile and that resolution has four precedence layers, the best of which reads the robot's declared step and standing heights. Mirroring it on the edge would mean a table plus a capability lookup kept in step across two repositories, and the mirror would stop matching for exactly the robots that describe themselves best. ``src/lib/navigation_map.py`` holds the one implementation; the simulation workload spec calls the same function.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_twins_get_twin_navigation_map_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TwinNavigationMapSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_twins_get_twin_navigation_map_with_http_info(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[TwinNavigationMapSchema]:
+        """Get Twin Navigation Map
+
+        Which occupancy map this twin should navigate in.  The edge's ``preloaded_map_bridge`` calls this at boot instead of deciding for itself, because the answer depends on the twin's traversability profile and that resolution has four precedence layers, the best of which reads the robot's declared step and standing heights. Mirroring it on the edge would mean a table plus a capability lookup kept in step across two repositories, and the mirror would stop matching for exactly the robots that describe themselves best. ``src/lib/navigation_map.py`` holds the one implementation; the simulation workload spec calls the same function.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_twins_get_twin_navigation_map_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TwinNavigationMapSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_twins_get_twin_navigation_map_without_preload_content(
+        self,
+        uuid: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Get Twin Navigation Map
+
+        Which occupancy map this twin should navigate in.  The edge's ``preloaded_map_bridge`` calls this at boot instead of deciding for itself, because the answer depends on the twin's traversability profile and that resolution has four precedence layers, the best of which reads the robot's declared step and standing heights. Mirroring it on the edge would mean a table plus a capability lookup kept in step across two repositories, and the mirror would stop matching for exactly the robots that describe themselves best. ``src/lib/navigation_map.py`` holds the one implementation; the simulation workload spec calls the same function.
+
+        :param uuid: (required)
+        :type uuid: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_twins_get_twin_navigation_map_serialize(
+            uuid=uuid,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TwinNavigationMapSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_twins_get_twin_navigation_map_serialize(
+        self,
+        uuid,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if uuid is not None:
+            _path_params['uuid'] = uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/twins/{uuid}/navigation-map',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
     def src_app_api_twins_get_twin_notebook(
         self,
         uuid: StrictStr,
@@ -133979,6 +134241,7 @@ class DefaultApi:
     def src_app_api_workflows_format_workflow_layout(
         self,
         uuid: StrictStr,
+        workflow_format_layout_schema: Optional[WorkflowFormatLayoutSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -133994,10 +134257,12 @@ class DefaultApi:
     ) -> WorkflowSchema:
         """Format Workflow Layout
 
-        Auto-arrange workflow node positions for clearer canvas spacing.
+        Auto-arrange workflow node positions for clearer canvas spacing.  The optional body carries the card heights the editor measured; without it every node is packed at the default height (see ``WorkflowLayoutService``). A non-positive height is dropped rather than trusted — a card that has not finished rendering reports zero, and honouring that would stack the column.
 
         :param uuid: (required)
         :type uuid: str
+        :param workflow_format_layout_schema:
+        :type workflow_format_layout_schema: WorkflowFormatLayoutSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -134022,6 +134287,7 @@ class DefaultApi:
 
         _param = self._src_app_api_workflows_format_workflow_layout_serialize(
             uuid=uuid,
+            workflow_format_layout_schema=workflow_format_layout_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -134046,6 +134312,7 @@ class DefaultApi:
     def src_app_api_workflows_format_workflow_layout_with_http_info(
         self,
         uuid: StrictStr,
+        workflow_format_layout_schema: Optional[WorkflowFormatLayoutSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -134061,10 +134328,12 @@ class DefaultApi:
     ) -> ApiResponse[WorkflowSchema]:
         """Format Workflow Layout
 
-        Auto-arrange workflow node positions for clearer canvas spacing.
+        Auto-arrange workflow node positions for clearer canvas spacing.  The optional body carries the card heights the editor measured; without it every node is packed at the default height (see ``WorkflowLayoutService``). A non-positive height is dropped rather than trusted — a card that has not finished rendering reports zero, and honouring that would stack the column.
 
         :param uuid: (required)
         :type uuid: str
+        :param workflow_format_layout_schema:
+        :type workflow_format_layout_schema: WorkflowFormatLayoutSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -134089,6 +134358,7 @@ class DefaultApi:
 
         _param = self._src_app_api_workflows_format_workflow_layout_serialize(
             uuid=uuid,
+            workflow_format_layout_schema=workflow_format_layout_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -134113,6 +134383,7 @@ class DefaultApi:
     def src_app_api_workflows_format_workflow_layout_without_preload_content(
         self,
         uuid: StrictStr,
+        workflow_format_layout_schema: Optional[WorkflowFormatLayoutSchema] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -134128,10 +134399,12 @@ class DefaultApi:
     ) -> RESTResponseType:
         """Format Workflow Layout
 
-        Auto-arrange workflow node positions for clearer canvas spacing.
+        Auto-arrange workflow node positions for clearer canvas spacing.  The optional body carries the card heights the editor measured; without it every node is packed at the default height (see ``WorkflowLayoutService``). A non-positive height is dropped rather than trusted — a card that has not finished rendering reports zero, and honouring that would stack the column.
 
         :param uuid: (required)
         :type uuid: str
+        :param workflow_format_layout_schema:
+        :type workflow_format_layout_schema: WorkflowFormatLayoutSchema
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -134156,6 +134429,7 @@ class DefaultApi:
 
         _param = self._src_app_api_workflows_format_workflow_layout_serialize(
             uuid=uuid,
+            workflow_format_layout_schema=workflow_format_layout_schema,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -134175,6 +134449,7 @@ class DefaultApi:
     def _src_app_api_workflows_format_workflow_layout_serialize(
         self,
         uuid,
+        workflow_format_layout_schema,
         _request_auth,
         _content_type,
         _headers,
@@ -134202,6 +134477,8 @@ class DefaultApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
+        if workflow_format_layout_schema is not None:
+            _body_params = workflow_format_layout_schema
 
 
         # set the HTTP header `Accept`
@@ -134212,6 +134489,19 @@ class DefaultApi:
                 ]
             )
 
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
 
         # authentication setting
         _auth_settings: List[str] = [
