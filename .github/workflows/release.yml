@@ -7,7 +7,36 @@ on:
   workflow_dispatch: # Allow manual triggering
 
 jobs:
+  # Fail before running the test matrix if the tag, pyproject.toml and
+  # cyberwave/_version.py disagree. Manual runs have no tag, so they only
+  # check the two source files against each other.
+  verify-version:
+    name: Verify release version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Verify version consistency
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            python .github/scripts/check_version.py --tag "${GITHUB_REF_NAME}"
+          else
+            python .github/scripts/check_version.py
+          fi
+
+  # The full Python 3.10-3.14 matrix from test.yml, run on the release commit.
+  test:
+    needs: verify-version
+    uses: ./.github/workflows/test.yml
+
   release:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -22,30 +51,42 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+          version: 1.8.5
 
-      - name: Load cached dependencies
-        id: cached-poetry-dependencies
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
-
-      - name: Install project
-        run: poetry install --no-interaction
-
-      - name: Run tests
+      - name: Build distributions
         run: |
-          poetry run pytest tests/ -v
-          poetry run python tests/test_imports.py
+          poetry build
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
 
-      - name: Build and publish to PyPI
+      # The tests import from the source tree, so they can't catch a wheel with
+      # missing files (e.g. cyberwave/rest) or wrong metadata. Install the
+      # built wheel into a clean venv and import it from outside the checkout.
+      - name: Smoke-test the built wheel
+        run: |
+          EXPECTED_VERSION="$(poetry version -s)"
+          python -m venv /tmp/wheel-smoke
+          /tmp/wheel-smoke/bin/python -m pip install --upgrade pip
+          /tmp/wheel-smoke/bin/python -m pip install dist/*.whl
+          cd /tmp
+          EXPECTED_VERSION="${EXPECTED_VERSION}" /tmp/wheel-smoke/bin/python - <<'PY'
+          import os
+          from importlib.metadata import version
+
+          from cyberwave import Cyberwave
+          from cyberwave.rest import DefaultApi
+
+          actual = version("cyberwave")
+          expected = os.environ["EXPECTED_VERSION"]
+          if actual != expected:
+              raise SystemExit(f"Expected {expected}, got {actual}")
+          if Cyberwave is None or DefaultApi is None:
+              raise SystemExit("cyberwave public API is unavailable")
+          print(f"cyberwave {actual} wheel imports cleanly")
+          PY
+
+      # Publish the exact files that were checked above instead of rebuilding.
+      - name: Publish to PyPI
         run: |
           poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN_SDK }}
-          poetry publish --build
+          poetry publish --no-interaction
