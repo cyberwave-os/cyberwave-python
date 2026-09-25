@@ -34,6 +34,18 @@ from cyberwave.edge.amr import (
     NavigationStatus,
     AMRAdapterProtocol,
 )
+from cyberwave.edge.host_metrics import (
+    CPU_THERMAL_ZONE_TYPES,
+    HARDWARE_WATCHDOG_DEVICE,
+    HostCpuTemperature,
+    HostFacts,
+    HostMemoryInfo,
+    discover_cpu_thermal_zones,
+    read_host_cpu_temperature,
+    read_host_facts,
+    read_host_memory,
+    read_thermal_zone_celsius,
+)
 from cyberwave.edge.platform import is_port_listening, is_usbip_server_running
 
 __all__ = [
@@ -50,4 +62,15 @@ __all__ = [
     # Platform detection
     "is_port_listening",
     "is_usbip_server_running",
+    # Host metrics
+    "CPU_THERMAL_ZONE_TYPES",
+    "HARDWARE_WATCHDOG_DEVICE",
+    "HostCpuTemperature",
+    "HostFacts",
+    "HostMemoryInfo",
+    "discover_cpu_thermal_zones",
+    "read_host_cpu_temperature",
+    "read_host_facts",
+    "read_host_memory",
+    "read_thermal_zone_celsius",
 ]

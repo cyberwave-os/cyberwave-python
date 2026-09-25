@@ -33,6 +33,8 @@ from aiortc import (
 from aiortc.mediastreams import AudioStreamTrack, MediaStreamError
 from av import AudioFrame
 
+from .ice import DEFAULT_TURN_SERVERS
+
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
 
@@ -90,15 +92,8 @@ AUDIO_PTIME = 0.020
 DEFAULT_SAMPLE_RATE = 48000
 DEFAULT_LAYOUT = "mono"
 
-# Reused from sensor package to avoid circular import
-_AUDIO_TURN_SERVERS = [
-    {"urls": ["stun:turn.cyberwave.com:3478"]},
-    {
-        "urls": "turn:turn.cyberwave.com:3478",
-        "username": "cyberwave-user",
-        "credential": "cyberwave-admin",
-    },
-]
+# Backwards-compatible internal name; the canonical value has no media imports.
+_AUDIO_TURN_SERVERS = DEFAULT_TURN_SERVERS
 _CONNECTION_LOSS_CONFIRMATION_CHECKS = 3
 
 

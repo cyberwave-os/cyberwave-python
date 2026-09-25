@@ -29,10 +29,11 @@ try:
 except ImportError:
     pass
 
-from cyberwave import Cyberwave, MLModelLookupError, resolve_ml_model_uuid, search_ml_models
+from cyberwave import Cyberwave, MLModelLookupError
 
 # --- edit these strings to explore your catalog --------------------------------
 
+# Each helper fetches the full catalog; SEARCH_LIMIT only caps displayed matches.
 # Broad substring search (name or model_external_id, case-insensitive).
 SEARCH_QUERY = "gemini"
 SEARCH_LIMIT = 10
@@ -50,7 +51,7 @@ def main() -> int:
     cw = Cyberwave()
     try:
         print(f"partial query: {SEARCH_QUERY!r} (limit={SEARCH_LIMIT})")
-        matches = search_ml_models(cw.api, SEARCH_QUERY, limit=SEARCH_LIMIT)
+        matches = cw.models.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
         if not matches:
             print("search_ml_models: no matches")
         else:
@@ -58,15 +59,18 @@ def main() -> int:
             for i, model in enumerate(matches, start=1):
                 print(
                     f"  {i}. name={model.name!r} external_id={model.model_external_id!r} "
-                    f"uuid={model.uuid} deployment={model.deployment!r} edge={model.is_edge_compatible}"
+                    f"uuid={model.uuid} deployment={model.deployment!r} edge={model.is_edge_compatible} "
+                    f"provider={model.model_provider_name!r} workspace={model.workspace_uuid!r} "
+                    f"visibility={model.visibility!r} slug={model.slug!r}"
                 )
 
         print(f"\nresolve query: {RESOLVE_QUERY!r}")
         try:
-            model_uuid = resolve_ml_model_uuid(cw.api, RESOLVE_QUERY)
+            model_uuid = cw.models.resolve_uuid(RESOLVE_QUERY)
             print("resolve_ml_model_uuid:", model_uuid)
         except MLModelLookupError as exc:
-            print("resolve_ml_model_uuid error:", exc)
+            print("resolve_ml_model_uuid error:", exc, file=sys.stderr)
+            return 1
     finally:
         cw.disconnect()
 

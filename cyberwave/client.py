@@ -2,34 +2,42 @@
 Main Cyberwave client that integrates REST and MQTT APIs
 """
 
+from __future__ import annotations
+
 import logging
 import os
+import platform
 import time
 import warnings
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
-logger = logging.getLogger(__name__)
-
+from cyberwave._error_metadata import mask_sensitive_headers
+from cyberwave._version import get_version
 from cyberwave.config import (
     CyberwaveConfig,
     DEFAULT_BASE_URL,
-)
-from cyberwave.controller import EdgeController
-from cyberwave.models.manager import ModelManager
-from cyberwave.mqtt_client import CyberwaveMQTTClient
-from cyberwave.workers.hooks import HookRegistry
-from cyberwave.twin import Twin, create_twin
-from cyberwave.utils import TimeReference
-from cyberwave.exceptions import (
-    CyberwaveError,
-    CyberwaveAPIError,
-    UnauthorizedException,
 )
 from cyberwave.constants import (
     SOURCE_TYPE_EDGE,
     SOURCE_TYPE_SIM,
 )
+from cyberwave.controller import EdgeController
 from cyberwave.data.api import DataBus
+from cyberwave.data.backend import DataBackend
+from cyberwave.data.utils import (
+    close_frame_subscribe_caches_for_backend,
+    fetch_twin_frame,
+)
+from cyberwave.exceptions import (
+    CyberwaveAPIError,
+    CyberwaveError,
+    CyberwaveInsufficientCreditsError,
+    UnauthorizedException,
+)
+from cyberwave.models.manager import ModelManager
+from cyberwave.mqtt_client import CyberwaveMQTTClient
+from cyberwave.twin import Twin, create_twin
+from cyberwave.utils import TimeReference
 from cyberwave.workers.hooks import HookRegistry
 
 # Import camera streamers with optional dependency handling
@@ -49,6 +57,84 @@ except ImportError:
     _has_realsense = False
     RealSenseStreamer = None
 
+if TYPE_CHECKING:
+    from cyberwave.scene import Scene
+
+
+logger = logging.getLogger(__name__)
+
+
+# SDK identity headers attached to every outbound REST request. These let the
+# backend attribute API traffic to an SDK version cohort (``backend_api_activity``
+# in ``src/lib/posthog_tracking.py``) without any per-call payload changes.
+_SDK_VERSION = get_version()
+_SDK_USER_AGENT = f"cyberwave-python/{_SDK_VERSION}"
+_SDK_VERSION_HEADER = "X-Cyberwave-SDK-Version"
+_SDK_ACCEPT_ENCODING = "gzip"
+
+
+CLIENT_USER_AGENT_ENV = "CYBERWAVE_CLIENT_USER_AGENT"
+
+
+def _compose_user_agent(client_identity: str | None) -> str:
+    """Build the ``User-Agent`` for outbound REST calls.
+
+    Downstream tools (CLI, MCP server) contribute their own ``product/version``
+    token so backend tracking can tell them apart from a user's own script —
+    otherwise every caller looks identical, since they all go through this
+    client. Both tokens are kept, space-separated per the ``User-Agent``
+    convention, so one request reports the tool *and* the SDK underneath it::
+
+        cyberwave-cli/0.12.6 cyberwave-python/0.6.5
+
+    Resolution order is the explicit ``user_agent=`` argument, then the
+    ``CYBERWAVE_CLIENT_USER_AGENT`` environment variable. The env var exists so
+    a wrapper that builds clients in many places (the CLI has ~8 call sites)
+    can identify itself once at startup instead of threading a kwarg through
+    each one — and so call sites added later are covered automatically.
+    """
+    identity = (client_identity or os.getenv(CLIENT_USER_AGENT_ENV) or "").strip()
+    # Guard against a stray newline / quote in an env value reaching a header.
+    identity = " ".join(identity.split())
+    return f"{identity} {_SDK_USER_AGENT}" if identity else _SDK_USER_AGENT
+
+
+def _apply_sdk_identity_headers(header_params: dict[str, Any]) -> dict[str, Any]:
+    """Add SDK identity headers without overriding caller-provided values.
+
+    Sets ``X-Cyberwave-SDK-Version`` so backend request tracking can report SDK
+    version distribution over REST, fills in a ``User-Agent`` for callers that
+    reach ``call_api`` without one, and explicitly negotiates gzip JSON.
+
+    The Django backend's gzip middleware only compresses when the request sends
+    ``Accept-Encoding: gzip``. urllib3 otherwise advertises ``identity`` by
+    default; large recording catalog responses can then exceed Cloud Run's
+    response-size limit before they reach the SDK. urllib3 transparently
+    decompresses the gzip response for callers.
+
+    Note that requests routed through ``ApiClient.param_serialize`` already
+    carry a ``User-Agent`` by the time they get here — ``param_serialize``
+    merges ``ApiClient.default_headers`` into the per-call headers. That value
+    is set once in :meth:`Cyberwave._setup_rest_client` via
+    :func:`_compose_user_agent`; without it the generated client's placeholder
+    (``OpenAPI-Generator/1.0.0/python``) would be what reached the backend.
+
+    The fallback goes through :func:`_compose_user_agent` too, so a request that
+    reaches here without one still reports the calling tool: ``_compose_user_agent``
+    reads ``CYBERWAVE_CLIENT_USER_AGENT``, which is how the CLI and MCP server
+    identify themselves. Using the bare SDK token here would silently attribute
+    those requests to a user script.
+    """
+    if not any(str(key).lower() == "user-agent" for key in header_params):
+        header_params["User-Agent"] = _compose_user_agent(None)
+    if not any(
+        str(key).lower() == _SDK_VERSION_HEADER.lower() for key in header_params
+    ):
+        header_params[_SDK_VERSION_HEADER] = _SDK_VERSION
+    if not any(str(key).lower() == "accept-encoding" for key in header_params):
+        header_params["Accept-Encoding"] = _SDK_ACCEPT_ENCODING
+    return header_params
+
 
 _RUNTIME_MODE_MAP = {
     "live": "live",
@@ -59,7 +145,24 @@ _RUNTIME_MODE_MAP = {
     "simulation": "simulation",
     "sim": "simulation",
     "sim_tele": "simulation",
+    "mujoco": "simulation",
+    "playground": "simulation",
 }
+
+# Simulation profiles that spin up a MuJoCo cloud instance when selected via
+# ``affect(...)``. ``playground`` is a simulation runtime too, but a lightweight
+# kinematic one with no MuJoCo instance to start (level-0 only), so it is absent.
+_AFFECT_MUJOCO_PROFILES = frozenset({"sim", "simulation", "sim_tele", "mujoco"})
+
+
+def _affect_autostart_backend(mode: Optional[str]) -> Optional[str]:
+    """Backend to auto-start for an ``affect(...)`` profile, or ``None``.
+
+    Returns ``"mujoco"`` for MuJoCo simulation profiles; ``None`` for
+    ``playground`` and every live profile (nothing to start).
+    """
+    normalized = (mode or "").lower().strip()
+    return "mujoco" if normalized in _AFFECT_MUJOCO_PROFILES else None
 
 
 def _resolve_runtime_mode(mode: Optional[str]) -> str:
@@ -121,8 +224,16 @@ class Cyberwave:
         mode: Optional[str] = "live",
         environment_id: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        user_agent: Optional[str] = None,
         **config_kwargs,
     ):
+        """Args:
+        user_agent: Optional ``product/version`` token identifying the tool
+            building this client (e.g. ``"cyberwave-cli/0.12.6"``). Prepended
+            to the SDK's own token on every REST request so backend tracking
+            can distinguish the CLI / MCP server / a user script. Library
+            callers can leave this unset.
+        """
         runtime_mode = _resolve_runtime_mode(mode)
 
         if not base_url:
@@ -167,32 +278,17 @@ class Cyberwave:
         if source_type is None and not os.getenv("CYBERWAVE_SOURCE_TYPE"):
             self.config.source_type = _default_state_source_type(runtime_mode)
 
+        # Set before ``_setup_rest_client`` — it reads this to build the
+        # ``User-Agent``, and ``configure()`` calls it again on rebuild.
+        self._user_agent = user_agent
         self._setup_rest_client()
         self._mqtt_client: Optional[CyberwaveMQTTClient] = None
+        self._data_backend: Optional[DataBackend] = None
         self._data_bus: Optional[DataBus] = None
+        self._data_twin_uuid_override: Optional[str] = None
+        self._data_sensor_name_override: Optional[str] = None
         self._hook_registry = HookRegistry()
-
-        self._hook_registry = HookRegistry()
-        self.models = ModelManager(data_bus=lambda: self._try_get_data_bus())
-
-        from cyberwave.resources import (
-            WorkspaceManager,
-            ProjectManager,
-            EnvironmentManager,
-            AssetManager,
-            EdgeManager,
-            TwinManager,
-        )
-        from cyberwave.workflows import WorkflowManager, WorkflowRunManager
-
-        self.workspaces = WorkspaceManager(self.api)
-        self.projects = ProjectManager(self.api)
-        self.environments = EnvironmentManager(self.api)
-        self.assets = AssetManager(self.api)
-        self.edges = EdgeManager(self.api)
-        self.twins = TwinManager(self.api, client=self)
-        self.workflows = WorkflowManager(self)
-        self.workflow_runs = WorkflowRunManager(self)
+        self._init_managers()
 
     def _setup_rest_client(self):
         """Setup the REST API client with authentication"""
@@ -207,6 +303,10 @@ class Cyberwave:
         configuration.verify_ssl = self.config.verify_ssl
 
         api_client = ApiClient(configuration)
+        # Replaces the generated placeholder ``OpenAPI-Generator/1.0.0/python``.
+        # ``param_serialize`` merges ``default_headers`` into every request, so
+        # this is what actually reaches the backend.
+        api_client.user_agent = _compose_user_agent(getattr(self, "_user_agent", None))
 
         original_response_deserialize = api_client.response_deserialize
         last_request_headers = {}
@@ -215,8 +315,45 @@ class Cyberwave:
             try:
                 return original_response_deserialize(response_data, response_types_map)
             except Exception as e:
-                if hasattr(e, "__dict__") and not hasattr(e, "request_headers"):
-                    e.request_headers = last_request_headers.copy()
+                # Mask here, not at render: this lands on any exception with
+                # a __dict__, including third-party ones, and anything that
+                # serializes exception attributes reads it without __str__.
+                # `is None` rather than `not hasattr`: cyberwave.exceptions.
+                # ApiException already sets request_headers = None in __init__,
+                # so a hasattr check would skip every transport exception once
+                # the two hierarchies are unified.
+                if (
+                    hasattr(e, "__dict__")
+                    and getattr(e, "request_headers", None) is None
+                ):
+                    e.request_headers = mask_sensitive_headers(last_request_headers)
+                if getattr(e, "status", None) == 402:
+                    import json as _json
+
+                    balance: Optional[float] = None
+                    manual_block = False
+                    manual_block_reason = ""
+                    try:
+                        body = _json.loads(getattr(e, "body", "") or "{}")
+                        detail = body.get("detail", "")
+                        if "balance=" in detail:
+                            balance = float(detail.split("balance=")[-1])
+                        manual_block = bool(body.get("manual_block", False))
+                        manual_block_reason = body.get("manual_block_reason", "")
+                    except Exception:
+                        pass
+                    msg = "Insufficient credits"
+                    if balance is not None:
+                        msg += f" (balance: {balance})"
+                    raise CyberwaveInsufficientCreditsError(
+                        message=msg,
+                        status_code=402,
+                        response_data=getattr(e, "body", None),
+                        request_headers=mask_sensitive_headers(last_request_headers),
+                        balance=balance,
+                        manual_block=manual_block,
+                        manual_block_reason=manual_block_reason,
+                    ) from e
                 raise
 
         original_call_api = api_client.call_api
@@ -236,6 +373,8 @@ class Cyberwave:
             )
             if self.config.api_key and not has_authorization:
                 header_params["Authorization"] = f"Bearer {self.config.api_key}"
+
+            _apply_sdk_identity_headers(header_params)
 
             last_request_headers.clear()
             if header_params:
@@ -258,6 +397,58 @@ class Cyberwave:
 
         self._wrap_api_methods()
 
+    def _init_managers(self) -> None:
+        """(Re)build high-level managers that hold REST client references.
+
+        ``configure()`` can rebuild ``self._api_client`` and ``self.api`` with a
+        new base URL or API key. Any manager instantiated before that point
+        would otherwise keep talking to the stale backend. Centralizing manager
+        setup here lets ``__init__`` and ``configure()`` refresh every surface
+        consistently.
+        """
+        from cyberwave.actions import ActionsClient
+        from cyberwave.agents import AgentManager
+        from cyberwave.resources import (
+            AttachmentManager,
+            AssetManager,
+            DatasetManager,
+            EdgeManager,
+            EnvironmentManager,
+            ProjectManager,
+            TwinManager,
+            WorkspaceManager,
+        )
+        from cyberwave.workflow_executions import WorkflowExecutionManager
+        from cyberwave.workflows import WorkflowManager, WorkflowRunManager
+
+        # ``cw.models`` is the unified surface for runtime, catalog, and playground:
+        #   cw.models.load("yolov8n")              → edge LoadedModel
+        #   cw.models.load("acme/models/sam-3.1")  → CloudLoadedModel (Playground)
+        #   cw.models.list(deployment="edge")       → catalog records
+        #   cw.models.get("acme/models/yolo26n")    → single catalog record
+        #   cw.models.playground("acme/models/gemini-robotics-er").run(image=...)
+        self.models = ModelManager(
+            data_bus=lambda: self._try_get_data_bus(),
+            api_client=self.api,
+        )
+        self.workspaces = WorkspaceManager(self.api)
+        self.projects = ProjectManager(self.api)
+        self.environments = EnvironmentManager(self.api)
+        self.attachments = AttachmentManager(self.api)
+        self.assets = AssetManager(self.api)
+        self.datasets = DatasetManager(self.api)
+        self.edges = EdgeManager(self.api)
+        self.twins = TwinManager(self.api, client=self)
+        from cyberwave.managers.policies import PolicyManager
+
+        self.policies = PolicyManager(self)
+        self.actions = ActionsClient(self._api_client)
+        self.agents = AgentManager(self._api_client)
+        self.control = self.agents.control
+        self.workflows = WorkflowManager(self)
+        self.workflow_runs = WorkflowRunManager(self)
+        self.workflow_executions = WorkflowExecutionManager(self)
+
     def _wrap_api_methods(self):
         """Wrap API methods to provide better error messages for authentication failures"""
         for attr_name in dir(self.api):
@@ -270,7 +461,13 @@ class Cyberwave:
                 setattr(self.api, attr_name, wrapped)
 
     def _create_wrapped_method(self, method):
-        """Create a wrapped version of an API method that handles auth errors"""
+        """Create a wrapped version of an API method that handles auth errors.
+
+        The ``except`` below only started matching once the two exception
+        hierarchies were unified; before that a rejected key surfaced
+        as a bare ``(401)``. The masked header dict is left off the translated
+        error to keep this message readable — it stays on the ``__cause__``.
+        """
 
         def wrapped(*args, **kwargs):
             try:
@@ -289,49 +486,194 @@ class Cyberwave:
                 error_msg += "  4. Run your script again!\n"
 
                 if hasattr(e, "request_headers") and e.request_headers:
-                    auth_header = e.request_headers.get("Authorization", "Not present")
-                    if auth_header and auth_header != "Not present":
-                        parts = auth_header.split(" ")
-                        if len(parts) == 2:
-                            token_preview = (
-                                parts[1][:8] + "..." if len(parts[1]) > 8 else parts[1]
-                            )
-                            error_msg += (
-                                f"Authorization header: {parts[0]} {token_preview}\n"
-                            )
-                    else:
-                        error_msg += "Authorization header: Not present\n"
+                    # Masked at attachment, so it can be shown as-is — the one
+                    # consumer that wants to see part of the key.
+                    auth_header = e.request_headers.get("Authorization")
+                    error_msg += (
+                        f"Authorization header: {auth_header}\n"
+                        if auth_header
+                        else "Authorization header: Not present\n"
+                    )
 
                 raise CyberwaveAPIError(
+                    # No request_headers: error_msg already names the
+                    # Authorization header above, and __str__ would append the
+                    # whole dict again — the doubling _handle_error was fixed
+                    # for. The masked dict stays on __cause__. Other statuses
+                    # keep theirs; they go through _handle_error, not here.
                     error_msg,
                     status_code=401,
-                    response_data=e.body if hasattr(e, "body") else None,
+                    response_data=getattr(e, "body", None),
                 ) from e
 
         return wrapped
+
+    def _get_data_backend(self) -> DataBackend:
+        """Shared Zenoh/filesystem backend (one session per :class:`Cyberwave` client)."""
+        if self._data_backend is None:
+            from cyberwave.data.config import BackendConfig, get_backend
+
+            cfg = BackendConfig()
+            if cfg.backend == "zenoh":
+                # Leave connect empty when unconfigured: ZenohBackend then takes
+                # Zenoh's peer default and finds same-host peers by multicast
+                # scouting. Synthesizing an endpoint here made whichever
+                # container happened to listen on 7447 an unplanned hub, so its
+                # restart took the whole bus down with it.
+                if not cfg.zenoh_connect and platform.system() == "Darwin":
+                    # Darwin is the one host where the peer default reaches
+                    # nobody: multicast scouting links no two sessions there
+                    # (measured, see cyberwave-sdks/README.md), and edge-core
+                    # publishes the worker's 7447 for exactly this reason. A
+                    # star is better than an empty bus, and no edge host is a
+                    # Mac.
+                    cfg.zenoh_connect = ["tcp/127.0.0.1:7447"]
+                if cfg.zenoh_connect:
+                    logger.info(
+                        "Zenoh connecting to configured endpoints: %s",
+                        ", ".join(cfg.zenoh_connect),
+                    )
+                else:
+                    logger.info(
+                        "Zenoh peer-to-peer discovery (multicast scouting); "
+                        "set ZENOH_CONNECT to pin a router endpoint instead"
+                    )
+            self._data_backend = get_backend(cfg)
+        return self._data_backend
+
+    def data_bus_for(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str | None = None,
+    ) -> DataBus:
+        """Return a :class:`~cyberwave.data.api.DataBus` for any twin on the shared backend."""
+        return DataBus(self._get_data_backend(), twin_uuid, sensor_name=sensor_name)
+
+    def use_data_bus_for(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str | None = None,
+    ) -> None:
+        """Pin :attr:`data` to *twin_uuid*, overriding ``CYBERWAVE_TWIN_UUID``.
+
+        Lazy: does not open a transport backend until :attr:`data` is
+        first accessed, so calling this in a compiled worker prelude
+        costs nothing for workflows that never touch the data bus.
+        Idempotent: repeated calls with the same twin/sensor are no-ops,
+        which preserves the existing :class:`DataBus` (and its per-channel
+        ``HeaderTemplate.seq`` counters) across multi-trigger hook
+        invocations that re-seed on every frame.
+        """
+        if (
+            self._data_twin_uuid_override == twin_uuid
+            and self._data_sensor_name_override == sensor_name
+        ):
+            return
+        self._data_bus = None
+        self._data_twin_uuid_override = twin_uuid
+        self._data_sensor_name_override = sensor_name
+
+    def fetch_zenoh_frame(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str = "default",
+        timeout_s: float = 1.0,
+        max_age_ms: float | None = None,
+    ) -> Any | None:
+        """Return the next camera frame on the Zenoh ``frames`` stream (subscribe path)."""
+        return fetch_twin_frame(
+            self._get_data_backend(),
+            twin_uuid,
+            sensor_name=sensor_name,
+            timeout_s=timeout_s,
+            max_age_ms=max_age_ms,
+        )
+
+    def diagnose_zenoh_frames(
+        self,
+        twin_uuid: str,
+        *,
+        sensor_name: str = "default",
+        timeout_s: float = 0.5,
+    ) -> dict[str, Any]:
+        """Return Zenoh connectivity hints for ``get_frame(source='zenoh')`` debugging."""
+        from cyberwave.data.keys import build_key, build_wildcard
+
+        try:
+            backend = self._get_data_backend()
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": str(exc),
+                "hint": (
+                    "Install eclipse-zenoh: pip install 'cyberwave[zenoh]'"
+                ),
+            }
+
+        prefix = getattr(backend, "key_prefix", "cw")
+        frame_key = build_key(
+            twin_uuid,
+            "frames",
+            sensor_name,
+            prefix=prefix,
+        )
+        wildcard = build_wildcard(twin_uuid, "frames", prefix=prefix)
+        frame = fetch_twin_frame(
+            backend,
+            twin_uuid,
+            sensor_name=sensor_name,
+            timeout_s=timeout_s,
+        )
+        stats: dict[str, Any] = {}
+        stats_fn = getattr(backend, "stats", None)
+        if stats_fn is not None:
+            stats = stats_fn()
+
+        recv = stats.get("recv", {})
+        frame_keys = [k for k in recv if "/data/frames" in k]
+        return {
+            "ok": frame is not None,
+            "frame_key": frame_key,
+            "wildcard_key": wildcard,
+            "recv_counts": recv,
+            "frame_keys_seen": frame_keys,
+            "stats": stats,
+            "hint": (
+                "No frame on subscribe within the probe window. Use the same "
+                "ZENOH_CONNECT as the camera driver and match sensor_name to "
+                "the driver's frames/<sensor> segment."
+            ),
+        }
 
     @property
     def data(self) -> DataBus:
         """Data-layer bus (lazy initialization).
 
         Returns a :class:`~cyberwave.data.api.DataBus` backed by the
-        backend selected via ``CYBERWAVE_DATA_BACKEND``.
+        backend selected via ``CYBERWAVE_DATA_BACKEND``. Scoped to the
+        twin set by :meth:`use_data_bus_for` if called, otherwise to
+        ``CYBERWAVE_TWIN_UUID``.
 
         Raises:
-            CyberwaveError: If ``CYBERWAVE_TWIN_UUID`` is not set.
+            CyberwaveError: If no twin has been pinned and
+                ``CYBERWAVE_TWIN_UUID`` is not set.
         """
         if self._data_bus is None:
-            from cyberwave.data.config import get_backend
-
-            twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
+            twin_uuid = self._data_twin_uuid_override or os.getenv(
+                "CYBERWAVE_TWIN_UUID"
+            )
             if not twin_uuid:
                 raise CyberwaveError(
                     "CYBERWAVE_TWIN_UUID environment variable is required "
                     "for cw.data but is not set.  Export it before accessing "
                     "the data bus, e.g.: export CYBERWAVE_TWIN_UUID=<uuid>"
                 )
-            backend = get_backend()
-            self._data_bus = DataBus(backend, twin_uuid)
+            self._data_bus = self.data_bus_for(
+                twin_uuid, sensor_name=self._data_sensor_name_override
+            )
         return self._data_bus
 
     def _try_get_data_bus(self) -> DataBus | None:
@@ -340,6 +682,11 @@ class Cyberwave:
             return self.data
         except (CyberwaveError, ImportError, Exception):
             return None
+
+    @property
+    def mlmodels(self) -> ModelManager:
+        """Alias for :attr:`models` (used by generated workflow workers)."""
+        return self.models
 
     @property
     def mqtt(self) -> CyberwaveMQTTClient:
@@ -352,12 +699,67 @@ class Cyberwave:
     _QUICKSTART_PROJECT_NAME = "Quickstart Project"
     _QUICKSTART_ENV_NAME = "Quickstart Environment"
 
-    def _get_or_create_quickstart_env(self) -> tuple[str, bool]:
-        """Return (env_uuid, created) for the quickstart environment.
+    _WEB_BASE_URL = "https://cyberwave.com"
 
-        Reuses an existing environment named ``_QUICKSTART_ENV_NAME`` when one
-        is available so that repeated runs do not produce duplicate environments.
+    def _build_environment_url(self, env_id: str) -> str:
+        """Build a user-facing URL for an environment.
+
+        Uses the environment's unified slug when available, falling back to
+        the UUID-based URL.
         """
+        try:
+            env = self.environments.get(env_id)
+            slug = getattr(env, "slug", None)
+            if slug:
+                return f"{self._WEB_BASE_URL}/{slug}"
+        except Exception:
+            pass
+        return f"{self._WEB_BASE_URL}/environments/{env_id}"
+
+    def _resolve_environment_id(self, env_id: str) -> str:
+        """Resolve an environment slug to its UUID if needed.
+
+        When *env_id* contains slashes (looks like a slug), the environment
+        is fetched by slug and its UUID is returned.  Otherwise *env_id* is
+        returned unchanged.
+        """
+        if "/" in env_id:
+            try:
+                env = self.environments.get_by_slug(env_id)
+                if env is not None:
+                    return str(env.uuid)
+            except Exception:
+                pass
+        return env_id
+
+    def _build_twin_url(self, twin_data: Any) -> str:
+        """Build a user-facing URL for a twin.
+
+        Uses the twin's unified slug when available, falling back to
+        the UUID-based URL.
+        """
+        slug = getattr(twin_data, "slug", None)
+        if isinstance(twin_data, dict):
+            slug = twin_data.get("slug", slug)
+        if slug:
+            return f"{self._WEB_BASE_URL}/{slug}"
+        twin_uuid = getattr(twin_data, "uuid", None)
+        if isinstance(twin_data, dict):
+            twin_uuid = twin_data.get("uuid", twin_uuid)
+        return f"{self._WEB_BASE_URL}/twins/{twin_uuid}"
+
+    def get_or_create_quickstart_environment(self) -> tuple[str, bool]:
+        """Return ``(environment_uuid, created)`` for the quickstart environment.
+
+        Reuses ``"Quickstart Environment"`` in the active workspace when present.
+        May persist ``workspace_id`` / ``environment_id`` on the client config if
+        they were unset. Assumes one quickstart env per project.
+        """
+        return self._get_or_create_quickstart_env()
+
+    def _get_or_create_quickstart_env(self) -> tuple[str, bool]:
+        """Internal implementation for :meth:`get_or_create_quickstart_environment`."""
+        workspace_id_was_set = bool(self.config.workspace_id)
         workspace_id = self.config.workspace_id
         if not workspace_id:
             workspaces = self.workspaces.list()
@@ -377,27 +779,42 @@ class Cyberwave:
                 workspace_id = self.workspaces.create(
                     name=self._QUICKSTART_WORKSPACE_NAME,
                 ).uuid
-        self.config.workspace_id = workspace_id
+        if not workspace_id_was_set:
+            self.config.workspace_id = workspace_id
 
         projects = self.projects.list()
+        workspace_projects = [
+            p
+            for p in projects
+            if str(
+                getattr(p, "workspace_uuid", None)
+                or getattr(p, "workspace_id", None)
+                or ""
+            )
+            == str(workspace_id)
+        ]
+        # Never fall back to global projects when a workspace is known — that
+        # re-attaches quickstart envs to another workspace's Edge Project.
+        project_pool = workspace_projects
         existing_project = next(
             (
                 p
-                for p in projects
+                for p in project_pool
                 if getattr(p, "name", None) == self._QUICKSTART_PROJECT_NAME
             ),
             None,
         )
         if existing_project:
             project_id = existing_project.uuid
-        elif projects:
-            project_id = projects[0].uuid
+        elif project_pool:
+            project_id = project_pool[0].uuid
         else:
             project_id = self.projects.create(
                 name=self._QUICKSTART_PROJECT_NAME,
                 workspace_id=workspace_id,
             ).uuid
 
+        # Single API page; steady state is one quickstart env per project.
         environments = self.environments.list(project_id=project_id)
         existing_env = next(
             (
@@ -437,18 +854,25 @@ class Cyberwave:
         - LocomoteTwin: For assets that can locomote (has move(), etc.)
 
         Args:
-            asset_key: Asset identifier (e.g., "the-robot-studio/so101"). Required for creation, optional when twin_id is provided.
-            environment_id: Environment ID (uses default if not provided)
-            twin_id: Existing twin ID to fetch (skips creation)
+            asset_key: Asset identifier — accepts a registry ID
+                (e.g. ``"the-robot-studio/so101"``), a full unified slug
+                (e.g. ``"acme/catalog/my-robot-arm"``), or a plain alias.
+                Required for creation, optional when *twin_id* is provided.
+            environment_id: Environment UUID or unified slug
+                (e.g. ``"acme/envs/production-floor"``).  Uses the default
+                environment when not provided.
+            twin_id: Existing twin UUID or unified slug
+                (e.g. ``"acme/twins/arm-station-1"``) to fetch (skips creation).
             **kwargs: Additional twin creation parameters
 
         Returns:
             Twin instance (or appropriate subclass based on capabilities)
 
         Example:
-            >>> robot = client.twin("unitree/go2")  # Create new twin
-            >>> robot = client.twin(twin_id="uuid")  # Fetch existing twin by ID
-            >>> robot.start_streaming(fps=15)  # Available because of RGB sensor
+            >>> robot = client.twin("unitree/go2")  # Create by registry ID
+            >>> robot = client.twin("acme/catalog/go2")  # Create by slug
+            >>> robot = client.twin(twin_id="acme/twins/my-go2")  # Fetch by slug
+            >>> robot = client.twin(twin_id="uuid")  # Fetch by UUID
             >>> robot.edit_position(x=1, y=0, z=0.5)
         """
         if twin_id:
@@ -464,10 +888,12 @@ class Cyberwave:
         twin_name = kwargs.get("name", None)
 
         env_id = environment_id or self.config.environment_id
+        environment_id_was_set = bool(env_id)
         if not env_id:
-            env_id, created = self._get_or_create_quickstart_env()
-            self.config.environment_id = env_id
-            env_url = f"https://cyberwave.com/environments/{env_id}"
+            env_id, created = self.get_or_create_quickstart_environment()
+            if not environment_id_was_set and not self.config.environment_id:
+                self.config.environment_id = env_id
+            env_url = self._build_environment_url(env_id)
             if created:
                 print(
                     f"[Cyberwave] No environment specified — created a new '{self._QUICKSTART_ENV_NAME}'.\n"
@@ -480,6 +906,8 @@ class Cyberwave:
                     f"  View it at: {env_url}\n"
                     "  Tip: set environment_id= (or CYBERWAVE_ENVIRONMENT_ID) to skip this step."
                 )
+        else:
+            env_id = self._resolve_environment_id(env_id)
 
         asset = self.assets.get_by_registry_id(asset_key)
         if asset is None:
@@ -503,7 +931,13 @@ class Cyberwave:
         except Exception:
             raise
 
-    def affect(self, mode: str) -> "Cyberwave":
+    def affect(
+        self,
+        mode: str,
+        *,
+        environment_id: Optional[str] = None,
+        duration: Optional[float] = None,
+    ) -> "Cyberwave":
         """
         Set whether commands affect the simulation or the real robot.
 
@@ -511,34 +945,118 @@ class Cyberwave:
         locomotion APIs, and keeps generic state/telemetry publishers aligned with
         the selected runtime (`edge` in live mode, `sim` in simulation mode).
 
+        Selecting a MuJoCo simulation profile (``"sim"`` / ``"simulation"`` /
+        ``"mujoco"``) **auto-starts** a MuJoCo simulation for the resolved
+        environment — a billable cloud instance. The lighter ``"playground"``
+        profile is a simulation runtime with no MuJoCo instance to start.
+
         Args:
-            mode: ``"simulation"`` (or ``"sim"``) to target the simulated
-                  environment, ``"live"`` / ``"real-world"`` (or
-                  ``"real"`` / ``"tele"``) to target the real robot.
+            mode: ``"sim"`` / ``"simulation"`` / ``"mujoco"`` to target (and start)
+                  a MuJoCo simulation, ``"playground"`` for the lightweight
+                  kinematic simulation runtime, ``"live"`` / ``"real-world"``
+                  (or ``"real"`` / ``"tele"``) to target the real robot.
+            environment_id: Environment to start the simulation for. Falls back to
+                  the client's configured environment when omitted.
+            duration: Optional simulation run duration in seconds (defaults to the
+                  backend's own default).
 
         Returns:
             self, for method chaining.
 
+        Note:
+            Locomotion, flight, and driver commands (``twin.locomote.*``,
+            ``twin.flying.*``, ``twin.commands.*``) are live/driver-only and raise
+            ``NotSimulatedError`` in any simulation runtime.
+
         Example:
-            >>> cw = Cyberwave()
-            >>> cw.affect("simulation")
-            >>> rover.move_forward(1.0)        # moves in simulation
+            >>> cw = Cyberwave(environment_id="acme/envs/floor")
+            >>> cw.affect("simulation")        # starts a MuJoCo sim (logs the cost)
+            >>> frame = robot.get_frame()      # reads from the running sim
 
             >>> cw.affect("real-world")
             >>> rover.move_forward(1.0)        # moves the real robot
-
-            >>> # Per-call override still works:
-            >>> rover.move_forward(1.0, source_type="tele")
         """
         runtime_mode = _resolve_runtime_mode(mode)
-        self.config.runtime_mode = runtime_mode
-        self.config.source_type = _default_state_source_type(runtime_mode)
+        source_type = _default_state_source_type(runtime_mode)
 
-        if self._mqtt_client:
-            self._mqtt_client.disconnect()
-            self._mqtt_client = None
+        if not (
+            self.config.runtime_mode == runtime_mode
+            and self.config.source_type == source_type
+        ):
+            self.config.runtime_mode = runtime_mode
+            self.config.source_type = source_type
+
+            if self._mqtt_client:
+                self._mqtt_client.disconnect()
+                self._mqtt_client = None
+
+        # A MuJoCo profile spins up a billable cloud instance; playground/live do not.
+        if _affect_autostart_backend(mode) == "mujoco":
+            self._autostart_simulation(
+                backend="mujoco", environment_id=environment_id, duration=duration
+            )
 
         return self
+
+    def _autostart_simulation(
+        self,
+        *,
+        backend: str,
+        environment_id: Optional[str],
+        duration: Optional[float],
+    ) -> Any:
+        """Start (or reuse) a simulation selected via :meth:`affect`, logging the cost.
+
+        Resolves the environment from ``environment_id`` or the client's configured
+        environment. When neither is available, logs how to start one and returns
+        ``None`` rather than raising — the runtime mode is still set. Blocks until
+        the simulation reports ``running`` (mirrors every other simulation-start
+        path in the SDK) so that a getter called right after ``affect()`` returns
+        never races a still-``loading`` instance.
+        """
+        from cyberwave.managers.simulations import (
+            SIMULATION_CREDITS_PER_HOUR,
+            SIMULATION_CREDITS_PER_MINUTE,
+        )
+
+        env_id = environment_id or self.config.environment_id
+        if not env_id:
+            logger.warning(
+                "affect(%r) selected a MuJoCo simulation runtime, but no environment "
+                "is set — no simulation was started. Pass environment_id=... to "
+                "affect(), set CYBERWAVE_ENVIRONMENT_ID, or start one explicitly with "
+                "cw.environments.simulations.start(environment_id, backend='mujoco').",
+                backend,
+            )
+            return None
+
+        env_id = self._resolve_environment_id(env_id)
+        simulations = self.environments.simulations
+
+        sim = simulations.get_active(env_id)
+        if sim is not None:
+            logger.info(
+                "Reusing active simulation %s for environment %s "
+                "(MuJoCo simulations are billed at ~%.2f credits/hour).",
+                sim.simulation_id,
+                env_id,
+                SIMULATION_CREDITS_PER_HOUR,
+            )
+        else:
+            sim = simulations.start(env_id, backend=backend, duration=duration)
+            logger.warning(
+                "Started MuJoCo simulation %s for environment %s — this is a billable "
+                "cloud instance consuming credits at ~%.2f credits/hour "
+                "(%.2f credits/min). Stop it with sim.stop() when done.",
+                sim.simulation_id,
+                env_id,
+                SIMULATION_CREDITS_PER_HOUR,
+                SIMULATION_CREDITS_PER_MINUTE,
+            )
+
+        if sim.status != "running":
+            sim.wait_until_active()
+        return sim
 
     def configure(
         self,
@@ -582,6 +1100,7 @@ class Cyberwave:
                 setattr(self.config, key, value)
 
         self._setup_rest_client()
+        self._init_managers()
 
         if self._mqtt_client:
             self._mqtt_client.disconnect()
@@ -608,9 +1127,11 @@ class Cyberwave:
         turn_servers: Optional[list] = None,
         time_reference: Optional[TimeReference] = None,
         keyframe_interval: Optional[int] = None,
-        frame_callback: Optional[callable] = None,
+        frame_callback: Optional[Callable] = None,
+        depth_callback: Optional[Callable] = None,
         camera_name: Optional[str] = None,
         fourcc: Optional[str] = None,
+        serial_number: Optional[str] = None,
     ):
         """
         Create a camera streamer for the specified twin. DEPRECATED: Use the TwinCamera instead
@@ -640,12 +1161,18 @@ class Cyberwave:
             keyframe_interval: Force a keyframe every N frames for better streaming start.
                 If None, uses CYBERWAVE_KEYFRAME_INTERVAL env var, or disables forced keyframes.
                 Recommended: fps * 2 (e.g., 60 for 30fps = keyframe every 2 seconds)
-            frame_callback: Optional callback for each frame (ML inference, etc.).
+            frame_callback: Optional per-frame color callback (ML inference, etc.).
                 Signature: callback(frame: np.ndarray, frame_count: int) -> None
+            depth_callback: Optional per-frame depth callback (RealSense only).
+                Signature: callback(depth: np.ndarray, frame_count: int) -> None
             camera_name: Optional sensor identifier for multi-stream twins.
             fourcc: Optional FOURCC for local V4L2/USB cameras (e.g. ``'MJPG'``, ``'YUYV'``).
                 Passed to :class:`~cyberwave.sensor.camera_cv2.CV2VideoTrack`. If omitted for a
                 local device, the SDK tries ``MJPG`` by default. Ignored for RealSense and IP/RTSP cameras.
+            serial_number: RealSense hardware serial to pin (RealSense only). Answers "which
+                physical unit", where ``camera_id`` answers "what source to open". Required on
+                hosts with more than one RealSense: without it every streamer binds whichever
+                device librealsense enumerates first, so a second twin dies on EBUSY.
 
         Returns:
             Camera streamer instance (CV2CameraStreamer or RealSenseStreamer)
@@ -746,6 +1273,7 @@ class Cyberwave:
             if auto_detect:
                 return RealSenseStreamer.from_device(
                     client=self.mqtt,
+                    serial_number=serial_number,
                     prefer_resolution=to_resolution(resolution),
                     prefer_fps=fps,
                     enable_depth=enable_depth,
@@ -753,6 +1281,8 @@ class Cyberwave:
                     twin_uuid=twin_uuid,
                     time_reference=time_reference,
                     camera_name=camera_name,
+                    frame_callback=frame_callback,
+                    depth_callback=depth_callback,
                 )
             else:
                 return RealSenseStreamer(
@@ -766,6 +1296,9 @@ class Cyberwave:
                     twin_uuid=twin_uuid,
                     time_reference=time_reference,
                     camera_name=camera_name,
+                    frame_callback=frame_callback,
+                    depth_callback=depth_callback,
+                    serial_number=serial_number,
                 )
         else:
             raise CyberwaveError(
@@ -865,6 +1398,18 @@ class Cyberwave:
         return self._hook_registry.on_battery
 
     @property
+    def on_alert(self) -> Callable:
+        return self._hook_registry.on_alert
+
+    @property
+    def on_mqtt(self) -> Callable:
+        return self._hook_registry.on_mqtt
+
+    @property
+    def on_manual_trigger(self) -> Callable:
+        return self._hook_registry.on_manual_trigger
+
+    @property
     def on_temperature(self) -> Callable:
         return self._hook_registry.on_temperature
 
@@ -877,8 +1422,16 @@ class Cyberwave:
         return self._hook_registry.on_data
 
     @property
+    def on_schedule(self) -> Callable:
+        return self._hook_registry.on_schedule
+
+    @property
     def on_synchronized(self) -> Callable:
         return self._hook_registry.on_synchronized
+
+    @property
+    def on_workflow_cancel(self) -> Callable:
+        return self._hook_registry.on_workflow_cancel
 
     # ── Worker runtime helpers ───────────────────────────────────
 
@@ -892,8 +1445,7 @@ class Cyberwave:
     ) -> None:
         """Publish a business event via MQTT.
 
-        Payload shape matches ``BaseEdgeNode.publish_event()`` and the
-        backend ``mqtt_consumer.handle_business_event()``::
+        Published payload shape::
 
             {"event_type": ..., "source": ..., "data": ..., "timestamp": ...}
         """
@@ -913,6 +1465,99 @@ class Cyberwave:
                 "timestamp": time.time(),
             },
         )
+
+    def publish_alert(
+        self,
+        twin_uuid: str,
+        name: str,
+        *,
+        description: str = "",
+        alert_type: str = "",
+        severity: str = "info",
+        category: str = "business",
+        force: bool = False,
+        source_type: str = "edge",
+        metadata: Optional[dict[str, Any]] = None,
+        workflow_uuid: Optional[str] = None,
+        workflow_node_uuid: Optional[str] = None,
+        workflow_execution_uuid: Optional[str] = None,
+    ) -> None:
+        """Create a business alert via the REST API.
+
+        This is a fire-and-forget convenience used by generated edge workers
+        to surface detection events as operator-visible alerts.  The backend
+        handles deduplication, MQTT relay, and notification dispatch.
+
+        Args:
+            twin_uuid: UUID of the twin the alert is attached to.
+            name: Human-readable alert title.
+            description: Optional details (model name, confidence, etc.).
+            alert_type: Machine-readable type code (e.g. ``person_detected``).
+            severity: One of ``info``, ``warning``, ``error``, ``critical``.
+            category: ``business`` (default) or ``technical``.
+            force: If True, bypass backend alert deduplication.
+            source_type: Alert origin (``edge``, ``cloud``, ``simulation``, etc.).
+            metadata: Optional dict of extra data stored on the alert.
+            workflow_uuid: UUID of the workflow that produced the alert. When
+                provided, the alert becomes queryable via
+                ``GET /api/v1/alerts?workflow_uuid=...``.
+            workflow_node_uuid: UUID of the workflow node (e.g. ``send_alert``)
+                that produced the alert. Stored under ``metadata`` for
+                provenance — does not require a schema change on the backend.
+            workflow_execution_uuid: UUID of the workflow execution that
+                produced the alert. Stored under ``metadata`` for provenance.
+        """
+        from cyberwave.alerts import _create_alert
+
+        payload: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "alert_type": alert_type,
+            "severity": severity.lower(),
+            "source_type": source_type,
+            "category": category,
+            "twin_uuid": twin_uuid,
+        }
+        if self.config.workspace_id:
+            payload["workspace_uuid"] = self.config.workspace_id
+        # Send the bound environment so the backend can derive the correct
+        # workspace when no workspace_id is configured. Without this, the
+        # alert endpoint falls back to the API-token user's default workspace,
+        # which fails the twin/environment workspace-match check with a 400.
+        if self.config.environment_id:
+            payload["environment_uuid"] = self.config.environment_id
+        if workflow_uuid:
+            payload["workflow_uuid"] = workflow_uuid
+        if force:
+            payload["force"] = True
+
+        # Auto-merge workflow node/execution provenance into metadata so callers
+        # don't have to remember; explicit user-supplied keys win.
+        merged_metadata: dict[str, Any] = {}
+        if workflow_uuid:
+            merged_metadata["workflow_uuid"] = workflow_uuid
+        if workflow_node_uuid:
+            merged_metadata["workflow_node_uuid"] = workflow_node_uuid
+        if workflow_execution_uuid:
+            merged_metadata["workflow_execution_uuid"] = workflow_execution_uuid
+        if metadata is not None:
+            merged_metadata.update(metadata)
+        if merged_metadata:
+            payload["metadata"] = merged_metadata
+
+        try:
+            _create_alert(self, payload)
+            logger.info(
+                "publish_alert: created alert type=%s for twin=%s",
+                alert_type,
+                twin_uuid[:8] + "...",
+            )
+        except Exception:
+            logger.exception(
+                "publish_alert: failed to create alert type=%s for twin=%s",
+                alert_type,
+                twin_uuid[:8] + "...",
+            )
 
     def run_edge_workers(self, workers_dir: str | None = None) -> None:
         """Start the edge worker runtime: load workers, activate hooks, block.
@@ -944,9 +1589,11 @@ class Cyberwave:
         """Disconnect all connections (REST, MQTT, and data bus)."""
         if self._mqtt_client:
             self._mqtt_client.disconnect()
-        if self._data_bus is not None:
-            self._data_bus.close()
-            self._data_bus = None
+        self._data_bus = None
+        if self._data_backend is not None:
+            close_frame_subscribe_caches_for_backend(self._data_backend)
+            self._data_backend.close()
+            self._data_backend = None
 
     def __enter__(self):
         return self

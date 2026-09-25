@@ -10,6 +10,7 @@ from typing import Callable, Optional, Dict, Any
 
 from .config import CyberwaveConfig, DEFAULT_MQTT_PORT
 from .mqtt import CyberwaveMQTTClient as BaseMQTTClient
+from .mqtt import TELEMETRY_CUT_SENDER, TELEMETRY_CUT_SOURCE_SUBTYPE, _UNSET
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,9 @@ class CyberwaveMQTTClient:
         mqtt_port = config.mqtt_port or DEFAULT_MQTT_PORT
         mqtt_username = config.mqtt_username or "mqttcyb"
         api_key = config.api_key
-        effective_mqtt_password = mqtt_password or api_key
+        # Explicit MQTT password (ctor arg or CYBERWAVE_MQTT_PASSWORD) wins over API key
+        # so CI can use legacy broker credentials while REST keeps the API token.
+        effective_mqtt_password = mqtt_password or config.mqtt_password or api_key
         if not effective_mqtt_password:
             raise ValueError(
                 "API key or mqtt_password is required. "
@@ -251,6 +254,29 @@ class CyberwaveMQTTClient:
             stream_instance_id=stream_instance_id,
         )
 
+    def publish_telemetry_cut(
+        self,
+        twin_uuid: str,
+        source_type: Optional[str] = None,
+        sender: str = TELEMETRY_CUT_SENDER,
+        source_subtype: str = TELEMETRY_CUT_SOURCE_SUBTYPE,
+    ) -> None:
+        """Publish a recording-session hard cut (telemetry_end + telemetry_start).
+
+        For a publisher that does not own the twin's telemetry session (e.g. a
+        workflow recorder node bounding a window in a driver's continuous
+        stream). Both messages are marked ``recording_boundary: True`` so
+        consumers do not mistake the cut for a peer disconnect and tear down a
+        live WebRTC stream. See ``MQTTClient.publish_telemetry_cut`` for the
+        full rationale.
+        """
+        return self._client.publish_telemetry_cut(
+            twin_uuid,
+            source_type=source_type,
+            sender=sender,
+            source_subtype=source_subtype,
+        )
+
     def update_joint_state(
         self,
         twin_uuid: str,
@@ -297,6 +323,8 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
+        as_targets: bool = False,
     ):
         """
         Update multiple joints at once via MQTT.
@@ -319,6 +347,12 @@ class CyberwaveMQTTClient:
             source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
             workload_uuid: Optional UUID of the workload generating this update
             session_id: Optional session ID for grouping related updates
+            camera_frame_counters: Optional dict mapping track_id to frame info used
+                for robot-camera synchronization.
+            as_targets: When True, publish as a *command* using ``target_*`` field
+                names (target_positions/target_velocities/target_efforts) instead
+                of the measured names. Used by controllers so the plant and viewers
+                never confuse a commanded setpoint with measured robot state.
         """
         return self._client.update_joints_state(
             twin_uuid,
@@ -330,6 +364,8 @@ class CyberwaveMQTTClient:
             source_subtype,
             workload_uuid,
             session_id,
+            camera_frame_counters,
+            as_targets,
         )
 
     def update_aggregated_joints_state(
@@ -343,6 +379,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Alias for update_joints_state with aggregated format.
@@ -359,6 +396,7 @@ class CyberwaveMQTTClient:
             source_subtype,
             workload_uuid,
             session_id,
+            camera_frame_counters,
         )
 
     def subscribe_environment(
@@ -415,6 +453,19 @@ class CyberwaveMQTTClient:
         """Publish depth frame data via MQTT."""
         return self._client.publish_depth_frame(twin_uuid, depth_data, timestamp)
 
+    def publish_pointcloud(
+        self,
+        twin_uuid: str,
+        point_cloud_data: Any,
+        timestamp: Optional[float] = None,
+        *,
+        stride: int = 6,
+    ):
+        """Publish a point cloud frame via MQTT."""
+        return self._client.publish_pointcloud(
+            twin_uuid, point_cloud_data, timestamp, stride=stride
+        )
+
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):
         """Publish WebRTC signaling message via MQTT."""
         return self._client.publish_webrtc_message(twin_uuid, webrtc_data)
@@ -449,7 +500,15 @@ class CyberwaveMQTTClient:
         return self._client.subscribe_pong(resource_uuid, on_pong)
 
     # Low-level MQTT methods for advanced use cases
-    def subscribe(self, topic: str, handler: Optional[Callable] = None, qos: int = 0):
+    def subscribe(
+        self,
+        topic: str,
+        handler: Optional[Callable] = None,
+        qos: int = 0,
+        *,
+        no_local: bool = False,
+        subscriber_key: Any = None,
+    ):
         """
         Subscribe to any MQTT topic.
 
@@ -457,17 +516,32 @@ class CyberwaveMQTTClient:
             topic: MQTT topic pattern
             handler: Callback function for messages
             qos: Quality of service level (0, 1, or 2)
+            no_local: MQTT v5 only — broker will not echo this client's publishes
+            subscriber_key: Opaque per-subscriber key. Distinct keys let
+                independent subscribers coexist on one topic; re-subscribing
+                under the same key replaces in place (see BaseMQTTClient).
         """
-        return self._client.subscribe(topic, handler, qos)
+        return self._client.subscribe(
+            topic, handler, qos, no_local=no_local, subscriber_key=subscriber_key
+        )
 
-    def unsubscribe(self, topic: str) -> None:
+    @property
+    def is_mqtt_v5(self) -> bool:
+        """True when the underlying client negotiates MQTT v5."""
+        return self._client.is_mqtt_v5
+
+    def unsubscribe(self, topic: str, subscriber_key: Any = _UNSET) -> None:
         """
-        Unsubscribe from an MQTT topic and remove all its handlers.
+        Unsubscribe from an MQTT topic.
 
         Args:
             topic: MQTT topic to unsubscribe from
+            subscriber_key: When given, removes only that subscriber's handler
+                and keeps the broker subscription alive while others remain.
+                Omitted (default) removes all handlers and tears down the
+                broker subscription.
         """
-        return self._client.unsubscribe(topic)
+        return self._client.unsubscribe(topic, subscriber_key)
 
     def publish(self, topic: str, message: Dict[str, Any], qos: int = 0):
         """

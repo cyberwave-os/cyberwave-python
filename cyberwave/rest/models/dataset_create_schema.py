@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,9 +29,10 @@ class DatasetCreateSchema(BaseModel):
     """ # noqa: E501
     episodes: List[StrictStr]
     name: Optional[StrictStr] = None
-    description: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["episodes", "name", "description", "metadata"]
+    include_audio: Optional[StrictBool] = None
+    allow_pending_recordings: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["episodes", "name", "metadata", "include_audio", "allow_pending_recordings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,15 +78,20 @@ class DatasetCreateSchema(BaseModel):
         if self.name is None and "name" in self.model_fields_set:
             _dict['name'] = None
 
-        # set to None if description (nullable) is None
-        # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
-
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
+
+        # set to None if include_audio (nullable) is None
+        # and model_fields_set contains the field
+        if self.include_audio is None and "include_audio" in self.model_fields_set:
+            _dict['include_audio'] = None
+
+        # set to None if allow_pending_recordings (nullable) is None
+        # and model_fields_set contains the field
+        if self.allow_pending_recordings is None and "allow_pending_recordings" in self.model_fields_set:
+            _dict['allow_pending_recordings'] = None
 
         return _dict
 
@@ -101,8 +107,9 @@ class DatasetCreateSchema(BaseModel):
         _obj = cls.model_validate({
             "episodes": obj.get("episodes"),
             "name": obj.get("name"),
-            "description": obj.get("description"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "include_audio": obj.get("include_audio"),
+            "allow_pending_recordings": obj.get("allow_pending_recordings")
         })
         return _obj
 

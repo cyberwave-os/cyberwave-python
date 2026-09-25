@@ -18,19 +18,19 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Union
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class JointStateSchema(BaseModel):
     """
-    JointStateSchema
+    Single-joint state.  ``velocity`` / ``effort`` are optional: ``None`` means \"not measured / not commanded\". An explicit ``0.0`` is a real measurement and preserved.
     """ # noqa: E501
     name: StrictStr
-    position: Union[StrictFloat, StrictInt]
-    velocity: Union[StrictFloat, StrictInt]
-    effort: Union[StrictFloat, StrictInt]
+    position: Optional[Union[StrictFloat, StrictInt]] = None
+    velocity: Optional[Union[StrictFloat, StrictInt]] = None
+    effort: Optional[Union[StrictFloat, StrictInt]] = None
     __properties: ClassVar[List[str]] = ["name", "position", "velocity", "effort"]
 
     model_config = ConfigDict(
@@ -72,6 +72,21 @@ class JointStateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if position (nullable) is None
+        # and model_fields_set contains the field
+        if self.position is None and "position" in self.model_fields_set:
+            _dict['position'] = None
+
+        # set to None if velocity (nullable) is None
+        # and model_fields_set contains the field
+        if self.velocity is None and "velocity" in self.model_fields_set:
+            _dict['velocity'] = None
+
+        # set to None if effort (nullable) is None
+        # and model_fields_set contains the field
+        if self.effort is None and "effort" in self.model_fields_set:
+            _dict['effort'] = None
+
         return _dict
 
     @classmethod

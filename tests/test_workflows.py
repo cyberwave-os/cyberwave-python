@@ -67,7 +67,7 @@ class TestWorkflowManager:
         raw = [{"uuid": "wf-1", "name": "Inspect", "slug": "inspect"}]
 
         with patch("cyberwave.workflows._list_workflows", return_value=raw) as mock_list:
-            wf = manager.get_by_slug("ws-1", "inspect")
+            wf = manager.get_by_slug("inspect", workspace_id="ws-1")
 
         mock_list.assert_called_once_with(client, workspace_id="ws-1", slug="inspect")
         assert isinstance(wf, Workflow)
@@ -78,9 +78,21 @@ class TestWorkflowManager:
         manager = WorkflowManager(client)
 
         with patch("cyberwave.workflows._list_workflows", return_value=[]):
-            wf = manager.get_by_slug("ws-1", "missing")
+            wf = manager.get_by_slug("missing", workspace_id="ws-1")
 
         assert wf is None
+
+    def test_get_by_slug_full_unified_slug(self):
+        """get_by_slug with full unified slug uses /by-slug endpoint."""
+        client = _make_client()
+        manager = WorkflowManager(client)
+        raw = {"uuid": "wf-1", "name": "Inspect", "slug": "acme/workflows/inspect"}
+
+        with patch("cyberwave.workflows._get_workflow_by_slug", return_value=raw):
+            wf = manager.get_by_slug("acme/workflows/inspect")
+
+        assert isinstance(wf, Workflow)
+        assert wf.slug == "acme/workflows/inspect"
 
     def test_trigger_returns_workflow_run(self):
         client = _make_client()

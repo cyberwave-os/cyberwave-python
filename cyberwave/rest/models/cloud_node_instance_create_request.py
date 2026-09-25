@@ -34,7 +34,8 @@ class CloudNodeInstanceCreateRequest(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     provider: Optional[CloudNodeProvider] = None
     visibility: Optional[Visibility] = None
-    __properties: ClassVar[List[str]] = ["profile_slug", "slug", "workspace_uuid", "provider", "visibility"]
+    environment_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["profile_slug", "slug", "workspace_uuid", "provider", "visibility", "environment_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -90,6 +91,11 @@ class CloudNodeInstanceCreateRequest(BaseModel):
         if self.provider is None and "provider" in self.model_fields_set:
             _dict['provider'] = None
 
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -106,7 +112,8 @@ class CloudNodeInstanceCreateRequest(BaseModel):
             "slug": obj.get("slug"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "provider": obj.get("provider"),
-            "visibility": obj.get("visibility")
+            "visibility": obj.get("visibility"),
+            "environment_uuid": obj.get("environment_uuid")
         })
         return _obj
 

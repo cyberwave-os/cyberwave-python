@@ -54,3 +54,33 @@ class ModelRuntime(ABC):
     def supports_predict(self) -> bool:
         """Whether ``predict()`` is implemented (not just a stub)."""
         return True
+
+
+def resolve_torch_device(
+    device: str | None,
+    torch_mod: Any,
+    *,
+    runtime_label: str,
+) -> str:
+    """Resolve a caller-supplied device string to one ``torch`` accepts.
+
+    ``"auto"`` (and ``None``) picks CUDA when available, else CPU. Anything else
+    is validated by ``torch.device()`` and returned verbatim, so indexed and
+    non-CUDA accelerators (``cuda:1``, ``mps``) work.
+
+    Shared rather than per-runtime because ``ModelManager._detect_device()``
+    returns ``"cuda:0"``, not ``"cuda"`` — a ``{"cpu", "cuda"}`` whitelist
+    rejects every GPU host.
+    """
+    requested = (device or "auto").strip().lower()
+    if requested == "auto":
+        return "cuda" if torch_mod.cuda.is_available() else "cpu"
+    try:
+        torch_mod.device(requested)
+    except Exception as exc:
+        raise ValueError(
+            f"Unsupported {runtime_label} device {device!r}. Use 'auto', 'cpu', "
+            "'cuda', an indexed CUDA device such as 'cuda:0', or any other "
+            "device string accepted by torch.device()."
+        ) from exc
+    return requested

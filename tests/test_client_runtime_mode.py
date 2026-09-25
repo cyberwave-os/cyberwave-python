@@ -1,9 +1,45 @@
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from cyberwave import Cyberwave
 from cyberwave.constants import SOURCE_TYPE_EDGE, SOURCE_TYPE_SIM
 from cyberwave.twin import LocomoteTwin
+
+
+@pytest.fixture(autouse=True)
+def _stub_manager_modules(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResourceManager:
+        def __init__(self, api_client, client=None):
+            self.api = api_client
+            self.client = client
+
+    class _FakeWorkflowManager:
+        def __init__(self, client):
+            self.client = client
+
+    fake_resources = SimpleNamespace(
+        BaseResourceManager=_FakeResourceManager,
+        WorkspaceManager=_FakeResourceManager,
+        ProjectManager=_FakeResourceManager,
+        EnvironmentManager=_FakeResourceManager,
+        AttachmentManager=_FakeResourceManager,
+        AssetManager=_FakeResourceManager,
+        DatasetManager=_FakeResourceManager,
+        EdgeManager=_FakeResourceManager,
+        TwinManager=_FakeResourceManager,
+        # ModelManager imports this lazily; must be present in the fake module.
+        MLModelsResourceManager=_FakeResourceManager,
+    )
+    fake_workflows = SimpleNamespace(
+        WorkflowManager=_FakeWorkflowManager,
+        WorkflowRunManager=_FakeWorkflowManager,
+    )
+
+    monkeypatch.setitem(sys.modules, "cyberwave.resources", fake_resources)
+    monkeypatch.setitem(sys.modules, "cyberwave.workflows", fake_workflows)
 
 
 def test_client_defaults_to_live_mode() -> None:
@@ -70,19 +106,44 @@ def test_affect_updates_state_source_type_to_match_runtime() -> None:
     assert client.config.source_type == SOURCE_TYPE_EDGE
 
 
+def test_affect_same_runtime_keeps_existing_mqtt_client() -> None:
+    with patch("cyberwave.mqtt.mqtt.Client"):
+        client = Cyberwave(
+            base_url="http://localhost:8000",
+            api_key="test_key",
+            mode="simulation",
+        )
+        mqtt_client = client.mqtt
+        mqtt_client.disconnect = MagicMock()
+
+        client.affect("simulation")
+
+        assert client.mqtt is mqtt_client
+        mqtt_client.disconnect.assert_not_called()
+
+
 def test_affect_changes_emitted_command_and_state_source_types() -> None:
     with patch("cyberwave.mqtt.mqtt.Client"):
         client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
-        twin = LocomoteTwin(client, SimpleNamespace(uuid="twin-uuid", name="Twin"))
+        twin = LocomoteTwin(
+            client,
+            SimpleNamespace(uuid="twin-uuid", name="Twin", asset_uuid="asset-uuid"),
+        )
 
         client.affect("simulation")
         simulation_mqtt = client.mqtt
         simulation_mqtt._client.connected = True
         simulation_mqtt._client.publish = MagicMock()
 
-        twin.move_forward(1.0)
-        simulation_command_payload = simulation_mqtt._client.publish.call_args.args[1]
-        assert simulation_command_payload["source_type"] == "sim_tele"
+        # Locomotion is PLAYGROUND-compatible: it publishes with sim_tele in
+        # simulation runtime mode rather than raising.
+        with patch.object(twin, "_prepare_outbound_command"):
+            twin.move_forward(1.0, duration=0)
+        forward_sim = next(
+            entry for entry in twin._outbound_log if entry.command == "move_forward"
+        )
+        assert forward_sim.payload["source_type"] == "sim_tele"
+        twin._outbound_log.clear()
 
         simulation_mqtt._client.publish.reset_mock()
         simulation_mqtt.update_twin_position(
@@ -95,10 +156,14 @@ def test_affect_changes_emitted_command_and_state_source_types() -> None:
         live_mqtt = client.mqtt
         live_mqtt._client.connected = True
         live_mqtt._client.publish = MagicMock()
+        twin._outbound_log.clear()
 
-        twin.move_forward(1.0)
-        live_command_payload = live_mqtt._client.publish.call_args.args[1]
-        assert live_command_payload["source_type"] == "tele"
+        with patch.object(twin, "_prepare_outbound_command"):
+            twin.move_forward(1.0, duration=0)
+        forward = next(
+            entry for entry in twin._outbound_log if entry.command == "move_forward"
+        )
+        assert forward.payload["source_type"] == "tele"
 
         live_mqtt._client.publish.reset_mock()
         live_mqtt.update_twin_position("twin-uuid", {"x": 4.0, "y": 5.0, "z": 6.0})
@@ -129,3 +194,23 @@ def test_rest_client_injects_authorization_for_generated_public_endpoint() -> No
 
     headers = client._api_client.rest_client.request.call_args.kwargs["headers"]
     assert headers["Authorization"] == "Bearer test_key"
+
+
+def test_configure_rebuilds_managers_against_new_rest_client() -> None:
+    client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
+
+    original_api = client.api
+    original_playground = client.models.playground
+    original_assets_api = client.assets.api
+
+    client.configure(base_url="http://localhost:9000", api_key="new_key")
+
+    assert client.api is not original_api
+    assert client.models.playground is not original_playground
+    assert client.models._mlmodels_client is client.models.playground
+    # Resource managers must also follow the rebuilt DefaultApi instead of
+    # keeping the stale instance from __init__.
+    assert client.assets.api is client.api
+    assert client.assets.api is not original_assets_api
+    # ModelManager catalog is rebuilt with the new DefaultApi after configure()
+    assert client.models._catalog is not None

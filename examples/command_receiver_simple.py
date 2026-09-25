@@ -1,22 +1,9 @@
 """
-Simple Command Receiver Example
+Command Receiver — subscribe to and respond to commands for a twin.
 
-This is the simplest example demonstrating how to receive and respond to commands
-for a digital twin using the subscribe_command_message and publish_command_message APIs.
-
-Quick Start:
-    1. Set environment variables:
-       export CYBERWAVE_API_KEY="your-api-key"
-       export TWIN_UUID="your-twin-uuid"
-    
-    2. Run the receiver:
-       python3 examples/command_receiver_simple.py
-    
-    3. Send command to topic:
-       {prefix}cyberwave/twin/{twin_uuid}/command
-       
-       Example command:
-       {"command": "greetings"}
+Env vars:
+    CYBERWAVE_API_KEY    API key
+    TWIN_UUID            Twin UUID
 
 Requirements:
     pip install cyberwave
@@ -24,75 +11,31 @@ Requirements:
 
 import asyncio
 import os
-import sys
+
 from cyberwave import Cyberwave
 
+cw = Cyberwave()
+twin_uuid = os.environ["TWIN_UUID"]
 
-async def main():
-    api_key = os.getenv("CYBERWAVE_API_KEY")
-    if not api_key:
-        print("Please set CYBERWAVE_API_KEY environment variable")
+cw.mqtt.connect()
+
+
+def command_handler(data):
+    if "status" in data:
         return
 
-    host = os.getenv("CYBERWAVE_MQTT_HOST")
-    port_str = os.getenv("CYBERWAVE_MQTT_PORT")
-    mqtt_username = os.getenv("CYBERWAVE_MQTT_USERNAME")
-    
-    port = int(port_str) if port_str else None
-    
-    client = Cyberwave(
-        api_key=api_key,
-        mqtt_host=host,
-        mqtt_port=port,
-        mqtt_username=mqtt_username
-    )
-
-    twin_uuid = os.getenv("TWIN_UUID")
-    if not twin_uuid:
-        print("Please set TWIN_UUID environment variable")
-        return
-    
-    if not client.mqtt.connected:
-        client.mqtt.connect()
-    
-    # All the command receiver logic and API usage is here
-    # Just handle commands and respond with client.mqtt.publish_command_message()
-    def command_handler(data):
-        if "status" in data:
-            return
-        
-        command_type = data.get("command")
-        if not command_type:
-            client.mqtt.publish_command_message(twin_uuid, "error")
-            return
-        
-        try:
-            if command_type == "greetings":
-                print("Hello World!")
-                client.mqtt.publish_command_message(twin_uuid, "ok")
-            else:
-                client.mqtt.publish_command_message(twin_uuid, "error")
-        except Exception:
-            client.mqtt.publish_command_message(twin_uuid, "error")
-    
-    client.mqtt.subscribe_command_message(twin_uuid, command_handler)
-    print("✅ Subscribed to command messages")
-    print("Send command: {\"command\": \"greetings\"}")
-    print("Press Ctrl+C to stop...\n")
-    
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        client.disconnect()
-        print("\nCommand receiver stopped")
+    command = data.get("command")
+    if command == "greetings":
+        print("Hello World!")
+        cw.mqtt.publish_command_message(twin_uuid, "ok")
+    else:
+        cw.mqtt.publish_command_message(twin_uuid, "error")
 
 
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        sys.exit(0)
+cw.mqtt.subscribe_command_message(twin_uuid, command_handler)
+print("Listening for commands… Press Ctrl+C to stop.")
 
+try:
+    asyncio.run(asyncio.sleep(float("inf")))
+except KeyboardInterrupt:
+    cw.disconnect()

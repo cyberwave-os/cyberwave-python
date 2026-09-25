@@ -11,82 +11,20 @@ Sensor capabilities are defined in the twin's capabilities dictionary:
             {"id": "uuid", "type": "depth", "offset": {...}}
         ]
     }
+
+Heavy dependencies (OpenCV, aiortc, RealSense, …) are loaded lazily via :pep:`562`
+``__getattr__`` so lightweight submodules can be imported in tests and minimal
+environments without pulling the full WebRTC stack.
 """
 
-# Base video classes and shared constants
-from .base_video import (  # noqa: F401
-    BaseVideoTrack,
-    BaseVideoStreamer,
-    DEFAULT_TURN_SERVERS,
-    CONNECTION_LOSS_CONFIRMATION_CHECKS,
-    SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
-    SDK_EDGE_HEALTH_INTERVAL_SECONDS,
-)
+from __future__ import annotations
 
-# Configuration classes
-from .config import (  # noqa: F401
-    CameraType,
-    Resolution,
-    CameraConfig,
-    EdgeCameraConfig,
-    SimStreamingConfig,
-    cameras_from_schema,
-    RealSenseConfig,
-    StreamProfile,
-    SensorOption,
-    RealSenseDeviceInfo,
-    RealSenseDiscovery,
-    PRESET_LOW_BANDWIDTH,
-    PRESET_STANDARD,
-    PRESET_HD,
-    PRESET_FULL_HD,
-)
-
-# Concrete video implementations
-from .camera_cv2 import CV2VideoTrack, CV2CameraStreamer  # noqa: F401
-from .camera_rs import RealSenseVideoTrack, RealSenseStreamer  # noqa: F401
-from .camera_virtual import VirtualVideoTrack, VirtualCameraStreamer  # noqa: F401
-
-# Simulation (MuJoCo) imports are optional — mujoco is not installed on edge devices
-try:
-    from .camera_sim import (  # noqa: F401
-        ThreadSafeFrameBuffer,
-        SimVideoTrack,
-        SimCameraStreamer,
-        MujocoMultiCameraStreamer,
-        CyberwaveSimStreaming,
-    )
-
-    _HAS_MUJOCO = True
-except ImportError:
-    _HAS_MUJOCO = False
-    ThreadSafeFrameBuffer = None  # type: ignore[misc, assignment]
-    SimVideoTrack = None  # type: ignore[misc, assignment]
-    SimCameraStreamer = None  # type: ignore[misc, assignment]
-    MujocoMultiCameraStreamer = None  # type: ignore[misc, assignment]
-    CyberwaveSimStreaming = None  # type: ignore[misc, assignment]
-
-# Camera stream manager
-from .manager import CameraStreamManager, run_streamer_in_background  # noqa: F401
-
-# Audio classes
-from .microphone import (  # noqa: F401
-    BaseAudioTrack,
-    BaseAudioStreamer,
-    MicrophoneAudioTrack,
-    MicrophoneAudioStreamer,
-    AUDIO_PTIME,
-    DEFAULT_SAMPLE_RATE,
-)
-
-# Multimedia (combined video + audio) streamer
-from .av_streamer import MultimediaStreamer  # noqa: F401
-
-# Backward-compatibility aliases
-CallbackAudioTrack = MicrophoneAudioTrack
-CallbackAudioStreamer = MicrophoneAudioStreamer
+import importlib
+import importlib.util
+from typing import Any
 
 __all__ = [
+    # NOTE: keep in sync with _LAZY_ATTRS and optional Mujoco block below.
     # Base classes
     "BaseVideoTrack",
     "BaseVideoStreamer",
@@ -94,8 +32,22 @@ __all__ = [
     "BaseAudioStreamer",
     "MicrophoneAudioTrack",
     "MicrophoneAudioStreamer",
+    "HostMicrophoneCapture",
+    "list_host_microphone_devices",
+    "check_host_microphone_settings",
+    "create_linux_microphone_monitor",
     "CallbackAudioTrack",
     "CallbackAudioStreamer",
+    # Speaker
+    "SpeakerAudioTrack",
+    "SpeakerAudioStreamer",
+    "HostSpeakerCapture",
+    "list_host_sound_devices",
+    "check_host_speaker_settings",
+    "create_linux_speaker_monitor",
+    "associate_speaker_to_microphone",
+    "associate_speaker_to_microphones",
+    "play_file",
     # Configuration
     "CameraType",
     "Resolution",
@@ -116,8 +68,12 @@ __all__ = [
     "CV2VideoTrack",
     "CV2CameraStreamer",
     # Virtual camera implementations
+    "CapturedVideoFrame",
     "VirtualCameraStreamer",
     "VirtualVideoTrack",
+    # Pre-encoded H.264 passthrough (bypasses aiortc's PyAV encode step)
+    "H264PacketCameraStreamer",
+    "H264PacketVideoTrack",
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",
@@ -135,7 +91,26 @@ __all__ = [
     "DEFAULT_SAMPLE_RATE",
 ]
 
-# Simulation (MuJoCo) exports are only available when mujoco is installed
+try:
+    _HAS_MUJOCO = importlib.util.find_spec("mujoco") is not None
+except ValueError:
+    # find_spec raises ValueError for modules without __spec__ (e.g. a
+    # sys.modules mock injected by tests); treat presence in sys.modules
+    # as available.
+    import sys as _sys
+
+    _HAS_MUJOCO = "mujoco" in _sys.modules
+
+_MUJOCO_EXPORT_NAMES: frozenset[str] = frozenset(
+    {
+        "ThreadSafeFrameBuffer",
+        "SimVideoTrack",
+        "SimCameraStreamer",
+        "MujocoMultiCameraStreamer",
+        "CyberwaveSimStreaming",
+    }
+)
+
 if _HAS_MUJOCO:
     __all__ += [
         "ThreadSafeFrameBuffer",
@@ -144,3 +119,108 @@ if _HAS_MUJOCO:
         "MujocoMultiCameraStreamer",
         "CyberwaveSimStreaming",
     ]
+
+# (submodule path relative to this package, attribute name)
+_LAZY_ATTRS: dict[str, tuple[str, str]] = {
+    "BaseVideoTrack": (".base_video", "BaseVideoTrack"),
+    "BaseVideoStreamer": (".base_video", "BaseVideoStreamer"),
+    "DEFAULT_TURN_SERVERS": (".ice", "DEFAULT_TURN_SERVERS"),
+    "CONNECTION_LOSS_CONFIRMATION_CHECKS": (
+        ".base_video",
+        "CONNECTION_LOSS_CONFIRMATION_CHECKS",
+    ),
+    "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS": (
+        ".base_video",
+        "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS",
+    ),
+    "SDK_EDGE_HEALTH_INTERVAL_SECONDS": (
+        ".base_video",
+        "SDK_EDGE_HEALTH_INTERVAL_SECONDS",
+    ),
+    "CameraType": (".config", "CameraType"),
+    "Resolution": (".config", "Resolution"),
+    "CameraConfig": (".config", "CameraConfig"),
+    "EdgeCameraConfig": (".config", "EdgeCameraConfig"),
+    "SimStreamingConfig": (".config", "SimStreamingConfig"),
+    "cameras_from_schema": (".config", "cameras_from_schema"),
+    "RealSenseConfig": (".config", "RealSenseConfig"),
+    "StreamProfile": (".config", "StreamProfile"),
+    "SensorOption": (".config", "SensorOption"),
+    "RealSenseDeviceInfo": (".config", "RealSenseDeviceInfo"),
+    "RealSenseDiscovery": (".config", "RealSenseDiscovery"),
+    "PRESET_LOW_BANDWIDTH": (".config", "PRESET_LOW_BANDWIDTH"),
+    "PRESET_STANDARD": (".config", "PRESET_STANDARD"),
+    "PRESET_HD": (".config", "PRESET_HD"),
+    "PRESET_FULL_HD": (".config", "PRESET_FULL_HD"),
+    "CV2VideoTrack": (".camera_cv2", "CV2VideoTrack"),
+    "CV2CameraStreamer": (".camera_cv2", "CV2CameraStreamer"),
+    "RealSenseVideoTrack": (".camera_rs", "RealSenseVideoTrack"),
+    "RealSenseStreamer": (".camera_rs", "RealSenseStreamer"),
+    "VirtualVideoTrack": (".camera_virtual", "VirtualVideoTrack"),
+    "CapturedVideoFrame": (".frame", "CapturedVideoFrame"),
+    "VirtualCameraStreamer": (".camera_virtual", "VirtualCameraStreamer"),
+    "H264PacketVideoTrack": (".camera_h264", "H264PacketVideoTrack"),
+    "H264PacketCameraStreamer": (".camera_h264", "H264PacketCameraStreamer"),
+    "CameraStreamManager": (".manager", "CameraStreamManager"),
+    "run_streamer_in_background": (".manager", "run_streamer_in_background"),
+    "BaseAudioTrack": (".microphone", "BaseAudioTrack"),
+    "BaseAudioStreamer": (".microphone", "BaseAudioStreamer"),
+    "MicrophoneAudioTrack": (".microphone", "MicrophoneAudioTrack"),
+    "MicrophoneAudioStreamer": (".microphone", "MicrophoneAudioStreamer"),
+    "HostMicrophoneCapture": (".microphone", "HostMicrophoneCapture"),
+    "list_host_microphone_devices": (".microphone", "list_host_microphone_devices"),
+    "check_host_microphone_settings": (".microphone", "check_host_microphone_settings"),
+    "create_linux_microphone_monitor": (
+        ".microphone",
+        "create_linux_microphone_monitor",
+    ),
+    "AUDIO_PTIME": (".microphone", "AUDIO_PTIME"),
+    "DEFAULT_SAMPLE_RATE": (".microphone", "DEFAULT_SAMPLE_RATE"),
+    "MultimediaStreamer": (".av_streamer", "MultimediaStreamer"),
+    "SpeakerAudioTrack": (".speaker", "SpeakerAudioTrack"),
+    "SpeakerAudioStreamer": (".speaker", "SpeakerAudioStreamer"),
+    "HostSpeakerCapture": (".speaker", "HostSpeakerCapture"),
+    "list_host_sound_devices": (".speaker", "list_host_sound_devices"),
+    "check_host_speaker_settings": (".speaker", "check_host_speaker_settings"),
+    "create_linux_speaker_monitor": (".speaker", "create_linux_speaker_monitor"),
+    "associate_speaker_to_microphone": (".speaker", "associate_speaker_to_microphone"),
+    "associate_speaker_to_microphones": (
+        ".speaker",
+        "associate_speaker_to_microphones",
+    ),
+    "play_file": (".speaker", "play_file"),
+}
+
+_MUJOCO_ATTRS: dict[str, tuple[str, str]] = {
+    "ThreadSafeFrameBuffer": (".camera_sim", "ThreadSafeFrameBuffer"),
+    "SimVideoTrack": (".camera_sim", "SimVideoTrack"),
+    "SimCameraStreamer": (".camera_sim", "SimCameraStreamer"),
+    "MujocoMultiCameraStreamer": (".camera_sim", "MujocoMultiCameraStreamer"),
+    "CyberwaveSimStreaming": (".camera_sim", "CyberwaveSimStreaming"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name == "CallbackAudioTrack":
+        return __getattr__("MicrophoneAudioTrack")
+    if name == "CallbackAudioStreamer":
+        return __getattr__("MicrophoneAudioStreamer")
+
+    if name in _MUJOCO_EXPORT_NAMES:
+        if not _HAS_MUJOCO:
+            # Match previous eager-import behavior when mujoco/camera_sim was unavailable.
+            return None
+        submod, attr = _MUJOCO_ATTRS[name]
+        mod = importlib.import_module(submod, package=__name__)
+        return getattr(mod, attr)
+
+    if name in _LAZY_ATTRS:
+        submod, attr = _LAZY_ATTRS[name]
+        mod = importlib.import_module(submod, package=__name__)
+        return getattr(mod, attr)
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

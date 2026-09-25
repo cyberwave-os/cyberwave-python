@@ -40,10 +40,10 @@ CAPABILITY_METHODS = {
         ),
     ],
     "can_actuate": [
-        ("joints", "JointController", "Controller for robot joints"),
+        ("joints", "JointsHandle", "Controller for robot joints"),
     ],
     "has_joints": [
-        ("joints", "JointController", "Controller for robot joints"),
+        ("joints", "JointsHandle", "Controller for robot joints"),
     ],
 }
 
@@ -86,6 +86,7 @@ def get_base_class(capabilities: Optional[dict[str, Any]]) -> str:
 
     has_sensors = bool(capabilities.get("sensors", []))
     has_depth = any(s.get("type") == "depth" for s in capabilities.get("sensors", []))
+    has_joints = bool(capabilities.get("has_joints"))
     can_fly = capabilities.get("can_fly", False)
     can_locomote = capabilities.get("can_locomote", False)
     can_grip = capabilities.get("can_grip", False)
@@ -112,6 +113,12 @@ def get_base_class(capabilities: Optional[dict[str, Any]]) -> str:
             return "LocomoteGripperCameraTwin"
         elif can_grip:
             return "LocomoteGripperTwin"
+        elif has_joints and has_depth:
+            return "LocomoteJointDepthCameraTwin"
+        elif has_joints and has_sensors:
+            return "LocomoteJointCameraTwin"
+        elif has_joints:
+            return "LocomoteJointTwin"
         elif has_depth:
             return "LocomoteDepthCameraTwin"
         elif has_sensors:
@@ -315,7 +322,7 @@ Do not edit manually.
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .twin import Twin, JointController
+from .twin import Twin, JointTwin
 
 '''
 
@@ -402,11 +409,15 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
         "    LocomoteGripperCameraTwin,",
         "    LocomoteGripperDepthCameraTwin,",
         "    LocomoteDepthCameraTwin,",
-        "    LocomoteCameraTwin,",
+        "    LocomoteJointTwin,",
+        "    LocomoteJointCameraTwin,",
+        "    LocomoteJointDepthCameraTwin,",
         ")",
         "from .camera import CameraStreamer",
         "from .controller import EdgeController",
         "from .mqtt_client import CyberwaveMQTTClient",
+        "from .models.manager import ModelManager",
+        "from .models.playground import PlaygroundClient, PlaygroundHandle, StructuredAction",
         "from .resources import (",
         "    WorkspaceManager,",
         "    ProjectManager,",
@@ -429,6 +440,7 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
         "    assets: AssetManager",
         "    edges: EdgeManager",
         "    twins: TwinManager",
+        "    models: ModelManager",
         "    ",
         "    def __init__(",
         "        self,",
@@ -468,7 +480,7 @@ def generate_client_stubs(assets: list[dict[str, Any]], output_path: Path) -> No
                 ]
             )
 
-    # Add fallback overload for unknown assets
+    # Add fallback overload for unknown assets``
     lines.extend(
         [
             "    @overload",

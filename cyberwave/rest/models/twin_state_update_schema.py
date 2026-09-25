@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -34,7 +34,8 @@ class TwinStateUpdateSchema(BaseModel):
     rotation_x: Optional[Union[StrictFloat, StrictInt]] = None
     rotation_y: Optional[Union[StrictFloat, StrictInt]] = None
     rotation_z: Optional[Union[StrictFloat, StrictInt]] = None
-    __properties: ClassVar[List[str]] = ["position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z"]
+    expected_revision: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "expected_revision"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -110,6 +111,11 @@ class TwinStateUpdateSchema(BaseModel):
         if self.rotation_z is None and "rotation_z" in self.model_fields_set:
             _dict['rotation_z'] = None
 
+        # set to None if expected_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_revision is None and "expected_revision" in self.model_fields_set:
+            _dict['expected_revision'] = None
+
         return _dict
 
     @classmethod
@@ -128,7 +134,8 @@ class TwinStateUpdateSchema(BaseModel):
             "rotation_w": obj.get("rotation_w"),
             "rotation_x": obj.get("rotation_x"),
             "rotation_y": obj.get("rotation_y"),
-            "rotation_z": obj.get("rotation_z")
+            "rotation_z": obj.get("rotation_z"),
+            "expected_revision": obj.get("expected_revision")
         })
         return _obj
 

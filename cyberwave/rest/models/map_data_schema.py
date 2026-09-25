@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -33,19 +33,21 @@ class MapDataSchema(BaseModel):
     environment_uuid: Optional[StrictStr] = None
     map_type: StrictStr
     resolution: Optional[Union[StrictFloat, StrictInt]] = None
-    origin_x: Union[StrictFloat, StrictInt]
-    origin_y: Union[StrictFloat, StrictInt]
-    origin_z: Union[StrictFloat, StrictInt]
-    origin_roll: Union[StrictFloat, StrictInt]
-    origin_pitch: Union[StrictFloat, StrictInt]
-    origin_yaw: Union[StrictFloat, StrictInt]
+    origin_x: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_y: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_z: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_roll: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_pitch: Optional[Union[StrictFloat, StrictInt]] = None
+    origin_yaw: Optional[Union[StrictFloat, StrictInt]] = None
     data_file_uuid: StrictStr
     image_width: Optional[StrictInt] = None
     image_height: Optional[StrictInt] = None
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
-    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "data_file_uuid", "image_width", "image_height", "metadata", "created_at", "updated_at"]
+    twin_name: Optional[StrictStr] = None
+    twin_is_deleted: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "data_file_uuid", "image_width", "image_height", "metadata", "created_at", "updated_at", "twin_name", "twin_is_deleted"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -101,6 +103,36 @@ class MapDataSchema(BaseModel):
         if self.resolution is None and "resolution" in self.model_fields_set:
             _dict['resolution'] = None
 
+        # set to None if origin_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_x is None and "origin_x" in self.model_fields_set:
+            _dict['origin_x'] = None
+
+        # set to None if origin_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_y is None and "origin_y" in self.model_fields_set:
+            _dict['origin_y'] = None
+
+        # set to None if origin_z (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_z is None and "origin_z" in self.model_fields_set:
+            _dict['origin_z'] = None
+
+        # set to None if origin_roll (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_roll is None and "origin_roll" in self.model_fields_set:
+            _dict['origin_roll'] = None
+
+        # set to None if origin_pitch (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_pitch is None and "origin_pitch" in self.model_fields_set:
+            _dict['origin_pitch'] = None
+
+        # set to None if origin_yaw (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_yaw is None and "origin_yaw" in self.model_fields_set:
+            _dict['origin_yaw'] = None
+
         # set to None if image_width (nullable) is None
         # and model_fields_set contains the field
         if self.image_width is None and "image_width" in self.model_fields_set:
@@ -115,6 +147,11 @@ class MapDataSchema(BaseModel):
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
+
+        # set to None if twin_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.twin_name is None and "twin_name" in self.model_fields_set:
+            _dict['twin_name'] = None
 
         return _dict
 
@@ -144,7 +181,9 @@ class MapDataSchema(BaseModel):
             "image_height": obj.get("image_height"),
             "metadata": obj.get("metadata"),
             "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at")
+            "updated_at": obj.get("updated_at"),
+            "twin_name": obj.get("twin_name"),
+            "twin_is_deleted": obj.get("twin_is_deleted") if obj.get("twin_is_deleted") is not None else False
         })
         return _obj
 

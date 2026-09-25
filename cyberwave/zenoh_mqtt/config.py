@@ -28,7 +28,7 @@ class BridgeConfig:
             Defaults to ``["model_output", "event", "model_health"]``.
         inbound_topics: MQTT topic suffixes forwarded to Zenoh.
             Env: ``CYBERWAVE_BRIDGE_INBOUND_TOPICS`` (comma-separated).
-            Defaults to ``["commands/sync_workflows"]``.
+            Defaults to ``["commands/sync_workflows", "alert"]``.
         mqtt_topic_prefix: Prefix added to MQTT topics (e.g. ``"staging"``).
             Env: ``CYBERWAVE_MQTT_TOPIC_PREFIX``.
         zenoh_key_prefix: Prefix used in Zenoh key expressions.
@@ -79,7 +79,7 @@ class BridgeConfig:
             if raw:
                 self.inbound_topics = [t.strip() for t in raw.split(",") if t.strip()]
             else:
-                self.inbound_topics = ["commands/sync_workflows"]
+                self.inbound_topics = ["commands/sync_workflows", "alert"]
 
         if not self.mqtt_topic_prefix:
             self.mqtt_topic_prefix = os.environ.get("CYBERWAVE_MQTT_TOPIC_PREFIX", "")

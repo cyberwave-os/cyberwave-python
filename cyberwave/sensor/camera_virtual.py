@@ -2,7 +2,9 @@
 
 Use VirtualCameraStreamer for streaming from custom sources like simulations,
 robot feeds, or processing pipelines. Pass a get_frame() callback that returns
-RGB numpy arrays (HxWx3 uint8) or None for placeholder frames.
+RGB numpy arrays (HxWx3 uint8) or None for placeholder frames. Asynchronous
+sources may return CapturedVideoFrame to keep acquisition clocks and pixels
+together while the sender repeats the latest image at its own cadence.
 
 Example:
     >>> def my_frame_source():
@@ -21,12 +23,13 @@ import asyncio
 import fractions
 import logging
 import time
-from typing import TYPE_CHECKING, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
 from av import VideoFrame
 
 from . import BaseVideoTrack, BaseVideoStreamer
+from .frame import CapturedVideoFrame
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
@@ -41,7 +44,7 @@ class VirtualVideoTrack(BaseVideoTrack):
     Returns placeholder (blue frame or custom image) when get_frame() returns None.
 
     Args:
-        get_frame: Callable returning RGB ndarray (HxWx3 uint8) or None
+        get_frame: Callable returning RGB ndarray, CapturedVideoFrame, or None
         width: Frame width in pixels (default: 640)
         height: Frame height in pixels (default: 480)
         fps: Target frames per second (default: 15)
@@ -50,9 +53,12 @@ class VirtualVideoTrack(BaseVideoTrack):
         placeholder_image: Optional RGB placeholder image when get_frame returns None
     """
 
+    # Default for tracks built without ``__init__``; ``+=`` rebinds per instance.
+    captured_frame_count: int = 0
+
     def __init__(
         self,
-        get_frame: Callable[[], Optional[np.ndarray]],
+        get_frame: Callable[[], Optional[np.ndarray | CapturedVideoFrame]],
         *,
         width: int = 640,
         height: int = 480,
@@ -72,6 +78,10 @@ class VirtualVideoTrack(BaseVideoTrack):
         self._frames_since_keyframe = 0
         self._last_time = None
         self.time_reference = time_reference
+
+        # Only advances on a real frame, unlike ``frame_count``.
+        self.captured_frame_count: int = 0
+        self._last_acquisition_id: int | None = None
 
         if placeholder_image is not None:
             self._placeholder = np.ascontiguousarray(placeholder_image, dtype=np.uint8)
@@ -111,28 +121,35 @@ class VirtualVideoTrack(BaseVideoTrack):
                 await asyncio.sleep(wait)
         self._last_time = time.time()
 
-        # Update time reference to capture current timestamp at frame capture moment.
-        # This ensures video frame timestamps reflect actual capture time, not
-        # a potentially stale timestamp from the teleop loop.
-        if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.read()
-        else:
-            timestamp = time.time()
-            timestamp_monotonic = time.monotonic()
-
-        # Store first frame timestamp
-        if self.frame_count == 0:
-            self.frame_0_timestamp = timestamp
-            self.frame_0_timestamp_monotonic = timestamp_monotonic
-
         # Fetch frame from callback
         frame = None
+        timestamp = timestamp_monotonic = None
         try:
-            frame = self.get_frame()
+            supplied = self.get_frame()
+            if isinstance(supplied, CapturedVideoFrame):
+                if (
+                    self._last_acquisition_id is not None
+                    and supplied.acquisition_id < self._last_acquisition_id
+                ):
+                    raise ValueError("Camera acquisition id moved backwards")
+                frame = supplied.image
+                timestamp = supplied.capture_wall_time
+                timestamp_monotonic = supplied.capture_monotonic
+                if supplied.acquisition_id != self._last_acquisition_id:
+                    self.captured_frame_count += 1
+                    self._last_acquisition_id = supplied.acquisition_id
+            elif supplied is not None:
+                frame = supplied
+                timestamp, timestamp_monotonic = self._capture_timestamp(
+                    self.time_reference
+                )
+                self.captured_frame_count += 1
         except Exception as e:
             logger.warning("Virtual frame provider error: %s", e)
 
-        # Use placeholder if no frame available
+        # Use placeholder if no frame available. Placeholder ticks do not count
+        # as captures or sync anchors. The existing SEI extension skips missing
+        # timestamps instead of inventing a camera acquisition for display art.
         if frame is None:
             if self._placeholder is not None:
                 # Modulate placeholder brightness with 2-second period
@@ -144,10 +161,19 @@ class VirtualVideoTrack(BaseVideoTrack):
                 frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
                 frame[...] = (0, 0, 255)
 
+        if self.frame_count == 0:
+            self.frame_0_timestamp = timestamp
+            self.frame_0_timestamp_monotonic = timestamp_monotonic
+
+        try:
+            self._current_frame = np.ascontiguousarray(frame).copy()
+        except Exception:
+            self._current_frame = frame
+
         # Log timestamps periodically
         if self.frame_count % 60 == 0 and self.frame_count > 0:
             logger.debug(
-                "%d: ts=%.3f, ts_monotonic=%.3f",
+                "%d: ts=%s, ts_monotonic=%s",
                 self.frame_count,
                 timestamp,
                 timestamp_monotonic,
@@ -182,11 +208,38 @@ class VirtualVideoTrack(BaseVideoTrack):
                 pass
 
         video_frame = video_frame.reformat(format=self.output_format)
-        video_frame.pts = self.frame_count
-        video_frame.time_base = fractions.Fraction(1, self.fps)
 
-        # Capture sync frame data for MQTT camera_sync_frame message
-        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        # Set media timestamps
+        # Current policy: pts = frame_index, time_base = 1/fps
+        video_frame.pts = self.frame_count
+        time_base = fractions.Fraction(1, self.fps)
+        video_frame.time_base = time_base
+
+        # Store per-frame metadata for sync extension (if installed)
+        self._store_frame_metadata_for_sync(
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+            capture_wall_time=timestamp,
+            capture_monotonic=timestamp_monotonic,
+        )
+
+        # Capture sync frame metadata with explicit frame_index, pts, and time_base
+        if timestamp is not None and timestamp_monotonic is not None:
+            if (
+                self.sync_frame_pts is None
+                and self.frame_count > self.sync_frame_target
+            ):
+                self.sync_frame_target = self.frame_count
+            self._capture_sync_frame(
+                timestamp,
+                timestamp_monotonic,
+                frame_index=self.frame_count,
+                pts=video_frame.pts,
+                time_base_num=time_base.numerator,
+                time_base_den=time_base.denominator,
+            )
         self.frame_count += 1
 
         return video_frame
@@ -199,19 +252,22 @@ class VirtualVideoTrack(BaseVideoTrack):
 class VirtualCameraStreamer(BaseVideoStreamer):
     """Stream video from custom sources via callback function.
 
-    Your get_frame() callback should return RGB numpy arrays (HxWx3 uint8)
-    or None to show a placeholder. Keep callbacks fast (<10ms) for smooth streaming.
+    Your get_frame() callback should return RGB numpy arrays (HxWx3 uint8),
+    CapturedVideoFrame for asynchronous sources, or None to show a placeholder.
+    Cache a captured sample until a new acquisition is available; repeated
+    sends retain its timestamp and do not count as fresh captures.
+    Keep callbacks fast (<10ms) for smooth streaming.
 
     Example:
         >>> def my_frames():
         ...     return np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
         >>>
         >>> streamer = VirtualCameraStreamer(
-        ...     client.mqtt, 
+        ...     client.mqtt,
         ...     get_frame=my_frames,
-        ...     width=640, 
-        ...     height=480, 
-        ...     fps=30, 
+        ...     width=640,
+        ...     height=480,
+        ...     fps=30,
         ...     twin_uuid="camera_twin",
         ...     time_reference=time_reference
         ... )
@@ -221,7 +277,7 @@ class VirtualCameraStreamer(BaseVideoStreamer):
     def __init__(
         self,
         client: "CyberwaveMQTTClient",
-        get_frame: Callable[[], Optional[np.ndarray]],
+        get_frame: Callable[[], Optional[np.ndarray | CapturedVideoFrame]],
         width: int = 640,
         height: int = 480,
         fps: int = 15,
@@ -236,12 +292,14 @@ class VirtualCameraStreamer(BaseVideoStreamer):
         stream_source: Optional[str] = None,
         stream_instance_id: Optional[str] = None,
         frontend_type: Optional[str] = None,
+        turn_servers: Optional[list] = None,
+        record: bool = True,
     ) -> None:
         """Initialize virtual camera streamer.
 
         Args:
             client: MQTT client (client.mqtt)
-            get_frame: Callback returning RGB frame (HxWx3 uint8) or None
+            get_frame: Callback returning RGB ndarray, CapturedVideoFrame, or None
             width: Frame width in pixels (default: 640)
             height: Frame height in pixels (default: 480)
             fps: Target frames per second (default: 15)
@@ -255,6 +313,11 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             enable_health_check: Whether to enable automatic health check reporting
             frontend_type: Track type sent in the WebRTC offer (e.g. "rgb", "depth").
                 Must match the consumer's expected track type so the SFU can pair them.
+            turn_servers: Optional list of TURN server configurations. Pass an empty
+                list to disable TURN (local/ICE-only mode); None uses platform defaults.
+            record: Whether the SFU should record this stream. Pass ``False`` for a
+                view-only producer (e.g. a simulator's free viewport camera, whose
+                ``twin_uuid`` is a routing key rather than a real twin).
         """
         super().__init__(
             client=client,
@@ -266,6 +329,8 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             stream_source=stream_source,
             stream_instance_id=stream_instance_id,
             frontend_type=frontend_type,
+            turn_servers=turn_servers,
+            record=record,
         )
 
         # Store virtual camera-specific parameters
@@ -294,4 +359,3 @@ class VirtualCameraStreamer(BaseVideoStreamer):
             time_reference=self.time_reference,
             placeholder_image=self.placeholder_image,
         )
-

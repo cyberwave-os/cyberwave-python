@@ -70,9 +70,14 @@ class AdapterConfig:
     port: int = field(default_factory=lambda: int(os.getenv("ADAPTER_PORT", "0")))
 
     # Authentication
+    # repr=False: the generated __repr__ would print credentials in full.
     username: str = field(default_factory=lambda: os.getenv("ADAPTER_USERNAME", ""))
-    password: str = field(default_factory=lambda: os.getenv("ADAPTER_PASSWORD", ""))
-    api_key: str = field(default_factory=lambda: os.getenv("ADAPTER_API_KEY", ""))
+    password: str = field(
+        default_factory=lambda: os.getenv("ADAPTER_PASSWORD", ""), repr=False
+    )
+    api_key: str = field(
+        default_factory=lambda: os.getenv("ADAPTER_API_KEY", ""), repr=False
+    )
 
     # Robot identity
     robot_id: str = field(default_factory=lambda: os.getenv("ADAPTER_ROBOT_ID", ""))

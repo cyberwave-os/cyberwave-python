@@ -20,6 +20,15 @@ SOURCE_TYPES = (
     SOURCE_TYPE_SIM_TELE,
 )
 
+# Physical edge feedback — not teleop commands (drivers publish, UI/teleop consumes).
+EDGE_STATE_SOURCE_TYPES = frozenset(
+    {
+        SOURCE_TYPE_EDGE,
+        SOURCE_TYPE_EDGE_LEADER,
+        SOURCE_TYPE_EDGE_FOLLOWER,
+    }
+)
+
 __all__ = [
     "SOURCE_TYPE_EDGE_LEADER",
     "SOURCE_TYPE_EDGE_FOLLOWER",
@@ -29,4 +38,5 @@ __all__ = [
     "SOURCE_TYPE_SIM",
     "SOURCE_TYPE_SIM_TELE",
     "SOURCE_TYPES",
+    "EDGE_STATE_SOURCE_TYPES",
 ]

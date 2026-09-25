@@ -48,18 +48,9 @@ import uuid as _uuid_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-import numpy as np
-
-from av import VideoFrame as _AvVideoFrame
 import mujoco
-
-# Path to the preview subprocess entry point.
-# Spawning a separate process keeps cv2's Qt5 GUI isolated from the simulation's
-# GLFW/OpenGL context (same-process Qt5 + GLFW causes fatal X11 errors on some
-# Linux drivers).  The script is a proper module, not an embedded string, so it
-# can be linted, type-checked, and tested independently.
-_PREVIEW_SCRIPT_PATH: Path = Path(__file__).parent / "_camera_preview.py"
-
+import numpy as np
+from av import VideoFrame as _AvVideoFrame
 
 from . import BaseVideoStreamer, BaseVideoTrack
 
@@ -68,6 +59,14 @@ if TYPE_CHECKING:
     from cyberwave.utils import TimeReference
 
 logger = logging.getLogger(__name__)
+
+
+# Path to the preview subprocess entry point.
+# Spawning a separate process keeps cv2's Qt5 GUI isolated from the simulation's
+# GLFW/OpenGL context (same-process Qt5 + GLFW causes fatal X11 errors on some
+# Linux drivers).  The script is a proper module, not an embedded string, so it
+# can be linted, type-checked, and tested independently.
+_PREVIEW_SCRIPT_PATH: Path = Path(__file__).parent / "_camera_preview.py"
 
 
 # =============================================================================
@@ -92,6 +91,9 @@ class ThreadSafeFrameBuffer:
         self._lock = threading.Lock()
         self._latest: Optional[np.ndarray] = None
         self._last_write_time: float = 0.0
+        # ``get_latest_frame`` keeps returning the last frame after writes
+        # stop, so this counter is the only liveness evidence.
+        self.frames_written: int = 0
 
     def add_frame(self, frame: np.ndarray) -> bool:
         """Store *frame* (RGB uint8 H×W×3) if enough time has elapsed.
@@ -111,6 +113,7 @@ class ThreadSafeFrameBuffer:
             else:
                 np.copyto(self._latest, frame)
             self._last_write_time = now
+            self.frames_written += 1
         return True
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
@@ -139,6 +142,9 @@ class SimVideoTrack(BaseVideoTrack):
         time_reference: Optional Cyberwave time reference for sync frames.
     """
 
+    # Default for tracks built without ``__init__``; ``+=`` rebinds per instance.
+    captured_frame_count: int = 0
+
     def __init__(
         self,
         frame_buffer: ThreadSafeFrameBuffer,
@@ -154,6 +160,9 @@ class SimVideoTrack(BaseVideoTrack):
         self.fps = fps
         self.time_reference = time_reference
         self._last_recv_time: Optional[float] = None
+        # Only advances when the sim writes a new frame, unlike ``frame_count``.
+        self.captured_frame_count: int = 0
+        self._last_seen_write: int = 0
         # Solid-blue placeholder emitted before the sim produces any frames
         self._placeholder = np.zeros((height, width, 3), dtype=np.uint8)
         self._placeholder[..., 2] = 128
@@ -180,16 +189,27 @@ class SimVideoTrack(BaseVideoTrack):
 
         # Read latest rendered frame
         frame = self.frame_buffer.get_latest_frame()
+        # The buffer keeps handing back the last frame after the sim thread
+        # stops, so liveness keys on writes, not on frame presence. A
+        # caller-supplied buffer may lack the counter; fall back rather than
+        # raise, which would kill the sender.
+        writes = getattr(self.frame_buffer, "frames_written", None)
+        if writes is None:
+            if frame is not None:
+                self.captured_frame_count += 1
+        elif writes != self._last_seen_write:
+            self._last_seen_write = writes
+            self.captured_frame_count += 1
         if frame is None:
             frame = self._placeholder
 
-        # Read time reference to capture current timestamp at frame capture moment.
-        # This ensures video frame timestamps reflect actual capture time.
-        if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.read()
-        else:
-            timestamp = time.time()
-            timestamp_monotonic = time.monotonic()
+        try:
+            self._current_frame = np.ascontiguousarray(frame).copy()
+        except Exception:
+            self._current_frame = frame
+
+        # Capture current timestamp at frame capture moment for accuracy.
+        timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 
         if self.frame_count == 0:
             self.frame_0_timestamp = timestamp
@@ -199,10 +219,32 @@ class SimVideoTrack(BaseVideoTrack):
         arr = np.ascontiguousarray(frame)
         video_frame = _AvVideoFrame.from_ndarray(arr, format="rgb24")
         video_frame = video_frame.reformat(format="yuv420p")
+        
+        # Set media timestamps
+        # Current policy: pts = frame_index, time_base = 1/fps
         video_frame.pts = self.frame_count
-        video_frame.time_base = fractions.Fraction(1, self.fps)
+        time_base = fractions.Fraction(1, self.fps)
+        video_frame.time_base = time_base
 
-        self._capture_sync_frame(timestamp, timestamp_monotonic, video_frame.pts)
+        # Store per-frame metadata for sync extension (if installed)
+        self._store_frame_metadata_for_sync(
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+            capture_wall_time=timestamp,
+            capture_monotonic=timestamp_monotonic,
+        )
+
+        # Capture sync frame metadata with explicit frame_index, pts, and time_base
+        self._capture_sync_frame(
+            timestamp,
+            timestamp_monotonic,
+            frame_index=self.frame_count,
+            pts=video_frame.pts,
+            time_base_num=time_base.numerator,
+            time_base_den=time_base.denominator,
+        )
         self.frame_count += 1
 
         return video_frame

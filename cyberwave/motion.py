@@ -5,14 +5,22 @@ Provides ergonomic wrappers around REST API endpoints for:
 - Pose/keyframe control (twin.motion.asset.pose("name"))
 - Animation playback (twin.motion.asset.animation("name"))
 - Navigation commands (twin.navigation.goto([x, y, z]))
+- Relative navigation (twin.navigation.relative_move([-1, 0, 0], frame="body"))
 """
 
 from __future__ import annotations
 
+import logging
 import math
+import threading
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence
 
 from .navigation import NavigationPlan
+
+logger = logging.getLogger(__name__)
+
+_NAV_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "blocked"})
 
 if TYPE_CHECKING:
     from .twin import Twin
@@ -50,6 +58,10 @@ class ScopedMotionHandle:
         return self._parent.list_animations(
             scope=self._scope, environment_uuid=self._environment_uuid
         )
+
+    def list_movements(self) -> List[Dict[str, Any]]:
+        """List available movements for this scope."""
+        return self.list_animations()
 
     def pose(
         self,
@@ -127,6 +139,51 @@ class ScopedMotionHandle:
             name,
             scope=self._scope,
             environment_uuid=environment_uuid or self._environment_uuid,
+            preview=preview,
+            sync=sync,
+            source_type=source_type,
+            transition_ms=transition_ms,
+            hold_ms=hold_ms,
+        )
+
+    def run_movement(
+        self,
+        name: str,
+        *,
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Run a saved movement."""
+        return self._parent.run_movement(
+            name,
+            scope=self._scope,
+            environment_uuid=environment_uuid or self._environment_uuid,
+            preview=preview,
+            sync=sync,
+            source_type=source_type,
+            transition_ms=transition_ms,
+            hold_ms=hold_ms,
+        )
+
+    def move_to_pose(
+        self,
+        name: str,
+        *,
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Apply a saved pose. Alias for existing pose/keyframe playback."""
+        return self.pose(
+            name,
+            environment_uuid=environment_uuid,
             preview=preview,
             sync=sync,
             source_type=source_type,
@@ -222,6 +279,16 @@ class TwinMotionHandle:
             return animations
         return [anim for anim in animations if anim.get("scope") == scope]
 
+    def list_movements(
+        self, scope: str = "auto", environment_uuid: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List available movements. Alias for existing animations.
+
+        Defaults to ``scope="auto"`` so callers see movements across the
+        twin/asset/environment scopes; pass an explicit scope to filter.
+        """
+        return self.list_animations(scope=scope, environment_uuid=environment_uuid)
+
     def pose(
         self,
         name: Optional[str] = None,
@@ -235,7 +302,46 @@ class TwinMotionHandle:
         transition_ms: Optional[int] = None,
         hold_ms: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Apply a pose/keyframe to the twin."""
+        """Apply a pose/keyframe to the twin.
+
+        Deprecated: ``motion.pose()`` will be removed in a future SDK version.
+        Saved/named pose collections are becoming a dedicated feature (save,
+        edit, load, and apply whole joint-position collections) with its own
+        SDK interface; ad-hoc ``joints=`` calls should use
+        :meth:`twin.joints.set` directly instead.
+
+        ``pose(joints=...)`` is treated as runtime control and published over MQTT
+        via ``twin.joints.set(...)`` so it targets simulation/live controllers
+        (not editor scene state).
+        """
+        if joints is not None and name is None:
+            warnings.warn(
+                "motion.pose(joints=...) is deprecated and will be removed in "
+                "a future SDK version; call twin.joints.set(joints) directly "
+                "instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            joints_handle = getattr(self._twin, "joints", None)
+            if joints_handle is None:
+                raise ValueError(
+                    "motion.pose(joints=...) requires a joint-capable twin. "
+                    "Use motion.pose(name=...) for saved pose actions."
+                )
+            joints_handle.set(joints, source_type=source_type)
+            return {
+                "status": "published",
+                "transport": "mqtt",
+                "command": "joint_update",
+            }
+
+        warnings.warn(
+            "motion.pose() for saved/named poses is deprecated and will be "
+            "removed in a future SDK version; saved pose collections are "
+            "moving to a dedicated pose-library SDK interface.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         payload: Dict[str, Any] = {
             "action_type": "pose",
             "scope": scope,
@@ -286,6 +392,68 @@ class TwinMotionHandle:
             payload["hold_ms"] = hold_ms
         return self._post_action(payload)
 
+    def run_movement(
+        self,
+        name: str,
+        *,
+        scope: str = "auto",
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Run a saved movement.
+
+        Defaults to ``scope="auto"`` so the backend resolves the movement by
+        name across twin/asset/environment scopes.
+        """
+        payload: Dict[str, Any] = {
+            "action_type": "movement",
+            "name": name,
+            "scope": scope,
+            "execution": "sync" if sync else "async",
+            "preview": preview,
+        }
+        if environment_uuid:
+            payload["environment_uuid"] = environment_uuid
+        if source_type:
+            payload["source_type"] = source_type
+        if transition_ms is not None:
+            payload["transition_ms"] = transition_ms
+        if hold_ms is not None:
+            payload["hold_ms"] = hold_ms
+        return self._post_action(payload)
+
+    def move_to_pose(
+        self,
+        name: str,
+        *,
+        scope: str = "auto",
+        environment_uuid: Optional[str] = None,
+        preview: bool = False,
+        sync: bool = False,
+        source_type: Optional[str] = None,
+        transition_ms: Optional[int] = None,
+        hold_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Apply a saved pose using the existing pose action API.
+
+        Defaults to ``scope="auto"`` so the backend resolves the pose by
+        name across twin/asset/environment scopes.
+        """
+        return self.pose(
+            name,
+            scope=scope,
+            environment_uuid=environment_uuid,
+            preview=preview,
+            sync=sync,
+            source_type=source_type,
+            transition_ms=transition_ms,
+            hold_ms=hold_ms,
+        )
+
     def plan(
         self,
         plan: Dict[str, Any],
@@ -316,7 +484,7 @@ class TwinMotionHandle:
     def _get_motions(self, environment_uuid: Optional[str] = None) -> Dict[str, Any]:
         """Get available motions for the twin."""
         api_client = self._twin.client.api.api_client
-        
+
         query_params = []
         if environment_uuid:
             query_params.append(("environment_uuid", environment_uuid))
@@ -361,6 +529,7 @@ class TwinNavigationHandle:
 
     Access via `twin.navigation`:
         >>> twin.navigation.goto([1, 2, 0])
+        >>> twin.navigation.relative_move([-1, 0, 0], frame="body")
         >>> twin.navigation.follow_path([[0, 0, 0], [1, 0, 0], [1, 1, 0]])
         >>> twin.navigation.stop()
     """
@@ -369,6 +538,63 @@ class TwinNavigationHandle:
         self._twin = twin
         self.uuid = twin.uuid
         self._controller_policy_uuid: Optional[str] = None
+        # Persistent subscription state for navigate/status so we
+        # don't race the REST call vs. the broker SUBACK.
+        self._status_lock = threading.Lock()
+        self._status_results: Dict[str, Dict[str, Any]] = {}
+        self._status_events: Dict[str, threading.Event] = {}
+        self._status_subscribed: bool = False
+
+    def _mqtt_client(self) -> Any | None:
+        return getattr(getattr(self._twin, "client", None), "mqtt", None)
+
+    def _status_topic(self) -> str:
+        mqtt = self._mqtt_client()
+        prefix = getattr(mqtt, "topic_prefix", "") if mqtt is not None else ""
+        prefix = prefix or ""
+        return f"{prefix}cyberwave/twin/{self.uuid}/navigate/status"
+
+    def _ensure_status_subscription(self) -> None:
+        """Subscribe once to this twin's navigate/status topic.
+
+        Registering eagerly (before the REST call that triggers the
+        action) ensures we don't miss a fast ``completed`` status on
+        simulated or teleop sources.
+        """
+        with self._status_lock:
+            if self._status_subscribed:
+                return
+            mqtt = self._mqtt_client()
+            if mqtt is None:
+                logger.warning(
+                    "navigation: no MQTT client available; skipping status subscription"
+                )
+                return
+            try:
+                mqtt.subscribe(self._status_topic(), self._on_status)
+                self._status_subscribed = True
+            except Exception as exc:
+                logger.warning(
+                    "navigation: failed to subscribe to %s: %s",
+                    self._status_topic(),
+                    exc,
+                )
+
+    def _on_status(self, payload: Any) -> None:
+        if not isinstance(payload, dict):
+            return
+        action_id = payload.get("action_id")
+        if not action_id:
+            return
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in _NAV_TERMINAL_STATUSES:
+            return
+        key = str(action_id)
+        with self._status_lock:
+            self._status_results[key] = {**payload, "status": status}
+            event = self._status_events.get(key)
+        if event is not None:
+            event.set()
 
     def use_controller(self, policy_uuid: str) -> "TwinNavigationHandle":
         """Set a default navigation controller policy UUID for future plans."""
@@ -398,39 +624,119 @@ class TwinNavigationHandle:
 
     def goto(
         self,
-        position: Sequence[float],
+        position: Optional[Sequence[float]] = None,
         *,
         rotation: Optional[Sequence[float]] = None,
         yaw: Optional[float] = None,
+        geodetic_position: Optional[Dict[str, Any]] = None,
+        orientation: Optional[Dict[str, Any]] = None,
+        coordinate_frame: Optional[Dict[str, Any]] = None,
         controller_policy_uuid: Optional[str] = None,
         environment_uuid: Optional[str] = None,
         source_type: Optional[str] = None,
         constraints: Optional[Dict[str, Any]] = None,
+        reference_frame: Optional[str] = None,
+        skip_nav_anchor_transform: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Navigate the twin to a specific position.
 
+        Two coordinate representations are supported, selected by
+        ``coordinate_frame`` (omitted == the legacy Cartesian contract):
+
+        * Cartesian (default): pass ``position`` ``[x, y, z]`` and optionally
+          ``rotation``/``yaw``.
+        * Geodetic (GPS): pass ``geodetic_position``
+          ``{"latitude", "longitude", "altitude"}``, ``orientation``
+          ``{"heading": <deg clockwise from true north>}`` and a
+          ``coordinate_frame`` with ``kind="geodetic"``. Consumed by GPS
+          drivers (e.g. a DJI aircraft executing a Wayline mission).
+
         Args:
-            position: Target [x, y, z] coordinates
-            rotation: Target rotation as quaternion [w, x, y, z]
-            yaw: Target yaw angle in radians (alternative to rotation)
+            position: Target ``[x, y, z]`` coordinates (Cartesian frame).
+            rotation: Target rotation as quaternion ``[w, x, y, z]``.
+            yaw: Target yaw angle in radians (alternative to rotation).
+            geodetic_position: GPS target ``{"latitude", "longitude",
+                "altitude"}`` (used instead of ``position``).
+            orientation: Canonical orientation, e.g. ``{"heading": 90.0}``
+                for geodetic targets.
+            coordinate_frame: Explicit coordinate semantics, e.g.
+                ``{"kind": "geodetic", ...}``. Omit for the Cartesian default.
             controller_policy_uuid: Navigation controller to use
             environment_uuid: Environment context
             source_type: Source type for tracking
             constraints: Navigation constraints
+            reference_frame: Coordinate frame ``position`` is expressed in
+                (e.g. ``map``, ``odom``, or a robot link name like
+                ``base_link`` for an arm's own end-effector frame). Defaults
+                to ``map`` server-side when omitted.
+            skip_nav_anchor_transform: Set when ``position`` is already an
+                offset from ``reference_frame`` (e.g. a robot link) rather
+                than an environment-absolute pose — tells the server not to
+                apply its environment->map nav-anchor transform to it.
             metadata: Additional metadata
+            actions: Top-level ``{"plugin": ..., "params": {...}}`` entries to
+                run on arrival — the ``goto`` equivalent of a waypoint's
+                per-point ``actions`` in :class:`~cyberwave.navigation.NavigationPlan`
+                (there's no waypoints list here to attach one to).
 
         Returns:
             Response from the navigation endpoint
         """
         if yaw is not None and rotation is not None:
             raise ValueError("Specify either rotation or yaw, not both")
+        # orientation is the canonical replacement for rotation/yaw, so it is
+        # mutually exclusive with them — guard it locally like the pair above
+        # rather than leaving the server to 400 on the contradiction.
+        if orientation is not None and (yaw is not None or rotation is not None):
+            raise ValueError("Specify orientation, or rotation/yaw, not both")
+        if position is not None and geodetic_position is not None:
+            raise ValueError(
+                "Specify either position or geodetic_position, not both"
+            )
+        if position is None and geodetic_position is None:
+            raise ValueError("goto requires position or geodetic_position")
+        # The server decides "geodetic" solely from coordinate_frame.kind, so a
+        # geodetic_position without one is read as a malformed Cartesian goto and
+        # the position is silently ignored. Reject it locally instead.
+        if geodetic_position is not None and (
+            coordinate_frame is None
+            or coordinate_frame.get("kind") != "geodetic"
+        ):
+            raise ValueError(
+                "geodetic_position requires coordinate_frame={'kind': "
+                "'geodetic', ...}"
+            )
 
-        payload: Dict[str, Any] = {
-            "command": "goto",
-            "position": [float(value) for value in position],
-        }
+        payload: Dict[str, Any] = {"command": "goto"}
+        if geodetic_position is not None:
+            # Coerce the numeric members to float so the geodetic path forgives
+            # an editor-supplied string ("47.3") symmetrically with the
+            # Cartesian path's ``float(...)``.
+            payload["geodetic_position"] = {
+                key: (
+                    float(value)
+                    if key in ("latitude", "longitude", "altitude")
+                    else value
+                )
+                for key, value in geodetic_position.items()
+            }
+        else:
+            assert position is not None  # narrowed by the guards above
+            payload["position"] = [float(value) for value in position]
+        if orientation is not None:
+            # Forwarded on both frames — never silently dropped on the
+            # Cartesian branch — so the server stays the single authority on
+            # what a frame supports. ``heading`` is coerced like the Cartesian
+            # numeric members.
+            payload["orientation"] = {
+                key: (float(value) if key == "heading" else value)
+                for key, value in orientation.items()
+            }
+        if coordinate_frame is not None:
+            payload["coordinate_frame"] = coordinate_frame
         if yaw is not None:
             payload["yaw"] = float(yaw)
         if rotation is not None:
@@ -443,10 +749,83 @@ class TwinNavigationHandle:
             payload["source_type"] = source_type
         if constraints:
             payload["constraints"] = constraints
+        if reference_frame:
+            payload["reference_frame"] = reference_frame
+        if skip_nav_anchor_transform:
+            payload["skip_nav_anchor_transform"] = True
         if metadata:
             payload["metadata"] = metadata
+        if actions:
+            payload["actions"] = list(actions)
 
+        # Subscribe to navigate/status before firing the REST call
+        # so a fast ``completed`` (e.g. sim_tele) cannot arrive before
+        # our handler is registered on the broker.
+        self._ensure_status_subscription()
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
+
+    def move_to_point(
+        self,
+        position: Sequence[float],
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Alias for :meth:`goto` using objective-planning language."""
+
+        return self.goto(position, **kwargs)
+
+    def relative_move(
+        self,
+        relative_translation: Sequence[float] | Dict[str, Any],
+        *,
+        frame: str,
+        controller_policy_uuid: Optional[str] = None,
+        environment_uuid: Optional[str] = None,
+        source_type: Optional[str] = None,
+        constraints: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Move the twin by a relative translation in meters.
+
+        Args:
+            relative_translation: [dx, dy, dz] meters, or {"x", "y", "z"}.
+            frame: "body" for robot-local offsets or "world" for fixed-map offsets.
+            controller_policy_uuid: Navigation controller to use.
+            environment_uuid: Environment context.
+            source_type: Source type for tracking.
+            constraints: Navigation constraints.
+            metadata: Additional metadata. ``units`` defaults to ``"meters"``.
+
+        Returns:
+            Response from the navigation endpoint.
+        """
+        payload: Dict[str, Any] = {
+            "command": "relative_move",
+            "relative_translation": relative_translation,
+            "frame": frame,
+        }
+        if environment_uuid:
+            payload["environment_uuid"] = environment_uuid
+        if source_type:
+            payload["source_type"] = source_type
+        if constraints:
+            payload["constraints"] = constraints
+        nav_metadata = dict(metadata or {})
+        nav_metadata["units"] = "meters"
+        payload["metadata"] = nav_metadata
+
+        self._ensure_status_subscription()
+        return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
+
+    def move_relative(
+        self,
+        relative_translation: Sequence[float] | Dict[str, Any],
+        *,
+        frame: str,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Alias for :meth:`relative_move`."""
+        return self.relative_move(relative_translation, frame=frame, **kwargs)
 
     def follow_path(
         self,
@@ -459,6 +838,8 @@ class TwinNavigationHandle:
         environment_uuid: Optional[str] = None,
         source_type: Optional[str] = None,
         constraints: Optional[Dict[str, Any]] = None,
+        reference_frame: Optional[str] = None,
+        skip_nav_anchor_transform: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
@@ -473,6 +854,13 @@ class TwinNavigationHandle:
             environment_uuid: Environment context
             source_type: Source type for tracking
             constraints: Navigation constraints
+            reference_frame: Coordinate frame the waypoints are expressed in
+                (e.g. ``map``, ``odom``, ``base_link``). Defaults to ``map``
+                server-side when omitted.
+            skip_nav_anchor_transform: Set when the waypoints are already
+                offsets from ``reference_frame`` (e.g. a robot link) rather
+                than environment-absolute poses. Skips the nav-anchor
+                (environment->map) transform server-side. Mirrors ``goto``.
             metadata: Additional metadata
 
         Returns:
@@ -491,6 +879,10 @@ class TwinNavigationHandle:
             payload["source_type"] = source_type
         if constraints:
             payload["constraints"] = constraints
+        if reference_frame:
+            payload["reference_frame"] = reference_frame
+        if skip_nav_anchor_transform:
+            payload["skip_nav_anchor_transform"] = True
 
         nav_metadata = dict(metadata or {})
         if wait_s > 0:
@@ -500,6 +892,7 @@ class TwinNavigationHandle:
         if nav_metadata:
             payload["metadata"] = nav_metadata
 
+        self._ensure_status_subscription()
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
     def stop(
@@ -547,6 +940,65 @@ class TwinNavigationHandle:
             payload["source_type"] = source_type
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
+    def wait_for_completion(
+        self,
+        action_id: str,
+        *,
+        timeout: float = 120.0,
+        raise_on_failure: bool = True,
+    ) -> Dict[str, Any]:
+        """Block until the given navigation ``action_id`` reaches a terminal status.
+
+        Subscribes to ``cyberwave/twin/{twin_uuid}/navigate/status`` and
+        returns the first payload whose ``status`` is one of
+        ``completed``, ``failed``, ``cancelled`` or ``blocked`` and whose
+        ``action_id`` matches.
+
+        Args:
+            action_id: The ``action_id`` returned by ``follow_path``/``goto``.
+            timeout: Maximum seconds to wait before raising ``TimeoutError``.
+            raise_on_failure: When True, raise ``RuntimeError`` if the
+                terminal status is anything other than ``completed``.
+
+        Returns:
+            The terminal status payload dict.
+        """
+        if not action_id:
+            raise ValueError("wait_for_completion requires a non-empty action_id")
+
+        self._ensure_status_subscription()
+        key = str(action_id)
+
+        with self._status_lock:
+            cached = self._status_results.get(key)
+            if cached is not None:
+                result = cached
+            else:
+                event = self._status_events.get(key)
+                if event is None:
+                    event = threading.Event()
+                    self._status_events[key] = event
+                result = None
+
+        if result is None:
+            if not event.wait(timeout):
+                raise TimeoutError(
+                    f"navigation action {action_id} did not reach a terminal "
+                    f"status within {timeout}s (topic={self._status_topic()})"
+                )
+            with self._status_lock:
+                result = self._status_results.get(key, {})
+
+        with self._status_lock:
+            self._status_events.pop(key, None)
+
+        if raise_on_failure and result.get("status") != "completed":
+            raise RuntimeError(
+                f"navigation action {action_id} finished with status "
+                f"{result.get('status')!r}: {result.get('message')!r}"
+            )
+        return result
+
     def _send_command(
         self,
         payload: Dict[str, Any],
@@ -557,6 +1009,20 @@ class TwinNavigationHandle:
         resolved_policy = controller_policy_uuid or self._controller_policy_uuid
         if resolved_policy:
             payload["controller_policy_uuid"] = resolved_policy
+
+        # Default source_type from the active ``cw.affect(...)`` mode when
+        # the caller didn't pin one explicitly. This mirrors how locomotion
+        # helpers (move_forward/turn_*) honor ``client.config`` via
+        # ``_default_control_source_type`` and ensures a single
+        # ``cw.affect("simulation")`` call at the top of a script (or
+        # generated worker) routes every downstream navigation command to
+        # the sim driver instead of the edge driver.
+        if "source_type" not in payload:
+            client_source_type = getattr(
+                getattr(self._twin.client, "config", None), "source_type", None
+            )
+            if client_source_type:
+                payload["source_type"] = client_source_type
 
         api_client = self._twin.client.api.api_client
 
@@ -588,4 +1054,3 @@ class TwinNavigationHandle:
         builder = NavigationPlan()
         builder.extend(waypoints)
         return builder.waypoints
-

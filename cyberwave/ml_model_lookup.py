@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
+
+if TYPE_CHECKING:
+    from cyberwave.rest import DefaultApi, MLModelSchema
 
 
 class MLModelLookupError(RuntimeError):
@@ -20,9 +23,13 @@ class MLModelMatch:
     deployment: Optional[str]
     is_edge_compatible: Optional[bool]
     is_cloud_compatible: Optional[bool]
+    model_provider_name: Optional[str] = None
+    workspace_uuid: Optional[str] = None
+    visibility: Optional[str] = None
+    slug: Optional[str] = None
 
 
-def _to_match(model: Any) -> MLModelMatch:
+def _to_match(model: MLModelSchema) -> MLModelMatch:
     return MLModelMatch(
         uuid=str(getattr(model, "uuid", "")),
         name=str(getattr(model, "name", "")),
@@ -30,6 +37,10 @@ def _to_match(model: Any) -> MLModelMatch:
         deployment=getattr(model, "deployment", None),
         is_edge_compatible=getattr(model, "is_edge_compatible", None),
         is_cloud_compatible=getattr(model, "is_cloud_compatible", None),
+        model_provider_name=getattr(model, "model_provider_name", None),
+        workspace_uuid=getattr(model, "workspace_uuid", None),
+        visibility=getattr(model, "visibility", None),
+        slug=getattr(model, "slug", None),
     )
 
 
@@ -42,7 +53,7 @@ def _external_norm(value: Optional[str]) -> str:
 
 
 def search_ml_models(
-    api: Any,
+    api: DefaultApi,
     query: str,
     *,
     deployment: Optional[str] = None,
@@ -54,7 +65,11 @@ def search_ml_models(
     Search ML models by partial name/external-id match (case-insensitive).
 
     Returns ordered matches from ``list_mlmodels`` filtered locally.
+    ``limit`` must be a positive integer. It caps returned matches, not the
+    catalog request: the full visible catalog is fetched on every call.
     """
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError("limit must be a positive integer")
     needle = _name_norm(query)
     if not needle:
         raise ValueError("query must be non-empty")
@@ -71,13 +86,13 @@ def search_ml_models(
         external_id = _name_norm(getattr(model, "model_external_id", None))
         if needle in name or needle in external_id:
             out.append(_to_match(model))
-            if len(out) >= max(limit, 1):
+            if len(out) >= limit:
                 break
     return out
 
 
 def resolve_ml_model_uuid(
-    api: Any,
+    api: DefaultApi,
     query: str,
     *,
     deployment: Optional[str] = None,
@@ -86,6 +101,8 @@ def resolve_ml_model_uuid(
 ) -> str:
     """
     Resolve one model UUID from external id/name query.
+
+    Fetches the full visible catalog on every call to detect ambiguity.
 
     Match order:
       1) exact external id
@@ -96,7 +113,7 @@ def resolve_ml_model_uuid(
     if not raw:
         raise ValueError("query must be non-empty")
 
-    models: Sequence[Any] = api.src_app_api_mlmodels_list_mlmodels(
+    models: Sequence[MLModelSchema] = api.src_app_api_mlmodels_list_mlmodels(
         deployment=deployment,
         edge_compatible=edge_compatible,
         _request_timeout=request_timeout,

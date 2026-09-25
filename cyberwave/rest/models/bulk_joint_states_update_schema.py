@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
-from typing import Any, ClassVar, Dict, List
+from pydantic import BaseModel, ConfigDict, StrictBool
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,7 +28,8 @@ class BulkJointStatesUpdateSchema(BaseModel):
     BulkJointStatesUpdateSchema
     """ # noqa: E501
     joint_states: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["joint_states"]
+    as_home_position: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["joint_states", "as_home_position"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,7 +82,8 @@ class BulkJointStatesUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "joint_states": obj.get("joint_states")
+            "joint_states": obj.get("joint_states"),
+            "as_home_position": obj.get("as_home_position") if obj.get("as_home_position") is not None else False
         })
         return _obj
 

@@ -16,7 +16,7 @@ This test demonstrates the complete SDK workflow by making real API calls:
 
 Prerequisites:
 - User must be authenticated (set CYBERWAVE_API_KEY env var)
-- Get your API key from https://app.cyberwave.com/profile
+- Get your API key from https://cyberwave.com/profile
 
 To run this test:
     cd cyberwave-sdks/cyberwave-python
@@ -31,7 +31,23 @@ import time
 
 # Import SDK components
 from cyberwave import Cyberwave
-from cyberwave.exceptions import CyberwaveAPIError
+from cyberwave.exceptions import CyberwaveAPIError, CyberwaveInsufficientCreditsError
+
+
+def _delete_resource_best_effort(kind: str, resource_uuid: str, delete_fn) -> None:
+    """Best-effort teardown of a resource created by a regression test.
+
+    ``delete_fn`` failures used to be swallowed with a bare ``except Exception:
+    pass``, which is why regression-test artifacts (e.g. three "Regression Test
+    Asset" rows) survived nightly CI runs and became permanent catalog entries —
+    the cleanup call was failing silently with nothing in the CI log to catch it.
+    Printing the failure at least makes it discoverable in the nightly run's
+    output instead of leaving the row as an invisible leak.
+    """
+    try:
+        delete_fn()
+    except Exception as exc:
+        print(f"  WARNING: failed to clean up {kind} {resource_uuid}: {exc}")
 
 
 @pytest.fixture(scope="module")
@@ -40,13 +56,13 @@ def cyberwave_client():
     Create a Cyberwave client connected to the Cyberwave API.
 
     Requires environment variable:
-    - CYBERWAVE_API_KEY: Your API key from https://app.cyberwave.com/profile
+    - CYBERWAVE_API_KEY: Your API key from https://cyberwave.com/profile
     """
     api_key = os.getenv("CYBERWAVE_API_KEY")
 
     if not api_key:
         pytest.skip(
-            "CYBERWAVE_API_KEY environment variable not set. Get your API key from https://app.cyberwave.com/profile"
+            "CYBERWAVE_API_KEY environment variable not set. Get your API key from https://cyberwave.com/profile"
         )
 
     client = Cyberwave(api_key=api_key)
@@ -60,6 +76,42 @@ def cyberwave_client():
     yield client
 
     # Cleanup
+    client.disconnect()
+
+
+@pytest.fixture(scope="module")
+def cyberwave_client_no_credits():
+    """
+    Create a Cyberwave client for a test account that has no available credits.
+
+    Used to verify that credit-exhausted responses surface as
+    ``CyberwaveInsufficientCreditsError`` rather than a generic crash.
+
+    Requires environment variable:
+    - CYBERWAVE_API_KEY_NO_CREDITS: API key for an account whose credits have
+      been drained or whose organization has been force-blocked by CI setup steps.
+    """
+    api_key = os.getenv("CYBERWAVE_API_KEY_NO_CREDITS")
+
+    if not api_key:
+        pytest.skip(
+            "CYBERWAVE_API_KEY_NO_CREDITS not set — skipping no-credits tests. "
+            "Set this to the API key of an account with zero or negative credits."
+        )
+
+    client = Cyberwave(api_key=api_key)
+
+    # Read-only sanity check — listing twins does not charge credits.
+    try:
+        client.twins.list()
+    except CyberwaveInsufficientCreditsError:
+        # Account is already blocked even for reads — that's fine for this fixture.
+        pass
+    except Exception as e:
+        pytest.skip(f"Cannot connect with no-credits API key: {e}")
+
+    yield client
+
     client.disconnect()
 
 
@@ -361,15 +413,31 @@ class TestIntegrationRegressions:
         found`` because ``get_by_registry_id`` tried ``GET /assets/vendor/model``
         which Django's URL router split at the slash, returning 404.
 
-        The fix routes slash-containing identifiers through the
+        The SDK fix routes slash-containing identifiers through the
         ``?registry_id=`` query parameter instead of the URL path.
+
+        The registry_id prefix must match an existing workspace slug so the
+        created asset stays in a workspace visible to the API token (backend
+        derives workspace from the ``vendor/`` segment of ``vendor/model``).
         """
         print("\n" + "=" * 70)
         print("Regression: cw.twin() with slash-containing registry_id")
         print("=" * 70)
 
         client = cyberwave_client
-        registry_id = f"test-vendor/test-robot-{int(time.time())}"
+        workspace_slug = None
+        workspace_id = client.config.workspace_id or os.getenv("CYBERWAVE_WORKSPACE_ID")
+        if workspace_id:
+            workspace = client.workspaces.get(workspace_id)
+            workspace_slug = getattr(workspace, "slug", None)
+        if not workspace_slug:
+            workspaces = client.workspaces.list()
+            if not workspaces:
+                pytest.skip("No workspaces available for regression test")
+            workspace_slug = getattr(workspaces[0], "slug", None)
+        if not workspace_slug:
+            pytest.skip("Workspace has no slug for registry_id prefix")
+        registry_id = f"{workspace_slug}/test-robot-{int(time.time())}"
 
         created_resources: dict = {"asset": None, "environment": None, "project": None}
 
@@ -404,29 +472,30 @@ class TestIntegrationRegressions:
 
             assert twin is not None, "twin() must return a Twin instance"
             assert twin.uuid is not None, "returned twin must have a valid UUID"
-            print(
-                f"✓ cw.twin('{registry_id}') succeeded (twin UUID: {twin.uuid})"
-            )
+            print(f"✓ cw.twin('{registry_id}') succeeded (twin UUID: {twin.uuid})")
 
         finally:
             if created_resources["asset"]:
-                try:
-                    client.assets.delete(created_resources["asset"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "asset",
+                    created_resources["asset"].uuid,
+                    lambda: client.assets.delete(created_resources["asset"].uuid),
+                )
             if created_resources["environment"] and created_resources["project"]:
-                try:
-                    client.environments.delete(
+                _delete_resource_best_effort(
+                    "environment",
+                    created_resources["environment"].uuid,
+                    lambda: client.environments.delete(
                         created_resources["environment"].uuid,
                         created_resources["project"].uuid,
-                    )
-                except Exception:
-                    pass
+                    ),
+                )
             if created_resources["project"]:
-                try:
-                    client.projects.delete(created_resources["project"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "project",
+                    created_resources["project"].uuid,
+                    lambda: client.projects.delete(created_resources["project"].uuid),
+                )
 
         print("=" * 70 + "\n")
 
@@ -512,24 +581,92 @@ class TestIntegrationRegressions:
 
         finally:
             if created_resources["asset"]:
-                try:
-                    client.assets.delete(created_resources["asset"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "asset",
+                    created_resources["asset"].uuid,
+                    lambda: client.assets.delete(created_resources["asset"].uuid),
+                )
             if created_resources["environment"] and created_resources["project"]:
-                try:
-                    client.environments.delete(
+                _delete_resource_best_effort(
+                    "environment",
+                    created_resources["environment"].uuid,
+                    lambda: client.environments.delete(
                         created_resources["environment"].uuid,
                         created_resources["project"].uuid,
-                    )
-                except Exception:
-                    pass
+                    ),
+                )
             if created_resources["project"]:
-                try:
-                    client.projects.delete(created_resources["project"].uuid)
-                except Exception:
-                    pass
+                _delete_resource_best_effort(
+                    "project",
+                    created_resources["project"].uuid,
+                    lambda: client.projects.delete(created_resources["project"].uuid),
+                )
 
+        print("=" * 70 + "\n")
+
+
+class TestIntegrationCredits:
+    """
+    Verify that the SDK surfaces credit-exhausted errors as the typed exception
+    ``CyberwaveInsufficientCreditsError`` rather than a generic crash.
+
+    These tests require a second API key (``CYBERWAVE_API_KEY_NO_CREDITS``) that
+    belongs to an account whose credits have been drained or force-blocked.
+    The CI workflow sets this up automatically before the test run.
+    """
+
+    def test_workflow_trigger_raises_insufficient_credits(
+        self, cyberwave_client_no_credits
+    ):
+        """
+        Triggering a workflow on a no-credits account must raise
+        ``CyberwaveInsufficientCreditsError``, not a generic exception.
+        """
+        print("\n" + "=" * 70)
+        print("Testing Credits: trigger raises CyberwaveInsufficientCreditsError")
+        print("=" * 70)
+
+        # The workflow has to be one the no-credits account *owns*. Credit
+        # enforcement charges the organization that owns the workflow, not the
+        # caller's, so triggering someone else's workflow bills their org and
+        # never returns 402 no matter how blocked the caller is. Listing is
+        # visibility-scoped rather than ownership-scoped — it also returns
+        # public and org-visible workflows from other tenants — so filter down
+        # to this account's own workspaces explicitly.
+        own_workspaces = {
+            ws.uuid for ws in cyberwave_client_no_credits.workspaces.list()
+        }
+        active = [
+            wf
+            for wf in cyberwave_client_no_credits.workflows.list()
+            if wf.is_active and wf.workspace_uuid in own_workspaces
+        ]
+        if not active:
+            # A skip here would hide the gap indefinitely, and CI has already
+            # committed to running this test by providing the key.
+            pytest.fail(
+                "The no-credits account owns no active workflow, so a 402 on "
+                "trigger cannot be provoked. CI provisions one in "
+                "`.github/scripts/setup_credit_state.py`; reaching this means "
+                "that step did not run or its workflow was removed."
+            )
+
+        wf = active[0]
+        print(f"  Using workflow: {wf.name} ({wf.uuid})")
+
+        with pytest.raises(CyberwaveInsufficientCreditsError) as exc_info:
+            cyberwave_client_no_credits.workflows.trigger(wf.uuid, inputs={})
+
+        err = exc_info.value
+        assert err.status_code == 402, f"Expected 402, got {err.status_code}"
+        if not err.manual_block:
+            # Balance-exhausted path: balance must be at or below zero.
+            assert err.balance is not None, "balance should be parseable from response"
+            assert err.balance <= 0, f"Expected non-positive balance, got {err.balance}"
+        print(
+            f"✓ trigger raised CyberwaveInsufficientCreditsError "
+            f"(balance={err.balance}, manual_block={err.manual_block})"
+        )
         print("=" * 70 + "\n")
 
 

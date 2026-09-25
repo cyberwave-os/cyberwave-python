@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,7 +28,9 @@ class LLMGenerationSchema(BaseModel):
     LLMGenerationSchema
     """ # noqa: E501
     prompt: StrictStr
-    __properties: ClassVar[List[str]] = ["prompt"]
+    llm_model_uuid: Optional[StrictStr] = None
+    llm_model_name: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["prompt", "llm_model_uuid", "llm_model_name"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -69,6 +71,16 @@ class LLMGenerationSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if llm_model_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.llm_model_uuid is None and "llm_model_uuid" in self.model_fields_set:
+            _dict['llm_model_uuid'] = None
+
+        # set to None if llm_model_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.llm_model_name is None and "llm_model_name" in self.model_fields_set:
+            _dict['llm_model_name'] = None
+
         return _dict
 
     @classmethod
@@ -81,7 +93,9 @@ class LLMGenerationSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "prompt": obj.get("prompt")
+            "prompt": obj.get("prompt"),
+            "llm_model_uuid": obj.get("llm_model_uuid"),
+            "llm_model_name": obj.get("llm_model_name")
         })
         return _obj
 

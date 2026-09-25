@@ -33,8 +33,18 @@ from cyberwave.resources import (
     ProjectManager,
     EnvironmentManager,
     AssetManager,
+    DatasetManager,
     EdgeManager,
     TwinManager,
+)
+from cyberwave.managers.simulations import Simulation, SimulationManager
+from cyberwave.managers.recordings import (
+    Recording,
+    RecordingList,
+    RecordingListItem,
+    RecordingManager,
+    RecordingType,
+    TwinRecordingsHandle,
 )
 
 __all__ = [
@@ -43,6 +53,15 @@ __all__ = [
     "ProjectManager",
     "EnvironmentManager",
     "AssetManager",
+    "DatasetManager",
     "EdgeManager",
     "TwinManager",
+    "SimulationManager",
+    "Simulation",
+    "RecordingManager",
+    "TwinRecordingsHandle",
+    "Recording",
+    "RecordingList",
+    "RecordingListItem",
+    "RecordingType",
 ]

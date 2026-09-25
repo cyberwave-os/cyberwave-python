@@ -18,13 +18,37 @@ Usage:
     >>> client = Cyberwave(api_key="...")
     >>> workspaces = client.workspaces.list()
     >>> twin = client.twins.get("uuid")
+    >>> client.ml_models.list()  # workspace + public ML catalog rows
 """
 
-import uuid as uuid_lib
+import base64
+import json
 import mimetypes
 import os
+import re
+import shutil
+import tempfile
+import time
+import uuid as uuid_lib
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    NoReturn,
+    Optional,
+    Tuple,
+    Union,
+)
+
+if TYPE_CHECKING:
+    from cyberwave.managers.simulations import SimulationManager
+    from cyberwave.managers.recordings import RecordingManager
+
+from typing_extensions import NotRequired, Required, TypedDict
 
 import urllib3
 
@@ -38,6 +62,7 @@ from cyberwave.rest import (
     ProjectCreateSchema,
     EnvironmentSchema,
     EnvironmentCreateSchema,
+    EnvironmentWaypointBulkCreateSchema,
     AssetSchema,
     AssetCreateSchema,
     AssetGLBFromAttachmentSchema,
@@ -45,6 +70,9 @@ from cyberwave.rest import (
     AttachmentCreateSchema,
     AttachmentSchema,
     CompleteLargeUploadSchema,
+    DatasetSchema,
+    DatasetImportInitSchema,
+    DatasetImportCompleteSchema,
     TwinSchema,
     TwinCreateSchema,
     TwinStateUpdateSchema,
@@ -53,8 +81,11 @@ from cyberwave.rest import (
     JointStateUpdateSchema,
     JointStateSchema,
     EdgeSchema,
+    MLModelSchema,
 )
-from cyberwave.rest.models.twin_joint_calibration_schema import TwinJointCalibrationSchema
+from cyberwave.rest.models.twin_joint_calibration_schema import (
+    TwinJointCalibrationSchema,
+)
 
 from .exceptions import CyberwaveAPIError
 
@@ -69,6 +100,194 @@ EDGE_CONFIG_INTERNAL_KEYS = {
 EDGE_DEVICE_UUID_NAMESPACE = uuid_lib.UUID("7f09e16f-ef6f-410d-9d5d-c071d8fbd1ad")
 
 
+class PolicyRefPayload(TypedDict):
+    """Typed controller policy reference resolved by the backend."""
+
+    kind: Required[Literal["uuid", "catalog_seed_id", "slug"]]
+    value: Required[str]
+
+
+class ControlRuntimeTargetPayload(TypedDict, total=False):
+    """Backend-resolved runtime target for a controller policy."""
+
+    enabled: Required[bool]
+    runtime_kind: Required[Literal["physical", "simulation"]]
+    backend: Required[str]
+    adapter: NotRequired[str | None]
+    source_type: NotRequired[str | None]
+    safety_level: NotRequired[str | None]
+    input_contract: NotRequired[str | None]
+    output_contract: NotRequired[str | None]
+    metadata: NotRequired[Dict[str, Any]]
+
+
+class AssetControllerConfigPayload(TypedDict, total=False):
+    """Controller binding entry from the backend-resolved setup view."""
+
+    id: Required[str]
+    controller_key: Required[str]
+    label: Required[str]
+    is_default: Required[bool]
+    mode: NotRequired[str]
+    settings: NotRequired[Dict[str, Any] | None]
+
+
+class AssetControllerSetupRuntimePolicy(TypedDict, total=False):
+    """Resolved runtime policy row returned by ``get_controller_setup``."""
+
+    key: Required[str]
+    runtime_kind: Required[Literal["physical", "simulation"]]
+    backend: Required[str]
+    controller_key: NotRequired[str | None]
+    catalog_key: NotRequired[str | None]
+    policy_ref: NotRequired[PolicyRefPayload | None]
+    controller_policy_uuid: NotRequired[str | None]
+    available: Required[bool]
+    runtime_enabled: Required[bool]
+    adapter: NotRequired[str | None]
+    source_type: NotRequired[str | None]
+    input_contract: NotRequired[str | None]
+    output_contract: NotRequired[str | None]
+    runtime_target: NotRequired[ControlRuntimeTargetPayload | None]
+    artifact_readiness: Required[str]
+    artifact_status: NotRequired[str | None]
+    artifact_manifest: NotRequired[Dict[str, Any] | None]
+    policy_config: NotRequired[Dict[str, Any] | None]
+    default_velocity_command: NotRequired[Dict[str, Any] | None]
+    warnings: NotRequired[List[str]]
+
+
+class AssetControllerSetupRuntimeOption(TypedDict, total=False):
+    """Selectable controller option for one runtime/backend pair."""
+
+    runtime_kind: Required[Literal["physical", "simulation"]]
+    backend: Required[str]
+    controller_key: NotRequired[str | None]
+    controller_policy_uuid: Required[str]
+    controller_name: Required[str]
+    controller_slug: NotRequired[str | None]
+    catalog_key: NotRequired[str | None]
+    policy_ref: NotRequired[PolicyRefPayload | None]
+    supports_runtime: Required[bool]
+    runtime_enabled: Required[bool]
+    adapter: NotRequired[str | None]
+    source_type: NotRequired[str | None]
+    input_contract: NotRequired[str | None]
+    output_contract: NotRequired[str | None]
+    runtime_target: NotRequired[ControlRuntimeTargetPayload | None]
+
+
+class AssetControllerSetupRecommendation(TypedDict, total=False):
+    """Backend-recommended controller setup for catalog editing."""
+
+    primary_controller_key: NotRequired[str | None]
+    primary_policy_ref: NotRequired[PolicyRefPayload | None]
+    primary_controller_uuid: NotRequired[str | None]
+    primary_controller_name: NotRequired[str | None]
+    mujoco_controller_key: NotRequired[str | None]
+    mujoco_policy_ref: NotRequired[PolicyRefPayload | None]
+    mujoco_controller_uuid: NotRequired[str | None]
+    mujoco_controller_name: NotRequired[str | None]
+    edge_controller_key: NotRequired[str | None]
+    edge_policy_ref: NotRequired[PolicyRefPayload | None]
+    edge_controller_uuid: NotRequired[str | None]
+    edge_controller_name: NotRequired[str | None]
+    default_policy_refs: NotRequired[Dict[str, Dict[str, PolicyRefPayload]]]
+
+
+class AssetControllerSetupView(TypedDict):
+    """Backend-owned controller setup view consumed by SDKs and frontend."""
+
+    asset_uuid: Required[str]
+    controller_configs: Required[List[AssetControllerConfigPayload]]
+    primary_controller_key: Required[str | None]
+    runtime_policies: Required[List[AssetControllerSetupRuntimePolicy]]
+    runtime_options: Required[List[AssetControllerSetupRuntimeOption]]
+    recommended_setup: Required[AssetControllerSetupRecommendation]
+
+
+def _is_uuid(value: str) -> bool:
+    """Check whether *value* looks like a UUID (any version, hex+hyphens)."""
+    try:
+        uuid_lib.UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
+def _looks_like_slug(value: str) -> bool:
+    """Return ``True`` when *value* resembles a unified slug (contains ``/``)."""
+    return "/" in value
+
+
+def _image_extension_from_mime(mime_type: str) -> str:
+    mime_type = mime_type.split(";", 1)[0].strip().lower()
+    return {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+    }.get(mime_type, ".png")
+
+
+# Keep in sync with ``MAX_SCHEMA_PATCH_OPERATIONS`` in
+# ``cyberwave-backend/src/app/services/universal_schema_patch.py``. The backend
+# rejects an over-cap batch rather than truncating it, so batches are chunked
+# here; in practice nothing chunks, since the largest real workload is ~28 ops.
+MAX_SCHEMA_PATCH_OPERATIONS = 1000
+
+
+def _patch_universal_schema_batch(
+    manager: "BaseResourceManager",
+    *,
+    resource_path: str,
+    entity_id: str,
+    operations: List[Dict[str, Any]],
+    description: str,
+) -> Optional[Dict[str, Any]]:
+    """POST a batch of JSON Pointer operations, chunked to the server's cap.
+
+    Deliberately calls the endpoint by raw path via ``param_serialize`` rather than
+    through a generated ``src_app_api_*`` stub: ``cyberwave/rest/`` is regenerated
+    from a live backend in CI, so referencing a not-yet-generated stub would fail
+    at runtime with ``AttributeError`` for anyone on an older generated client.
+    Mirrors ``EnvironmentManager.patch_universal_schema``.
+
+    Each chunk is atomic on the server; a chunked sequence as a whole is not.
+    Returns the last chunk's response, or None for an empty operation list.
+    """
+    if not operations:
+        return None
+
+    result: Optional[Dict[str, Any]] = None
+    try:
+        for start in range(0, len(operations), MAX_SCHEMA_PATCH_OPERATIONS):
+            chunk = operations[start : start + MAX_SCHEMA_PATCH_OPERATIONS]
+            _param = manager.api.api_client.param_serialize(
+                method="PATCH",
+                resource_path=resource_path,
+                path_params={"uuid": entity_id},
+                body={"operations": chunk},
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = manager.api.api_client.call_api(*_param)
+            response_data.read()
+            result = manager.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+    except Exception as e:
+        manager._handle_error(e, description)
+        raise
+
+    return result
+
+
 class BaseResourceManager:
     """Base class for resource managers"""
 
@@ -77,22 +296,92 @@ class BaseResourceManager:
 
     def _handle_error(self, e: Exception, operation: str):
         """Handle API errors consistently"""
+        # Already translated by client.py. These expose status_code, not status,
+        # so re-wrapping hit the bare branch below and dropped the status code,
+        # the subclass, and CyberwaveInsufficientCreditsError's balance fields.
+        # Re-raise instead, but keep the "Failed to ..." context re-wrapping used
+        # to add. Nested managers reach this twice with the same object
+        # (get_device -> list_devices), so rebuild from the stashed original: the
+        # outermost call is the one the user made, and it names the operation.
+        if isinstance(e, CyberwaveAPIError):
+            base = getattr(e, "_untranslated_message", None)
+            if base is None:
+                base = e.message
+                e._untranslated_message = base
+            e.operation = operation
+            e.message = f"Failed to {operation}: {base}"
+            e.args = (e.message, *e.args[1:])
+            raise e
+
         if hasattr(e, "status"):
             body = getattr(e, "body", None)
             response_dict = body if isinstance(body, dict) else None
-
-            # Try to extract request headers if available
-            request_headers = None
-            if hasattr(e, "request_headers"):
-                request_headers = e.request_headers
-
-            raise CyberwaveAPIError(
+            err = CyberwaveAPIError(
                 f"Failed to {operation}: {str(e)}",
                 status_code=int(e.status) if hasattr(e.status, "__int__") else None,
                 response_data=response_dict,
-                request_headers=request_headers,
+                request_headers=getattr(e, "request_headers", None),
             )
-        raise CyberwaveAPIError(f"Failed to {operation}: {str(e)}")
+        else:
+            err = CyberwaveAPIError(f"Failed to {operation}: {str(e)}")
+
+        # Same contract as the isinstance branch above. Only 401/402 arrive here
+        # already translated; every other status builds a new object on this path,
+        # so without the stash an outer manager would prefix the prefix.
+        err._untranslated_message = str(e)
+        err.operation = operation
+        # No `from e`: callers duck-type on `.status`, so `e` is not always a
+        # BaseException. Every real call site is inside `except`, which chains it
+        # as __context__ anyway.
+        raise err
+
+    def check_slug(
+        self,
+        slug: str,
+        entity_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Check whether a unified slug is available.
+
+        Calls ``GET /api/v1/slugs/check`` to verify that the given slug is not
+        already taken by another entity.
+
+        Args:
+            slug: Full unified slug to check
+                (e.g. ``"acme/catalog/my-robot-arm"``).
+            entity_type: Optional entity type filter — one of ``"asset"``,
+                ``"workflow"``, ``"mlmodel"``, ``"controllerpolicy"``,
+                ``"environment"``, ``"twin"``.  When omitted the backend checks
+                all entity tables.
+
+        Returns:
+            Dict with keys ``available`` (bool), ``slug`` (normalised str),
+            and ``suggestion`` (str or None).
+
+        Example:
+            result = cw.assets.check_slug("acme/catalog/my-robot-arm")
+            if result["available"]:
+                print("Slug is available!")
+            else:
+                print(f"Try: {result['suggestion']}")
+        """
+        try:
+            query_params: list[tuple[str, str]] = [("slug", slug)]
+            if entity_type:
+                query_params.append(("entity_type", entity_type))
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/slugs/check",
+                query_params=query_params,
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"check slug availability for '{slug}'")
+            raise
 
 
 class WorkspaceManager(BaseResourceManager):
@@ -185,26 +474,103 @@ class ProjectManager(BaseResourceManager):
 class EnvironmentManager(BaseResourceManager):
     """Manager for environment operations"""
 
+    @property
+    def simulations(self) -> "SimulationManager":
+        """Simulation lifecycle for environments (start/list/get_active/stop)."""
+        mgr = getattr(self, "_simulations", None)
+        if mgr is None:
+            from cyberwave.managers.simulations import SimulationManager
+
+            mgr = SimulationManager(self.api)
+            self._simulations = mgr
+        return mgr
+
+    @property
+    def recordings(self) -> "RecordingManager":
+        """Recording listing/fetching for environments."""
+        mgr = getattr(self, "_recordings", None)
+        if mgr is None:
+            from cyberwave.managers.recordings import RecordingManager
+
+            mgr = RecordingManager(self.api)
+            self._recordings = mgr
+        return mgr
+
     def list(self, project_id: Optional[str] = None) -> List[EnvironmentSchema]:
-        """List all environments, optionally filtered by project"""
+        """List all environments, optionally filtered by project.
+
+        Paginates automatically so callers always receive the full result set
+        regardless of how many environments exist.
+        """
+        _page_size = 200
         try:
-            if project_id:
-                return self.api.src_app_api_environments_list_environments_for_project(
-                    project_id
-                )
-            else:
-                return self.api.src_app_api_environments_list_all_environments()
+            results: List[EnvironmentSchema] = []
+            offset = 0
+            while True:
+                if project_id:
+                    page = (
+                        self.api.src_app_api_environments_list_environments_for_project(
+                            project_id, limit=_page_size, offset=offset
+                        )
+                    )
+                else:
+                    page = self.api.src_app_api_environments_list_all_environments(
+                        limit=_page_size, offset=offset
+                    )
+                results.extend(page)
+                if len(page) < _page_size:
+                    break
+                offset += _page_size
+            return results
         except Exception as e:
             self._handle_error(e, "list environments")
             raise  # For type checker
 
     def get(self, environment_id: str) -> EnvironmentSchema:
-        """Get environment by ID"""
+        """Get environment by UUID or unified slug.
+
+        Args:
+            environment_id: UUID or full unified slug
+                (e.g. ``"acme/envs/production-floor"``).
+        """
         try:
             return self.api.src_app_api_environments_get_environment(environment_id)
         except Exception as e:
+            if not _is_uuid(environment_id) and _looks_like_slug(environment_id):
+                result = self.get_by_slug(environment_id)
+                if result is not None:
+                    return result
             self._handle_error(e, f"get environment {environment_id}")
             raise  # For type checker
+
+    def get_by_slug(self, slug: str) -> Optional[EnvironmentSchema]:
+        """Get environment by its full unified slug.
+
+        Args:
+            slug: Full unified slug
+                (e.g. ``"acme/envs/production-floor"``).
+
+        Returns:
+            EnvironmentSchema if found, otherwise ``None``.
+
+        Example:
+            env = cw.environments.get_by_slug("acme/envs/production-floor")
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/environments/by-slug",
+                query_params=[("slug", slug)],
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "EnvironmentSchema"},
+            ).data
+        except Exception:
+            return None
 
     def create(
         self, name: str, project_id: str | None = None, description: str = "", **kwargs
@@ -257,7 +623,9 @@ class EnvironmentManager(BaseResourceManager):
             env = self.get(environment_id)
             return env.universal_schema
         except Exception as e:
-            self._handle_error(e, f"get universal schema for environment {environment_id}")
+            self._handle_error(
+                e, f"get universal schema for environment {environment_id}"
+            )
             raise
 
     def set_universal_schema(
@@ -301,7 +669,9 @@ class EnvironmentManager(BaseResourceManager):
                 environment_id, update_schema
             )
         except Exception as e:
-            self._handle_error(e, f"set universal schema for environment {environment_id}")
+            self._handle_error(
+                e, f"set universal schema for environment {environment_id}"
+            )
             raise
 
     def patch_universal_schema(
@@ -347,7 +717,10 @@ class EnvironmentManager(BaseResourceManager):
                 resource_path="/api/v1/environments/{uuid}/universal-schema",
                 path_params={"uuid": environment_id},
                 body={"op": op, "path": path, "value": value},
-                header_params={"Content-Type": "application/json", "Accept": "application/json"},
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
                 auth_settings=["CustomTokenAuthentication"],
             )
             response_data = self.api.api_client.call_api(*_param)
@@ -429,28 +802,152 @@ class EnvironmentManager(BaseResourceManager):
             self._handle_error(e, f"generate preview for environment {environment_id}")
             raise
 
+    def get_waypoints(self, environment_id: str) -> List[Dict[str, Any]]:
+        """Get normalized waypoints for an environment.
+
+        Calls ``GET /api/v1/environments/{uuid}/waypoints``.
+        """
+        try:
+            return self.api.src_app_api_environments_list_environment_waypoints(
+                environment_id
+            )
+        except Exception as e:
+            self._handle_error(e, f"get waypoints for environment {environment_id}")
+            raise
+
+    def create_waypoints(
+        self, environment_id: str, waypoints: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Append one or more waypoints to an environment.
+
+        Calls ``POST /api/v1/environments/{uuid}/waypoints`` and returns the
+        full normalized waypoint list after creation.
+        """
+        try:
+            payload = EnvironmentWaypointBulkCreateSchema.from_dict(
+                {"waypoints": waypoints}
+            )
+            return self.api.src_app_api_environments_add_environment_waypoints(
+                environment_id, payload
+            )
+        except Exception as e:
+            self._handle_error(e, f"create waypoints for environment {environment_id}")
+            raise
+
+    def create_waypoint(
+        self,
+        environment_id: str,
+        *,
+        position: Dict[str, Any],
+        name: Optional[str] = None,
+        rotation: Optional[Dict[str, Any]] = None,
+        waypoint_id: Optional[str] = None,
+        collection: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Append a single waypoint to an environment.
+
+        Returns the full normalized waypoint list after creation.
+        """
+        waypoint: Dict[str, Any] = {"position": position}
+        if waypoint_id is not None:
+            waypoint["id"] = waypoint_id
+        if name is not None:
+            waypoint["name"] = name
+        if collection is not None:
+            waypoint["collection"] = collection
+        if rotation is not None:
+            waypoint["rotation"] = rotation
+        if metadata is not None:
+            waypoint["metadata"] = metadata
+
+        return self.create_waypoints(environment_id, [waypoint])
+
+    def update_waypoint(
+        self,
+        environment_id: str,
+        waypoint_id: str,
+        *,
+        position: Optional[Dict[str, Any]] = None,
+        rotation: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Update a waypoint's stored position/rotation offset.
+
+        Calls ``PATCH /api/v1/environments/{uuid}/waypoints/{waypoint_id}``.
+        Only ``position``/``rotation`` can be changed — never the
+        waypoint's reference frame. Fields left as ``None`` are untouched
+        server-side (a true partial update), so e.g. passing only
+        ``position`` leaves the current rotation as-is.
+
+        Returns the updated, normalized waypoint dict.
+        """
+        update_fields: Dict[str, Any] = {}
+        if position is not None:
+            update_fields["position"] = position
+        if rotation is not None:
+            update_fields["rotation"] = rotation
+        if not update_fields:
+            raise ValueError("update_waypoint requires position and/or rotation")
+
+        try:
+            # Lazy import: schema may be absent from a generated rest client that
+            # predates the endpoint (prod self-containment build), so a top-level
+            # import would break the whole SDK.
+            from cyberwave.rest import EnvironmentWaypointPositionUpdateSchema
+
+            payload = EnvironmentWaypointPositionUpdateSchema.from_dict(update_fields)
+            return (
+                self.api.src_app_api_environments_update_environment_waypoint_position(
+                    environment_id, waypoint_id, payload
+                )
+            )
+        except Exception as e:
+            self._handle_error(
+                e, f"update waypoint {waypoint_id} in environment {environment_id}"
+            )
+            raise
+
+    def delete_waypoint(
+        self, environment_id: str, waypoint_id: str
+    ) -> List[Dict[str, Any]]:
+        """Delete a waypoint from an environment by ID.
+
+        Calls ``DELETE /api/v1/environments/{uuid}/waypoints/{waypoint_id}`` and
+        returns the full normalized waypoint list after deletion.
+        """
+        try:
+            return self.api.src_app_api_environments_delete_environment_waypoint(
+                environment_id, waypoint_id
+            )
+        except Exception as e:
+            self._handle_error(
+                e, f"delete waypoint {waypoint_id} from environment {environment_id}"
+            )
+            raise
+
     # =========================================================================
     # Universal Schema Export APIs
     # =========================================================================
 
     def get_universal_schema_json(self, environment_id: str) -> Dict[str, Any]:
         """Get the composed universal schema JSON for an environment (direct download).
-        
+
         Composes schema from all twins' universal_schemas in the environment.
-        
+
         Args:
             environment_id: UUID of the environment
-            
+
         Returns:
             Dict containing the composed CommonSchema as JSON.
-            
+
         Example:
             schema = cw.environments.get_universal_schema_json(env_id)
             print(schema['links'])  # Access links in the schema
         """
         import json
+
         try:
-            response = self.api.src_app_api_environments_get_environment_universal_schema_json_with_http_info(
+            response = self.api.src_app_api_environments_exports_get_environment_universal_schema_json_with_http_info(
                 environment_id
             )
             raw = response.raw_data
@@ -458,42 +955,46 @@ class EnvironmentManager(BaseResourceManager):
                 return json.loads(raw.decode("utf-8"))
             return raw
         except Exception as e:
-            self._handle_error(e, f"Get universal schema for environment {environment_id}")
+            self._handle_error(
+                e, f"Get universal schema for environment {environment_id}"
+            )
             raise
 
-    def export_urdf_scene(self, environment_id: str, output_path: Optional[str] = None) -> bytes:
+    def export_urdf_scene(
+        self, environment_id: str, output_path: Optional[str] = None
+    ) -> bytes:
         """
         Export environment as URDF project ZIP file.
-        
+
         Downloads a ZIP containing:
         - scene.urdf: The complete URDF scene
         - meshes/: Directory with all required mesh files
-        
+
         Args:
             environment_id: UUID of the environment
             output_path: Optional path to save the ZIP file. If None, returns bytes.
-            
+
         Returns:
             ZIP file contents as bytes (if output_path is None)
-            
+
         Example:
             # Save to file
             cw.environments.export_urdf_scene(env_id, "urdf_project.zip")
-            
+
             # Get bytes
             zip_data = cw.environments.export_urdf_scene(env_id)
         """
         try:
             # Use with_http_info to get raw response data
-            response = self.api.src_app_api_environments_get_environment_urdf_scene_zip_direct_with_http_info(
+            response = self.api.src_app_api_environments_exports_get_environment_urdf_scene_zip_direct_with_http_info(
                 environment_id
             )
-            
+
             # Extract bytes from response - use raw_data for binary content
             zip_bytes = response.raw_data
-            
+
             if output_path:
-                with open(output_path, 'wb') as f:
+                with open(output_path, "wb") as f:
                     f.write(zip_bytes)
                 return zip_bytes
             return zip_bytes
@@ -501,41 +1002,232 @@ class EnvironmentManager(BaseResourceManager):
             self._handle_error(e, f"export URDF scene for environment {environment_id}")
             raise
 
-    def export_mujoco_scene(self, environment_id: str, output_path: Optional[str] = None) -> bytes:
+    def _fetch_export_url(self, url: str) -> bytes:
+        """Download an export URL handed back by a descriptor endpoint.
+
+        The URL is whatever the backend's storage produced: an absolute signed
+        object-storage link in the cloud, or a relative ``/media/...`` path when
+        the backend runs on local filesystem storage. Relative URLs are
+        resolved against the API host and get the API credentials; absolute
+        ones already carry their own signature in the query string, so the
+        token is withheld rather than handed to a third-party origin.
+
+        For the same reason the failure message names the object without its
+        query string: that signature is a live credential for the next 24 hours,
+        and an exception message ends up in whatever the caller logs.
+        """
+        config = self.api.api_client.configuration
+        host = config.host.rstrip("/")
+        resolved = url if re.match(r"^https?://", url, re.IGNORECASE) else f"{host}{url}"
+
+        headers: Dict[str, str] = {}
+        if resolved == host or resolved.startswith(host + "/"):
+            for setting in config.auth_settings().values():
+                if setting["in"] == "header":
+                    headers[setting["key"]] = setting["value"]
+
+        response = self.api.api_client.rest_client.request("GET", resolved, headers=headers)
+        if response.status >= 400:
+            raise CyberwaveAPIError(
+                f"Failed to download export from {resolved.split('?', 1)[0]}: "
+                f"HTTP {response.status}"
+            )
+        return response.read()
+
+    def export_mujoco_scene(
+        self,
+        environment_id: str,
+        output_path: Optional[str] = None,
+        *,
+        timeout: float = 120.0,
+        poll_interval: float = 2.0,
+    ) -> bytes:
         """
         Export environment as MuJoCo scene ZIP file.
-        
+
         Downloads a ZIP containing:
-        - scene.xml: The complete MuJoCo scene
-        - meshes/: Directory with all required mesh files
-        
+        - mujoco_scene.xml: The complete MuJoCo scene
+        - assets/: Directory with all required mesh files
+
+        The archive is built by a background worker and served from object
+        storage rather than streamed out of the API, so it is not bounded by
+        the API's response size limit and a large scene exports the same way a
+        small one does. The first call for a given environment revision pays
+        the build; later calls are served from cache.
+
         Args:
             environment_id: UUID of the environment
             output_path: Optional path to save the ZIP file. If None, returns bytes.
-            
+            timeout: Seconds to wait for the background build before giving up.
+                Defaults to 120s; a large environment can take over a minute to
+                compose, mesh, and upload on a cold cache.
+            poll_interval: Seconds between checks while the build is running.
+
         Returns:
-            ZIP file contents as bytes (if output_path is None)
-            
+            ZIP file contents as bytes
+
+        Raises:
+            CyberwaveAPIError: if the build fails or does not finish in time.
+
         Example:
             # Save to file
             cw.environments.export_mujoco_scene(env_id, "mujoco_scene.zip")
-            
+
             # Get bytes
             zip_data = cw.environments.export_mujoco_scene(env_id)
         """
         try:
-            response = self.api.src_app_api_environments_get_environment_mujoco_scene_zip_direct_with_http_info(
-                environment_id
-            )
-            zip_bytes = response.raw_data
+            deadline = time.monotonic() + timeout
+            url = ""
+            while True:
+                response = self.api.src_app_api_environments_exports_get_environment_mujoco_scene_with_http_info(
+                    str(environment_id)
+                )
+                raw = response.raw_data
+                descriptor = json.loads(
+                    raw.decode("utf-8") if isinstance(raw, bytes) else raw
+                )
+
+                if descriptor.get("status") == "failed":
+                    raise CyberwaveAPIError(
+                        f"MuJoCo scene export failed for environment {environment_id}"
+                    )
+
+                url = descriptor.get("url") or ""
+                if url:
+                    break
+
+                if time.monotonic() >= deadline:
+                    raise CyberwaveAPIError(
+                        f"Timed out after {timeout:g}s waiting for the MuJoCo scene "
+                        f"export of environment {environment_id}"
+                    )
+                time.sleep(poll_interval)
+
+            zip_bytes = self._fetch_export_url(url)
 
             if output_path:
-                with open(output_path, 'wb') as f:
+                with open(output_path, "wb") as f:
                     f.write(zip_bytes)
             return zip_bytes
         except Exception as e:
-            self._handle_error(e, f"export MuJoCo scene for environment {environment_id}")
+            self._handle_error(
+                e, f"export MuJoCo scene for environment {environment_id}"
+            )
             raise
+
+
+class AttachmentManager(BaseResourceManager):
+    """Manager for attachment operations."""
+
+    def get(self, attachment_id: str) -> AttachmentSchema:
+        """Get an attachment by UUID."""
+        try:
+            return self.api.src_app_api_attachments_get_attachment(str(attachment_id))
+        except Exception as e:
+            self._handle_error(e, f"get attachment {attachment_id}")
+            raise
+
+    def create(
+        self,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        asset_uuid: Optional[str] = None,
+        twin_uuid: Optional[str] = None,
+        environment_uuid: Optional[str] = None,
+        workspace_uuid: Optional[str] = None,
+    ) -> AttachmentSchema:
+        """Create a new attachment anchored to a twin/asset/environment/workspace."""
+        payload = AttachmentCreateSchema(
+            asset_uuid=asset_uuid,
+            twin_uuid=twin_uuid,
+            environment_uuid=environment_uuid,
+            workspace_uuid=workspace_uuid,
+            metadata=metadata or {},
+        )
+        try:
+            return self.api.src_app_api_attachments_create_attachment(payload)
+        except Exception as e:
+            self._handle_error(e, "create attachment")
+            raise
+
+    def update(
+        self,
+        attachment_id: str,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        asset_uuid: Optional[str] = None,
+        twin_uuid: Optional[str] = None,
+    ) -> AttachmentSchema:
+        """Update mutable attachment fields while preserving ownership."""
+        payload = AttachmentCreateSchema(
+            asset_uuid=asset_uuid,
+            twin_uuid=twin_uuid,
+            metadata=metadata or {},
+        )
+        try:
+            return self.api.src_app_api_attachments_update_attachment(
+                str(attachment_id), payload
+            )
+        except Exception as e:
+            self._handle_error(e, f"update attachment {attachment_id}")
+            raise
+
+    def upload(
+        self,
+        attachment_id: str,
+        file: bytes | str | tuple[str, bytes],
+        *,
+        filename: Optional[str] = None,
+    ) -> AttachmentSchema:
+        """Upload replacement file contents for an attachment."""
+        file_payload = (
+            (filename, file) if filename and isinstance(file, bytes) else file
+        )
+        try:
+            return self.api.src_app_api_attachments_upload_attachment(
+                str(attachment_id), file_payload
+            )
+        except Exception as e:
+            self._handle_error(e, f"upload attachment {attachment_id}")
+            raise
+
+    def upload_image_from_url(
+        self,
+        attachment_id: str,
+        image_url: str,
+        *,
+        filename: Optional[str] = None,
+    ) -> AttachmentSchema:
+        """Replace an attachment file with image bytes from a URL or data URL."""
+        if not isinstance(image_url, str) or not image_url.strip():
+            raise ValueError("image_url is required")
+
+        image_bytes, ext = self._read_image_url(image_url.strip())
+        resolved_filename = filename or f"{attachment_id}_annotated{ext}"
+        return self.upload(attachment_id, image_bytes, filename=resolved_filename)
+
+    def _read_image_url(self, image_url: str) -> tuple[bytes, str]:
+        if image_url.startswith("data:"):
+            header, b64_payload = image_url.split(",", 1)
+            mime_type = header.split(";", 1)[0].replace("data:", "") or "image/png"
+            return base64.b64decode(b64_payload), _image_extension_from_mime(mime_type)
+
+        http = urllib3.PoolManager()
+        response = http.request(
+            "GET",
+            image_url,
+            timeout=urllib3.Timeout(connect=5, read=30),
+        )
+        if response.status >= 400:
+            body = response.data.decode("utf-8", errors="replace")
+            raise CyberwaveAPIError(
+                f"Failed to download image for attachment upload: {body}",
+                status_code=response.status,
+            )
+
+        mime_type = response.headers.get("Content-Type", "image/png")
+        return response.data, _image_extension_from_mime(mime_type)
 
 
 class AssetManager(BaseResourceManager):
@@ -580,11 +1272,47 @@ class AssetManager(BaseResourceManager):
             raise  # For type checker
 
     def get(self, asset_id: str) -> AssetSchema:
-        """Get asset by ID"""
+        """Get asset by UUID, unified slug, or registry ID.
+
+        The backend ``GET /assets/{identifier}`` endpoint resolves identifiers
+        in this order: UUID, unified slug, registry_id / alias.
+
+        Args:
+            asset_id: UUID, unified slug (e.g. ``"acme/catalog/my-arm"``),
+                or legacy registry ID.
+        """
         try:
             return self.api.src_app_api_assets_get_asset(asset_id)
         except Exception as e:
             self._handle_error(e, f"get asset {asset_id}")
+            raise  # For type checker
+
+    def get_controller_setup(self, asset_uuid: str) -> AssetControllerSetupView:
+        """Get the backend-resolved controller runtime setup view for an asset.
+
+        This is the SDK-facing companion to ``GET
+        /api/v1/assets/{uuid}/controller-setup``. The response contains
+        configured controller bindings, primary controller selection, runtime
+        policies, runtime options, typed ``policy_ref`` entries, and
+        recommended setup defaults already resolved by the backend.
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/assets/{uuid}/controller-setup",
+                path_params={"uuid": asset_uuid},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            setup = self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+            return setup
+        except Exception as e:
+            self._handle_error(e, f"get controller setup for asset {asset_uuid}")
             raise  # For type checker
 
     def create(self, name: str, description: str = "", **kwargs) -> AssetSchema:
@@ -627,11 +1355,7 @@ class AssetManager(BaseResourceManager):
         if status == 413:
             return True
 
-        details = (
-            str(getattr(error, "body", "") or "")
-            + " "
-            + str(error)
-        ).lower()
+        details = (str(getattr(error, "body", "") or "") + " " + str(error)).lower()
         return bool(
             status == 400
             and (
@@ -750,13 +1474,13 @@ class AssetManager(BaseResourceManager):
     def get_universal_schema(self, asset_id: str) -> Dict[str, Any]:
         """
         Get the asset's universal schema as JSON.
-        
+
         Args:
             asset_id: UUID of the asset
-            
+
         Returns:
             Dict containing the CommonSchema as JSON
-            
+
         Example:
             schema = cw.assets.get_universal_schema(asset_id)
             print(schema['links'])  # Access links in the schema
@@ -769,30 +1493,26 @@ class AssetManager(BaseResourceManager):
             raise
 
     def patch_universal_schema(
-        self, 
-        asset_id: str, 
-        path: str, 
-        value: Any, 
-        op: str = "replace"
+        self, asset_id: str, path: str, value: Any, op: str = "replace"
     ) -> Dict[str, Any]:
         """
         Update the asset's universal schema using JSON Pointer operations.
-        
+
         This updates the authoritative schema and increments the schema hash.
         All twins created from this asset after the update will use the new schema.
-        
+
         Args:
             asset_id: UUID of the asset
             path: JSON Pointer path to update (e.g., "/links/0/name")
             value: Value to set at the path
             op: Operation type - "add" or "replace" (default: "replace")
-            
+
         Returns:
             Dict with keys:
                 - schema: The updated full schema
                 - hash: The new schema hash
                 - updated: Dict with op and path that were applied
-                
+
         Example:
             # Update a link name
             result = cw.assets.patch_universal_schema(
@@ -801,7 +1521,7 @@ class AssetManager(BaseResourceManager):
                 value="base_link_v2",
                 op="replace"
             )
-            
+
             # Add a new capability
             result = cw.assets.patch_universal_schema(
                 asset_id,
@@ -809,19 +1529,15 @@ class AssetManager(BaseResourceManager):
                 value=True,
                 op="add"
             )
-            
+
             print(f"New schema hash: {result['hash']}")
         """
         from cyberwave.rest.models.universal_schema_patch_schema import (
-            UniversalSchemaPatchSchema
+            UniversalSchemaPatchSchema,
         )
-        
+
         try:
-            payload = UniversalSchemaPatchSchema(
-                op=op,
-                path=path,
-                value=value
-            )
+            payload = UniversalSchemaPatchSchema(op=op, path=path, value=value)
             return self.api.src_app_api_assets_patch_asset_universal_schema(
                 asset_id, payload
             )
@@ -829,7 +1545,57 @@ class AssetManager(BaseResourceManager):
             self._handle_error(e, f"patch universal schema for asset {asset_id}")
             raise
 
-    def get_universal_schema_at_path(self, asset_id: str, path: str = "") -> Dict[str, Any]:
+    def patch_universal_schema_batch(
+        self, asset_id: str, operations: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Apply many JSON Pointer operations to the asset's universal schema at once.
+
+        Operations are applied in order, each seeing the result of the previous
+        ones — the same outcome as calling :meth:`patch_universal_schema` once per
+        operation, but the schema hash, the database write and the stored-URDF
+        regeneration happen once for the whole batch instead of once per
+        operation. For a robot with a few dozen joints that is the difference
+        between a few hundred object-storage round trips and a handful.
+
+        All-or-nothing: if any operation fails nothing is persisted, and the error
+        identifies the offending operation by index.
+
+        Args:
+            asset_id: UUID of the asset
+            operations: List of ``{"op": "add"|"replace", "path": ..., "value": ...}``
+
+        Returns:
+            Dict with keys:
+                - schema: The updated full schema
+                - applied: Number of operations applied
+                - changed: False when the operations reproduced the stored schema,
+                  in which case no write or regeneration was performed
+
+            None when ``operations`` is empty.
+
+        Example:
+            result = cw.assets.patch_universal_schema_batch(
+                asset_id,
+                [
+                    {"op": "replace", "path": "/joints/0/type", "value": "continuous"},
+                    {"op": "replace", "path": "/joints/0/limits/lower", "value": None},
+                    {"op": "replace", "path": "/joints/0/limits/upper", "value": None},
+                ],
+            )
+            print(result["applied"], result["changed"])
+        """
+        return _patch_universal_schema_batch(
+            self,
+            resource_path="/api/v1/assets/{uuid}/universal-schema/batch",
+            entity_id=asset_id,
+            operations=operations,
+            description=f"batch patch universal schema for asset {asset_id}",
+        )
+
+    def get_universal_schema_at_path(
+        self, asset_id: str, path: str = ""
+    ) -> Dict[str, Any]:
         """
         Get value at a specific JSON Pointer path in the asset's universal schema.
 
@@ -947,7 +1713,9 @@ class AssetManager(BaseResourceManager):
             updated["solver"] = {**current.get("solver", {}), **solver}
         if contact is not None:
             updated["contact"] = {**current.get("contact", {}), **contact}
-        return self.patch_universal_schema(asset_id, path="/physics", value=updated, op="add")
+        return self.patch_universal_schema(
+            asset_id, path="/physics", value=updated, op="add"
+        )
 
     def set_gravity(
         self,
@@ -1161,7 +1929,8 @@ class AssetManager(BaseResourceManager):
         ``registry_id_alias`` fields on the server side.  This is the correct
         way to look up an asset by a registry identifier that may contain a
         slash (e.g. ``"vendor/model"``), since embedding such a value directly
-        in a URL path segment would break Django's URL routing.
+        as a URL path segment would be ambiguous with the path's own segment
+        boundaries.
         """
         try:
             _param = self.api.api_client.param_serialize(
@@ -1189,11 +1958,11 @@ class AssetManager(BaseResourceManager):
         """Get asset by canonical registry ID or registry ID alias.
 
         When the identifier contains a slash (e.g. ``"vendor/model"``), a
-        direct ``GET /assets/{registry_id}`` call would break Django's URL
-        routing because the slash is interpreted as a path separator.  For
-        that reason this method uses the ``?registry_id=`` query-parameter
-        route, which does an exact server-side match against both
-        ``registry_id`` and ``registry_id_alias``.
+        direct ``GET /assets/{registry_id}`` call would be ambiguous because
+        the slash would be interpreted as a path separator.  For that reason
+        this method uses the ``?registry_id=`` query-parameter route, which
+        does an exact server-side match against both ``registry_id`` and
+        ``registry_id_alias``.
 
         For plain aliases (no slash) the direct ``GET /assets/{alias}``
         shortcut is tried first so that the common case remains efficient.
@@ -1229,20 +1998,44 @@ class AssetManager(BaseResourceManager):
         try:
             search_results = self.search(normalized_identifier)
             for asset in search_results:
-                if getattr(asset, "registry_id", None) == normalized_identifier or getattr(
-                    asset, "registry_id_alias", None
-                ) == normalized_identifier:
+                if (
+                    getattr(asset, "registry_id", None) == normalized_identifier
+                    or getattr(asset, "registry_id_alias", None)
+                    == normalized_identifier
+                ):
                     return asset
 
             assets = self.list()
             for asset in assets:
-                if getattr(asset, "registry_id", None) == normalized_identifier or getattr(
-                    asset, "registry_id_alias", None
-                ) == normalized_identifier:
+                if (
+                    getattr(asset, "registry_id", None) == normalized_identifier
+                    or getattr(asset, "registry_id_alias", None)
+                    == normalized_identifier
+                ):
                     return asset
             return None
         except Exception:
             return None
+
+    def get_by_slug(self, slug: str) -> Optional[AssetSchema]:
+        """Get asset by its full unified slug.
+
+        The unified slug format is ``{workspace-slug}/catalog/{entity-slug}``.
+        This method delegates to ``get_by_registry_id`` which tries the direct
+        ``GET /assets/{identifier}`` endpoint first (which the backend resolves
+        by UUID, unified slug, then registry_id/alias).
+
+        Args:
+            slug: Full unified slug
+                (e.g. ``"acme/catalog/my-robot-arm"``).
+
+        Returns:
+            AssetSchema if found, otherwise ``None``.
+
+        Example:
+            asset = cw.assets.get_by_slug("acme/catalog/my-robot-arm")
+        """
+        return self.get_by_registry_id(slug)
 
     def get_by_alias(self, alias: str) -> Optional[AssetSchema]:
         """Get asset by the first-class registry ID alias."""
@@ -1345,6 +2138,107 @@ class EdgeManager(BaseResourceManager):
             self._handle_error(e, f"update edge {edge_id}")
             raise
 
+    def discover(
+        self,
+        fingerprint: str,
+        *,
+        hostname: str = "",
+        platform: str = "",
+        name: str = "",
+        host_facts: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Upsert an edge by fingerprint and return the twin bindings.
+
+        Mirrors ``POST /api/v1/edges/discover``: the backend auto-registers
+        unknown fingerprints, refreshes the matching ``Edge`` row (hostname,
+        platform, IP, optional ``metadata['host_facts']``) and returns every
+        twin whose metadata binds it to this fingerprint.
+
+        ``host_facts`` is a free-form dict (typically the JSON produced by
+        :meth:`cyberwave.edge.host_metrics.HostFacts.to_dict`) and is merged
+        into ``Edge.metadata['host_facts']`` server-side.
+
+        Returns the raw response dict (``edge_uuid``, ``fingerprint``,
+        ``twins``).  Callers that only care about the side-effect of
+        refreshing host facts can ignore the return value.
+        """
+        try:
+            payload: Dict[str, Any] = {"fingerprint": fingerprint}
+            if hostname:
+                payload["hostname"] = hostname
+            if platform:
+                payload["platform"] = platform
+            if name:
+                payload["name"] = name
+            if host_facts is not None:
+                payload["host_facts"] = host_facts
+
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/edges/discover",
+                body=payload,
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"discover edge {fingerprint}")
+            raise
+
+    def get_twins(self, edge_id: str) -> List[Dict[str, Any]]:
+        """Twins bound to this edge: ``GET /api/v1/edges/{uuid}/twins``.
+
+        The backend matches this edge's fingerprint across its whole
+        workspace. Rows are ``{twin_uuid, twin_name, camera_config}``.
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/edges/{uuid}/twins",
+                path_params={"uuid": edge_id},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"get twins for edge {edge_id}")
+            raise
+
+    def unpair_twin(self, edge_id: str, twin_id: str) -> Dict[str, bool]:
+        """Release a twin from this edge: ``DELETE /api/v1/edges/{uuid}/twins/{twin_uuid}``.
+
+        Clears both the canonical ``metadata.edge_fingerprint`` and the legacy
+        ``edge_configs`` map. ``{"success": False}`` means there was no binding
+        to remove.
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="DELETE",
+                resource_path="/api/v1/edges/{uuid}/twins/{twin_uuid}",
+                path_params={"uuid": edge_id, "twin_uuid": twin_id},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"unpair twin {twin_id} from edge {edge_id}")
+            raise
+
     def delete(self, edge_id: str) -> Dict[str, bool]:
         """Delete an edge."""
         try:
@@ -1364,6 +2258,51 @@ class EdgeManager(BaseResourceManager):
         except Exception as e:
             self._handle_error(e, f"delete edge {edge_id}")
             raise
+
+
+def _extract_frame_generation(response_data: Any) -> Optional[int]:
+    """Pull the ``X-Frame-Generation`` producer heartbeat from a frame response.
+
+    Reads the header case-insensitively across the header shapes the generated
+    HTTP client can expose (``getheaders()`` mapping, ``getheader(name)``, or a
+    ``.headers`` mapping). Returns ``None`` when the header is absent or not a
+    valid integer — callers then fall back to byte-comparison, so a missing
+    header is never an error.
+    """
+    header_name = "x-frame-generation"
+
+    def _from_mapping(mapping: Any) -> Optional[str]:
+        try:
+            items = mapping.items()
+        except AttributeError:
+            return None
+        for key, value in items:
+            if isinstance(key, str) and key.lower() == header_name:
+                return value
+        return None
+
+    raw: Any = None
+    getheaders = getattr(response_data, "getheaders", None)
+    if callable(getheaders):
+        try:
+            raw = _from_mapping(getheaders())
+        except Exception:  # noqa: BLE001
+            raw = None
+    if raw is None:
+        getheader = getattr(response_data, "getheader", None)
+        if callable(getheader):
+            try:
+                raw = getheader("X-Frame-Generation")
+            except Exception:  # noqa: BLE001
+                raw = None
+    if raw is None:
+        raw = _from_mapping(getattr(response_data, "headers", None))
+    if raw is None:
+        return None
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 class TwinManager(BaseResourceManager):
@@ -1387,9 +2326,16 @@ class TwinManager(BaseResourceManager):
             raise  # For type checker
 
     def get(self, twin_id: str):
-        """Get twin by ID. Returns a Twin object with motion/navigation handles."""
+        """Get twin by UUID or unified slug.
+
+        Returns a Twin object with motion/navigation handles.
+
+        Args:
+            twin_id: UUID or full unified slug
+                (e.g. ``"acme/twins/arm-station-1"``).
+        """
         try:
-            twin_data = self.api.src_app_api_twins_get_twin(twin_id)
+            twin_data = self._resolve_twin(twin_id)
             if self._client:
                 from .twin import create_twin
 
@@ -1400,12 +2346,55 @@ class TwinManager(BaseResourceManager):
             raise  # For type checker
 
     def get_raw(self, twin_id: str) -> TwinSchema:
-        """Get raw twin data by ID (returns TwinSchema)"""
+        """Get raw twin data by UUID or unified slug (returns TwinSchema).
+
+        Args:
+            twin_id: UUID or full unified slug
+                (e.g. ``"acme/twins/arm-station-1"``).
+        """
         try:
-            return self.api.src_app_api_twins_get_twin(twin_id)
+            return self._resolve_twin(twin_id)
         except Exception as e:
             self._handle_error(e, f"get twin {twin_id}")
             raise  # For type checker
+
+    def _resolve_twin(self, twin_id: str) -> TwinSchema:
+        """Resolve a twin by UUID first, then by slug."""
+        if _is_uuid(twin_id):
+            return self.api.src_app_api_twins_get_twin(twin_id)
+        result = self.get_by_slug(twin_id)
+        if result is not None:
+            return result
+        return self.api.src_app_api_twins_get_twin(twin_id)
+
+    def get_by_slug(self, slug: str) -> Optional[TwinSchema]:
+        """Get twin by its full unified slug.
+
+        Args:
+            slug: Full unified slug
+                (e.g. ``"acme/twins/arm-station-1"``).
+
+        Returns:
+            TwinSchema if found, otherwise ``None``.
+
+        Example:
+            twin = cw.twins.get_by_slug("acme/twins/arm-station-1")
+        """
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="GET",
+                resource_path="/api/v1/twins/by-slug",
+                query_params=[("slug", slug)],
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "TwinSchema"},
+            ).data
+        except Exception:
+            return None
 
     def get_latest_frame(
         self,
@@ -1413,7 +2402,10 @@ class TwinManager(BaseResourceManager):
         sensor_id: Optional[str] = None,
         mock: bool = False,
         source_type: Optional[str] = None,
-    ) -> bytes:
+        frame_bucket: Optional[str] = None,
+        _request_timeout: Union[None, float, Tuple[float, float]] = None,
+        return_headers: bool = False,
+    ) -> Union[bytes, Tuple[bytes, Dict[str, Any]]]:
         """Get the latest JPEG frame for a twin.
 
         Args:
@@ -1422,9 +2414,37 @@ class TwinManager(BaseResourceManager):
             mock: If true, request deterministic mock JPEG bytes from the backend.
             source_type: Optional source selector (``"sim"`` or ``"tele"``).
                 Use ``"sim"`` to request a virtual camera frame from simulation.
+            frame_bucket: ``"policy_depth"`` to fetch the policy-resolution
+                depth frame rendered at the trained observation size. This is a
+                parity-critical surface: when no policy-depth frame is available
+                the backend returns HTTP 404 and this call raises
+                :class:`CyberwaveAPIError` (``status_code=404``) — it never falls
+                back to a regular RGB frame, which would feed the policy
+                out-of-distribution observations. Callers wanting an RGB frame on
+                miss must catch the 404 and re-request without ``frame_bucket``.
+            _request_timeout: Optional per-request timeout, in seconds, forwarded
+                to the underlying HTTP client. Either a single total timeout or a
+                ``(connect, read)`` tuple. Polling callers (e.g. a background
+                camera fetch loop) MUST set this so a single stalled socket cannot
+                block the thread forever; without it urllib3 waits indefinitely.
+            return_headers: When ``True``, return ``(bytes, meta)`` instead of
+                bare bytes, where ``meta`` currently carries
+                ``{"generation": int | None}``. ``generation`` is the sim's
+                per-render heartbeat from the ``X-Frame-Generation`` response
+                header — it advances on every render even when the pixels are
+                byte-identical (a static scene) and freezes only when the
+                producer stops, letting a polling consumer tell a legitimately
+                still scene from a dead producer. ``None`` when the backend
+                served no header (live/real camera, or an older sim).
 
         Returns:
-            JPEG bytes.
+            Image bytes (JPEG or PNG depending on bucket) when
+            ``return_headers`` is ``False``; otherwise a ``(bytes, meta)`` tuple.
+
+        Raises:
+            CyberwaveAPIError: with ``status_code=404`` when ``frame_bucket``
+                is ``"policy_depth"`` and no policy-resolution depth frame is
+                being rendered (no RGB fallback).
         """
         try:
             query_params = []
@@ -1443,6 +2463,8 @@ class TwinManager(BaseResourceManager):
                     "teleoperation",
                 }:
                     query_params.append(("source_type", "tele"))
+            if frame_bucket:
+                query_params.append(("frame_bucket", frame_bucket))
 
             _param = self.api.api_client.param_serialize(
                 method="GET",
@@ -1451,23 +2473,34 @@ class TwinManager(BaseResourceManager):
                 query_params=query_params,
                 auth_settings=["CustomTokenAuthentication"],
             )
-            response_data = self.api.api_client.call_api(*_param)
+            response_data = self.api.api_client.call_api(
+                *_param, _request_timeout=_request_timeout
+            )
             response_data.read()
 
             payload = getattr(response_data, "data", None)
+            frame_bytes: Optional[bytes] = None
             if isinstance(payload, (bytes, bytearray)):
-                return bytes(payload)
-            if isinstance(payload, str):
-                return payload.encode("utf-8")
+                frame_bytes = bytes(payload)
+            elif isinstance(payload, str):
+                frame_bytes = payload.encode("utf-8")
+            else:
+                # Fallback used by some urllib3 response wrappers.
+                raw_payload = getattr(response_data, "raw_data", None)
+                if isinstance(raw_payload, (bytes, bytearray)):
+                    frame_bytes = bytes(raw_payload)
 
-            # Fallback used by some urllib3 response wrappers.
-            raw_payload = getattr(response_data, "raw_data", None)
-            if isinstance(raw_payload, (bytes, bytearray)):
-                return bytes(raw_payload)
+            if frame_bytes is None:
+                raise CyberwaveAPIError(
+                    "Failed to get latest frame: unexpected response payload format"
+                )
 
-            raise CyberwaveAPIError(
-                "Failed to get latest frame: unexpected response payload format"
-            )
+            if return_headers:
+                meta: Dict[str, Any] = {
+                    "generation": _extract_frame_generation(response_data)
+                }
+                return frame_bytes, meta
+            return frame_bytes
         except Exception as e:
             self._handle_error(e, f"get latest frame for twin {twin_id}")
             raise
@@ -1513,6 +2546,80 @@ class TwinManager(BaseResourceManager):
             self._handle_error(e, f"update twin {twin_id}")
             raise  # For type checker
 
+    def set_flight_request(
+        self,
+        twin_id: str,
+        *,
+        hovering: bool,
+        hovering_altitude: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Record the operator's takeoff/land intent on an aerial twin.
+
+        ``POST /api/v1/twins/{uuid}/flight-request``. Use this instead of
+        ``update(metadata=...)``: ``PUT /twins`` shallow-merges only TOP-LEVEL
+        metadata keys, so sending ``status`` replaces the whole dict — wiping
+        ``status.is_flying`` / ``is_flying_at`` / ``flight_mode``, which only the
+        edge may write and which the redundant-takeoff guard reads. This endpoint
+        merges server-side under a row lock, so operator intent and aircraft
+        truth can be written concurrently by their respective owners.
+
+        Called by raw path via ``param_serialize`` rather than a generated
+        ``src_app_api_*`` stub: ``cyberwave/rest/`` is regenerated from a live
+        backend in CI, so a not-yet-generated stub would raise ``AttributeError``
+        for anyone on an older generated client.
+        """
+        body: Dict[str, Any] = {"hovering": hovering}
+        if hovering_altitude is not None:
+            body["hovering_altitude"] = hovering_altitude
+
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/twins/{uuid}/flight-request",
+                path_params={"uuid": twin_id},
+                body=body,
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"set flight request for twin {twin_id}")
+            raise  # For type checker
+
+    def set_driver_schema(
+        self,
+        twin_id: str,
+        *,
+        driver_config: Dict[str, Any],
+        merge: bool = True,
+    ) -> TwinSchema:
+        """Compile cw-driver.yml root dict on the backend and persist twin metadata catalogs."""
+        try:
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/twins/{uuid}/driver-schema",
+                path_params={"uuid": twin_id},
+                body={"driver_config": driver_config, "merge": merge},
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "TwinSchema"},
+            ).data
+        except Exception as e:
+            self._handle_error(e, f"set driver schema for twin {twin_id}")
+            raise
+
     def delete(self, twin_id: str) -> None:
         """Delete a twin"""
         try:
@@ -1552,32 +2659,34 @@ class TwinManager(BaseResourceManager):
     # Universal Schema APIs
     # =========================================================================
 
-    def get_universal_schema_at_path(self, twin_id: str, path: str = "") -> Dict[str, Any]:
+    def get_universal_schema_at_path(
+        self, twin_id: str, path: str = ""
+    ) -> Dict[str, Any]:
         """
         Get value at a specific JSON Pointer path in the twin's universal schema.
-        
+
         Args:
             twin_id: UUID of the twin
             path: JSON Pointer path (e.g., "/sensors/0", "/extensions/cyberwave/capabilities")
                  Empty string returns the entire schema
-            
+
         Returns:
             Dict with keys:
                 - path: The JSON Pointer path
                 - value: The value at that path (can be any JSON type)
-                
+
         Example:
             # Get entire schema
             result = cw.twins.get_universal_schema_at_path(twin_id)
             schema = result['value']
-            
+
             # Get specific path
             result = cw.twins.get_universal_schema_at_path(twin_id, "/sensors/0")
             sensor = result['value']
-            
+
             # Get capabilities
             result = cw.twins.get_universal_schema_at_path(
-                twin_id, 
+                twin_id,
                 "/extensions/cyberwave/capabilities"
             )
             capabilities = result['value']
@@ -1591,30 +2700,26 @@ class TwinManager(BaseResourceManager):
             raise
 
     def patch_universal_schema(
-        self, 
-        twin_id: str, 
-        path: str, 
-        value: Any, 
-        op: str = "replace"
+        self, twin_id: str, path: str, value: Any, op: str = "replace"
     ) -> Dict[str, Any]:
         """
         Update the twin's universal schema using JSON Pointer operations.
-        
+
         This allows editing twin-specific schema overrides, such as:
         - /sensors (array of sensor objects)
         - /extensions/cyberwave/capabilities
-        
+
         Args:
             twin_id: UUID of the twin
             path: JSON Pointer path to update (e.g., "/sensors/0/parameters/id")
             value: Value to set at the path
             op: Operation type - "add" or "replace" (default: "replace")
-            
+
         Returns:
             Dict with keys:
                 - schema: The updated full schema
                 - updated: Dict with op and path that were applied
-                
+
         Example:
             # Update a sensor ID
             result = cw.twins.patch_universal_schema(
@@ -1623,7 +2728,7 @@ class TwinManager(BaseResourceManager):
                 value="my_camera",
                 op="replace"
             )
-            
+
             # Add a new capability
             result = cw.twins.patch_universal_schema(
                 twin_id,
@@ -1633,21 +2738,57 @@ class TwinManager(BaseResourceManager):
             )
         """
         from cyberwave.rest.models.twin_universal_schema_patch_schema import (
-            TwinUniversalSchemaPatchSchema
+            TwinUniversalSchemaPatchSchema,
         )
-        
+
         try:
-            payload = TwinUniversalSchemaPatchSchema(
-                op=op,
-                path=path,
-                value=value
-            )
+            payload = TwinUniversalSchemaPatchSchema(op=op, path=path, value=value)
             return self.api.src_app_api_twins_patch_twin_universal_schema(
                 twin_id, payload
             )
         except Exception as e:
             self._handle_error(e, f"patch universal schema for twin {twin_id}")
             raise
+
+    def patch_universal_schema_batch(
+        self, twin_id: str, operations: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Apply many JSON Pointer operations to the twin's universal schema at once.
+
+        Operations are applied in order, each seeing the result of the previous
+        ones — the same outcome as calling :meth:`patch_universal_schema` once per
+        operation, but the deep copy, the schema validation, the database write and
+        the MQTT notification happen once for the whole batch instead of once per
+        operation.
+
+        All-or-nothing: if any operation fails nothing is persisted, and the error
+        identifies the offending operation by index.
+
+        Args:
+            twin_id: UUID of the twin
+            operations: List of ``{"op": "add"|"replace", "path": ..., "value": ...}``
+
+        Returns:
+            Dict with keys ``schema``, ``applied`` and ``changed``; None when
+            ``operations`` is empty.
+
+        Example:
+            result = cw.twins.patch_universal_schema_batch(
+                twin_id,
+                [
+                    {"op": "replace", "path": "/sensors/0/parameters/id", "value": "cam"},
+                    {"op": "add", "path": "/sensors/0/parameters/fps", "value": 30},
+                ],
+            )
+        """
+        return _patch_universal_schema_batch(
+            self,
+            resource_path="/api/v1/twins/{uuid}/universal-schema/batch",
+            entity_id=twin_id,
+            operations=operations,
+            description=f"batch patch universal schema for twin {twin_id}",
+        )
 
     # =========================================================================
     # Edge Device Pairing
@@ -1813,7 +2954,9 @@ class TwinManager(BaseResourceManager):
                 if not isinstance(candidate_metadata, dict):
                     continue
                 candidate_edge_configs = candidate_metadata.get(EDGE_CONFIGS_KEY, {})
-                if self._resolve_binding_for_fingerprint(candidate_edge_configs, fingerprint):
+                if self._resolve_binding_for_fingerprint(
+                    candidate_edge_configs, fingerprint
+                ):
                     raise CyberwaveAPIError(
                         (
                             f"Device already paired to twin '{candidate_uuid}'. "
@@ -1824,7 +2967,9 @@ class TwinManager(BaseResourceManager):
 
             _, metadata, edge_configs = self._get_twin_edge_configs(twin_id)
 
-            existing = self._resolve_binding_for_fingerprint(edge_configs, fingerprint) or {}
+            existing = (
+                self._resolve_binding_for_fingerprint(edge_configs, fingerprint) or {}
+            )
             if not isinstance(existing, dict):
                 existing = {}
 
@@ -1906,9 +3051,8 @@ class TwinManager(BaseResourceManager):
             if self._is_legacy_edge_configs_map(edge_configs):
                 fingerprint_to_remove = None
                 for fingerprint, _binding in self._iter_edge_bindings(edge_configs):
-                    if (
-                        self._device_uuid_for_fingerprint(twin_id, fingerprint)
-                        == str(device_uuid)
+                    if self._device_uuid_for_fingerprint(twin_id, fingerprint) == str(
+                        device_uuid
                     ):
                         fingerprint_to_remove = fingerprint
                         break
@@ -1928,10 +3072,10 @@ class TwinManager(BaseResourceManager):
                 }
 
             binding_fingerprint = edge_configs.get("edge_fingerprint")
-            if (
-                not isinstance(binding_fingerprint, str)
-                or self._device_uuid_for_fingerprint(twin_id, binding_fingerprint)
-                != str(device_uuid)
+            if not isinstance(
+                binding_fingerprint, str
+            ) or self._device_uuid_for_fingerprint(twin_id, binding_fingerprint) != str(
+                device_uuid
             ):
                 raise CyberwaveAPIError("Device not found", status_code=404)
 
@@ -2080,7 +3224,9 @@ class TwinManager(BaseResourceManager):
             >>> manager.update_calibration(twin_id, calibration, "leader")
         """
         if robot_type not in ["leader", "follower"]:
-            raise ValueError(f"robot_type must be 'leader' or 'follower', got '{robot_type}'")
+            raise ValueError(
+                f"robot_type must be 'leader' or 'follower', got '{robot_type}'"
+            )
 
         try:
             # Build calibration dicts (not model objects) for robustness across SDK versions
@@ -2104,10 +3250,12 @@ class TwinManager(BaseResourceManager):
                             pass
                 joint_calibration_dicts[joint_name] = base
 
-            schema = TwinJointCalibrationSchema.model_validate({
-                "joint_calibration": joint_calibration_dicts,
-                "robot_type": robot_type,
-            })
+            schema = TwinJointCalibrationSchema.model_validate(
+                {
+                    "joint_calibration": joint_calibration_dicts,
+                    "robot_type": robot_type,
+                }
+            )
 
             return self.api.src_app_api_twins_update_twin_calibration(
                 uuid=twin_id,
@@ -2137,3 +3285,764 @@ class TwinManager(BaseResourceManager):
         except Exception as e:
             self._handle_error(e, f"delete calibration for twin {twin_id}")
             raise
+
+
+class MLModelsResourceManager(BaseResourceManager):
+    """Workspace ML model records from ``GET/POST/DELETE /api/v1/mlmodels``.
+
+    Lists and fetches catalog metadata (names, slugs, ``sdk_load_id``,
+    deployment flags, etc.) so callers can choose what to pass to
+    :meth:`cyberwave.models.manager.ModelManager.load`.
+
+    This manager is intentionally **not** bound to ``Cyberwave.models`` — that
+    attribute stays the unified runtime loader (:class:`~cyberwave.models.manager.ModelManager`).
+    Playground inference is available via ``cw.models.playground("slug").run(...)``.
+
+    Methods :meth:`create` and :meth:`update` are stubs until the SDK grows
+    typed, high-level wrappers; use
+    ``client.api.src_app_api_mlmodels_create_mlmodel(...)`` /
+    ``client.api.src_app_api_mlmodels_update_mlmodel(...)`` for full control.
+    """
+
+    def list(
+        self,
+        *,
+        deployment: Optional[str] = None,
+        edge_compatible: Optional[bool] = None,
+        model_external_id: Optional[str] = None,
+        supported_level: Optional[str] = None,
+        is_trainable: Optional[bool] = None,
+        catalog_seed_id: Optional[str] = None,
+    ) -> List[MLModelSchema]:
+        """List ML models visible to the authenticated user (workspace + public).
+
+        Mirrors query parameters on :func:`list_mlmodels` in the backend router.
+        """
+        try:
+            return self.api.src_app_api_mlmodels_list_mlmodels(
+                deployment=deployment,
+                edge_compatible=edge_compatible,
+                model_external_id=model_external_id,
+                supported_level=supported_level,
+                is_trainable=is_trainable,
+                catalog_seed_id=catalog_seed_id,
+            )
+        except Exception as e:
+            self._handle_error(e, "list ml models")
+            raise
+
+    def list_public(
+        self,
+        *,
+        deployment: Optional[str] = None,
+    ) -> List[MLModelSchema]:
+        """List public ML models (open route; does not require membership)."""
+        try:
+            return self.api.src_app_api_mlmodels_list_public_mlmodels(
+                deployment=deployment,
+            )
+        except Exception as e:
+            self._handle_error(e, "list public ml models")
+            raise
+
+    def get_by_uuid(self, uuid: str) -> MLModelSchema:
+        """Fetch one model by UUID."""
+        try:
+            return self.api.src_app_api_mlmodels_get_mlmodel(uuid=str(uuid).strip())
+        except Exception as e:
+            self._handle_error(e, f"get ml model {uuid}")
+            raise
+
+    def get_by_slug(self, slug: str) -> MLModelSchema:
+        """Fetch one model by unified slug (``ws/models/name``)."""
+        try:
+            return self.api.src_app_api_mlmodels_get_mlmodel_by_slug(
+                slug=str(slug).strip()
+            )
+        except Exception as e:
+            self._handle_error(e, f"get ml model by slug {slug!r}")
+            raise
+
+    def get(self, model_id: str) -> MLModelSchema:
+        """Resolve *model_id* by slug (contains ``/``) or otherwise by UUID."""
+        mid = str(model_id).strip()
+        if _looks_like_slug(mid):
+            return self.get_by_slug(mid)
+        return self.get_by_uuid(mid)
+
+    def delete(self, uuid: str) -> Dict[str, bool]:
+        """Delete an ML model by UUID.
+
+        The generated OpenAPI binding returns ``None``; this wrapper matches
+        the HTTP JSON body and returns ``{"success": True}`` on completion.
+        """
+        uid = str(uuid).strip()
+        try:
+            self.api.src_app_api_mlmodels_delete_mlmodel(uuid=uid)
+        except Exception as e:
+            self._handle_error(e, f"delete ml model {uid}")
+            raise
+        return {"success": True}
+
+    def create(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Stub — not implemented in the SDK yet.
+
+        Raises:
+            NotImplementedError: Always, until a typed create helper lands.
+        """
+        raise NotImplementedError(
+            "MLModelsResourceManager.create() is not implemented yet — call "
+            "Cyberwave.api.src_app_api_mlmodels_create_mlmodel(ml_model_create_schema=...) "
+            "or upgrade the SDK once this wrapper is finalized."
+        )
+
+    def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Stub — not implemented in the SDK yet.
+
+        Raises:
+            NotImplementedError: Always, until a typed update helper lands.
+        """
+        raise NotImplementedError(
+            "MLModelsResourceManager.update() is not implemented yet — call "
+            "Cyberwave.api.src_app_api_mlmodels_update_mlmodel(uuid=..., ml_model_update_schema=...) "
+            "or upgrade the SDK once this wrapper is finalized."
+        )
+
+
+# Sentinel: distinguishes "caller did not pass on_poll" from "caller passed None".
+_DEFAULT_ON_POLL: object = object()
+
+# Terminal processing statuses returned by the backend.
+_DATASET_TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed"})
+
+
+def _default_on_import_poll(ds: "DatasetSchema") -> None:
+    """Built-in progress printer for :meth:`DatasetManager.wait_until_ready`."""
+    print(
+        f"[cyberwave] dataset {ds.uuid} status={ds.processing_status} "
+        f"episodes={ds.processed_episodes}/{ds.total_episodes} "
+        f"failed={ds.failed_episodes}"
+    )
+
+
+def _default_on_convert_poll(state: Any) -> None:
+    """Built-in progress printer for :meth:`DatasetManager.convert`."""
+    status = getattr(state, "status", None) or "ready"
+    print(f"[cyberwave] convert status={status}")
+
+
+class DatasetManager(BaseResourceManager):
+    """Manager for dataset operations (import from HuggingFace or upload local).
+
+    Example:
+        # HuggingFace import (string is not a local path); idempotent — reuses
+        # an existing import for the same HF repo if one already exists.
+        ds = cw.datasets.add("lerobot/pusht", name="pusht")
+
+        # Local upload (path exists on disk; zipped first, then uploaded)
+        ds = cw.datasets.add("./my_dataset", name="my_dataset")
+
+        ds.uuid, ds.processing_status, ds.is_ready
+
+        # Wait for async ingestion to finish (prints status each poll by default)
+        ds = cw.datasets.wait_until_ready(ds)
+
+        # Get the frontend URL to visualize in a browser
+        url = cw.datasets.visualize(ds)
+    """
+
+    # Loose check used as a hint when the path doesn't exist on disk.
+    _HF_REPO_PATTERN = re.compile(r"^[\w.\-]+/[\w.\-]+$")
+
+    # Frontend base URL (can be overridden via environment variable)
+    _FRONTEND_URL = os.environ.get("CYBERWAVE_FRONTEND_URL", "https://cyberwave.com")
+
+    def list(
+        self,
+        *,
+        limit: int = 60,
+        offset: int = 0,
+        environment: Optional[str] = None,
+        processing_status: Optional[str] = None,
+    ) -> List[DatasetSchema]:
+        """List datasets visible to the authenticated user.
+
+        Args:
+            limit: Maximum number of datasets to return (default 60).
+            offset: Number of datasets to skip for pagination (default 0).
+            environment: Filter by environment UUID.
+            processing_status: Filter by processing status (e.g. "completed").
+
+        Returns:
+            List of DatasetSchema objects.
+        """
+        try:
+            response = self.api.src_app_api_datasets_list_datasets(
+                limit=limit,
+                offset=offset,
+                environment=environment,
+                processing_status=processing_status,
+            )
+            return response.datasets
+        except Exception as e:
+            self._handle_error(e, "list datasets")
+            raise  # For type checker
+
+    def get(self, dataset_id: str) -> DatasetSchema:
+        """Get a dataset by UUID."""
+        try:
+            return self.api.src_app_api_datasets_get_dataset(dataset_id)
+        except Exception as e:
+            self._handle_error(e, f"get dataset {dataset_id}")
+            raise  # For type checker
+
+    def delete(self, dataset_id: str) -> Dict[str, bool]:
+        """Delete a dataset by UUID.
+
+        Returns:
+            ``{"success": True}`` on success.
+        """
+        try:
+            return self.api.src_app_api_datasets_delete_dataset(dataset_id)  # type: ignore[return-value]
+        except Exception as e:
+            self._handle_error(e, f"delete dataset {dataset_id}")
+            raise  # For type checker
+
+    def visualize(self, dataset: "DatasetSchema | str") -> str:
+        """Return the frontend URL to visualize this dataset in a browser.
+
+        Args:
+            dataset: A DatasetSchema object or a dataset UUID string.
+
+        Returns:
+            The full URL to the dataset detail page.
+
+        Example:
+            >>> ds = cw.datasets.add("lerobot/pusht")
+            >>> print(cw.datasets.visualize(ds))
+            https://cyberwave.com/acme/datasets/pusht
+        """
+        if isinstance(dataset, str):
+            ds = self.get(dataset)
+        else:
+            ds = dataset
+
+        slug = getattr(ds, "slug", None)
+        uuid = getattr(ds, "uuid", None)
+
+        if slug:
+            return f"{self._FRONTEND_URL}/{slug}"
+        if uuid:
+            return f"{self._FRONTEND_URL}/datasets/{uuid}"
+        raise CyberwaveAPIError(
+            "Dataset has neither slug nor uuid; cannot construct URL."
+        )
+
+    def add(
+        self,
+        name_or_path: str,
+        *,
+        name: Optional[str] = None,
+        hf_revision: Optional[str] = None,
+        hf_subset: Optional[str] = None,
+        content_type: str = "application/zip",
+        reuse_existing: bool = True,
+    ) -> DatasetSchema:
+        """Import a dataset from HuggingFace or upload a local folder/file.
+
+        Routes based on whether *name_or_path* resolves to an existing
+        filesystem entry. If it does, the path is zipped (when a directory or
+        a non-zip file) and uploaded via a signed URL. Otherwise the value is
+        treated as a HuggingFace repo id (e.g. ``"lerobot/pusht"``) and the
+        backend imports it directly.
+
+        Returns the :class:`DatasetSchema` immediately so callers can read
+        ``uuid``, ``processing_status``, ``is_ready``, etc. For HuggingFace
+        imports, processing continues asynchronously on the backend; call
+        :meth:`wait_until_ready` to block until ingestion finishes.
+
+        Args:
+            name_or_path: HuggingFace repo id (``"owner/repo"``) or local path.
+            name: Display name for the dataset (must be ≥3 chars). Defaults
+                to a sensible value derived from *name_or_path*.
+            hf_revision: HuggingFace revision/branch/tag (HF imports only).
+            hf_subset: HuggingFace dataset subset/config (HF imports only).
+            content_type: Content type used for the signed PUT (zip uploads
+                only). Defaults to ``application/zip``.
+            reuse_existing: When ``True`` (default), look up existing datasets
+                that were already imported from the same HF repo (+ revision/
+                subset) and return the first match instead of queuing a new
+                import. Pass ``False`` to always create a fresh import.
+        """
+        if os.path.exists(name_or_path):
+            return self._add_from_path(
+                name_or_path,
+                name=name,
+                content_type=content_type,
+            )
+        return self._add_from_huggingface(
+            name_or_path,
+            name=name,
+            hf_revision=hf_revision,
+            hf_subset=hf_subset,
+            reuse_existing=reuse_existing,
+        )
+
+    @staticmethod
+    def _default_name_from_repo(repo_id: str) -> str:
+        return repo_id.replace("/", "-")
+
+    @staticmethod
+    def _default_name_from_path(path: str) -> str:
+        base = os.path.basename(os.path.abspath(path))
+        # Strip a trailing ".zip" so a file like "my_dataset.zip" yields the
+        # nicer display name "my_dataset".
+        if base.lower().endswith(".zip"):
+            base = base[:-4]
+        return base or "dataset"
+
+    def _add_from_huggingface(
+        self,
+        repo_id: str,
+        *,
+        name: Optional[str],
+        hf_revision: Optional[str],
+        hf_subset: Optional[str],
+        reuse_existing: bool,
+    ) -> DatasetSchema:
+        if not self._HF_REPO_PATTERN.match(repo_id):
+            raise CyberwaveAPIError(
+                f"'{repo_id}' is not a local path and does not look like a "
+                "HuggingFace repo id (expected 'owner/repo'). "
+                "Pass an existing path to upload, or a valid HF repo id."
+            )
+
+        if reuse_existing:
+            existing = self._find_existing_hf_import(
+                repo_id, hf_revision=hf_revision, hf_subset=hf_subset
+            )
+            if existing is not None:
+                return existing
+
+        dataset_name = (name or self._default_name_from_repo(repo_id)).strip()
+        try:
+            payload = DatasetImportInitSchema(
+                source="hf",
+                name=dataset_name,
+                hf_repo_id=repo_id,
+                hf_revision=hf_revision,
+                hf_subset=hf_subset,
+            )
+            response = self.api.src_app_api_datasets_import_dataset(payload)
+            # HF imports are async (HTTP 202); fetch the full schema so the
+            # caller has a populated DatasetSchema to inspect and poll.
+            return self.get(response.dataset_uuid)
+        except Exception as e:
+            self._handle_error(e, f"import dataset from HuggingFace '{repo_id}'")
+            raise  # For type checker
+
+    def _find_existing_hf_import(
+        self,
+        repo_id: str,
+        *,
+        hf_revision: Optional[str],
+        hf_subset: Optional[str],
+    ) -> Optional[DatasetSchema]:
+        """Return the first existing dataset imported from *repo_id* (same revision/subset), or ``None``."""
+        offset = 0
+        page_size = 200
+        while True:
+            page = self.list(limit=page_size, offset=offset)
+            for ds in page:
+                meta = getattr(ds, "metadata", None) or {}
+                import_info = meta.get("import") if isinstance(meta, dict) else None
+                if not isinstance(import_info, dict):
+                    continue
+                if import_info.get("source") != "hf":
+                    continue
+                if import_info.get("hf_repo_id") != repo_id:
+                    continue
+                if (
+                    hf_revision is not None
+                    and import_info.get("hf_revision") != hf_revision
+                ):
+                    continue
+                if hf_subset is not None and import_info.get("hf_subset") != hf_subset:
+                    continue
+                return ds
+            if len(page) < page_size:
+                break
+            offset += page_size
+        return None
+
+    def wait_until_ready(
+        self,
+        dataset: "DatasetSchema | str",
+        *,
+        poll_interval: float = 5.0,
+        timeout: float = 1800.0,
+        on_poll: "Callable[[DatasetSchema], None] | None" = _DEFAULT_ON_POLL,  # type: ignore[assignment]
+    ) -> DatasetSchema:
+        """Poll ``GET /datasets/{uuid}`` until processing is terminal.
+
+        HuggingFace imports are asynchronous (HTTP 202 from :meth:`add`).
+        Call this method to block until ingestion completes or fails.
+
+        Args:
+            dataset: A :class:`~cyberwave.rest.DatasetSchema` or dataset UUID.
+            poll_interval: Seconds between polling attempts (default 5 s).
+            timeout: Maximum seconds to wait before raising
+                :class:`~cyberwave.exceptions.CyberwaveAPIError` (default
+                1800 s = 30 min).
+            on_poll: Called with the fresh :class:`~cyberwave.rest.DatasetSchema`
+                after every fetch, including the terminal one.
+
+                - **Omitted** (default): uses a built-in printer that writes a
+                  one-line status to stdout.
+                - **``None``**: fully silent.
+                - **callable**: your own progress handler.
+
+        Returns:
+            The final :class:`~cyberwave.rest.DatasetSchema` once
+            ``processing_status`` is ``"completed"`` or ``"failed"``.
+
+        Raises:
+            CyberwaveAPIError: If ``processing_status`` is ``"failed"`` or the
+                timeout expires before a terminal status is reached.
+
+        Example:
+            ds = cw.datasets.add("lerobot/pusht")
+            ds = cw.datasets.wait_until_ready(ds)
+            print(ds.is_ready)
+        """
+        cb: Optional[Callable[["DatasetSchema"], None]] = (
+            _default_on_import_poll  # type: ignore[assignment]
+            if on_poll is _DEFAULT_ON_POLL
+            else on_poll
+        )
+
+        dataset_uuid = dataset if isinstance(dataset, str) else str(dataset.uuid)
+        deadline = time.monotonic() + timeout
+
+        while True:
+            ds = self.get(dataset_uuid)
+            if cb is not None:
+                cb(ds)
+
+            status = getattr(ds, "processing_status", None) or ""
+            if status in _DATASET_TERMINAL_STATUSES:
+                if status == "failed":
+                    failed_uuids = getattr(ds, "failed_episode_uuids", []) or []
+                    detail = (
+                        f" Failed episodes: {', '.join(failed_uuids)}"
+                        if failed_uuids
+                        else ""
+                    )
+                    raise CyberwaveAPIError(
+                        f"Dataset '{dataset_uuid}' ingestion failed.{detail}",
+                        status_code=None,
+                    )
+                return ds
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CyberwaveAPIError(
+                    f"Dataset '{dataset_uuid}' ingestion did not complete within "
+                    f"{timeout:.0f}s (last status: {status!r}).",
+                    status_code=None,
+                )
+            time.sleep(min(poll_interval, remaining))
+
+    def _add_from_path(
+        self,
+        path: str,
+        *,
+        name: Optional[str],
+        content_type: str,
+    ) -> DatasetSchema:
+        dataset_name = (name or self._default_name_from_path(path)).strip()
+
+        zip_path, cleanup_zip = self._materialize_zip(path)
+        try:
+            file_size = os.path.getsize(zip_path)
+
+            try:
+                init_payload = DatasetImportInitSchema(
+                    source="zip",
+                    name=dataset_name,
+                    file_size_bytes=file_size,
+                    content_type=content_type,
+                )
+                init_response = self.api.src_app_api_datasets_import_dataset(
+                    init_payload
+                )
+            except Exception as e:
+                self._handle_error(e, f"initialize dataset upload for '{path}'")
+                raise  # For type checker
+
+            upload_url = getattr(init_response, "upload_url", None)
+            dataset_uuid = init_response.dataset_uuid
+            if not upload_url:
+                raise CyberwaveAPIError(
+                    "Dataset upload not available: backend did not return a "
+                    "signed upload URL."
+                )
+
+            self._put_zip_to_signed_url(zip_path, upload_url, content_type)
+
+            try:
+                complete_payload = DatasetImportCompleteSchema(
+                    dataset_uuid=dataset_uuid,
+                )
+                return self.api.src_app_api_datasets_complete_dataset_import(
+                    complete_payload
+                )
+            except Exception as e:
+                self._handle_error(
+                    e, f"complete dataset upload for dataset {dataset_uuid}"
+                )
+                raise  # For type checker
+        finally:
+            if cleanup_zip:
+                try:
+                    os.remove(zip_path)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def _materialize_zip(path: str) -> tuple[str, bool]:
+        """Return ``(zip_path, cleanup)`` for *path*.
+
+        - Directory: zipped into a temp ``.zip`` (cleanup=True).
+        - Existing ``.zip`` file: reused as-is (cleanup=False).
+        - Other file: wrapped in a temp ``.zip`` containing that single file
+          (cleanup=True).
+        """
+        abs_path = os.path.abspath(path)
+
+        if os.path.isdir(abs_path):
+            tmp_dir = tempfile.mkdtemp(prefix="cw-dataset-")
+            base_name = os.path.join(tmp_dir, "dataset")
+            archive_path = shutil.make_archive(
+                base_name=base_name, format="zip", root_dir=abs_path
+            )
+            return archive_path, True
+
+        if not os.path.isfile(abs_path):
+            raise CyberwaveAPIError(f"Path is not a file or directory: {path}")
+
+        if abs_path.lower().endswith(".zip"):
+            return abs_path, False
+
+        tmp_dir = tempfile.mkdtemp(prefix="cw-dataset-")
+        archive_path = os.path.join(tmp_dir, "dataset.zip")
+        # ``make_archive`` only zips directories, so build a single-file zip
+        # manually using a staging directory.
+        staging = os.path.join(tmp_dir, "staging")
+        os.makedirs(staging, exist_ok=True)
+        shutil.copy2(abs_path, os.path.join(staging, os.path.basename(abs_path)))
+        archive_path = shutil.make_archive(
+            base_name=os.path.join(tmp_dir, "dataset"),
+            format="zip",
+            root_dir=staging,
+        )
+        return archive_path, True
+
+    # ------------------------------------------------------------------
+    # Conversion and download
+    # ------------------------------------------------------------------
+
+    # Formats the backend can produce today.
+    WRITABLE_FORMATS: frozenset[str] = frozenset(
+        {"parquet", "lerobot3", "lerobot21", "rlds", "openvla", "robodm"}
+    )
+
+    def convert(
+        self,
+        dataset: "DatasetSchema | str",
+        format: str,  # noqa: A002
+        *,
+        poll_interval: float = 5.0,
+        timeout: float = 3600.0,
+        on_poll: "Callable[[Any], None] | None" = _DEFAULT_ON_POLL,  # type: ignore[assignment]
+    ) -> str:
+        """Trigger cloud conversion of a dataset and block until the artifact is ready.
+
+        Calls ``GET /datasets/{uuid}/download?format={format}`` (idempotent) and
+        polls every *poll_interval* seconds until the backend returns HTTP 200
+        (conversion finished). Mirrors the frontend ``useDatasetDownload`` hook.
+
+        Args:
+            dataset: A :class:`~cyberwave.rest.DatasetSchema` or a dataset UUID string.
+            format: Target format. Supported values: ``"parquet"``, ``"lerobot3"``,
+                ``"lerobot21"``, ``"rlds"``, ``"openvla"``, ``"robodm"``.
+                Deprecated aliases ``"lerobot"`` and ``"plain"`` are normalised
+                server-side.
+            poll_interval: Seconds between polling attempts (default 5 s).
+            timeout: Maximum seconds to wait for the conversion before raising
+                :class:`~cyberwave.exceptions.CyberwaveAPIError` (default 3600 s).
+            on_poll: Called with the raw backend response object after every
+                poll iteration (the object has ``.status``, ``.signed_url``,
+                ``.expires_at`` attributes depending on the state).
+
+                - **Omitted** (default): uses a built-in printer that writes
+                  the current ``status`` to stdout.
+                - **``None``**: fully silent. Replaces the old ``verbose=False``.
+                - **callable**: your own progress handler.
+
+        Returns:
+            The signed download URL (valid for 24 h).
+
+        Raises:
+            CyberwaveAPIError: If the format is invalid, the backend returns an
+                error, or the conversion does not complete within *timeout*.
+
+        Example:
+            url = cw.datasets.convert("my-dataset-uuid", "lerobot3")
+            print(f"Download at: {url}")
+        """
+        cb: Optional[Callable[[Any], None]] = (
+            _default_on_convert_poll  # type: ignore[assignment]
+            if on_poll is _DEFAULT_ON_POLL
+            else on_poll
+        )
+
+        dataset_uuid = dataset if isinstance(dataset, str) else str(dataset.uuid)
+        format_lower = format.strip().lower()
+
+        deadline = time.monotonic() + timeout
+
+        while True:
+            try:
+                result = self.api.src_app_api_datasets_download_dataset(
+                    dataset_uuid, format_lower
+                )
+            except Exception as e:
+                self._handle_error(
+                    e,
+                    f"request conversion of dataset {dataset_uuid} to '{format_lower}'",
+                )
+                raise  # For type checker
+
+            if cb is not None:
+                cb(result)
+
+            # Detect response type by the presence of discriminating fields.
+            # "ready" responses carry a `signed_url`; "processing" responses carry
+            # `poll_url`.  We duck-type rather than isinstance-check so both the
+            # auto-generated Pydantic models and plain SimpleNamespace mocks work.
+            signed_url = getattr(result, "signed_url", None)
+            if signed_url:
+                return str(signed_url)
+
+            status = getattr(result, "status", "queued")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CyberwaveAPIError(
+                    f"Dataset conversion to '{format_lower}' did not complete within "
+                    f"{timeout:.0f}s (last status: {status}).",
+                    status_code=None,
+                )
+            time.sleep(min(poll_interval, remaining))
+
+    def download(
+        self,
+        dataset: "DatasetSchema | str",
+        format: str,  # noqa: A002
+        dest: Optional[str] = None,
+        *,
+        poll_interval: float = 5.0,
+        timeout: float = 3600.0,
+        on_poll: "Callable[[Any], None] | None" = _DEFAULT_ON_POLL,  # type: ignore[assignment]
+    ) -> str:
+        """Convert a dataset to *format* and download the artifact to disk.
+
+        Convenience wrapper around :meth:`convert`: triggers conversion (or
+        reuses an existing artifact) and streams the resulting zip file to
+        *dest*.
+
+        Args:
+            dataset: A :class:`~cyberwave.rest.DatasetSchema` or a dataset UUID string.
+            format: Target format (same values as :meth:`convert`).
+            dest: Destination path on disk.  If ``None`` (default), the file is
+                saved to the current working directory as
+                ``{dataset_uuid}_{format}.zip``.  If *dest* is a directory the
+                filename is auto-derived inside that directory.
+            poll_interval: Polling interval forwarded to :meth:`convert`.
+            timeout: Timeout forwarded to :meth:`convert`.
+            on_poll: Progress callback forwarded to :meth:`convert`.
+                Omit for default stdout printing; pass ``None`` to silence.
+
+        Returns:
+            The absolute path to the saved file.
+
+        Raises:
+            CyberwaveAPIError: If conversion fails or the HTTP download fails.
+
+        Example:
+            path = cw.datasets.download("my-dataset-uuid", "lerobot3", dest="./data")
+            print(f"Saved to {path}")
+        """
+        dataset_uuid = dataset if isinstance(dataset, str) else str(dataset.uuid)
+        format_lower = format.strip().lower()
+
+        signed_url = self.convert(
+            dataset_uuid,
+            format_lower,
+            poll_interval=poll_interval,
+            timeout=timeout,
+            on_poll=on_poll,
+        )
+
+        # Resolve destination path.
+        filename = f"{dataset_uuid}_{format_lower}.zip"
+        if dest is None:
+            file_path = os.path.abspath(filename)
+        elif os.path.isdir(dest):
+            file_path = os.path.join(os.path.abspath(dest), filename)
+        else:
+            file_path = os.path.abspath(dest)
+
+        http = urllib3.PoolManager()
+        response = http.request("GET", signed_url, preload_content=False)
+        try:
+            status = response.status
+            if status >= 400:
+                response.release_conn()
+                raise CyberwaveAPIError(
+                    f"Dataset download failed with HTTP {status}",
+                    status_code=status,
+                )
+            with open(file_path, "wb") as fh:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+        finally:
+            response.release_conn()
+
+        return file_path
+
+    @staticmethod
+    def _put_zip_to_signed_url(
+        zip_path: str, upload_url: str, content_type: str
+    ) -> None:
+        with open(zip_path, "rb") as fh:
+            body = fh.read()
+
+        http = urllib3.PoolManager()
+        response = http.request(
+            "PUT",
+            upload_url,
+            body=body,
+            headers={"Content-Type": content_type},
+            preload_content=False,
+        )
+        status = response.status
+        response.release_conn()
+        if status >= 400:
+            raise CyberwaveAPIError(
+                f"Signed dataset upload failed with status code {status}",
+                status_code=status,
+            )
