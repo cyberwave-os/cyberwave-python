@@ -1,5 +1,7 @@
 """Tests for camera sensor id discovery from universal schema."""
 
+import pytest
+
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -145,3 +147,55 @@ def test_camera_twin_inherits_list_camera_sensor_ids():
     cam = CameraTwin(client, SimpleNamespace(uuid="ct", name="CT"))
 
     assert cam.list_camera_sensor_ids() == ["cam0"]
+
+
+@pytest.mark.parametrize("name", [None, "Front camera"])
+def test_camera_sensor_ids_uses_schema_parameter_id(name):
+    sensor = {"type": "camera", "parameters": {"id": "front"}}
+    if name is not None:
+        sensor["name"] = name
+    assert camera_sensor_ids_from_schema({"sensors": [sensor]}) == ["front"]
+
+
+@pytest.mark.parametrize("key", ["id", "sensor_id"])
+def test_camera_sensor_ids_preserves_explicit_id_precedence(key):
+    sensor = {"type": "camera", key: "explicit", "parameters": {"id": "nested"}}
+    assert camera_sensor_ids_from_schema({"sensors": [sensor]}) == ["explicit"]
+
+
+@pytest.mark.parametrize("parameters", [None, [], "invalid", {}, {"id": " "}])
+def test_camera_sensor_ids_handles_missing_or_malformed_parameters(parameters):
+    sensor = {"type": "camera", "name": "front", "parameters": parameters}
+    assert camera_sensor_ids_from_schema({"sensors": [sensor]}) == ["front"]
+
+
+def test_camera_sensor_ids_normalizes_exported_names_before_deduplication():
+    schema = {
+        "sensors": [{"type": "camera", "name": "1c04c936aaa64a41bfc347e9b5f3cf51__front_camera"}],
+        "capabilities": {"sensors": [
+            {"type": "rgb", "id": "front_camera"},
+            {"type": "rgb", "id": "rear_camera"},
+        ]},
+    }
+    assert camera_sensor_ids_from_schema(schema, max_ids=2) == ["front_camera", "rear_camera"]
+
+
+def test_camera_sensor_ids_preserves_non_uuid_names_and_explicit_ids():
+    schema = {"sensors": [
+        {"type": "camera", "name": "rig__front"},
+        {"type": "camera", "id": "1c04c936aaa64a41bfc347e9b5f3cf51__explicit"},
+    ]}
+    assert camera_sensor_ids_from_schema(schema) == [
+        "rig__front", "1c04c936aaa64a41bfc347e9b5f3cf51__explicit",
+    ]
+
+
+@pytest.mark.parametrize("schema", [None, {}, {"sensors": [{"type": "camera", "id": "front"}]}])
+def test_camera_sensor_ids_zero_limit(schema):
+    assert camera_sensor_ids_from_schema(schema, max_ids=0) == []
+
+
+@pytest.mark.parametrize("schema", [None, {}, {"sensors": [{"type": "camera", "id": "front"}]}])
+def test_camera_sensor_ids_negative_limit(schema):
+    with pytest.raises(ValueError, match="max_ids must be nonnegative"):
+        camera_sensor_ids_from_schema(schema, max_ids=-1)

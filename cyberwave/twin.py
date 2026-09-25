@@ -1374,7 +1374,11 @@ class Twin:
         is fetched via :meth:`get_schema` (same source as the platform editor).
 
         Args:
-            max_ids: Maximum number of ids to return (default ``16``).
+            max_ids: Nonnegative maximum number of ids to return (default ``16``).
+                Zero returns an empty list.
+
+        Raises:
+            ValueError: If ``max_ids`` is negative.
 
         Returns:
             Ordered unique ids from ``sensors`` and ``capabilities.sensors`` entries

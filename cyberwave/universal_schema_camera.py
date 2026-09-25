@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, List
+from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,30 @@ def _is_camera_like_sensor_type(sensor_type: str) -> bool:
 
 
 def _sensor_id_from_entry(sensor: dict) -> str | None:
-    for key in ("id", "sensor_id", "name"):
-        v = sensor.get(key)
-        if v is not None:
-            sid = str(v).strip()
+    parameters = sensor.get("parameters")
+    parameter_id = parameters.get("id") if isinstance(parameters, dict) else None
+    # Preserve explicit capability IDs; schema parameters take precedence over
+    # a sensor name, which may be a label or an exported simulation name.
+    for value in (sensor.get("id"), sensor.get("sensor_id"), parameter_id):
+        if value is not None:
+            sid = str(value).strip()
             if sid:
                 return sid
-    return None
+
+    name = sensor.get("name")
+    if name is None:
+        return None
+    sid = str(name).strip()
+    prefix, separator, suffix = sid.partition("__")
+    if separator:
+        # Only strip the exporter UUID namespace, not arbitrary user names.
+        try:
+            UUID(prefix)
+        except ValueError:
+            pass
+        else:
+            sid = suffix.strip()
+    return sid or None
 
 
 def camera_sensor_ids_from_schema(schema: Any, *, max_ids: int = 16) -> List[str]:
@@ -50,15 +68,23 @@ def camera_sensor_ids_from_schema(schema: Any, *, max_ids: int = 16) -> List[str
     Inspects top-level ``sensors`` and nested ``capabilities.sensors``. Entries are
     included when their ``type`` looks like a camera (``camera``, ``depth_camera``,
     ``rgb``, ``depth``, or any type containing ``"camera"``).
+    Explicit ``id`` and ``sensor_id`` fields take precedence over ``parameters.id``.
+    Names are a fallback; exported UUID prefixes are removed to match stream IDs.
 
     Args:
         schema: Full universal schema (e.g. from :meth:`~cyberwave.twin.Twin.get_schema`).
-        max_ids: Maximum number of ids to return (default ``16``).
+        max_ids: Nonnegative maximum number of ids to return (default ``16``).
+            Zero returns an empty list.
+
+    Raises:
+        ValueError: If ``max_ids`` is negative.
 
     Returns:
         Ordered list of unique sensor ids, suitable for ``sensor_id=`` on latest-frame APIs.
     """
-    if not isinstance(schema, dict):
+    if max_ids < 0:
+        raise ValueError("max_ids must be nonnegative")
+    if max_ids == 0 or not isinstance(schema, dict):
         return []
 
     out: list[str] = []
