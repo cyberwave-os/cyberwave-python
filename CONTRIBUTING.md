@@ -14,7 +14,7 @@ relevant files, acceptance criteria, and how to validate the change. Comment on
 an issue before starting so we can coordinate; **@khushisharma22** is the program's
 primary maintainer.
 
-Once the [program automation is activated](.github/CONTRIBUTOR_PROGRAM.md), your
+Once the program automation is activated, your
 PR receives one welcome comment. When it is ready for review, we request a
 maintainer and post a custom Claude advisory review using the Anthropic API. That
 review reads eligible patch excerpts; it does not run your code, approve your

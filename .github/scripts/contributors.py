@@ -210,7 +210,11 @@ def celebrate(github, pr, webhook):
     existing = github.comment(pr["number"], MERGE)
     if existing:
         if "discord:sent:" not in existing["body"]:
-            summary("Discord delivery needs reconciliation: a previous attempt may have sent. See the runbook.")
+            summary("Discord delivery needs reconciliation: a previous attempt may have sent. "
+                    "Check the Discord channel for this PR before retrying. If delivered, update "
+                    "the bot's merge comment to <!-- discord:sent:MESSAGE_ID -->. Only if no "
+                    "message was delivered and the original run has stopped, delete that "
+                    "merge comment and rerun the workflow.")
         return
     thanks = f"Thanks @{pr['user']['login']} — your contribution has been merged!"
     # Persist the intent BEFORE contacting Discord. A timeout or process crash
