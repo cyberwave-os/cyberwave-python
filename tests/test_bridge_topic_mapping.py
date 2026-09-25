@@ -50,6 +50,12 @@ class TestZenohToMqtt:
     def test_too_short_returns_none(self):
         assert zenoh_to_mqtt(f"cw/{TWIN}") is None
 
+    def test_empty_channel_returns_none(self):
+        assert zenoh_to_mqtt(f"cw/{TWIN}/data/") is None
+
+    def test_empty_channel_before_sensor_returns_none(self):
+        assert zenoh_to_mqtt(f"cw/{TWIN}/data//default") is None
+
     def test_empty_string_returns_none(self):
         assert zenoh_to_mqtt("") is None
 
