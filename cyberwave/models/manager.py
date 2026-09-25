@@ -48,6 +48,7 @@ from cyberwave.models.runtimes import (
 )
 
 if TYPE_CHECKING:
+    from cyberwave.ml_model_lookup import MLModelMatch
     from cyberwave.models.cascade import CascadeModel
     from cyberwave.rest import MLModelSchema
 
@@ -255,6 +256,56 @@ class ModelManager:
         if filters:
             results = _apply_filter_shorthands(results, filters)
         return results
+
+    def search(
+        self,
+        query: str,
+        *,
+        deployment: str | None = None,
+        edge_compatible: bool | None = None,
+        request_timeout: float = 60.0,
+        limit: int = 20,
+    ) -> list[MLModelMatch]:
+        """Find models by case-insensitive name or external-ID substring.
+
+        Fetches the full visible catalog; ``limit`` only caps returned matches
+        and must be a positive integer. Matches include provider, workspace,
+        visibility, and slug metadata to help distinguish similar entries.
+        """
+        from cyberwave.ml_model_lookup import search_ml_models
+
+        return search_ml_models(
+            self._require_catalog().api,
+            query,
+            deployment=deployment,
+            edge_compatible=edge_compatible,
+            request_timeout=request_timeout,
+            limit=limit,
+        )
+
+    def resolve_uuid(
+        self,
+        query: str,
+        *,
+        deployment: str | None = None,
+        edge_compatible: bool | None = None,
+        request_timeout: float = 60.0,
+    ) -> str:
+        """Resolve an unambiguous external ID or name to a catalog UUID.
+
+        Prefers exact external ID, then case-insensitive exact name, then
+        substring matches. Raises MLModelLookupError on no match or ambiguity
+        at the winning priority. Fetches the full visible catalog each time.
+        """
+        from cyberwave.ml_model_lookup import resolve_ml_model_uuid
+
+        return resolve_ml_model_uuid(
+            self._require_catalog().api,
+            query,
+            deployment=deployment,
+            edge_compatible=edge_compatible,
+            request_timeout=request_timeout,
+        )
 
     def list_public(self, *, deployment: str | None = None) -> list[MLModelSchema]:
         """List public ML models (no workspace membership required)."""
