@@ -11,7 +11,7 @@ resolution-markers = [
 [manifest]
 
 [manifest.dependency-groups]
-dev = [{ name = "openai-agents", specifier = ">=0.18.2" }]
+nl-arm-controller = [{ name = "openai-agents", specifier = ">=0.18.2" }]
 
 [[package]]
 name = "annotated-types"
