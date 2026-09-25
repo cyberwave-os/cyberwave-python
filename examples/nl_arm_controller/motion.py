@@ -255,6 +255,16 @@ def effective_limits(
     return limits
 
 
+def _sdk_joint_name(joint: str) -> str:
+    """Map our canonical joint names ("1".."6") to the SDK's controllable names.
+
+    The so101 twin's universal schema exposes joints as "_1".."_6" (leading
+    underscore), while the rest of this app — plans, prompts, limits — uses
+    the bare "1".."6" convention. Translate only at this SDK boundary.
+    """
+    return joint if joint.startswith("_") else f"_{joint}"
+
+
 class _RobotJoints(Protocol):
     def set(  # noqa: D401 — match SDK signature
         self,
@@ -567,38 +577,8 @@ class MotionExecutor:
             if last is not None and abs(last - angle) < PUBLISH_EPSILON_DEG:
                 continue
             if not self.dry_run:
-                self.robot.joints.set(joint, angle, degrees=True)
-            self._published[joint] = angle
-
-    def _publish_gripper(self, opening_pct: float) -> None:
-        """Send the gripper in the twin's native unit (metres or radians).
-
-        `joint7` is prismatic on the stock PiPER model, so `degrees=True`
-        would silently scale the command by π/180. We resolve the joint's
-        real range from the twin schema and always publish native units.
-        """
-        pct = clamp_opening(opening_pct)
-        self._gripper_pct = pct
-
-        low, high = self._gripper_native_range()
-        native = low + (high - low) * (pct / 100.0)
-
-        last = self._published.get(GRIPPER.name)
-        span = abs(high - low) or 1.0
-        if last is not None and abs(last - native) < span * 1e-3:
-            return
-        if not self.dry_run:
-            # joint8 mimics joint7 (factor -1.0) and is driven by the
-            # platform — commanding it here would fight the mimic.
-            self.robot.joints.set(GRIPPER.name, native, degrees=False)
-        self._published[GRIPPER.name] = native
-
-    def _gripper_native_range(self) -> tuple[float, float]:
-        info = self.twin_joints.get(GRIPPER.name) or {}
-        lo, hi = info.get("lower"), info.get("upper")
-        if lo is not None and hi is not None and float(hi) != float(lo):
-            return float(lo), float(hi)
-        return GRIPPER.closed_native, GRIPPER.open_native
+                self.robot.joints.set(_sdk_joint_name(joint), angle, degrees=True)
+            self._current_pose[joint] = angle
 
     def _format_pose(self) -> str:
         arm = ", ".join(f"{j}={self._current_pose[j]:+.1f}°" for j in JOINTS)
