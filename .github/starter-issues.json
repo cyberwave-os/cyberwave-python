@@ -1,0 +1,26 @@
+[
+  {
+    "id": "client-context-cleanup",
+    "title": "Test Cyberwave client context-manager cleanup without network access",
+    "labels": ["good first issue", "help wanted", "tests"],
+    "body": "## Why\nCyberwave implements `__enter__` and `__exit__`, but the existing client tests do not directly cover context-manager cleanup. A focused regression suite will help preserve predictable cleanup for SDK users.\n\n## Scope\nAdd tests for normal exit and an exception raised inside a `with client:` block. Keep SDK behavior unchanged.\n\n## Start here\n- `cyberwave/client.py`: `Cyberwave.__enter__`, `Cyberwave.__exit__`, `Cyberwave.disconnect`\n- `tests/test_client_twin.py`: examples of constructing a client with mocked managers\n\n## Acceptance criteria\n- `__enter__` returns the same client.\n- `disconnect` is called once on normal exit and on exceptional exit.\n- An exception from the block propagates to the caller.\n- Tests use mocks and do not contact MQTT, a backend, or hardware.\n\n## Validation\n`poetry run pytest tests/test_client_context_manager.py -v`\n\n## Requirements\nPython 3.10+ and the development dependencies; no API key or hardware.\n\n## Getting started\nComment before starting so the maintainer can help scope the work."
+  },
+  {
+    "id": "empty-zenoh-channel",
+    "title": "Reject empty outbound Zenoh channel names in topic mapping",
+    "labels": ["good first issue", "help wanted", "bug"],
+    "body": "## Why\n`zenoh_to_mqtt` currently accepts `cw/12345678-1234-1234-1234-123456789abc/data/` and returns an MQTT topic with an empty channel. Its documented contract returns `None` for keys that do not match the canonical channel pattern.\n\n## Scope\nReject an empty channel segment without changing how valid channels, sensor suffixes, or MQTT prefixes are handled. Do not broaden this into a rewrite of topic validation.\n\n## Start here\n- `cyberwave/zenoh_mqtt/topic_mapping.py`: `zenoh_to_mqtt`\n- `tests/test_bridge_topic_mapping.py`: `TestZenohToMqtt`\n\n## Acceptance criteria\n- Empty channels, including a key with an empty channel before a sensor segment, return `None`.\n- Existing valid channel and sensor mappings remain unchanged.\n- Add regression tests for both malformed shapes.\n\n## Validation\n`poetry run pytest tests/test_bridge_topic_mapping.py -v`\n\n## Requirements\nDevelopment dependencies only; no broker, Zenoh service, API key, or robot.\n\n## Getting started\nComment before starting so the maintainer can help scope the work."
+  },
+  {
+    "id": "example-prerequisites",
+    "title": "Document prerequisites for four introductory SDK examples",
+    "labels": ["good first issue", "help wanted", "documentation"],
+    "body": "## Why\nThe examples index says that most scripts need an API key and some need extras, but newcomers cannot readily tell which of the first examples require a backend, simulation, or hardware.\n\n## Scope\nDocument prerequisites for `quickstart.py`, `compact.py`, `joints.py`, and `locomotion.py` in `examples/README.md`. Read each script before making claims.\n\n## Start here\n- `examples/README.md`\n- The four scripts under `examples/`\n- `pyproject.toml` for supported extras\n\n## Acceptance criteria\n- Each entry states required extras, API/backend access, simulation support, and any hardware requirement.\n- Distinguish 'no physical hardware' from 'works completely offline'.\n- Preserve the existing links and descriptions.\n- Avoid executing motion commands as part of this documentation task.\n\n## Validation\nCheck every referenced script and extra exists; preview the Markdown and verify relative links. Explain in the PR which source code established each prerequisite.\n\n## Requirements\nReading source files only; no account, API key, or robot.\n\n## Getting started\nComment before starting so the maintainer can help scope the work."
+  },
+  {
+    "id": "topic-mapping-guide",
+    "title": "Add worked examples explaining Zenoh-to-MQTT topic mapping",
+    "labels": ["good first issue", "help wanted", "documentation"],
+    "body": "## Why\nTopic mapping has executable examples in unit tests and a short module docstring, but contributors need a small guide explaining prefixes, nested suffixes, and sensor segments.\n\n## Scope\nAdd `cyberwave/zenoh_mqtt/README.md` with worked examples of the current mapping behavior. Link it from `CONTRIBUTING.md` as a hardware-free area to explore.\n\n## Start here\n- `cyberwave/zenoh_mqtt/topic_mapping.py`\n- `tests/test_bridge_topic_mapping.py`\n\n## Acceptance criteria\n- Show both directions using a syntactically valid UUID.\n- Explain MQTT prefix concatenation and the configurable inbound Zenoh prefix.\n- Show that nested MQTT suffixes use underscores in the Zenoh channel, and that outbound sensor suffixes are dropped.\n- Explain why mapping is not a lossless round trip.\n- Include the focused test command and do not require starting either broker.\n\n## Validation\n`poetry run pytest tests/test_bridge_topic_mapping.py -v`; compare every worked example to the implementation/tests.\n\n## Requirements\nDevelopment dependencies for optional verification; no API key, hardware, or running service.\n\n## Getting started\nComment before starting so the maintainer can help scope the work."
+  }
+]

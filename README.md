@@ -134,6 +134,9 @@ Runnable scripts live in [examples/](examples) and see the [examples index](exam
 
 ## Documentation
 
+Want to improve the SDK? Join the [SDK Contributors program](CONTRIBUTING.md#sdk-contributors-program)
+for scoped starter tasks, maintainer help, and recognition for your contributions.
+
 Full guides and the complete API reference are at **[docs.cyberwave.com](https://docs.cyberwave.com)**
 ([overview](https://docs.cyberwave.com/overview) ·
 [API reference](https://docs.cyberwave.com/api-reference/overview)).

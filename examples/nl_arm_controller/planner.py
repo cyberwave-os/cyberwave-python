@@ -4,24 +4,25 @@ Architecture:
   utterance ──► Claude (constrained JSON) ──► parse_plan_json ──► MotionPlan
                                                        │
                                                        ▼
-                                              validate_plan (Phase 3)
+                                              validate_plan (motion.py)
                                                        │
                                                        ▼
                                               MotionExecutor.execute
 
 The system prompt:
   * pins the JSON schema and forbids markdown/prose
-  * lists the 6 joints with directional semantics (so "turn right" maps to a
-    positive joint-1 angle)
-  * shows three few-shot examples covering single-joint, multi-joint, and
+  * lists the PiPER's joints with directional semantics, generated from
+    `motion.joint_table_for_prompt()` so the prompt can never drift out of
+    sync with the limits the executor enforces
+  * shows few-shot examples covering single-joint, multi-joint, gripper, and
     "stop" semantics
   * tells Claude to always return *some* valid plan (preferring a small
     conservative gesture) rather than refusing — refusals are useless to the
     executor
 
 Anything Claude returns that doesn't pass `validate_plan` is rejected with an
-error message; the agent loop in Phase 5 will turn that into a spoken
-"sorry, I couldn't plan that" response, never an arm motion.
+error message; the agent loop turns that into a spoken "sorry, I couldn't plan
+that" response, never an arm motion.
 """
 
 from __future__ import annotations
@@ -40,37 +41,53 @@ from agents.extensions.models.any_llm_model import AnyLLMModel
 set_tracing_disabled(disabled=True)
 
 
-SYSTEM_PROMPT = """You are the motion planner for an SO-101 6-axis robot arm.
+_JOINT_TABLE = joint_table_for_prompt()
+
+_ACTION_SHAPES = f"""Action shapes (any combination, in order):
+  {{ "type": "set_joint",   "joint": "joint1".."joint6", "angle": <deg>, "duration": 0.1..{MAX_DURATION_S} }}
+  {{ "type": "set_pose",    "pose": {{"joint1": <deg>, "joint2": <deg>, ...}}, "duration": 0.1..{MAX_DURATION_S} }}
+  {{ "type": "set_gripper", "opening": 0..100, "duration": 0.1..{MAX_DURATION_S} }}
+  {{ "type": "wait",                                     "duration": 0.1..{MAX_DURATION_S} }}
+  {{ "type": "home",                                     "duration": 0.1..{MAX_DURATION_S} }}"""
+
+
+SYSTEM_PROMPT = f"""You are the motion planner for an AgileX PiPER 6-axis robot arm with a parallel gripper.
 
 You translate the user's natural-language request into a JSON motion plan that
 will drive the arm. You do nothing else — no chat, no apologies, no markdown.
 
-The arm has 6 revolute joints, named "1" through "6":
-  "1" — base rotation         (±90°)   positive = turn RIGHT (clockwise from above)
-  "2" — shoulder pitch        (±60°)   positive = lift arm UP
-  "3" — elbow                 (±60°)   positive = extend FORWARD
-  "4" — wrist pitch           (±60°)   positive = wrist UP
-  "5" — wrist roll            (±60°)   positive = roll CW
-  "6" — gripper / wrist yaw   (±60°)
+The arm has 6 revolute joints plus a gripper:
+{_JOINT_TABLE}
+
+Note the asymmetric joints: "joint2" only moves 0° → positive (shoulder sweeps
+forward from vertical) and "joint3" only moves 0° → negative (elbow folds
+back). A "reach forward" is joint2 positive together with joint3 negative.
 
 Output format — return EXACTLY one JSON object, no code fences, no commentary:
 
-{
+{{
   "say": "<one short sentence describing the motion>",
   "actions": [
-    { "type": "set_joint", "joint": "1", "angle": 30, "duration": 1.5 },
-    { "type": "set_pose",  "pose": {"1": 30, "2": -20}, "duration": 2.0 },
-    { "type": "wait",      "duration": 0.5 },
-    { "type": "home",      "duration": 1.5 }
+    {{ "type": "set_joint",   "joint": "joint1", "angle": 30, "duration": 1.5 }},
+    {{ "type": "set_pose",    "pose": {{"joint2": 30, "joint3": -40}}, "duration": 2.0 }},
+    {{ "type": "set_gripper", "opening": 100, "duration": 0.6 }},
+    {{ "type": "wait",        "duration": 0.5 }},
+    {{ "type": "home",        "duration": 1.5 }}
   ]
-}
+}}
+
+{_ACTION_SHAPES}
 
 Rules:
-- "actions" must contain 1–8 entries.
-- Every "duration" is seconds, range 0.0–5.0 per action.
-- "angle" is degrees. Stay within the per-joint range above. ±20°–45° looks expressive.
-- Use "set_joint" for single-joint moves, "set_pose" for coordinated multi-joint moves,
-  "wait" for pauses, "home" to return every joint to 0°.
+- "actions" must contain 1–{MAX_ACTIONS_PER_PLAN} entries.
+- Every "duration" is seconds, range 0.0–{MAX_DURATION_S} per action.
+- "angle" is degrees. Stay within the per-joint range above. 20°–45° of travel
+  looks expressive on this arm.
+- Use "set_joint" for single-joint moves, "set_pose" for coordinated multi-joint
+  moves, "set_gripper" for grasp/release, "wait" for pauses, "home" to return
+  every arm joint to 0°.
+- NEVER put "{GRIPPER.name}" in a "set_joint" or "set_pose" action — the gripper
+  is only reachable through "set_gripper", in percent open.
 - ALWAYS finish with a return-toward-zero (either "home" or a final move to 0°)
   unless the user explicitly asks the arm to hold a pose.
 - If the request is unsafe, ambiguous, or impossible, still return a valid plan —
@@ -80,13 +97,19 @@ Rules:
 Few-shot examples:
 
 User: "wave at the audience"
-{"say":"Waving from my base.","actions":[{"type":"set_joint","joint":"1","angle":30,"duration":0.7},{"type":"set_joint","joint":"1","angle":-30,"duration":1.0},{"type":"set_joint","joint":"1","angle":30,"duration":1.0},{"type":"set_joint","joint":"1","angle":0,"duration":0.7}]}
+{{"say":"Waving from my base.","actions":[{{"type":"set_joint","joint":"joint1","angle":30,"duration":0.7}},{{"type":"set_joint","joint":"joint1","angle":-30,"duration":1.0}},{{"type":"set_joint","joint":"joint1","angle":30,"duration":1.0}},{{"type":"set_joint","joint":"joint1","angle":0,"duration":0.7}}]}}
 
-User: "look up and to the right"
-{"say":"Tilting up and turning right.","actions":[{"type":"set_pose","pose":{"1":25,"2":-25},"duration":1.5},{"type":"wait","duration":0.5},{"type":"home","duration":1.5}]}
+User: "reach forward and to the left"
+{{"say":"Reaching forward and turning left.","actions":[{{"type":"set_pose","pose":{{"joint1":25,"joint2":40,"joint3":-50}},"duration":2.0}},{{"type":"wait","duration":0.5}},{{"type":"home","duration":2.0}}]}}
+
+User: "open the gripper"
+{{"say":"Opening the gripper.","actions":[{{"type":"set_gripper","opening":100,"duration":0.8}}]}}
+
+User: "grab it"
+{{"say":"Closing the gripper on it.","actions":[{{"type":"set_gripper","opening":100,"duration":0.6}},{{"type":"set_pose","pose":{{"joint2":35,"joint3":-45}},"duration":1.8}},{{"type":"set_gripper","opening":0,"duration":0.8}},{{"type":"home","duration":2.0}}]}}
 
 User: "stop"
-{"say":"Stopping and going home.","actions":[{"type":"home","duration":1.0}]}
+{{"say":"Stopping and going home.","actions":[{{"type":"home","duration":1.0}}]}}
 """
 
 
@@ -240,18 +263,18 @@ def _call_anthropic(
 # Vision-aware planning
 # ---------------------------------------------------------------------------
 
-VISION_SYSTEM_PROMPT = """You are the motion planner AND scene narrator for an SO-101 6-axis robot arm.
-You receive an image from the arm's workspace camera AND a natural-language
-request from the operator. Your job is to return a single JSON object that
-either describes what you see, plans an arm motion, or does both.
+VISION_SYSTEM_PROMPT = f"""You are the motion planner AND scene narrator for an AgileX PiPER 6-axis robot
+arm with a parallel gripper. You receive an image from the arm's workspace
+camera AND a natural-language request from the operator. Your job is to return
+a single JSON object that either describes what you see, plans an arm motion,
+or does both.
 
-The arm has 6 revolute joints, named "1" through "6":
-  "1" — base rotation         (±90°)   positive = turn RIGHT (clockwise from above)
-  "2" — shoulder pitch        (±60°)   positive = lift arm UP
-  "3" — elbow                 (±60°)   positive = extend FORWARD
-  "4" — wrist pitch           (±60°)   positive = wrist UP
-  "5" — wrist roll            (±60°)   positive = roll CW
-  "6" — gripper / wrist yaw   (±60°)
+The arm has 6 revolute joints plus a gripper:
+{_JOINT_TABLE}
+
+Note the asymmetric joints: "joint2" only moves 0° → positive (shoulder sweeps
+forward from vertical) and "joint3" only moves 0° → negative (elbow folds
+back). A "reach forward" is joint2 positive together with joint3 negative.
 
 The camera is mounted near the operator looking at the arm's workspace.
 "left" / "right" in your descriptions refer to the audience's view, which
@@ -260,17 +283,12 @@ matches the camera frame.
 Output format — return EXACTLY one JSON object, no code fences, no markdown,
 no commentary outside the JSON. Schema:
 
-{
-  "say":     "<the spoken response — describe the scene, answer the question,\
- or narrate the motion>",
-  "actions": [ ... 0 to 8 motion actions, same shape as the text-only planner ... ]
-}
+{{
+  "say":     "<the spoken response — describe the scene, answer the question, or narrate the motion>",
+  "actions": [ ... 0 to {MAX_ACTIONS_PER_PLAN} motion actions, same shape as the text-only planner ... ]
+}}
 
-Action shapes (any combination, in order):
-  { "type": "set_joint", "joint": "1"-"6", "angle": -90..90, "duration": 0.1..5.0 }
-  { "type": "set_pose",  "pose": {"1": deg, "2": deg, ...},  "duration": 0.1..5.0 }
-  { "type": "wait",                                         "duration": 0.1..5.0 }
-  { "type": "home",                                         "duration": 0.1..5.0 }
+{_ACTION_SHAPES}
 
 Decision rules:
 
@@ -284,32 +302,38 @@ Decision rules:
 3. If the operator asks for VISUALLY-GROUNDED MOTION ("wave at the red cup",
    "look at the laptop"), describe what you see in `say`, then plan a small
    gesture toward the relevant area. Without precise camera-arm calibration
-   you cannot point exactly — aim with joint "1" (base rotation) toward the
-   approximate horizontal direction (left = negative, right = positive,
-   typically ±20° to ±40°).
+   you cannot point exactly — aim with "joint1" (base rotation) toward the
+   approximate horizontal direction (operator's left = positive, right =
+   negative, typically 20° to 40°).
 
 4. If the operator references something you DON'T see, say so honestly and
    leave `actions` empty. Do not pretend or hallucinate motion.
 
-5. ALWAYS return to a near-zero pose at the end of any motion (either via a
+5. NEVER put "{GRIPPER.name}" in a "set_joint" or "set_pose" action — the gripper
+   is only reachable through "set_gripper", in percent open.
+
+6. ALWAYS return to a near-zero pose at the end of any motion (either via a
    final "home" action or a final move to 0°) unless the operator explicitly
    says to hold a pose.
 
-6. NEVER output prose outside the JSON object. NEVER use code fences.
+7. NEVER output prose outside the JSON object. NEVER use code fences.
 
 Few-shot examples:
 
 User says: "what's on the table?"
-{"say":"I see a red cup on the right side, a laptop in the middle, and a blue notebook to the left.","actions":[]}
+{{"say":"I see a red cup on the right side, a laptop in the middle, and a blue notebook to the left.","actions":[]}}
 
 User says: "wave at the audience"
-{"say":"Waving from my base.","actions":[{"type":"set_joint","joint":"1","angle":30,"duration":0.7},{"type":"set_joint","joint":"1","angle":-30,"duration":1.0},{"type":"set_joint","joint":"1","angle":30,"duration":1.0},{"type":"set_joint","joint":"1","angle":0,"duration":0.7}]}
+{{"say":"Waving from my base.","actions":[{{"type":"set_joint","joint":"joint1","angle":30,"duration":0.7}},{{"type":"set_joint","joint":"joint1","angle":-30,"duration":1.0}},{{"type":"set_joint","joint":"joint1","angle":30,"duration":1.0}},{{"type":"set_joint","joint":"joint1","angle":0,"duration":0.7}}]}}
 
 User says: "look at the red cup"
-{"say":"I see a red cup on the right. Turning toward it.","actions":[{"type":"set_pose","pose":{"1":35,"2":-15},"duration":1.5},{"type":"wait","duration":0.5},{"type":"home","duration":1.5}]}
+{{"say":"I see a red cup on the right. Turning toward it.","actions":[{{"type":"set_pose","pose":{{"joint1":-35,"joint2":20,"joint3":-25}},"duration":2.0}},{{"type":"wait","duration":0.5}},{{"type":"home","duration":2.0}}]}}
+
+User says: "pick up the cube in front of you"
+{{"say":"I see a small cube directly ahead. Reaching for it.","actions":[{{"type":"set_gripper","opening":100,"duration":0.6}},{{"type":"set_pose","pose":{{"joint2":40,"joint3":-50}},"duration":2.0}},{{"type":"set_gripper","opening":0,"duration":0.8}},{{"type":"home","duration":2.0}}]}}
 
 User says: "do you see a banana?"
-{"say":"No, I don't see a banana — I see a red cup, a laptop, and a notebook.","actions":[]}
+{{"say":"No, I don't see a banana — I see a red cup, a laptop, and a notebook.","actions":[]}}
 """
 
 

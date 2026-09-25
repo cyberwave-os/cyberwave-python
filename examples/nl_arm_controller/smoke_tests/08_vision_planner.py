@@ -9,7 +9,7 @@ modes of the vision planner:
   3. visually-grounded motion → "look at the [object you're holding up]"
 
 Offline by default — does not drive the arm. Add --execute to run any
-returned plan on the live SO-101.
+returned plan on the live PiPER.
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def main() -> None:
         cw = Cyberwave()
         cw.affect(os.environ.get("CW_MODE", "live"))
         robot = cw.twin(
-            "the-robot-studio/so101",
+            os.environ.get("CW_ASSET_KEY", "agile-x-robotics/piper"),
             twin_id=arm_twin_id,
             environment_id=env_id,
         )
