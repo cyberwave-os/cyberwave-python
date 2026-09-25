@@ -1,6 +1,6 @@
-"""Smoke test 5/5 — Phase 3 motion executor on the real SO-101 twin.
+"""Smoke test 5/5 — motion executor on the real PiPER twin.
 
-Runs three hand-crafted `MotionPlan`s end-to-end and verifies that every plan:
+Runs four hand-crafted `MotionPlan`s end-to-end and verifies that every plan:
   1. validates cleanly
   2. ramps smoothly (no snap)
   3. ends in the expected pose
@@ -49,21 +49,30 @@ except ImportError as exc:
 # ---------------------------------------------------------------------------
 
 PLAN_WAVE = MotionPlan(
-    say="Waving with joint 1.",
+    say="Waving with joint1.",
     actions=[
-        Action(type="set_joint", joint="1", angle=+30, duration=1.0),
-        Action(type="set_joint", joint="1", angle=-30, duration=1.5),
-        Action(type="set_joint", joint="1", angle=0, duration=1.0),
+        Action(type="set_joint", joint="joint1", angle=+30, duration=1.0),
+        Action(type="set_joint", joint="joint1", angle=-30, duration=1.5),
+        Action(type="set_joint", joint="joint1", angle=0, duration=1.0),
     ],
 )
 
 PLAN_LOOK_AROUND_DICT = {
-    "say": "Looking around — base and shoulder together.",
+    "say": "Looking around — base, shoulder and elbow together.",
     "actions": [
-        {"type": "set_pose", "pose": {"1": 25, "2": -20}, "duration": 1.5},
+        {"type": "set_pose", "pose": {"joint1": 25, "joint2": 30, "joint3": -40}, "duration": 1.5},
         {"type": "wait", "duration": 0.5},
-        {"type": "set_pose", "pose": {"1": -25, "2": 20}, "duration": 2.0},
+        {"type": "set_pose", "pose": {"joint1": -25, "joint2": 15, "joint3": -20}, "duration": 2.0},
         {"type": "home", "duration": 1.5},
+    ],
+}
+
+PLAN_GRIPPER_DICT = {
+    "say": "Opening and closing the gripper.",
+    "actions": [
+        {"type": "set_gripper", "opening": 100, "duration": 0.8},
+        {"type": "wait", "duration": 0.5},
+        {"type": "set_gripper", "opening": 0, "duration": 0.8},
     ],
 }
 
@@ -79,8 +88,11 @@ def _validation_negative_tests() -> bool:
 
     bad_plan = MotionPlan(
         actions=[
-            Action(type="set_joint", joint="99", angle=10),
-            Action(type="set_joint", joint="1"),
+            Action(type="set_joint", joint="joint99", angle=10),
+            Action(type="set_joint", joint="joint1"),
+            # joint7 is the gripper — reachable only through set_gripper.
+            Action(type="set_joint", joint="joint7", angle=30),
+            Action(type="set_gripper"),
             Action(type="wait", duration=MAX_DURATION_S + 1),
             Action(type="bogus"),
         ]
@@ -89,11 +101,20 @@ def _validation_negative_tests() -> bool:
     print(f"  validator caught {len(errs)} errors:")
     for e in errs:
         print(f"    • {e}")
-    if len(errs) < 4:
-        print("❌ expected ≥4 errors")
+    if len(errs) < 6:
+        print("❌ expected ≥6 errors")
         return False
 
-    cases = [("1", 999, 90.0), ("1", -999, -90.0), ("3", 999, 60.0), ("3", -999, -60.0)]
+    cases = [
+        ("joint1", 999, 90.0),
+        ("joint1", -999, -90.0),
+        # joint2/joint3 are one-sided on the PiPER: the shoulder only sweeps
+        # forward from zero, the elbow only folds back.
+        ("joint2", 999, 90.0),
+        ("joint2", -999, 0.0),
+        ("joint3", 999, 0.0),
+        ("joint3", -999, -90.0),
+    ]
     for joint, raw, expected in cases:
         got = clamp(joint, raw)
         if got != expected:
@@ -124,7 +145,7 @@ def main() -> None:
     cw.affect(os.environ.get("CW_MODE", "simulation"))
 
     robot = cw.twin(
-        "the-robot-studio/so101",
+        os.environ.get("CW_ASSET_KEY", "agile-x-robotics/piper"),
         twin_id=twin_id,
         environment_id=env_id,
     )
@@ -145,11 +166,15 @@ def main() -> None:
     executor.execute(MotionPlan.from_dict(PLAN_LOOK_AROUND_DICT))
     time.sleep(0.5)
 
-    print("\n→ Plan 3: HOME")
+    print("\n→ Plan 3: GRIPPER  (joint7 in native units, joint8 follows the mimic)")
+    executor.execute(MotionPlan.from_dict(PLAN_GRIPPER_DICT))
+    time.sleep(0.5)
+
+    print("\n→ Plan 4: HOME")
     executor.execute(PLAN_HOME)
 
     cw.disconnect()
-    print("\n✅ Phase 3 motion executor OK")
+    print("\n✅ Motion executor OK")
 
 
 if __name__ == "__main__":

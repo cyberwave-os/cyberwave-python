@@ -29,8 +29,8 @@ from planner import plan_from_utterance  # noqa: E402
 
 UTTERANCES = [
     "wave at the audience",
-    "look up and to the right",
-    "do a small bow",
+    "reach forward and to the left",
+    "open the gripper, then close it",
     "stop and go home",
 ]
 
@@ -61,7 +61,7 @@ def main() -> None:
         cw = Cyberwave()
         cw.affect(os.environ.get("CW_MODE", "simulation"))
         robot = cw.twin(
-            "the-robot-studio/so101",
+            os.environ.get("CW_ASSET_KEY", "agile-x-robotics/piper"),
             twin_id=twin_id,
             environment_id=env_id,
         )
@@ -97,6 +97,8 @@ def main() -> None:
                 extras.append(f"angle={a.angle:+.1f}")
             if a.pose is not None:
                 extras.append(f"pose={a.pose}")
+            if a.opening is not None:
+                extras.append(f"opening={a.opening:.0f}%")
             extras.append(f"dur={a.duration:.2f}s")
             print(f"     {i}. {a.type:<10} {' '.join(extras)}")
 

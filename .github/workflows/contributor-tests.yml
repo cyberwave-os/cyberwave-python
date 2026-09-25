@@ -1,0 +1,22 @@
+name: Contributor automation tests
+
+on:
+  pull_request:
+    paths: ['.github/**']
+  push:
+    branches: [main, dev]
+    paths: ['.github/**']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Test community automation without credentials or network calls
+        run: python3 -m unittest discover -s .github/scripts/tests -v
