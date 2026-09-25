@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,14 +28,22 @@ class EnvironmentCreateSchema(BaseModel):
     EnvironmentCreateSchema
     """ # noqa: E501
     name: StrictStr
+    slug: Optional[StrictStr] = None
     description: StrictStr
     settings: Optional[Dict[str, Any]] = None
+    settings_base: Optional[Dict[str, Any]] = None
     universal_schema: Optional[Dict[str, Any]] = None
     asset_uuid: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "settings", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility"]
+    tags: Optional[List[StrictStr]] = None
+    is_template: Optional[StrictBool] = None
+    control_plane_access: Optional[StrictStr] = None
+    expected_object_revisions: Optional[Dict[str, Dict[str, StrictStr]]] = None
+    twin_asset_uuid: Optional[StrictStr] = None
+    mlmodel_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "settings_base", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template", "control_plane_access", "expected_object_revisions", "twin_asset_uuid", "mlmodel_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,10 +84,20 @@ class EnvironmentCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if settings (nullable) is None
         # and model_fields_set contains the field
         if self.settings is None and "settings" in self.model_fields_set:
             _dict['settings'] = None
+
+        # set to None if settings_base (nullable) is None
+        # and model_fields_set contains the field
+        if self.settings_base is None and "settings_base" in self.model_fields_set:
+            _dict['settings_base'] = None
 
         # set to None if universal_schema (nullable) is None
         # and model_fields_set contains the field
@@ -106,6 +124,36 @@ class EnvironmentCreateSchema(BaseModel):
         if self.visibility is None and "visibility" in self.model_fields_set:
             _dict['visibility'] = None
 
+        # set to None if tags (nullable) is None
+        # and model_fields_set contains the field
+        if self.tags is None and "tags" in self.model_fields_set:
+            _dict['tags'] = None
+
+        # set to None if is_template (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_template is None and "is_template" in self.model_fields_set:
+            _dict['is_template'] = None
+
+        # set to None if control_plane_access (nullable) is None
+        # and model_fields_set contains the field
+        if self.control_plane_access is None and "control_plane_access" in self.model_fields_set:
+            _dict['control_plane_access'] = None
+
+        # set to None if expected_object_revisions (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_object_revisions is None and "expected_object_revisions" in self.model_fields_set:
+            _dict['expected_object_revisions'] = None
+
+        # set to None if twin_asset_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.twin_asset_uuid is None and "twin_asset_uuid" in self.model_fields_set:
+            _dict['twin_asset_uuid'] = None
+
+        # set to None if mlmodel_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.mlmodel_uuid is None and "mlmodel_uuid" in self.model_fields_set:
+            _dict['mlmodel_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -119,13 +167,21 @@ class EnvironmentCreateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "name": obj.get("name"),
+            "slug": obj.get("slug"),
             "description": obj.get("description"),
             "settings": obj.get("settings"),
+            "settings_base": obj.get("settings_base"),
             "universal_schema": obj.get("universal_schema"),
             "asset_uuid": obj.get("asset_uuid"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "project_uuid": obj.get("project_uuid"),
-            "visibility": obj.get("visibility")
+            "visibility": obj.get("visibility"),
+            "tags": obj.get("tags"),
+            "is_template": obj.get("is_template"),
+            "control_plane_access": obj.get("control_plane_access"),
+            "expected_object_revisions": obj.get("expected_object_revisions"),
+            "twin_asset_uuid": obj.get("twin_asset_uuid"),
+            "mlmodel_uuid": obj.get("mlmodel_uuid")
         })
         return _obj
 

@@ -42,6 +42,13 @@ class TwinActionRequestSchema(BaseModel):
     hold_ms: Optional[StrictInt] = None
     __properties: ClassVar[List[str]] = ["action_type", "name", "plan", "joints", "scope", "environment_uuid", "execution", "preview", "source_type", "tick_ms", "transition_ms", "hold_ms"]
 
+    @field_validator('action_type')
+    def action_type_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['pose', 'movement', 'animation', 'plan']):
+            raise ValueError("must be one of enum values ('pose', 'movement', 'animation', 'plan')")
+        return value
+
     @field_validator('execution')
     def execution_validate_enum(cls, value):
         """Validates the enum"""

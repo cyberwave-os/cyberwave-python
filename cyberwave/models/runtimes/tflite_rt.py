@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from cyberwave.models.runtimes.base import ModelRuntime
-from cyberwave.models.types import BoundingBox, Detection, PredictionResult
+from cyberwave.models.types import BoundingBox, Detection, DetectionResult, PredictionResult
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ class TFLiteRuntime(ModelRuntime):
                 input_shape=input_shape,
             )
 
-        return PredictionResult(detections=detections, raw=raw_outputs)
+        return DetectionResult(detections, raw=raw_outputs)
 
 
 # ------------------------------------------------------------------

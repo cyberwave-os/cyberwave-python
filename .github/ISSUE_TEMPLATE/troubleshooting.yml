@@ -1,0 +1,42 @@
+name: Troubleshooting (resolved)
+description: >-
+  Submit a solved problem so we can publish it under the catalog get-started Troubleshooting section
+  (automation merges into https://cyberwave.com catalog content via the internal monorepo).
+title: "[troubleshooting] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this after you **found a fix**. Close the issue as **completed** when done so downstream automation can ingest it.
+
+        Prefer opening from the Cyberwave catalog **Open issue** link — it pre-fills the catalog path below.
+
+        Use the **`catalog/<workspace-or-vendor>/<entity>`** shape that matches
+        [`content/catalog/` paths in the monorepo](https://github.com/cyberwave-os/cyberwave/tree/dev/cyberwave-frontend/content/catalog)
+        (e.g. unified slug `workspace/catalog/so101` → `catalog/workspace/so101`; registry id `vendor/name` → `catalog/vendor/name`).
+
+  - type: input
+    id: entity
+    attributes:
+      label: Catalog content path (entity)
+      description: Exact path fragment under cyberwave-frontend/content/ (starts with catalog/).
+      placeholder: catalog/the-robot-studio/so101
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: Problem / symptom
+      description: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: Resolution
+      description: What fixed it — steps, config, commands, versions.
+    validations:
+      required: false

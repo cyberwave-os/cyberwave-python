@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -25,10 +25,9 @@ from pydantic_core import to_jsonable_python
 
 class ReplayTimelineEventSchema(BaseModel):
     """
-    ReplayTimelineEventSchema
+    One annotation whose only tie to a recording is its timestamp.  There is deliberately no recording reference. An annotation is not owned by a recording — it just happens to fall inside a window — and the client is the only side that knows which of its selected windows contain a given instant.
     """ # noqa: E501
     uuid: StrictStr
-    recording_uuid: StrictStr
     timestamp_us: StrictInt
     kind: StrictStr
     subtype: StrictStr
@@ -38,8 +37,17 @@ class ReplayTimelineEventSchema(BaseModel):
     severity: Optional[StrictStr] = None
     source_type: Optional[StrictStr] = None
     context: StrictStr
+    association: StrictStr
+    matching_rule: StrictStr
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "recording_uuid", "timestamp_us", "kind", "subtype", "title", "description", "twin_uuid", "severity", "source_type", "context", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "timestamp_us", "kind", "subtype", "title", "description", "twin_uuid", "severity", "source_type", "context", "association", "matching_rule", "metadata"]
+
+    @field_validator('association')
+    def association_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['window_annotation']):
+            raise ValueError("must be one of enum values ('window_annotation')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -108,7 +116,6 @@ class ReplayTimelineEventSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
-            "recording_uuid": obj.get("recording_uuid"),
             "timestamp_us": obj.get("timestamp_us"),
             "kind": obj.get("kind"),
             "subtype": obj.get("subtype"),
@@ -118,6 +125,8 @@ class ReplayTimelineEventSchema(BaseModel):
             "severity": obj.get("severity"),
             "source_type": obj.get("source_type"),
             "context": obj.get("context"),
+            "association": obj.get("association"),
+            "matching_rule": obj.get("matching_rule"),
             "metadata": obj.get("metadata")
         })
         return _obj

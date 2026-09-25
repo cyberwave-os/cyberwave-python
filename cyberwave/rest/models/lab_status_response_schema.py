@@ -29,6 +29,7 @@ class LabStatusResponseSchema(BaseModel):
     """ # noqa: E501
     has_session: StrictBool
     available: StrictBool
+    kind: Optional[StrictStr] = 'manipulator'
     total_labs: StrictInt
     free_labs: StrictInt
     queue_length: StrictInt
@@ -42,7 +43,7 @@ class LabStatusResponseSchema(BaseModel):
     environment_name: Optional[StrictStr] = None
     environment_uuid: Optional[StrictStr] = None
     message: Optional[StrictStr] = ''
-    __properties: ClassVar[List[str]] = ["has_session", "available", "total_labs", "free_labs", "queue_length", "configured_labs", "online_labs", "queue_position", "estimated_wait_minutes", "session_status", "session_expires_at", "time_remaining_seconds", "environment_name", "environment_uuid", "message"]
+    __properties: ClassVar[List[str]] = ["has_session", "available", "kind", "total_labs", "free_labs", "queue_length", "configured_labs", "online_labs", "queue_position", "estimated_wait_minutes", "session_status", "session_expires_at", "time_remaining_seconds", "environment_name", "environment_uuid", "message"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -132,6 +133,7 @@ class LabStatusResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "has_session": obj.get("has_session"),
             "available": obj.get("available"),
+            "kind": obj.get("kind") if obj.get("kind") is not None else 'manipulator',
             "total_labs": obj.get("total_labs"),
             "free_labs": obj.get("free_labs"),
             "queue_length": obj.get("queue_length"),

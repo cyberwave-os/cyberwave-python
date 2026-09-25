@@ -24,9 +24,17 @@ def get_runtime(name: str) -> ModelRuntime:
     """
     if name not in _RUNTIME_REGISTRY:
         available = ", ".join(sorted(_RUNTIME_REGISTRY.keys())) or "(none)"
+        hint = ""
+        if name == "faster_whisper":
+            hint = (
+                " Make sure the deployed SDK build includes "
+                "faster_whisper_rt and the 'ml-stt-faster' extra "
+                "(pip install cyberwave[ml-stt-faster]), then restart "
+                "the process so the new runtime is registered."
+            )
         raise ValueError(
             f"Unknown model runtime '{name}'. Available: {available}. "
-            f"Install the required package and ensure it is registered."
+            f"Install the required package and ensure it is registered.{hint}"
         )
     cls = _RUNTIME_REGISTRY[name]
     instance = cls()
@@ -41,6 +49,17 @@ def get_runtime(name: str) -> ModelRuntime:
 def available_runtimes() -> list[str]:
     """Return names of runtimes whose dependencies are currently importable."""
     return [name for name, cls in _RUNTIME_REGISTRY.items() if cls().is_available()]
+
+
+def is_runtime_registered(name: str) -> bool:
+    """Whether ``name`` is a runtime this SDK build knows about.
+
+    Deliberately does **not** check ``is_available()``: a registered runtime
+    with missing dependencies should still be selected so the caller gets
+    ``get_runtime``'s actionable ImportError, not a silent fallback to a
+    different backend.
+    """
+    return name in _RUNTIME_REGISTRY
 
 
 # Auto-register built-in runtimes.  Each runtime module defers its heavy
@@ -73,3 +92,23 @@ register_runtime(TensorRTRuntime)
 from cyberwave.models.runtimes.torch_rt import TorchRuntime  # noqa: E402
 
 register_runtime(TorchRuntime)
+
+from cyberwave.models.runtimes.faster_whisper_rt import FasterWhisperRuntime  # noqa: E402
+
+register_runtime(FasterWhisperRuntime)
+
+from cyberwave.models.runtimes.whisper_cpp_rt import WhisperCppRuntime  # noqa: E402
+
+register_runtime(WhisperCppRuntime)
+
+from cyberwave.models.runtimes.hailo_rt import HailoRuntime  # noqa: E402
+
+register_runtime(HailoRuntime)
+
+from cyberwave.models.runtimes.vda_rt import VideoDepthAnythingRuntime  # noqa: E402
+
+register_runtime(VideoDepthAnythingRuntime)
+
+from cyberwave.models.runtimes.depth_anything_v2_rt import DepthAnythingV2Runtime  # noqa: E402
+
+register_runtime(DepthAnythingV2Runtime)

@@ -3,12 +3,19 @@
 Covers:
 - is_hovering() / get_hovering_status() from cached metadata
 - set_hovering_status() — API call + local cache update
-- takeoff() / land() / hover() automatic status updates in sim_tele mode
+- takeoff() / land() / hover() are PLAYGROUND-compatible: they publish (and
+  mirror hovering status, since there's no edge driver to do it) in a
+  simulation runtime
 - takeoff() / land() / hover() do NOT touch status in live (tele) mode
+
+The MQTT-side contract (canonical command topic / payload envelope /
+source-type validation) is exercised in
+``test_flying_twin_drone_commands.py`` to keep this file focused on the
+hovering-metadata bookkeeping that lives next to the SDK methods.
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,8 +31,18 @@ def _make_client(*, runtime_mode: str = "simulation") -> SimpleNamespace:
     mqtt = MagicMock()
     mqtt.connected = True
     twins_manager = MagicMock()
-    return SimpleNamespace(
+    twins_manager.update.return_value = SimpleNamespace(uuid="drone-uuid", metadata={})
+    assets = MagicMock()
+    assets.get.return_value = SimpleNamespace(
+        metadata={"mqtt": {"topics": {}, "commands": {"supported": []}}}
+    )
+    policy = MagicMock()
+    policy.ensure_attached = MagicMock()
+
+    client = SimpleNamespace(
         mqtt=mqtt,
+        assets=assets,
+        policy=policy,
         config=SimpleNamespace(
             runtime_mode=runtime_mode,
             source_type="sim" if runtime_mode == "simulation" else "edge",
@@ -33,6 +50,7 @@ def _make_client(*, runtime_mode: str = "simulation") -> SimpleNamespace:
         ),
         twins=twins_manager,
     )
+    return client
 
 
 def _make_flying_twin(
@@ -44,10 +62,22 @@ def _make_flying_twin(
     data = SimpleNamespace(
         uuid="drone-uuid",
         name="Test Drone",
+        asset_uuid="asset-uuid",
         metadata=metadata or {},
     )
     twin = FlyingTwin(client, data)
+    twin._prepare_outbound_command = lambda: None  # type: ignore[method-assign]
     return twin, client
+
+
+def _published_command(twin: FlyingTwin, command: str) -> dict:
+    """Return the canonical-command payload from PR1 mock outbound log."""
+    matching = [r.payload for r in twin._outbound_log if r.command == command]
+    assert matching, (
+        f"No mock outbound command {command!r}; log: "
+        f"{[r.command for r in twin._outbound_log]}"
+    )
+    return matching[-1]
 
 
 # ---------------------------------------------------------------------------
@@ -120,19 +150,38 @@ class TestGetHoveringStatus:
 # ---------------------------------------------------------------------------
 
 class TestSetHoveringStatus:
-    def test_calls_twins_update_with_merged_metadata(self):
+    """Intent goes through POST /flight-request, never PUT /twins.
+
+    `PUT /twins` shallow-merges only TOP-LEVEL metadata keys, so sending
+    `status` replaces the whole dict -- wiping `is_flying` / `is_flying_at` /
+    `flight_mode`, which only the edge may write and which the
+    redundant-takeoff guard reads. `takeoff()` calls this from `sim_tele`, so
+    the clobber raced a live aircraft report. The server merges under a row
+    lock, so these tests assert on the INTENT sent, and on the local cache --
+    not on a metadata blob the client no longer builds a request from.
+    """
+
+    def test_sends_intent_through_flight_request(self):
         twin, client = _make_flying_twin(
             metadata={"drivers": {"default": {"docker_image": "img"}}}
         )
         twin.set_hovering_status(hovering=True, hovering_altitude=2.0)
 
-        client.twins.update.assert_called_once_with(
+        client.twins.set_flight_request.assert_called_once_with(
             "drone-uuid",
-            metadata={
-                "drivers": {"default": {"docker_image": "img"}},
-                "status": {"controller_requested_hovering": True, "controller_requested_hovering_altitude": 2.0},
-            },
+            hovering=True,
+            hovering_altitude=2.0,
         )
+
+    def test_never_puts_the_whole_metadata_blob(self):
+        """The regression this endpoint exists for."""
+        twin, client = _make_flying_twin(
+            metadata={"status": {"is_flying": True, "is_flying_at": 1234.5}}
+        )
+        twin.set_hovering_status(hovering=True, hovering_altitude=2.0)
+
+        client.twins.update.assert_not_called()
+        client.twins.set_flight_request.assert_called_once()
 
     def test_updates_local_cache_after_api_call(self):
         twin, _ = _make_flying_twin(metadata={})
@@ -147,82 +196,97 @@ class TestSetHoveringStatus:
         )
         twin.set_hovering_status(hovering=False)
 
-        _, kwargs = client.twins.update.call_args
-        assert "controller_requested_hovering_altitude" not in kwargs["metadata"]["status"]
-        assert kwargs["metadata"]["status"]["controller_requested_hovering"] is False
-
-    def test_preserves_existing_altitude_when_not_provided_on_land(self):
-        """Altitude key is removed (not just set to None) on hovering=False."""
-        twin, client = _make_flying_twin(
-            metadata={"status": {"controller_requested_hovering": True, "controller_requested_hovering_altitude": 2.0}}
+        # No altitude is sent, which is what tells the server to clear it.
+        client.twins.set_flight_request.assert_called_once_with(
+            "drone-uuid",
+            hovering=False,
+            hovering_altitude=None,
         )
-        twin.set_hovering_status(hovering=False)
-        updated_status = client.twins.update.call_args.kwargs["metadata"]["status"]
-        assert "controller_requested_hovering_altitude" not in updated_status
+        assert (
+            "controller_requested_hovering_altitude"
+            not in twin._data.metadata["status"]
+        )
+        assert twin.is_hovering() is False
 
-    def test_does_not_overwrite_unrelated_altitude_when_hovering_with_explicit_value(self):
+    def test_keeps_unrelated_metadata_in_the_local_cache(self):
+        twin, _ = _make_flying_twin(
+            metadata={"drivers": {"default": {"docker_image": "img"}}}
+        )
+        twin.set_hovering_status(hovering=True, hovering_altitude=4.0)
+
+        assert twin._data.metadata["drivers"] == {"default": {"docker_image": "img"}}
+
+    def test_local_cache_keeps_the_aircraft_keys_beside_the_intent(self):
+        """The cache update must not clobber what the endpoint deliberately keeps.
+
+        `is_flying` / `is_flying_at` live in the same `status` dict as the
+        intent, and only the edge may write them. Rewriting the dict wholesale
+        from the cached snapshot would drop them locally, which is the same
+        mistake the endpoint exists to avoid on the server.
+        """
+        twin, _ = _make_flying_twin(
+            metadata={"status": {"is_flying": True, "is_flying_at": 123.0}}
+        )
+        twin.set_hovering_status(hovering=True, hovering_altitude=2.0)
+
+        status = twin._data.metadata["status"]
+        assert status["is_flying"] is True
+        assert status["is_flying_at"] == 123.0
+        assert status["controller_requested_hovering"] is True
+
+    def test_explicit_altitude_wins_over_the_cached_one(self):
         twin, client = _make_flying_twin(
             metadata={"status": {"controller_requested_hovering": False, "controller_requested_hovering_altitude": 1.0}}
         )
         twin.set_hovering_status(hovering=True, hovering_altitude=4.0)
-        updated_status = client.twins.update.call_args.kwargs["metadata"]["status"]
-        assert updated_status["controller_requested_hovering_altitude"] == 4.0
+
+        assert client.twins.set_flight_request.call_args.kwargs["hovering_altitude"] == 4.0
+        assert twin.get_hovering_status()["controller_requested_hovering_altitude"] == 4.0
 
     def test_altitude_unchanged_when_hovering_true_and_no_altitude_passed(self):
-        """Passing hovering=True without altitude leaves existing altitude intact."""
+        """Passing hovering=True without altitude leaves the existing one intact.
+
+        Nothing is sent for it, so the server leaves its copy alone too.
+        """
         twin, client = _make_flying_twin(
             metadata={"status": {"controller_requested_hovering": False, "controller_requested_hovering_altitude": 2.0}}
         )
         twin.set_hovering_status(hovering=True)
-        updated_status = client.twins.update.call_args.kwargs["metadata"]["status"]
-        # altitude was already in status and we didn't pass a new value — should be preserved
-        assert updated_status["controller_requested_hovering_altitude"] == 2.0
+
+        assert client.twins.set_flight_request.call_args.kwargs["hovering_altitude"] is None
+        assert twin.get_hovering_status()["controller_requested_hovering_altitude"] == 2.0
 
     def test_raises_cyberwave_error_on_api_failure(self):
         from cyberwave.exceptions import CyberwaveError
 
         twin, client = _make_flying_twin()
-        client.twins.update.side_effect = RuntimeError("network error")
+        client.twins.set_flight_request.side_effect = RuntimeError("network error")
 
         with pytest.raises(CyberwaveError, match="Failed to update hovering status"):
             twin.set_hovering_status(hovering=True, hovering_altitude=1.0)
 
 
 # ---------------------------------------------------------------------------
-# takeoff() in simulation mode — should auto-update hovering status
+# takeoff() in simulation mode — live/driver-only, raises NotSimulatedError
 # ---------------------------------------------------------------------------
 
 class TestTakeoffSimMode:
-    def test_publishes_mqtt_takeoff_command(self):
+    def test_takeoff_publishes_and_sets_hovering_in_sim_mode(self):
+        # Flight is PLAYGROUND-compatible: the browser playground renders
+        # takeoff/land/hover directly, so they publish (rather than raise) in
+        # simulation mode, and sim_tele takeoff mirrors hovering status since
+        # there's no edge driver to report motors-on.
         twin, client = _make_flying_twin(runtime_mode="simulation")
         twin.takeoff(altitude=3.0)
 
-        client.mqtt.publish.assert_any_call(
-            "twins/drone-uuid/commands/takeoff", {"altitude": 3.0}
-        )
+        assert _published_command(twin, "takeoff")
+        client.twins.set_flight_request.assert_called()
+        assert twin.is_hovering() is True
 
-    def test_sets_hovering_true_with_altitude_in_sim_mode(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
-        twin.takeoff(altitude=3.0)
-
-        client.twins.update.assert_called_once()
-        metadata = client.twins.update.call_args.kwargs["metadata"]
-        assert metadata["status"]["controller_requested_hovering"] is True
-        assert metadata["status"]["controller_requested_hovering_altitude"] == 3.0
-
-    def test_uses_default_altitude_1m(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
-        twin.takeoff()
-
-        metadata = client.twins.update.call_args.kwargs["metadata"]
-        assert metadata["status"]["controller_requested_hovering_altitude"] == 1.0
-
-    def test_local_cache_reflects_hovering_after_takeoff(self):
+    def test_takeoff_sets_hovering_altitude_in_sim_mode(self):
         twin, _ = _make_flying_twin(runtime_mode="simulation")
         twin.takeoff(altitude=2.5)
-
         assert twin.is_hovering() is True
-        assert twin.get_hovering_status()["controller_requested_hovering_altitude"] == 2.5
 
 
 # ---------------------------------------------------------------------------
@@ -230,19 +294,20 @@ class TestTakeoffSimMode:
 # ---------------------------------------------------------------------------
 
 class TestTakeoffLiveMode:
-    def test_publishes_mqtt_takeoff_command(self):
-        twin, client = _make_flying_twin(runtime_mode="live")
+    def test_publishes_canonical_takeoff_command_with_tele_source(self):
+        twin, _client = _make_flying_twin(runtime_mode="live")
         twin.takeoff(altitude=2.0)
 
-        client.mqtt.publish.assert_called_once_with(
-            "twins/drone-uuid/commands/takeoff", {"altitude": 2.0}
-        )
+        payload = _published_command(twin, "takeoff")
+        assert payload["source_type"] == "tele"
+        assert payload["data"] == {"altitude": 2.0}
 
     def test_does_not_call_twins_update(self):
         twin, client = _make_flying_twin(runtime_mode="live")
         twin.takeoff(altitude=2.0)
 
         client.twins.update.assert_not_called()
+        client.twins.set_flight_request.assert_not_called()
 
     def test_local_cache_unchanged(self):
         twin, _ = _make_flying_twin(runtime_mode="live", metadata={})
@@ -252,37 +317,19 @@ class TestTakeoffLiveMode:
 
 
 # ---------------------------------------------------------------------------
-# land() in simulation mode — should auto-clear hovering status
+# land() in simulation mode — live/driver-only, raises NotSimulatedError
 # ---------------------------------------------------------------------------
 
 class TestLandSimMode:
-    def test_publishes_mqtt_land_command(self):
+    def test_land_publishes_and_clears_hovering_in_sim_mode(self):
         twin, client = _make_flying_twin(
             runtime_mode="simulation",
             metadata={"status": {"controller_requested_hovering": True, "controller_requested_hovering_altitude": 2.0}},
         )
         twin.land()
 
-        client.mqtt.publish.assert_any_call("twins/drone-uuid/commands/land", {})
-
-    def test_sets_hovering_false_in_sim_mode(self):
-        twin, client = _make_flying_twin(
-            runtime_mode="simulation",
-            metadata={"status": {"controller_requested_hovering": True, "controller_requested_hovering_altitude": 2.0}},
-        )
-        twin.land()
-
-        metadata = client.twins.update.call_args.kwargs["metadata"]
-        assert metadata["status"]["controller_requested_hovering"] is False
-        assert "controller_requested_hovering_altitude" not in metadata["status"]
-
-    def test_local_cache_reflects_not_hovering_after_land(self):
-        twin, _ = _make_flying_twin(
-            runtime_mode="simulation",
-            metadata={"status": {"controller_requested_hovering": True, "controller_requested_hovering_altitude": 2.0}},
-        )
-        twin.land()
-
+        assert _published_command(twin, "land")
+        client.twins.set_flight_request.assert_called()
         assert twin.is_hovering() is False
 
 
@@ -291,43 +338,33 @@ class TestLandSimMode:
 # ---------------------------------------------------------------------------
 
 class TestLandLiveMode:
-    def test_publishes_mqtt_land_command(self):
-        twin, client = _make_flying_twin(runtime_mode="live")
+    def test_publishes_canonical_land_command_with_tele_source(self):
+        twin, _client = _make_flying_twin(runtime_mode="live")
         twin.land()
 
-        client.mqtt.publish.assert_called_once_with(
-            "twins/drone-uuid/commands/land", {}
-        )
+        payload = _published_command(twin, "land")
+        assert payload["source_type"] == "tele"
+        assert payload["data"] == {}
 
     def test_does_not_call_twins_update(self):
         twin, client = _make_flying_twin(runtime_mode="live")
         twin.land()
 
         client.twins.update.assert_not_called()
+        client.twins.set_flight_request.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# hover() in simulation mode — should set hovering=True (no altitude change)
+# hover() in simulation mode — live/driver-only, raises NotSimulatedError
 # ---------------------------------------------------------------------------
 
 class TestHoverSimMode:
-    def test_publishes_mqtt_hover_command(self):
+    def test_hover_publishes_and_sets_hovering_in_sim_mode(self):
         twin, client = _make_flying_twin(runtime_mode="simulation")
         twin.hover()
 
-        client.mqtt.publish.assert_any_call("twins/drone-uuid/commands/hover", {})
-
-    def test_sets_hovering_true_in_sim_mode(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
-        twin.hover()
-
-        metadata = client.twins.update.call_args.kwargs["metadata"]
-        assert metadata["status"]["controller_requested_hovering"] is True
-
-    def test_local_cache_reflects_hovering_after_hover(self):
-        twin, _ = _make_flying_twin(runtime_mode="simulation")
-        twin.hover()
-
+        assert _published_command(twin, "hover")
+        client.twins.set_flight_request.assert_called()
         assert twin.is_hovering() is True
 
 
@@ -341,37 +378,31 @@ class TestHoverLiveMode:
         twin.hover()
 
         client.twins.update.assert_not_called()
+        client.twins.set_flight_request.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# Full workflow: takeoff → hover → land (sim mode)
+# Full workflow: takeoff → hover → land (live mode)
 # ---------------------------------------------------------------------------
 
 class TestFullFlightWorkflow:
-    def test_takeoff_hover_land_sequence_updates_status_correctly(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
-
-        twin.takeoff(altitude=2.0)
-        assert twin.is_hovering() is True
-        assert twin.get_hovering_status()["controller_requested_hovering_altitude"] == 2.0
-
-        twin.hover()
-        assert twin.is_hovering() is True
-
-        twin.land()
-        assert twin.is_hovering() is False
-        assert twin.get_hovering_status()["controller_requested_hovering_altitude"] is None
-
-    def test_mqtt_commands_published_in_order(self):
-        twin, client = _make_flying_twin(runtime_mode="simulation")
+    def test_live_takeoff_land_published_in_order_without_status_writes(self):
+        twin, client = _make_flying_twin(runtime_mode="live")
 
         twin.takeoff(altitude=1.5)
         twin.land()
 
-        mqtt_calls = client.mqtt.publish.call_args_list
-        topics = [c.args[0] for c in mqtt_calls]
-        assert "twins/drone-uuid/commands/takeoff" in topics
-        assert "twins/drone-uuid/commands/land" in topics
-        assert topics.index("twins/drone-uuid/commands/takeoff") < topics.index(
-            "twins/drone-uuid/commands/land"
-        )
+        canonical_commands = [r.command for r in twin._outbound_log]
+        assert "takeoff" in canonical_commands
+        assert "land" in canonical_commands
+        assert canonical_commands.index("takeoff") < canonical_commands.index("land")
+        # Live mode: the edge driver owns hovering status, not the SDK.
+        client.twins.update.assert_not_called()
+        client.twins.set_flight_request.assert_not_called()
+
+    def test_sim_takeoff_then_land_updates_hovering_status(self):
+        twin, _ = _make_flying_twin(runtime_mode="simulation")
+        twin.takeoff(altitude=2.0)
+        assert twin.is_hovering() is True
+        twin.land()
+        assert twin.is_hovering() is False

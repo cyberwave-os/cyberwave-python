@@ -39,7 +39,9 @@ class WorkflowNodeExecutionSchema(BaseModel):
     error_message: StrictStr
     execution_time_ms: Optional[StrictInt]
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "execution_uuid", "node_uuid", "status", "input_data", "output_data", "started_at", "finished_at", "error_message", "execution_time_ms", "metadata"]
+    activation_index: Optional[StrictInt] = 0
+    caller_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "execution_uuid", "node_uuid", "status", "input_data", "output_data", "started_at", "finished_at", "error_message", "execution_time_ms", "metadata", "activation_index", "caller_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -95,6 +97,11 @@ class WorkflowNodeExecutionSchema(BaseModel):
         if self.execution_time_ms is None and "execution_time_ms" in self.model_fields_set:
             _dict['execution_time_ms'] = None
 
+        # set to None if caller_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.caller_uuid is None and "caller_uuid" in self.model_fields_set:
+            _dict['caller_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -117,7 +124,9 @@ class WorkflowNodeExecutionSchema(BaseModel):
             "finished_at": obj.get("finished_at"),
             "error_message": obj.get("error_message"),
             "execution_time_ms": obj.get("execution_time_ms"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "activation_index": obj.get("activation_index") if obj.get("activation_index") is not None else 0,
+            "caller_uuid": obj.get("caller_uuid")
         })
         return _obj
 

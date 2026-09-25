@@ -37,15 +37,24 @@ class WorkflowSchema(BaseModel):
     is_active: StrictBool
     workspace_uuid: StrictStr
     workspace_name: Optional[StrictStr] = None
+    environment_uuid: Optional[StrictStr] = None
+    environment_name: Optional[StrictStr] = None
+    run_on_edge: StrictBool
+    allow_concurrent_executions: Optional[StrictBool] = False
+    concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
+    execution_target: StrictStr
     visibility: StrictStr
+    tags: Optional[List[StrictStr]] = None
+    is_template: Optional[StrictBool] = False
     created_at: datetime
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     metadata: Dict[str, Any]
+    has_worker_source_override: Optional[StrictBool] = False
     nodes: Optional[List[WorkflowNodeSchema]] = None
     connections: Optional[List[WorkflowConnectionSchema]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "visibility", "created_at", "updated_at", "created_by", "updated_by", "metadata", "nodes", "connections"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -105,6 +114,16 @@ class WorkflowSchema(BaseModel):
         if self.workspace_name is None and "workspace_name" in self.model_fields_set:
             _dict['workspace_name'] = None
 
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
+        # set to None if environment_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_name is None and "environment_name" in self.model_fields_set:
+            _dict['environment_name'] = None
+
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -144,12 +163,21 @@ class WorkflowSchema(BaseModel):
             "is_active": obj.get("is_active"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "workspace_name": obj.get("workspace_name"),
+            "environment_uuid": obj.get("environment_uuid"),
+            "environment_name": obj.get("environment_name"),
+            "run_on_edge": obj.get("run_on_edge"),
+            "allow_concurrent_executions": obj.get("allow_concurrent_executions") if obj.get("allow_concurrent_executions") is not None else False,
+            "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
+            "execution_target": obj.get("execution_target"),
             "visibility": obj.get("visibility"),
+            "tags": obj.get("tags"),
+            "is_template": obj.get("is_template") if obj.get("is_template") is not None else False,
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),
             "updated_by": obj.get("updated_by"),
             "metadata": obj.get("metadata"),
+            "has_worker_source_override": obj.get("has_worker_source_override") if obj.get("has_worker_source_override") is not None else False,
             "nodes": [WorkflowNodeSchema.from_dict(_item) for _item in obj["nodes"]] if obj.get("nodes") is not None else None,
             "connections": [WorkflowConnectionSchema.from_dict(_item) for _item in obj["connections"]] if obj.get("connections") is not None else None
         })

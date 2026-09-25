@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 
 from cyberwave.models.runtimes.base import ModelRuntime
-from cyberwave.models.types import BoundingBox, Detection, PredictionResult
+from cyberwave.models.types import BoundingBox, Detection, DetectionResult, PredictionResult
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ class OpenCVRuntime(ModelRuntime):
             img_w=img_w,
             img_h=img_h,
         )
-        return PredictionResult(detections=detections, raw=outputs)
+        return DetectionResult(detections, raw=outputs)
 
 
 class _OpenCVHandle:

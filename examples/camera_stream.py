@@ -1,15 +1,14 @@
 """
-Camera Streaming Example
-
-Stream camera feed to a digital twin. Press Ctrl+C to stop.
+Camera Streaming — stream a USB camera to a digital twin. Press Ctrl+C to stop.
 
 Requirements:
     pip install cyberwave[camera]
 """
 
-import os
 from cyberwave import Cyberwave
 
-cw = Cyberwave(api_key=os.getenv("CYBERWAVE_API_KEY"))
+cw = Cyberwave()
 camera = cw.twin("cyberwave/standard-cam")
 camera.start_streaming()
+# After streaming, grab a local frame:
+# frame = camera.get_frame("numpy", source="local")

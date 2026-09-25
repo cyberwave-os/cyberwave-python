@@ -44,6 +44,7 @@ from . import (
     SDK_EDGE_HEALTH_INTERVAL_SECONDS,
     SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
 )
+from .base_video import _strip_vp8_video, read_liveness_counter
 from .microphone import BaseAudioTrack, _strip_non_opus_audio
 
 if TYPE_CHECKING:
@@ -51,34 +52,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# VP8 codec lines that aiortc inserts by default.  We strip them so only
-# H264 remains, matching what the mediasoup SFU expects.
-_VP8_PREFIXES = (
-    "a=rtpmap:97",
-    "a=rtpmap:98",
-    "a=rtcp-fb:97 nack",
-    "a=rtcp-fb:97 nack pli",
-    "a=rtcp-fb:97 goog-remb",
-    "a=rtcp-fb:98 nack",
-    "a=rtcp-fb:98 nack pli",
-    "a=rtcp-fb:98 goog-remb",
-    "a=fmtp:98",
-)
-
 
 def _filter_multimedia_sdp(sdp: str) -> str:
-    """Remove VP8 video codecs and non-Opus audio codecs from the SDP."""
-    lines = sdp.split("\r\n")
-    filtered: list[str] = []
-    for line in lines:
-        if line.startswith("m=video"):
-            parts = line.split()
-            filtered.append(" ".join(p for p in parts if p not in ("97", "98")))
-        elif line.startswith(_VP8_PREFIXES):
-            continue
-        else:
-            filtered.append(line)
-    return _strip_non_opus_audio("\r\n".join(filtered))
+    """Strip VP8/VP9 video codecs and non-Opus audio codecs from a WebRTC SDP.
+
+    aiortc's default codec table includes VP8 (video) and PCMU/PCMA (audio),
+    both of which the mediasoup SFU rejects. We discover payload types by
+    codec name so the filter tracks aiortc's PT-shuffles across versions.
+    """
+    return _strip_non_opus_audio(_strip_vp8_video(sdp))
 
 
 class MultimediaStreamer:
@@ -125,7 +107,9 @@ class MultimediaStreamer:
         self.auto_reconnect = auto_reconnect
         self._should_record = recording
         self.enable_health_check = enable_health_check
-        self.turn_servers = turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
+        self.turn_servers = (
+            turn_servers if turn_servers is not None else DEFAULT_TURN_SERVERS
+        )
 
         # WebRTC state
         self.pc: Optional[RTCPeerConnection] = None
@@ -236,7 +220,9 @@ class MultimediaStreamer:
                 await self._start_webrtc()
                 self._should_reconnect = self.auto_reconnect
             except Exception as e:
-                logger.error("Auto-start multimedia stream failed: %s", e, exc_info=True)
+                logger.error(
+                    "Auto-start multimedia stream failed: %s", e, exc_info=True
+                )
 
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
@@ -250,7 +236,9 @@ class MultimediaStreamer:
                 if self.pc is None and self.auto_reconnect and not _initial_connected:
                     if time.monotonic() >= _next_retry_at:
                         try:
-                            logger.info("No active multimedia stream — retrying offer...")
+                            logger.info(
+                                "No active multimedia stream — retrying offer..."
+                            )
                             await self._start_webrtc()
                             self._should_reconnect = self.auto_reconnect
                             _initial_connected = True
@@ -311,8 +299,12 @@ class MultimediaStreamer:
         prefix = self.client.topic_prefix
         topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-offer"
 
-        video_attrs = self.video_track.get_stream_attributes() if self.video_track else {}
-        audio_attrs = self.audio_track.get_stream_attributes() if self.audio_track else {}
+        video_attrs = (
+            self.video_track.get_stream_attributes() if self.video_track else {}
+        )
+        audio_attrs = (
+            self.audio_track.get_stream_attributes() if self.audio_track else {}
+        )
 
         offer_payload: dict[str, Any] = {
             "target": "backend",
@@ -328,6 +320,7 @@ class MultimediaStreamer:
             },
             "sensor": self.camera_name,
             "track_id": self.video_track.id if self.video_track else None,
+            "audio_track_id": self.audio_track.id if self.audio_track else None,
             "session_id": f"{self.client.client_id}_multimedia",
         }
         self.client.publish(topic, offer_payload, qos=2)
@@ -370,20 +363,27 @@ class MultimediaStreamer:
                     # Single-track answers (video-only or audio-only) are left
                     # for the standalone streamer that sent the original offer.
                     if "m=video" not in sdp or "m=audio" not in sdp:
-                        logger.debug(
-                            "Ignoring answer without both m=video and m=audio"
-                        )
+                        logger.debug("Ignoring answer without both m=video and m=audio")
                         return
                     self._answer_data = payload
                     self._answer_received = True
-                elif payload.get("type") == "candidate" and payload.get("target") == "edge":
+                elif (
+                    payload.get("type") == "candidate"
+                    and payload.get("target") == "edge"
+                ):
                     self._handle_candidate(payload)
             except Exception as e:
                 logger.error("Error in multimedia on_answer: %s", e)
 
-        self.client.subscribe(answer_topic, on_answer)
+        # Key the handler by this stream's identity. The multimedia streamer
+        # claims answers by media (both m=video and m=audio) rather than by
+        # sensor, so the camera+mic pair identifies it. A reconnect re-subscribes
+        # under the same key (replace, no storm), while video-only / audio-only
+        # streamers on this shared, twin-scoped topic keep their own handlers.
+        subscriber_key = f"av:{self.camera_name}:{self.mic_name}"
+        self.client.subscribe(answer_topic, on_answer, subscriber_key=subscriber_key)
         candidate_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-candidate"
-        self.client.subscribe(candidate_topic, on_answer)
+        self.client.subscribe(candidate_topic, on_answer, subscriber_key=subscriber_key)
 
     def _handle_candidate(self, payload: dict[str, Any]) -> None:
         if not self.pc or not payload.get("candidate") or not self._event_loop:
@@ -422,7 +422,9 @@ class MultimediaStreamer:
                         self._handle_stop_command(), self._event_loop
                     )
             except Exception as e:
-                logger.error("Error processing multimedia command: %s", e, exc_info=True)
+                logger.error(
+                    "Error processing multimedia command: %s", e, exc_info=True
+                )
 
         self.client.subscribe(command_topic, on_command)
 
@@ -523,15 +525,73 @@ class MultimediaStreamer:
                 edge_id=self.twin_uuid,
                 stale_timeout=SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
                 interval=SDK_EDGE_HEALTH_INTERVAL_SECONDS,
+                # Surface the audio track's typed config on the
+                # wire so multimedia twins render ``48 kHz · stereo``
+                # from the heartbeat instead of falling back to the
+                # asset spec (which silently mis-classifies multi-sensor
+                # twins).  Video is left for later — the
+                # video track here is a generic ``BaseVideoTrack`` that
+                # does not implement ``get_stream_config`` yet.
+                stream_config_provider=self._collect_stream_configs,
             )
             self._health_check.start()
             self._last_frame_count = 0
-            self._health_monitor_task = asyncio.create_task(
-                self._monitor_frame_count()
-            )
+            self._health_monitor_task = asyncio.create_task(self._monitor_frame_count())
             logger.debug("Multimedia health check started")
         except Exception as e:
             logger.warning("Failed to start multimedia health check: %s", e)
+
+    def _collect_stream_configs(self) -> dict[str, dict[str, Any]]:
+        """Build the per-stream ``stream_config`` dict.
+
+        Invoked on every heartbeat via the ``stream_config_provider``
+        wiring above.  Returns the audio track's
+        :meth:`BaseAudioTrack.get_stream_config` under the ``"audio"``
+        key — NOT the legacy ``"stream"`` key that audio-only
+        publishers use — so when the video side gets a
+        ``get_stream_config`` hook later the wire shape
+        is already prepared for ``{"video": …, "audio": …}`` per the
+        multi-stream design.  Stuffing audio into ``"stream"``
+        today would force a wire-breaking rename then.
+
+        Known limitation (shared liveness counters).  ``EdgeHealthCheck``
+        tracks ``frame_count`` / ``last_frame_time`` at the instance
+        level, and :meth:`_monitor_frame_count` above forwards the
+        *video* track's increments via ``update_frame_count``.  After
+        this rename, the wire entry ``streams["audio"].frames_sent``
+        therefore reflects video frames, not audio packets, while the
+        ``stream_config.kind`` says ``"audio"``.  This mismatch is not
+        new — previously the same wire data lived under the
+        ambiguous ``streams["stream"]`` key — but the rename surfaces
+        it.  The dashboard hides ``fps`` / ``frames_sent`` for audio
+        rows so users don't see the mismatch; raw MQTT subscribers do.
+        Proper fix is one ``EdgeHealthCheck`` per stream (see the
+        ``get_health_data`` docstring's "inadequate for drivers with
+        truly independent per-stream live metrics" note) — out of
+        scope here.
+
+        Empty when the audio track is gone (between reconnects) or
+        hasn't implemented the hook — keeps the wire on the legacy
+        single-``streams.stream`` shape rather than emitting a
+        half-built block.  This causes a transient one-heartbeat
+        key flap ("stream" → "audio") during reconnects, accepted
+        because ``MultimediaStreamer`` has no production drivers
+        today; revisit if/when it does.
+        """
+        result: dict[str, dict[str, Any]] = {}
+        track = self.audio_track
+        if track is not None:
+            try:
+                cfg = track.get_stream_config()
+            except Exception as exc:
+                logger.debug("Audio track get_stream_config raised: %s", exc)
+                cfg = None
+            if cfg is not None:
+                result["audio"] = cfg
+        # Video track is intentionally absent today: ``BaseVideoTrack``
+        # has no ``get_stream_config`` hook yet.  When it lands, slot
+        # the result in under ``result["video"]`` here.
+        return result
 
     def _stop_health_check(self) -> None:
         if self._health_monitor_task:
@@ -550,7 +610,7 @@ class MultimediaStreamer:
         while self._is_running or self.pc is not None:
             try:
                 if self.video_track and self._health_check:
-                    current = getattr(self.video_track, "frame_count", 0)
+                    current = read_liveness_counter(self.video_track)
                     if current < self._last_frame_count:
                         self._last_frame_count = current
                     if current > self._last_frame_count:
@@ -566,14 +626,23 @@ class MultimediaStreamer:
     # ------------------------------------------------------------------
 
     def _publish_camera_sync_frame(
-        self, pts: int, timestamp: float, timestamp_monotonic: float
+        self,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
+        timestamp: float,
+        timestamp_monotonic: float,
     ) -> None:
         prefix = self.client.topic_prefix
         topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/telemetry"
         payload = {
             "type": "camera_sync_frame",
             "sender": "edge",
+            "frame_index": frame_index,
             "pts": pts,
+            "time_base_num": time_base_num,
+            "time_base_den": time_base_den,
             "timestamp": timestamp,
             "timestamp_monotonic": timestamp_monotonic,
             "track_id": self.video_track.id if self.video_track else None,
@@ -582,7 +651,8 @@ class MultimediaStreamer:
         }
         self.client.publish(topic, payload, qos=2)
         logger.info(
-            "Published camera_sync_frame: pts=%s, timestamp=%.3f", pts, timestamp
+            f"Published camera_sync_frame: frame_index={frame_index}, pts={pts}, "
+            f"time_base={time_base_num}/{time_base_den}, timestamp={timestamp:.3f}"
         )
 
     async def _wait_and_publish_camera_sync_frame(
@@ -596,8 +666,7 @@ class MultimediaStreamer:
         while self.video_track and self.video_track.sync_frame_pts is None:
             if time.time() - start_time > timeout:
                 logger.warning(
-                    "Timeout waiting for multimedia sync frame %s, "
-                    "current frame: %s",
+                    "Timeout waiting for multimedia sync frame %s, current frame: %s",
                     sync_frame,
                     self.video_track.frame_count if self.video_track else 0,
                 )
@@ -605,12 +674,24 @@ class MultimediaStreamer:
             await asyncio.sleep(0.05)
 
         if self.video_track and self.video_track.sync_frame_pts is not None:
+            frame_index = self.video_track.sync_frame_target
             pts = self.video_track.sync_frame_pts
             timestamp = self.video_track.sync_frame_timestamp
             timestamp_monotonic = self.video_track.sync_frame_timestamp_monotonic
-            if timestamp is not None:
+            time_base_num = self.video_track.sync_frame_time_base_num
+            time_base_den = self.video_track.sync_frame_time_base_den
+            if (
+                timestamp is not None
+                and time_base_num is not None
+                and time_base_den is not None
+            ):
                 self._publish_camera_sync_frame(
-                    pts, timestamp, timestamp_monotonic or 0.0
+                    frame_index,
+                    pts,
+                    time_base_num,
+                    time_base_den,
+                    timestamp,
+                    timestamp_monotonic or 0.0,
                 )
 
     # ------------------------------------------------------------------

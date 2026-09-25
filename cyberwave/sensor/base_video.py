@@ -18,9 +18,13 @@ from aiortc import (
     RTCConfiguration,
     RTCIceServer,
     RTCPeerConnection,
+    RTCRtpSender,
     RTCSessionDescription,
     VideoStreamTrack,
 )
+
+from .hw_encoder import apply_h264_hw_patch
+from .ice import DEFAULT_TURN_SERVERS
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
@@ -30,22 +34,135 @@ else:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TURN_SERVERS = [
-    {
-        "urls": [
-            "stun:turn.cyberwave.com:3478",
-        ]
-    },
-    {
-        "urls": "turn:turn.cyberwave.com:3478",
-        "username": "cyberwave-user",
-        "credential": "cyberwave-admin",
-    },
-]
-
 CONNECTION_LOSS_CONFIRMATION_CHECKS = 3
-SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS = 60
+
+# How long a dead source may look alive. Matches the frontend's
+# ``EDGE_HEALTH_STALE_TIMEOUT_SECONDS``. ``EdgeHealthCheck``'s own default stays
+# 60 for drivers with a device-dependent liveness cadence.
+SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS = 30
 SDK_EDGE_HEALTH_INTERVAL_SECONDS = 5
+
+
+# We strip these video codecs so the mediasoup SFU picks H264 in its router
+# codec priority order (VP8 > VP9 > H264). The SFU *does* support
+# VP8 and VP9, but leaving them in the offer causes mediasoup to negotiate a
+# codec Safari <14 cannot decode. If the SFU router order is ever changed to
+# prefer H264, this filter can be removed entirely.
+_STRIPPED_VIDEO_CODECS = frozenset({"VP8", "VP9"})
+
+
+def _strip_vp8_video(sdp: str) -> str:
+    """Remove VP8/VP9 (and their RTX) payload types from the video m-section.
+
+    Discovers PTs by their ``a=rtpmap`` codec name so the filter stays correct
+    across aiortc's default-codec reshuffles. Also drops every ``a=rtpmap``,
+    ``a=fmtp`` and ``a=rtcp-fb`` line that would otherwise reference a stripped
+    PT — Safari's SDP parser rejects such orphans.
+
+    Bails out (returns the SDP untouched) when stripping would leave *any*
+    ``m=video`` section without a surviving payload type. That prevents us
+    from shipping a malformed offer with orphan PTs on the m-line, and lets
+    the SFU reject the offer with a clear error instead.
+    """
+    joiner = "\r\n" if "\r\n" in sdp else "\n"
+    lines = sdp.split(joiner)
+
+    stripped_pts: set[str] = set()
+    for line in lines:
+        if not line.startswith("a=rtpmap:"):
+            continue
+        rest = line[len("a=rtpmap:") :]
+        pt, _, codec_clock = rest.partition(" ")
+        codec = codec_clock.split("/")[0].strip().upper()
+        if codec in _STRIPPED_VIDEO_CODECS:
+            stripped_pts.add(pt)
+
+    # RTX payload types reference their apt via ``a=fmtp:<rtx_pt> apt=<pt>``.
+    # Iterate until stable so RTX-chains (rare, non-standard) are still caught.
+    while True:
+        added = False
+        for line in lines:
+            if not line.startswith("a=fmtp:"):
+                continue
+            rest = line[len("a=fmtp:") :]
+            pt, _, params = rest.partition(" ")
+            if not params or pt in stripped_pts:
+                continue
+            for token in params.replace(";", " ").split():
+                key, _, value = token.partition("=")
+                if key.strip() == "apt" and value.strip() in stripped_pts:
+                    stripped_pts.add(pt)
+                    added = True
+                    break
+        if not added:
+            break
+
+    if not stripped_pts:
+        return sdp
+
+    # Safety check: if any m=video section would end up with no PTs left,
+    # something is wrong upstream (aiortc failed to negotiate H264). Return
+    # the SDP untouched rather than emit a malformed offer.
+    in_video = False
+    for line in lines:
+        if line.startswith("m="):
+            in_video = line.startswith("m=video")
+        if not in_video or not line.startswith("m=video"):
+            continue
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        if all(pt in stripped_pts for pt in parts[3:]):
+            logger.warning(
+                "SDP filter would strip every video PT (%s); leaving SDP "
+                "untouched so the SFU fails visibly instead of receiving "
+                "an offer with orphan payload types",
+                ",".join(parts[3:]),
+            )
+            return sdp
+
+    def _rewrite_m_video(line: str) -> str:
+        parts = line.split()
+        if len(parts) < 4:
+            return line
+        header, pts = parts[:3], parts[3:]
+        kept = [pt for pt in pts if pt not in stripped_pts]
+        return " ".join(header + kept)
+
+    per_pt_prefixes = tuple(
+        prefix.format(pt=pt)
+        for pt in stripped_pts
+        for prefix in ("a=rtpmap:{pt} ", "a=fmtp:{pt} ", "a=rtcp-fb:{pt} ")
+    )
+
+    in_video = False
+    result: list[str] = []
+    for line in lines:
+        if line.startswith("m="):
+            in_video = line.startswith("m=video")
+        if in_video and line.startswith("m=video"):
+            result.append(_rewrite_m_video(line))
+            continue
+        if in_video and line.startswith(per_pt_prefixes):
+            continue
+        result.append(line)
+
+    return joiner.join(result)
+
+
+def read_liveness_counter(track: Any) -> int:
+    """Return the counter that proves a track's *source* is still delivering.
+
+    Tracks with a freeze/cached-frame fallback expose ``captured_frame_count``,
+    which only advances on a real capture; ``frame_count`` climbs regardless and
+    would report an unplugged camera as healthy forever. Opt-in by attribute
+    presence. Module-level because ``MultimediaStreamer`` keeps its own copy of
+    the monitor loop.
+    """
+    captured = getattr(track, "captured_frame_count", None)
+    if isinstance(captured, int):
+        return captured
+    return getattr(track, "frame_count", 0)
 
 
 # =============================================================================
@@ -72,19 +189,91 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
         self.sync_frame_pts: Optional[int] = None
         self.sync_frame_timestamp: Optional[float] = None
         self.sync_frame_timestamp_monotonic: Optional[float] = None
+        self.sync_frame_time_base_num: Optional[int] = None
+        self.sync_frame_time_base_den: Optional[int] = None
+
+        # Sync metadata, populated by extension if present
+        self._sync_enabled: bool = False
+        self._current_frame_index: int = 0
+        self._current_pts: int = 0
+        self._current_time_base_num: int = 1
+        self._current_time_base_den: int = 30
+        self._current_capture_wall_time: Optional[float] = None
+        self._current_capture_monotonic: Optional[float] = None
+        self._current_frame: Any = None
+
+    def _store_frame_metadata_for_sync(
+        self,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
+        capture_wall_time: Optional[float],
+        capture_monotonic: Optional[float],
+    ):
+        """Store per-frame metadata for sync extension (if installed).
+
+        This metadata is read by the sync extension when active.
+        Called by concrete track implementations before returning the frame.
+
+        Args:
+            frame_index: Sender frame counter (0-indexed)
+            pts: Media presentation timestamp
+            time_base_num: Time base numerator
+            time_base_den: Time base denominator
+            capture_wall_time: Acquisition wall clock, or None for a placeholder
+            capture_monotonic: Acquisition monotonic clock, or None for a placeholder
+        """
+        self._current_frame_index = frame_index
+        self._current_pts = pts
+        self._current_time_base_num = time_base_num
+        self._current_time_base_den = time_base_den
+        self._current_capture_wall_time = capture_wall_time
+        self._current_capture_monotonic = capture_monotonic
+
+    def _capture_timestamp(
+        self, time_reference: Optional["TimeReference"] = None
+    ) -> tuple[float, float]:
+        """Timestamp at frame production: shared reference if provided, else OS clocks.
+
+        When a ``TimeReference`` is supplied, returns its last ``update()`` snapshot
+        (``read()`` is lock-free). Otherwise uses ``time.time()`` and ``time.monotonic()``.
+
+        Returns:
+            Tuple of (wall_clock_timestamp, monotonic_timestamp)
+        """
+        if time_reference is not None:
+            return time_reference.read()
+        return time.time(), time.monotonic()
 
     def _capture_sync_frame(
-        self, timestamp: float, timestamp_monotonic: float, pts: int
+        self,
+        timestamp: float,
+        timestamp_monotonic: float,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
     ):
         """Capture sync frame data at the exact moment of frame capture.
 
         This is used for the MQTT camera_sync_frame message which provides
         the anchor point for video/robot synchronization.
+
+        Args:
+            timestamp: Wall-clock timestamp when frame was captured
+            timestamp_monotonic: Monotonic timestamp when frame was captured
+            frame_index: Sender frame counter (0-indexed)
+            pts: Media presentation timestamp (units depend on time_base)
+            time_base_num: Time base numerator (e.g., 1 for 1/fps)
+            time_base_den: Time base denominator (e.g., fps for 1/fps)
         """
-        if pts == self.sync_frame_target and self.sync_frame_pts is None:
+        if frame_index == self.sync_frame_target and self.sync_frame_pts is None:
             self.sync_frame_pts = pts
             self.sync_frame_timestamp = timestamp
             self.sync_frame_timestamp_monotonic = timestamp_monotonic
+            self.sync_frame_time_base_num = time_base_num
+            self.sync_frame_time_base_den = time_base_den
 
     def get_stream_attributes(self) -> Dict[str, Any]:
         """Get streaming attributes for the offer payload.
@@ -128,6 +317,7 @@ class BaseVideoStreamer(abc.ABC):
         stream_source: Optional[str] = None,
         stream_instance_id: Optional[str] = None,
         frontend_type: Optional[str] = None,
+        record: bool = True,
     ):
         """Initialize the video streamer.
 
@@ -138,6 +328,12 @@ class BaseVideoStreamer(abc.ABC):
             time_reference: Time reference for synchronization
             auto_reconnect: Whether to automatically reconnect on disconnection
             enable_health_check: Whether to enable automatic health check reporting (default: True)
+            record: Initial value of the offer's ``recording`` flag, which is what
+                tells the SFU whether to persist this stream. Pass ``False`` for a
+                producer that must never be recorded — a stream whose ``twin_uuid``
+                is a synthetic routing key rather than a real twin has nothing for
+                a recording to belong to. An inbound ``start_video`` command still
+                overrides this per run.
             camera_name: Sensor/camera identifier used for WebRTC signaling routing
                 (MQTT offer ``sensor`` field). Omit only for non-recording or legacy
                 paths; for recording, pass :attr:`cyberwave.twin.CameraTwin.default_camera_name`
@@ -152,6 +348,7 @@ class BaseVideoStreamer(abc.ABC):
         self.stream_source: Optional[str] = stream_source
         self.stream_instance_id: Optional[str] = stream_instance_id
         self.frontend_type: Optional[str] = frontend_type
+        self._video_encoder_name: Optional[str] = None
         self.auto_reconnect = auto_reconnect
         # Use explicit None check so empty list [] disables TURN servers
         self.turn_servers = (
@@ -163,6 +360,11 @@ class BaseVideoStreamer(abc.ABC):
         # WebRTC state
         self.pc: Optional[RTCPeerConnection] = None
         self.streamer: Optional[BaseVideoTrack] = None
+        # The RTCRtpSender returned by pc.addTrack(), for callers that need live
+        # send-side stats (e.g. RTCP receiver-report loss feedback for bitrate
+        # adaptation) rather than routing everything through this class. Reset on
+        # every (re)connect, since a new pc/addTrack pair means a new sender.
+        self.sender: Optional[RTCRtpSender] = None
 
         # Answer handling state
         self._answer_received = False
@@ -175,7 +377,7 @@ class BaseVideoStreamer(abc.ABC):
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Recording state
-        self._should_record = True
+        self._should_record = record
 
         # Health check state
         self._health_check: Optional[Any] = None
@@ -198,14 +400,26 @@ class BaseVideoStreamer(abc.ABC):
         self._bad_connection_checks = 0
 
     def _publish_camera_sync_frame(
-        self, pts: int, timestamp: float, timestamp_monotonic: float
+        self,
+        frame_index: int,
+        pts: int,
+        time_base_num: int,
+        time_base_den: int,
+        timestamp: float,
+        timestamp_monotonic: float,
     ):
         """Publish a camera sync frame via MQTT.
 
         This sync frame is sent after ~1 second of streaming when the connection
-        has stabilized. It provides an anchor point for video/robot synchronization:
-        - pts: The edge frame counter at this sync point
-        - timestamp: Wall-clock time when this frame was captured
+        has stabilized. It provides an anchor point for video/robot synchronization.
+
+        Args:
+            frame_index: Sender frame counter (0-indexed)
+            pts: Media presentation timestamp (units depend on time_base)
+            time_base_num: Time base numerator (e.g., 1 for 1/fps)
+            time_base_den: Time base denominator (e.g., fps for 1/fps)
+            timestamp: Wall-clock time when this frame was captured
+            timestamp_monotonic: Monotonic time when this frame was captured
 
         During recording processing, the video is trimmed to start at this sync frame,
         and the timestamp becomes the video's start time. No interpolation needed.
@@ -216,7 +430,10 @@ class BaseVideoStreamer(abc.ABC):
         payload = {
             "type": "camera_sync_frame",
             "sender": "edge",
+            "frame_index": frame_index,
             "pts": pts,
+            "time_base_num": time_base_num,
+            "time_base_den": time_base_den,
             "timestamp": timestamp,
             "timestamp_monotonic": timestamp_monotonic,
             "track_id": self.streamer.id if self.streamer else None,
@@ -225,11 +442,12 @@ class BaseVideoStreamer(abc.ABC):
         }
         self._publish_message(topic, payload)
         logger.info(
-            f"Published camera_sync_frame: pts={pts}, timestamp={timestamp:.3f}"
+            f"Published camera_sync_frame: frame_index={frame_index}, pts={pts}, "
+            f"time_base={time_base_num}/{time_base_den}, timestamp={timestamp:.3f}"
         )
 
     async def _wait_and_publish_camera_sync_frame(
-        self, sync_frame: int = 30, timeout: float = 10.0
+        self, sync_frame: int | None = None, timeout: float = 10.0
     ):
         """Wait for the sync frame to be captured and publish it via MQTT.
 
@@ -243,6 +461,14 @@ class BaseVideoStreamer(abc.ABC):
         accurate video/robot synchronization.
         """
         if self.streamer:
+            if sync_frame is None:
+                stream_fps = getattr(self.streamer, "fps", None)
+                if isinstance(stream_fps, (int, float)) and stream_fps > 0:
+                    # Use roughly one second of video as the sync point so low-FPS
+                    # virtual streams don't always time out waiting for frame 30.
+                    sync_frame = max(1, int(round(float(stream_fps))))
+                else:
+                    sync_frame = 30
             self.streamer.sync_frame_target = sync_frame
 
         start_time = time.time()
@@ -257,13 +483,25 @@ class BaseVideoStreamer(abc.ABC):
             await asyncio.sleep(0.05)
 
         if self.streamer and self.streamer.sync_frame_pts is not None:
+            frame_index = self.streamer.sync_frame_target
             pts = self.streamer.sync_frame_pts
             timestamp = self.streamer.sync_frame_timestamp
             timestamp_monotonic = self.streamer.sync_frame_timestamp_monotonic
+            time_base_num = self.streamer.sync_frame_time_base_num
+            time_base_den = self.streamer.sync_frame_time_base_den
 
-            if timestamp is not None:
+            if (
+                timestamp is not None
+                and time_base_num is not None
+                and time_base_den is not None
+            ):
                 self._publish_camera_sync_frame(
-                    pts, timestamp, timestamp_monotonic or 0.0
+                    frame_index,
+                    pts,
+                    time_base_num,
+                    time_base_den,
+                    timestamp,
+                    timestamp_monotonic or 0.0,
                 )
 
     # -------------------------------------------------------------------------
@@ -287,6 +525,13 @@ class BaseVideoStreamer(abc.ABC):
 
         logger.info(f"Starting camera stream for twin {self.twin_uuid}")
 
+        try:
+            selection = apply_h264_hw_patch()
+            self._video_encoder_name = selection.codec_name
+        except Exception:
+            logger.exception("H264 hardware encoder setup failed; using aiortc default")
+            self._video_encoder_name = None
+
         self._subscribe_to_answer()
         await asyncio.sleep(2.5)
         await self._setup_webrtc()
@@ -300,6 +545,7 @@ class BaseVideoStreamer(abc.ABC):
             except Exception:
                 pass
             self.pc = None
+            self.sender = None
             if self.streamer is not None:
                 try:
                     self.streamer.close()
@@ -331,6 +577,7 @@ class BaseVideoStreamer(abc.ABC):
                 logger.error(f"Error closing peer connection: {e}")
             finally:
                 self.pc = None
+                self.sender = None
         if self.streamer:
             try:
                 self.streamer.close()
@@ -346,6 +593,7 @@ class BaseVideoStreamer(abc.ABC):
         self,
         stop_event: Optional[asyncio.Event] = None,
         command_callback: Optional[Callable] = None,
+        subscribe_to_commands: bool = True,
     ):
         """Run camera streaming with automatic reconnection and MQTT command handling.
 
@@ -363,7 +611,8 @@ class BaseVideoStreamer(abc.ABC):
         self._event_loop = asyncio.get_running_loop()
         stop = stop_event or asyncio.Event()
 
-        self._subscribe_to_commands(command_callback)
+        if subscribe_to_commands:
+            self._subscribe_to_commands(command_callback)
 
         if self.pc is None:
             try:
@@ -393,7 +642,11 @@ class BaseVideoStreamer(abc.ABC):
 
         try:
             while not stop.is_set() and self._is_running:
-                if self.pc is None and self.auto_reconnect and not _initial_stream_connected:
+                if (
+                    self.pc is None
+                    and self.auto_reconnect
+                    and not _initial_stream_connected
+                ):
                     if time.monotonic() >= _next_retry_at:
                         try:
                             logger.info(
@@ -405,8 +658,7 @@ class BaseVideoStreamer(abc.ABC):
                             _initial_stream_connected = True
                         except Exception as retry_exc:
                             logger.info(
-                                "Camera stream retry failed (%s). "
-                                "Will retry in %.0fs.",
+                                "Camera stream retry failed (%s). Will retry in %.0fs.",
                                 retry_exc,
                                 _retry_backoff,
                             )
@@ -422,13 +674,21 @@ class BaseVideoStreamer(abc.ABC):
 
     async def _setup_webrtc(self):
         """Initialize WebRTC peer connection and video track."""
-        self.streamer = self.initialize_track()
+        # Install sync extension hooks if available
+        try:
+            import cyberwave_video_sync
+
+            cyberwave_video_sync.install()
+            self.streamer = self.initialize_track()
+            self.streamer._sync_enabled = True
+        except ImportError:
+            self.streamer = self.initialize_track()
 
         ice_servers = [RTCIceServer(**server) for server in self.turn_servers]
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
 
         self._setup_pc_handlers()
-        self.pc.addTrack(self.streamer)
+        self.sender = self.pc.addTrack(self.streamer)
 
     def _setup_pc_handlers(self):
         """Set up peer connection event handlers."""
@@ -468,6 +728,11 @@ class BaseVideoStreamer(abc.ABC):
         stream_attributes = {}
         if self.streamer:
             stream_attributes = self.streamer.get_stream_attributes()
+        if self._video_encoder_name:
+            stream_attributes = {
+                **stream_attributes,
+                "video_encoder": self._video_encoder_name,
+            }
 
         offer_payload = {
             "target": "backend",
@@ -510,42 +775,121 @@ class BaseVideoStreamer(abc.ABC):
             else self._answer_data
         )
 
+        # Only apply the remote answer while this peer connection is still waiting
+        # for one ("have-local-offer"). If a race or a duplicate answer already
+        # advanced the connection to "stable" (or it was closed), applying another
+        # answer raises aiortc InvalidStateError ("Cannot handle answer in
+        # signaling state stable"), which propagates up and tears down the stream.
+        # Skipping here keeps the already-established connection alive.
+        signaling_state = getattr(self.pc, "signalingState", None)
+        if signaling_state != "have-local-offer":
+            logger.warning(
+                "Skipping setRemoteDescription: peer connection not awaiting an "
+                f"answer (signalingState={signaling_state}). Likely a duplicate or "
+                "stale answer; keeping the current connection."
+            )
+            return
+
         await self.pc.setRemoteDescription(
             RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
         )
 
     def _filter_sdp(self, sdp: str) -> str:
-        """Filter SDP to remove VP8 codec lines."""
-        VP8_PREFIXES = (
-            "a=rtpmap:97",
-            "a=rtpmap:98",
-            "a=rtcp-fb:97 nack",
-            "a=rtcp-fb:97 nack pli",
-            "a=rtcp-fb:97 goog-remb",
-            "a=rtcp-fb:98 nack",
-            "a=rtcp-fb:98 nack pli",
-            "a=rtcp-fb:98 goog-remb",
-            "a=fmtp:98",
-        )
+        """Strip VP8 (and its RTX) from the video m-section so the SFU picks H264.
 
-        sdp_lines = sdp.split("\r\n")
-        final_sdp_lines = []
-
-        for line in sdp_lines:
-            if line.startswith("m=video"):
-                parts = line.split()
-                filtered_parts = [part for part in parts if part not in ["97", "98"]]
-                final_sdp_lines.append(" ".join(filtered_parts))
-            elif line.startswith(VP8_PREFIXES):
-                continue
-            else:
-                final_sdp_lines.append(line)
-
-        return "\r\n".join(final_sdp_lines)
+        Historically this filter hard-coded aiortc's default payload types
+        (97/98). aiortc's codec table can shift across versions and Safari's
+        SDP parser rejects orphan a=fmtp/a=rtcp-fb lines pointing to PTs that
+        no longer appear on the m= line, so we discover PTs by codec name and
+        strip every attribute referencing them.
+        """
+        return _strip_vp8_video(sdp)
 
     # -------------------------------------------------------------------------
     # MQTT Communication
     # -------------------------------------------------------------------------
+
+    def _on_answer_message(self, data):
+        """Handle a WebRTC answer/candidate MQTT message.
+
+        Bound method so the MQTT client can deduplicate it correctly:
+        multiple streamers sharing the same twin topic each register
+        their own ``_on_answer_message`` (distinct bound-method objects),
+        while a single streamer re-subscribing on reconnect reuses the
+        same bound-method identity.
+        """
+        try:
+            payload = data if isinstance(data, dict) else json.loads(data)
+            logger.debug(f"Received message: type={payload.get('type')}")
+            logger.debug(f"Full payload: {payload}")
+
+            if payload.get("type") == "offer":
+                logger.debug("Skipping offer message")
+                return
+            elif payload.get("type") == "answer":
+                if payload.get("target") == "edge":
+                    if "m=video" not in payload.get("sdp", ""):
+                        logger.debug(
+                            "Ignoring answer with no m=video (likely audio stream)"
+                        )
+                        return
+                    answer_sensor = payload.get("sensor") or payload.get("camera")
+                    expected = self.camera_name
+                    answer_stream_source = payload.get("stream_source") or "live"
+                    expected_stream_source = self.stream_source or "live"
+                    answer_stream_instance_id = (
+                        payload.get("stream_instance_id") or "default"
+                    )
+                    expected_stream_instance_id = self.stream_instance_id or "default"
+                    if (
+                        (answer_sensor is None or answer_sensor == expected)
+                        and answer_stream_source == expected_stream_source
+                        and answer_stream_instance_id == expected_stream_instance_id
+                    ):
+                        # Answer idempotency: only the FIRST matching answer per
+                        # offer is captured. The SFU (or a reconnecting consumer)
+                        # can re-publish an answer on this shared, twin-scoped
+                        # topic after we've already applied one; accepting a second
+                        # answer would drive setRemoteDescription() while the peer
+                        # connection is already "stable", raising aiortc
+                        # InvalidStateError ("Cannot handle answer in signaling
+                        # state stable") and killing the live tile. _reset_state()
+                        # clears this flag for each fresh offer (start/reconnect).
+                        if self._answer_received:
+                            logger.debug(
+                                "Ignoring duplicate WebRTC answer "
+                                f"(sensor={answer_sensor}); answer already applied "
+                                "for the current offer"
+                            )
+                            return
+                        logger.info(
+                            "Processing answer targeted at edge"
+                            + (
+                                f" (sensor={expected}, answer_sensor={answer_sensor})"
+                                if expected != "default"
+                                else ""
+                            )
+                        )
+                        self._answer_data = payload
+                        self._answer_received = True
+                    else:
+                        logger.debug(
+                            "Ignoring answer with mismatched stream identity: "
+                            f"expected_sensor={expected}, got_sensor={answer_sensor}, "
+                            f"expected_stream_source={expected_stream_source}, "
+                            f"got_stream_source={answer_stream_source}, "
+                            f"expected_stream_instance_id={expected_stream_instance_id}, "
+                            f"got_stream_instance_id={answer_stream_instance_id}"
+                        )
+                else:
+                    logger.debug("Skipping answer message not targeted at edge")
+            elif payload.get("type") == "candidate":
+                if payload.get("target") == "edge":
+                    self._handle_candidate(payload)
+            else:
+                logger.debug(f"Ignoring message type: {payload.get('type')}")
+        except Exception as e:
+            logger.error(f"Error in on_answer: {e}")
 
     def _subscribe_to_answer(self):
         """Subscribe to WebRTC answer topic."""
@@ -556,67 +900,21 @@ class BaseVideoStreamer(abc.ABC):
         answer_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-answer"
         logger.info(f"Subscribing to WebRTC answer topic: {answer_topic}")
 
-        def on_answer(data):
-            try:
-                payload = data if isinstance(data, dict) else json.loads(data)
-                logger.debug(f"Received message: type={payload.get('type')}")
-                logger.debug(f"Full payload: {payload}")
-
-                if payload.get("type") == "offer":
-                    logger.debug("Skipping offer message")
-                    return
-                elif payload.get("type") == "answer":
-                    if payload.get("target") == "edge":
-                        if "m=video" not in payload.get("sdp", ""):
-                            logger.debug("Ignoring answer with no m=video (likely audio stream)")
-                            return
-                        answer_sensor = payload.get("sensor") or payload.get("camera")
-                        expected = self.camera_name
-                        answer_stream_source = payload.get("stream_source") or "live"
-                        expected_stream_source = self.stream_source or "live"
-                        answer_stream_instance_id = (
-                            payload.get("stream_instance_id") or "default"
-                        )
-                        expected_stream_instance_id = (
-                            self.stream_instance_id or "default"
-                        )
-                        if (
-                            (answer_sensor is None or answer_sensor == expected)
-                            and answer_stream_source == expected_stream_source
-                            and answer_stream_instance_id == expected_stream_instance_id
-                        ):
-                            logger.info(
-                                "Processing answer targeted at edge"
-                                + (
-                                    f" (sensor={expected}, answer_sensor={answer_sensor})"
-                                    if expected != "default"
-                                    else ""
-                                )
-                            )
-                            self._answer_data = payload
-                            self._answer_received = True
-                        else:
-                            logger.debug(
-                                "Ignoring answer with mismatched stream identity: "
-                                f"expected_sensor={expected}, got_sensor={answer_sensor}, "
-                                f"expected_stream_source={expected_stream_source}, "
-                                f"got_stream_source={answer_stream_source}, "
-                                f"expected_stream_instance_id={expected_stream_instance_id}, "
-                                f"got_stream_instance_id={answer_stream_instance_id}"
-                            )
-                    else:
-                        logger.debug("Skipping answer message not targeted at edge")
-                elif payload.get("type") == "candidate":
-                    if payload.get("target") == "edge":
-                        self._handle_candidate(payload)
-                else:
-                    logger.debug(f"Ignoring message type: {payload.get('type')}")
-            except Exception as e:
-                logger.error(f"Error in on_answer: {e}")
-
-        self.client.subscribe(answer_topic, on_answer)
+        # Key the handler by this stream's identity (media + sensor + source +
+        # instance) — the same tuple on_answer uses to claim an answer. A
+        # reconnect or a fresh instance for the same sensor re-subscribes under
+        # the same key (replace, no storm), while a different sensor/stream on
+        # this shared, twin-scoped topic keeps its own handler.
+        subscriber_key = (
+            f"video:{self.camera_name}:{self.stream_source}:{self.stream_instance_id}"
+        )
+        self.client.subscribe(
+            answer_topic, self._on_answer_message, subscriber_key=subscriber_key
+        )
         candidate_topic = f"{prefix}cyberwave/twin/{self.twin_uuid}/webrtc-candidate"
-        self.client.subscribe(candidate_topic, on_answer)
+        self.client.subscribe(
+            candidate_topic, self._on_answer_message, subscriber_key=subscriber_key
+        )
 
     def _handle_candidate(self, payload: Dict[str, Any]):
         """Handle incoming ICE candidate."""
@@ -655,6 +953,8 @@ class BaseVideoStreamer(abc.ABC):
                     logger.warning("Command message missing command field")
                     return
 
+                _EDGE_CORE_COMMANDS = {"sync_workflows", "remove_workflow_worker"}
+
                 if command_type == "start_video":
                     data_dict = payload.get("data", {})
                     if isinstance(data_dict, dict):
@@ -670,6 +970,8 @@ class BaseVideoStreamer(abc.ABC):
                     asyncio.run_coroutine_threadsafe(
                         self._handle_stop_command(command_callback), self._event_loop
                     )
+                elif command_type in _EDGE_CORE_COMMANDS:
+                    pass
                 else:
                     logger.warning(f"Unknown command type: {command_type}")
 
@@ -888,6 +1190,14 @@ class BaseVideoStreamer(abc.ABC):
                 edge_id=self.twin_uuid,
                 stale_timeout=SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
                 interval=SDK_EDGE_HEALTH_INTERVAL_SECONDS,
+                # Wire the per-stream static config through the dynamic
+                # provider rather than ``register_stream_config`` so the
+                # block is re-read on every heartbeat.  This is what lets
+                # ``CV2CameraStreamer`` publish ``actual_fps`` once the
+                # V4L2 stack has negotiated — registered-once snapshots
+                # would have shipped the requested fps for the lifetime
+                # of the streamer instead of the runtime-negotiated value.
+                stream_config_provider=self._collect_stream_configs,
             )
             self._health_check.start()
             self._last_frame_count = 0
@@ -896,6 +1206,57 @@ class BaseVideoStreamer(abc.ABC):
             logger.debug("Health check started")
         except Exception as e:
             logger.warning(f"Failed to start health check: {e}")
+
+    def _collect_stream_configs(self) -> Dict[str, Dict[str, Any]]:
+        """Adapter from the per-streamer hook to the multi-stream provider shape.
+
+        ``EdgeHealthCheck.stream_config_provider`` returns
+        ``{stream_id: config}`` so it can advertise multi-stream
+        publishers.  ``BaseVideoStreamer`` is single-stream by design
+        (one peer connection, one track), so the dict has at most one
+        key — the canonical ``"stream"`` id, matching the single
+        ``streams[…]`` entry the publisher emits when no driver has
+        registered something more meaningful.
+
+        Returns an empty dict when the subclass hasn't overridden
+        :meth:`_build_stream_config` (legacy publishers stay on the
+        no-stream_config wire shape) or when the override raises (the
+        heartbeat keeps flowing — a broken hook must not silently mark
+        the edge offline).
+        """
+        try:
+            cfg = self._build_stream_config()
+        except Exception as exc:
+            logger.debug("_build_stream_config raised: %s", exc)
+            return {}
+        if cfg is None:
+            return {}
+        return {"stream": cfg}
+
+    def _build_stream_config(self) -> Optional[Dict[str, Any]]:
+        """Return a typed ``stream_config`` block for this streamer, or ``None``.
+
+        Invoked on every heartbeat via the ``stream_config_provider``
+        wiring in :meth:`_start_health_check`, so subclasses can return
+        runtime-negotiated values (post-V4L2 ``actual_fps``, the codec
+        the SDP handshake settled on, etc.).  The publisher re-reads on
+        every cycle; there is no need for subclasses to track when
+        these values become available.
+
+        Default implementation returns ``None`` (no config block on the
+        wire), which keeps the legacy heartbeat shape for streamers
+        without static config to advertise — virtual / test tracks, or
+        early bootstrap publishers that don't know their parameters
+        yet.
+
+        Concrete subclasses (``CV2CameraStreamer``, ``RealsenseCameraStreamer``,
+        ...) override this to return a dict carrying ``kind`` plus
+        kind-specific fields.  See :meth:`EdgeHealthCheck.register_stream_config`
+        for the schema contract.  Credentials in ``source`` must
+        already be masked by the override; the publisher does not
+        redact.
+        """
+        return None
 
     def _stop_health_check(self):
         """Stop health check monitoring."""
@@ -913,11 +1274,11 @@ class BaseVideoStreamer(abc.ABC):
         self._last_frame_count = 0
 
     async def _monitor_frame_count(self):
-        """Monitor streamer frame count and update health check."""
+        """Monitor streamer capture liveness and update health check."""
         while self._is_running or self.pc is not None:
             try:
                 if self.streamer and self._health_check:
-                    current_frame_count = getattr(self.streamer, "frame_count", 0)
+                    current_frame_count = read_liveness_counter(self.streamer)
                     if current_frame_count < self._last_frame_count:
                         self._last_frame_count = current_frame_count
                     if current_frame_count > self._last_frame_count:

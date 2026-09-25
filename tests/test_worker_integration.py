@@ -118,8 +118,10 @@ def test_full_pipeline(tmp_path):
 
     runtime.start()
 
-    # The runtime should have subscribed via the backend using the proper Zenoh key.
-    expected_key = f"cw/{TEST_TWIN_UUID}/data/frames/default"
+    # With no explicit sensor=, @cw.on_frame(twin) now subscribes to a
+    # wildcard so the hook matches whatever sensor name the driver
+    # publishes under (``color_camera``, ``depth_camera``, …).
+    expected_key = f"cw/{TEST_TWIN_UUID}/data/frames/**"
     assert expected_key in data_bus.backend._subscriptions
     assert len(data_bus.backend._subscriptions[expected_key]) == 1
 
@@ -175,8 +177,9 @@ def test_multiple_workers_multiple_hooks(tmp_path):
 
     runtime.start()
 
-    frame_key = f"cw/{TEST_TWIN_UUID}/data/frames/default"
-    depth_key = f"cw/{TEST_TWIN_UUID}/data/depth/default"
+    # Wildcard subscription matches whatever sensor name the driver uses.
+    frame_key = f"cw/{TEST_TWIN_UUID}/data/frames/**"
+    depth_key = f"cw/{TEST_TWIN_UUID}/data/depth/**"
     assert frame_key in data_bus.backend._subscriptions
     assert depth_key in data_bus.backend._subscriptions
 
@@ -185,34 +188,30 @@ def test_multiple_workers_multiple_hooks(tmp_path):
 
 def test_real_client_property_hook_delegation():
     """The real Cyberwave client's @property hook delegates register correctly."""
-    with (
-        patch("cyberwave.rest.ApiClient"),
-        patch("cyberwave.rest.DefaultApi"),
-        patch("cyberwave.rest.Configuration"),
-    ):
-        from cyberwave.client import Cyberwave
+    from cyberwave.client import Cyberwave
 
-        client = Cyberwave(api_key="test-key", base_url="http://localhost:8000")
+    client = object.__new__(Cyberwave)
+    client._hook_registry = HookRegistry()
 
-        @client.on_frame("test-uuid", sensor="front")
-        def handle_frame(sample, ctx):
-            pass
+    @client.on_frame("test-uuid", sensor="front")
+    def handle_frame(sample, ctx):
+        pass
 
-        @client.on_depth("test-uuid")
-        def handle_depth(sample, ctx):
-            pass
+    @client.on_depth("test-uuid")
+    def handle_depth(sample, ctx):
+        pass
 
-        @client.on_data("test-uuid", "custom_ch")
-        def handle_data(sample, ctx):
-            pass
+    @client.on_data("test-uuid", "custom_ch")
+    def handle_data(sample, ctx):
+        pass
 
-        hooks = client._hook_registry.hooks
-        assert len(hooks) == 3
-        assert hooks[0].hook_type == "frame"
-        assert hooks[0].channel == "frames/front"
-        assert hooks[0].callback is handle_frame
-        assert hooks[1].hook_type == "depth"
-        assert hooks[1].callback is handle_depth
-        assert hooks[2].hook_type == "data"
-        assert hooks[2].channel == "custom_ch"
-        assert hooks[2].callback is handle_data
+    hooks = client._hook_registry.hooks
+    assert len(hooks) == 3
+    assert hooks[0].hook_type == "frame"
+    assert hooks[0].channel == "frames/front"
+    assert hooks[0].callback is handle_frame
+    assert hooks[1].hook_type == "depth"
+    assert hooks[1].callback is handle_depth
+    assert hooks[2].hook_type == "data"
+    assert hooks[2].channel == "custom_ch"
+    assert hooks[2].callback is handle_data

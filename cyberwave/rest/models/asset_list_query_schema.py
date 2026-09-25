@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -27,15 +28,19 @@ class AssetListQuerySchema(BaseModel):
     """
     AssetListQuerySchema
     """ # noqa: E501
-    limit: Optional[StrictInt] = None
-    offset: Optional[StrictInt] = None
+    limit: Optional[Annotated[int, Field(le=1000, strict=True, ge=1)]] = None
+    offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None
     registry_id: Optional[StrictStr] = None
     registry_vendor: Optional[StrictStr] = None
     owned: Optional[StrictStr] = None
     search: Optional[StrictStr] = None
+    tag: Optional[StrictStr] = None
     metadata_key: Optional[StrictStr] = None
     metadata_value: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["limit", "offset", "registry_id", "registry_vendor", "owned", "search", "metadata_key", "metadata_value"]
+    min_price: Optional[Union[StrictFloat, StrictInt]] = None
+    max_price: Optional[Union[StrictFloat, StrictInt]] = None
+    workspace_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["limit", "offset", "registry_id", "registry_vendor", "owned", "search", "tag", "metadata_key", "metadata_value", "min_price", "max_price", "workspace_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -106,6 +111,11 @@ class AssetListQuerySchema(BaseModel):
         if self.search is None and "search" in self.model_fields_set:
             _dict['search'] = None
 
+        # set to None if tag (nullable) is None
+        # and model_fields_set contains the field
+        if self.tag is None and "tag" in self.model_fields_set:
+            _dict['tag'] = None
+
         # set to None if metadata_key (nullable) is None
         # and model_fields_set contains the field
         if self.metadata_key is None and "metadata_key" in self.model_fields_set:
@@ -115,6 +125,21 @@ class AssetListQuerySchema(BaseModel):
         # and model_fields_set contains the field
         if self.metadata_value is None and "metadata_value" in self.model_fields_set:
             _dict['metadata_value'] = None
+
+        # set to None if min_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.min_price is None and "min_price" in self.model_fields_set:
+            _dict['min_price'] = None
+
+        # set to None if max_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_price is None and "max_price" in self.model_fields_set:
+            _dict['max_price'] = None
+
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
 
         return _dict
 
@@ -134,8 +159,12 @@ class AssetListQuerySchema(BaseModel):
             "registry_vendor": obj.get("registry_vendor"),
             "owned": obj.get("owned"),
             "search": obj.get("search"),
+            "tag": obj.get("tag"),
             "metadata_key": obj.get("metadata_key"),
-            "metadata_value": obj.get("metadata_value")
+            "metadata_value": obj.get("metadata_value"),
+            "min_price": obj.get("min_price"),
+            "max_price": obj.get("max_price"),
+            "workspace_uuid": obj.get("workspace_uuid")
         })
         return _obj
 

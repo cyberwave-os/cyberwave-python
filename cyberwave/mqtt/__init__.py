@@ -7,6 +7,8 @@ It uses paho-mqtt (2.1.0+) for reliable MQTT connectivity.
 
 import json
 import logging
+import math
+import os
 import threading
 import time
 import uuid
@@ -22,6 +24,51 @@ from ..constants import SOURCE_TYPE_EDGE, SOURCE_TYPES
 
 logger = logging.getLogger(__name__)
 SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
+
+# Sentinel distinguishing "remove every handler for the topic" (default) from
+# an explicit ``subscriber_key=None`` (remove only the default slot).
+_UNSET = object()
+
+# ---------------------------------------------------------------------------
+# Recording-boundary marker for ``telemetry_end`` / ``telemetry_start``
+#
+# ``telemetry_end`` is overloaded. Its original meaning is "the publisher that
+# owns this twin's telemetry session is going away", and consumers act on it
+# accordingly — the media-service SFU treats it exactly like a DTLS close or
+# ICE disconnect and drops the twin's whole mediasoup room (producers,
+# consumers, router).
+#
+# ``publish_telemetry_cut`` reuses the same topic for a completely different
+# intent: bounding a *recording window* inside a session it does not own, while
+# the WebRTC peer stays connected. These fields let a consumer tell the two
+# apart. Consumers MUST key on ``RECORDING_BOUNDARY_KEY``; ``sender`` and
+# ``source_subtype`` are free-form attribution for logs and must never drive
+# behavior.
+# ---------------------------------------------------------------------------
+RECORDING_BOUNDARY_KEY = "recording_boundary"
+TELEMETRY_CUT_SENDER = "workflow"
+TELEMETRY_CUT_SOURCE_SUBTYPE = "node_recorder"
+
+
+def _replace_non_finite(value: Any) -> Any:
+    """Recursively replace non-finite floats (``NaN`` / ``inf``) with ``None``.
+
+    ``json.dumps`` defaults to ``allow_nan=True`` and emits the bare tokens
+    ``NaN`` / ``Infinity`` / ``-Infinity``, which are NOT valid JSON (RFC 8259).
+    A strict consumer — the browser's ``JSON.parse``, the C++/other SDKs — then
+    rejects the ENTIRE payload, silently dropping otherwise-valid joint / pose /
+    telemetry messages. Producers legitimately end up with non-finite values
+    (e.g. a driver forwarding an unmeasured ``NaN`` joint effort), so the MQTT
+    wire boundary maps them to ``null`` (a valid JSON marker for "no value")
+    rather than letting an invalid document reach subscribers.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _replace_non_finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_replace_non_finite(v) for v in value]
+    return value
 
 
 class CyberwaveMQTTClient:
@@ -106,8 +153,22 @@ class CyberwaveMQTTClient:
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
 
-        # Event handlers
-        self._handlers: Dict[str, List[Callable]] = {}
+        # Initial-connect resilience. The first CONNACK can be delayed when the
+        # broker is briefly overloaded (e.g. a reconnect storm from other
+        # clients saturating the auth callback). Rather than failing the whole
+        # process after a single short window, retry the connect a bounded
+        # number of times with backoff. Tunable for callers that prefer
+        # fast-fail via these env vars.
+        self._connect_timeout = float(os.getenv("CYBERWAVE_MQTT_CONNECT_TIMEOUT", "10"))
+        self._connect_max_attempts = max(
+            1, int(os.getenv("CYBERWAVE_MQTT_CONNECT_ATTEMPTS", "3"))
+        )
+
+        # Event handlers, keyed per topic by an opaque ``subscriber_key``.
+        # ``None`` is the default single-subscriber slot (replace semantics);
+        # distinct non-None keys let independent subscribers coexist on one
+        # topic. See :meth:`_add_handler` for the rationale.
+        self._handlers: Dict[str, Dict[Any, Callable]] = {}
 
         # Position tracking to avoid duplicate updates
         self._last_positions: Dict[str, Dict[str, float]] = {}
@@ -118,6 +179,7 @@ class CyberwaveMQTTClient:
         # Rate limiting
         self._last_update_times: Dict[str, float] = {}
         self._min_update_interval = 0.025  # 40 Hz max
+        self._gps_min_update_interval = 0.5  # 2 Hz for GNSS telemetry storage
 
         # Setup MQTT callbacks
         self.client.on_connect = self._on_connect
@@ -130,6 +192,7 @@ class CyberwaveMQTTClient:
         self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
         self._subscription_lock = threading.Lock()
         self._pending_subscriptions: Dict[int, str] = {}
+        self._subscribe_options: Dict[str, Any] = {}
         self.source_type = source_type
 
         # Auto-connect if requested (must happen after all state is initialized)
@@ -146,6 +209,24 @@ class CyberwaveMQTTClient:
             )
         return effective_source_type
 
+    @property
+    def is_mqtt_v5(self) -> bool:
+        """True when the client negotiates MQTT v5 with the broker."""
+        return self._protocol == mqtt.MQTTv5
+
+    def _build_subscribe_options(self, *, qos: int, no_local: bool) -> Any | None:
+        if not no_local:
+            return None
+        if not self.is_mqtt_v5:
+            logger.debug(
+                "no_local subscribe requested but client uses MQTT v3.1.1; "
+                "set CYBERWAVE_MQTT_PROTOCOL=5 for broker-side echo filtering"
+            )
+            return None
+        from paho.mqtt.subscribeoptions import SubscribeOptions
+
+        return SubscribeOptions(qos=qos, noLocal=True)
+
     def _positions_equal(
         self, pos1: Dict[str, float], pos2: Dict[str, float], tolerance: float = 1e-6
     ) -> bool:
@@ -158,29 +239,84 @@ class CyberwaveMQTTClient:
                 return False
         return True
 
-    def _is_rate_limited(self, key: str) -> bool:
-        """Check if this update is being sent too frequently."""
-        current_time = time.time()
-        last_time = self._last_update_times.get(key, 0)
+    def _is_rate_limited(self, key: str, min_interval: float | None = None) -> bool:
+        """Check if this update is being sent too frequently (uses monotonic clock)."""
+        interval = self._min_update_interval if min_interval is None else min_interval
+        now = time.monotonic()
+        last_time = self._last_update_times.get(key, 0.0)
 
-        if current_time - last_time < self._min_update_interval:
+        if now - last_time < interval:
             return True
 
-        self._last_update_times[key] = current_time
+        self._last_update_times[key] = now
         return False
 
-    def _add_handler(self, topic: str, handler: Callable):
-        """Add event handler for a specific topic."""
-        if topic not in self._handlers:
-            self._handlers[topic] = []
-        self._handlers[topic].append(handler)
+    def _add_handler(
+        self, topic: str, handler: Callable, subscriber_key: Any = None
+    ) -> bool:
+        """Register ``handler`` for ``topic`` under ``subscriber_key``.
 
-    def unsubscribe(self, topic: str) -> None:
-        """Unsubscribe from an MQTT topic and remove all its handlers.
+        Handlers are keyed per topic by ``subscriber_key`` so that:
+
+        * **Re-subscribing under the same key replaces** the prior handler
+          in place — no accumulation. This is what kills the WebRTC answer
+          storm: ``_subscribe_to_answer()`` runs on every auto-reconnect
+          cycle and builds a *fresh* ``on_answer`` closure (a distinct
+          object), so identity-based dedup can't catch it. As long as the
+          streamer passes a stable key, only one live handler survives.
+          Under the old append semantics a single SFU answer fanned out
+          into N stale closures (one per reconnect) and the matching
+          ``webrtc-candidate`` subscription injected the same ICE candidate
+          N times — destabilising aioice's checklist into a "connected but
+          no media" zombie state.
+        * **Distinct keys coexist** on the same topic. The ``webrtc-answer``
+          topic is keyed only by ``twin_uuid``, so a twin running several
+          streamers at once (multimedia + video-only + microphone) shares
+          it; each registers under its own key and content-filters answers
+          it doesn't own. Replace-by-topic would let the last subscriber
+          silently evict the others.
+
+        ``subscriber_key=None`` is the default single slot: callers that
+        don't opt into coexistence get plain replace semantics.
+
+        Returns ``True`` when this is the first handler for the topic
+        (caller should issue a broker-level SUBSCRIBE), ``False`` when the
+        topic already had at least one handler (broker subscription is
+        still live, no SUBSCRIBE round-trip is needed).
+        """
+        is_new = topic not in self._handlers
+        bucket = self._handlers.setdefault(topic, {})
+        if subscriber_key in bucket:
+            logger.debug(
+                "Replacing handler for topic %s (key=%r, idempotent re-subscribe)",
+                topic,
+                subscriber_key,
+            )
+        bucket[subscriber_key] = handler
+        return is_new
+
+    def unsubscribe(self, topic: str, subscriber_key: Any = _UNSET) -> None:
+        """Unsubscribe from an MQTT topic.
 
         Idempotent — safe to call even if the topic was never subscribed.
+
+        With no ``subscriber_key`` (default), removes *all* handlers for the
+        topic and tears down the broker subscription. When a specific
+        ``subscriber_key`` is given, only that subscriber's handler is
+        removed; the broker subscription is kept alive as long as other
+        subscribers remain on the topic (so unsubscribing one streamer
+        doesn't break the others sharing the same ``webrtc-answer`` topic).
         """
-        self._handlers.pop(topic, None)
+        if subscriber_key is not _UNSET:
+            bucket = self._handlers.get(topic)
+            if bucket is not None:
+                bucket.pop(subscriber_key, None)
+                if bucket:
+                    # Other subscribers still live — keep the broker sub.
+                    return
+                self._handlers.pop(topic, None)
+        else:
+            self._handlers.pop(topic, None)
         if self.connected:
             self.client.unsubscribe(topic)
 
@@ -208,7 +344,7 @@ class CyberwaveMQTTClient:
         """Trigger all handlers for a specific topic."""
         # First, try exact match
         if topic in self._handlers:
-            for handler in self._handlers[topic]:
+            for handler in list(self._handlers[topic].values()):
                 try:
                     handler(data)
                 except Exception as e:
@@ -218,7 +354,7 @@ class CyberwaveMQTTClient:
         for pattern, handlers in self._handlers.items():
             if pattern != topic and ("+" in pattern or "#" in pattern):
                 if self._match_mqtt_pattern(pattern, topic):
-                    for handler in handlers:
+                    for handler in list(handlers.values()):
                         try:
                             # Pass both topic and data to handler if it accepts 2 args
                             import inspect
@@ -242,7 +378,11 @@ class CyberwaveMQTTClient:
 
             # Resubscribe to all topics
             for topic in self._handlers.keys():
-                result = client.subscribe(topic)
+                options = self._subscribe_options.get(topic)
+                if options is not None:
+                    result = client.subscribe(topic, options=options)
+                else:
+                    result = client.subscribe(topic)
                 if result[0] == mqtt.MQTT_ERR_SUCCESS:
                     with self._subscription_lock:
                         self._pending_subscriptions[result[1]] = topic
@@ -396,44 +536,79 @@ class CyberwaveMQTTClient:
         self.publish(topic, message)
 
     def connect(self):
-        """Connect to MQTT broker."""
-        try:
-            logger.warning(
-                "MQTT connection settings: tls=%s, broker=%s, port=%s, custom_ca=%s",
-                self.use_tls,
-                self.mqtt_broker,
-                self.mqtt_port,
-                bool(self.tls_ca_cert),
-            )
-            logger.debug(
-                f"Connecting to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}"
-            )
-            self.client.connect(self.mqtt_broker, self.mqtt_port, keepalive=60)
-            self.client.loop_start()
+        """Connect to MQTT broker.
 
-            # Wait for connection to establish
-            timeout = 10
-            start_time = time.time()
-            while not self.connected and (time.time() - start_time) < timeout:
-                time.sleep(0.5)
+        Retries the initial connect a bounded number of times with backoff so a
+        briefly-overloaded broker (delayed CONNACK) does not fail the whole
+        process on the first short window. Tunable via
+        ``CYBERWAVE_MQTT_CONNECT_TIMEOUT`` (per-attempt seconds) and
+        ``CYBERWAVE_MQTT_CONNECT_ATTEMPTS``.
+        """
+        logger.warning(
+            "MQTT connection settings: tls=%s, broker=%s, port=%s, custom_ca=%s",
+            self.use_tls,
+            self.mqtt_broker,
+            self.mqtt_port,
+            bool(self.tls_ca_cert),
+        )
 
-            if not self.connected:
-                raise Exception("Failed to connect to MQTT broker within timeout")
+        timeout = self._connect_timeout
+        max_attempts = self._connect_max_attempts
+        self.client.loop_start()
 
-            logger.debug("Successfully connected to MQTT broker")
+        last_error: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # paho's first call must be connect(); subsequent retries reuse
+                # the already-configured socket via reconnect().
+                if attempt == 1:
+                    self.client.connect(self.mqtt_broker, self.mqtt_port, keepalive=60)
+                else:
+                    self.client.reconnect()
+            except Exception as e:
+                # Socket-level failure (broker down, DNS, refused connection).
+                last_error = e
+                logger.warning(
+                    "MQTT connect attempt %d/%d failed at socket level: %s",
+                    attempt,
+                    max_attempts,
+                    e,
+                )
+            else:
+                # CONNACK arrives asynchronously; _on_connect flips self.connected.
+                start_time = time.time()
+                while not self.connected and (time.time() - start_time) < timeout:
+                    time.sleep(0.5)
+                if self.connected:
+                    logger.debug("Successfully connected to MQTT broker")
+                    break
+                last_error = Exception(
+                    "Failed to connect to MQTT broker within timeout"
+                )
+                logger.warning(
+                    "MQTT CONNACK not received within %ss (attempt %d/%d)",
+                    timeout,
+                    attempt,
+                    max_attempts,
+                )
 
-            # Send telemetry start message only for twins that haven't received one yet
-            # This prevents duplicate telemetry_start messages on reconnection
-            # Thread-safe: Uses lock to coordinate with _handle_twin_update_with_telemetry
-            with self._telemetry_lock:
-                for twin_uuid in self.twin_uuids:
-                    if twin_uuid not in self.twin_uuids_with_telemetry_start:
-                        self.twin_uuids_with_telemetry_start.append(twin_uuid)
-                        self._publish_connect_message(twin_uuid)
-                        self._publish_telemetry_start_message(twin_uuid, None)
-        except Exception as e:
-            logger.error(f"Failed to connect to MQTT broker: {e}")
-            raise
+            if attempt < max_attempts:
+                time.sleep(min(2.0 * attempt, 5.0))
+
+        if not self.connected:
+            self.client.loop_stop()
+            logger.error("Failed to connect to MQTT broker: %s", last_error)
+            raise last_error or Exception("Failed to connect to MQTT broker")
+
+        # Send telemetry start message only for twins that haven't received one yet
+        # This prevents duplicate telemetry_start messages on reconnection
+        # Thread-safe: Uses lock to coordinate with _handle_twin_update_with_telemetry
+        with self._telemetry_lock:
+            for twin_uuid in self.twin_uuids:
+                if twin_uuid not in self.twin_uuids_with_telemetry_start:
+                    self.twin_uuids_with_telemetry_start.append(twin_uuid)
+                    self._publish_connect_message(twin_uuid)
+                    self._publish_telemetry_start_message(twin_uuid, None)
 
     def disconnect(self):
         """Disconnect from MQTT broker."""
@@ -456,23 +631,72 @@ class CyberwaveMQTTClient:
         try:
             if isinstance(message, dict):
                 message.setdefault("session_id", self.client_id)
-            payload = json.dumps(message) if isinstance(message, dict) else message
+            if isinstance(message, dict):
+                # Fast path: emit strict JSON (allow_nan=False rejects NaN/inf).
+                # Only pay the recursive-sanitize cost when a non-finite value is
+                # actually present, so the wire never carries invalid-JSON tokens.
+                try:
+                    payload = json.dumps(message, allow_nan=False)
+                except ValueError:
+                    payload = json.dumps(_replace_non_finite(message), allow_nan=False)
+            else:
+                payload = message
             result = self.client.publish(topic, payload, qos=qos)
 
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
                 logger.error(f"Failed to publish to {topic}: {result.rc}")
-            else:
-                logger.debug(f"Published to {topic}")
         except Exception as e:
             logger.error(f"Error publishing to {topic}: {e}")
 
-    def subscribe(self, topic: str, handler: Optional[Callable] = None, qos: int = 0):
-        """Subscribe to MQTT topic."""
+    def subscribe(
+        self,
+        topic: str,
+        handler: Optional[Callable] = None,
+        qos: int = 0,
+        *,
+        no_local: bool = False,
+        subscriber_key: Any = None,
+    ):
+        """Subscribe to MQTT topic.
+
+        Idempotent w.r.t. ``(topic, subscriber_key)``: re-registering for a
+        topic the client is already subscribed to replaces that
+        subscriber's prior handler in-place and skips the broker-level
+        SUBSCRIBE round-trip (no extra ``mid`` / SUBACK pair). See
+        :meth:`_add_handler` for the rationale — without this, every camera
+        auto-reconnect cycle added another stale closure to the
+        ``webrtc-answer`` / ``webrtc-candidate`` topics, and a single SFU
+        answer fanned out into N "Processing answer" log lines plus N
+        duplicate ``addIceCandidate`` calls.
+
+        Pass a stable ``subscriber_key`` (e.g. per streamer instance) when
+        several independent subscribers must coexist on one topic — they
+        share the broker subscription but keep distinct handlers. With the
+        default ``subscriber_key=None`` the topic holds a single handler
+        that later subscribes replace.
+
+        When ``no_local=True`` and the client uses MQTT v5, the broker
+        will not deliver this client's own publications on *topic* (useful
+        when publishing and subscribing to ``cyberwave/joint/.../update``).
+        """
+        is_new_topic = True
         if handler:
-            self._add_handler(topic, handler)
+            is_new_topic = self._add_handler(topic, handler, subscriber_key)
+
+        if not is_new_topic:
+            return
+
+        options = self._build_subscribe_options(qos=qos, no_local=no_local)
+        if options is not None:
+            self._subscribe_options[topic] = options
+        else:
+            self._subscribe_options.pop(topic, None)
 
         if self.connected:
-            result = self.client.subscribe(topic, qos=qos)
+            if options is not None:
+                result = self.client.subscribe(topic, qos=qos, options=options)
+            else:
+                result = self.client.subscribe(topic, qos=qos)
             if result[0] == mqtt.MQTT_ERR_SUCCESS:
                 with self._subscription_lock:
                     self._pending_subscriptions[result[1]] = topic
@@ -501,6 +725,8 @@ class CyberwaveMQTTClient:
                 message["fps"] = metadata["fps"]
             if "observations" in metadata:
                 message["observations"] = metadata["observations"]
+            if "camera_participants" in metadata:
+                message["camera_participants"] = metadata["camera_participants"]
         logger.info(
             f"Publishing telemetry start message for twin {twin_uuid}: {message}"
         )
@@ -518,7 +744,7 @@ class CyberwaveMQTTClient:
 
         Args:
             twin_uuid: UUID of the twin
-            metadata: Optional dict (e.g. {"fps": 100, "observations": {...}})
+            metadata: Optional dict (e.g. fps, observations, camera_participants)
         """
         with self._telemetry_lock:
             if twin_uuid not in self.twin_uuids:
@@ -555,7 +781,33 @@ class CyberwaveMQTTClient:
         Also clears the telemetry tracking state for this twin, allowing
         subsequent publish_telemetry_start calls to work properly when
         a new operation (teleoperate/remoteoperate) is started.
+
+        This method is idempotent: if telemetry_end was already published for
+        this twin (i.e., twin is no longer in tracking list), this call is a
+        no-op to avoid sending duplicate telemetry_end messages.
         """
+        # Check and clear tracking state atomically to ensure idempotency.
+        # Only publish if the twin was still being tracked (telemetry_start was sent).
+        with self._telemetry_lock:
+            was_in_list = twin_uuid in self.twin_uuids_with_telemetry_start
+            if was_in_list:
+                self.twin_uuids_with_telemetry_start.remove(twin_uuid)
+            logger.info(
+                "publish_telemetry_end: twin %s was_in_tracking_list=%s, "
+                "remaining_tracked_twins=%s",
+                twin_uuid,
+                was_in_list,
+                self.twin_uuids_with_telemetry_start,
+            )
+
+        # Skip publishing if already ended (idempotent behavior)
+        if not was_in_list:
+            logger.debug(
+                "publish_telemetry_end: skipping duplicate for twin %s (already ended)",
+                twin_uuid,
+            )
+            return
+
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
         message = {
             "type": "telemetry_end",
@@ -569,19 +821,76 @@ class CyberwaveMQTTClient:
             message["stream_instance_id"] = stream_instance_id
         self.publish(topic, message)
 
-        # Clear tracking state so next publish_telemetry_start will fire
-        # Use lock for thread safety (consistent with _handle_twin_update_with_telemetry)
-        with self._telemetry_lock:
-            was_in_list = twin_uuid in self.twin_uuids_with_telemetry_start
-            if was_in_list:
-                self.twin_uuids_with_telemetry_start.remove(twin_uuid)
-            logger.info(
-                "publish_telemetry_end: twin %s was_in_tracking_list=%s, "
-                "remaining_tracked_twins=%s",
-                twin_uuid,
-                was_in_list,
-                self.twin_uuids_with_telemetry_start,
-            )
+    def publish_telemetry_cut(
+        self,
+        twin_uuid: str,
+        source_type: Optional[str] = None,
+        sender: str = TELEMETRY_CUT_SENDER,
+        source_subtype: str = TELEMETRY_CUT_SOURCE_SUBTYPE,
+    ) -> None:
+        """Publish a recording-session *hard cut* on the twin's telemetry topic.
+
+        Emits a ``telemetry_end`` immediately followed by a ``telemetry_start``
+        (same wall-clock, the start nudged +1ms so it sorts after the end),
+        both unconditionally — the SDK's per-client telemetry-start tracking is
+        intentionally bypassed.
+
+        This is for a publisher that does NOT own the twin's telemetry session
+        (e.g. a workflow recorder node cutting a bounded window into a stream a
+        driver is continuously producing):
+
+        * The ``telemetry_end`` closes the currently-open recording window
+          precisely. A lone ``telemetry_start`` would instead be dropped by the
+          backend's duplicate-start grace when it lands within that window, so
+          no cut would be recorded for a short window.
+        * The trailing ``telemetry_start`` reopens the session immediately so
+          the owning publisher's ongoing samples keep being recorded — never an
+          end without a start after it.
+
+        Idempotent-per-client helpers (``publish_telemetry_start`` /
+        ``publish_telemetry_end``) are unsuitable here: this client never sent
+        the owning ``telemetry_start``, so ``publish_telemetry_end`` would no-op.
+
+        Both messages carry ``recording_boundary: True`` plus ``sender`` /
+        ``source_subtype`` attribution, so a consumer can tell this window cut
+        apart from a genuine end of telemetry. This matters because the peer
+        here is still live: without the marker, media-service's
+        ``handle_telemetry_message`` would treat the ``telemetry_end`` as a
+        disconnect and drop the twin's producers and consumers, killing the very
+        stream being recorded. Recording for that flow is controlled by the
+        ``webrtc-command`` ``start_recording`` / ``stop_recording`` pair
+        instead. See ``RECORDING_BOUNDARY_KEY``.
+        """
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+        now = time.time()
+        marker: Dict[str, Any] = {
+            "sender": sender,
+            "source_subtype": source_subtype,
+            RECORDING_BOUNDARY_KEY: True,
+        }
+        end_message: Dict[str, Any] = {
+            "type": "telemetry_end",
+            "timestamp": now,
+            **marker,
+        }
+        start_message: Dict[str, Any] = {
+            "type": "telemetry_start",
+            "timestamp": now + 0.001,
+            **marker,
+        }
+        if source_type:
+            end_message["source_type"] = source_type
+            start_message["source_type"] = source_type
+        logger.info(
+            "Publishing telemetry cut (end+start) for twin %s "
+            "(source_type=%s, sender=%s, source_subtype=%s)",
+            twin_uuid,
+            source_type,
+            sender,
+            source_subtype,
+        )
+        self.publish(topic, end_message)
+        self.publish(topic, start_message)
 
     def publish_connected(self, twin_uuid: str):
         """Publish connected message via MQTT.
@@ -625,22 +934,17 @@ class CyberwaveMQTTClient:
 
     def update_twin_position(self, twin_uuid: str, position: Dict[str, float]):
         """Update twin position via MQTT."""
-        # Check if this position is the same as the last one sent
-        self._handle_twin_update_with_telemetry(twin_uuid)
-
         if twin_uuid in self._last_positions:
             if self._positions_equal(self._last_positions[twin_uuid], position):
-                # Position hasn't changed, skip the update
                 logger.debug(f"Position hasn't changed for twin {twin_uuid}")
                 return
 
-        # Check rate limiting
         rate_key = f"twin:{twin_uuid}:position"
         if self._is_rate_limited(rate_key):
             logger.warning(f"Rate limited for twin {twin_uuid}")
             return
 
-        # Store the new position
+        self._handle_twin_update_with_telemetry(twin_uuid)
         self._last_positions[twin_uuid] = position.copy()
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/position"
@@ -654,22 +958,17 @@ class CyberwaveMQTTClient:
 
     def update_twin_rotation(self, twin_uuid: str, rotation: Dict[str, float]):
         """Update twin rotation via MQTT."""
-        # Check if this rotation is the same as the last one sent
-
-        self._handle_twin_update_with_telemetry(twin_uuid)
         if twin_uuid in self._last_rotations:
             if self._positions_equal(self._last_rotations[twin_uuid], rotation):
-                # Rotation hasn't changed, skip the update
                 logger.debug(f"Rotation hasn't changed for twin {twin_uuid}")
                 return
 
-        # Check rate limiting
         rate_key = f"twin:{twin_uuid}:rotation"
         if self._is_rate_limited(rate_key):
             logger.warning(f"Rate limited for twin {twin_uuid}")
             return
 
-        # Store the new rotation
+        self._handle_twin_update_with_telemetry(twin_uuid)
         self._last_rotations[twin_uuid] = rotation.copy()
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/rotation"
@@ -683,12 +982,11 @@ class CyberwaveMQTTClient:
 
     def update_twin_scale(self, twin_uuid: str, scale: Dict[str, float]):
         """Update twin scale via MQTT."""
-
-        self._handle_twin_update_with_telemetry(twin_uuid)
-        # Check rate limiting
         rate_key = f"twin:{twin_uuid}:scale"
         if self._is_rate_limited(rate_key):
             return
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
 
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/scale"
         message = {
@@ -697,6 +995,74 @@ class CyberwaveMQTTClient:
             "scale": scale,
             "timestamp": time.time(),
         }
+        self.publish(topic, message)
+
+    def update_twin_gps(
+        self,
+        twin_uuid: str,
+        latitude: float,
+        longitude: float,
+        altitude: float = 0.0,
+        *,
+        satellite_count: Optional[int] = None,
+        signal_level: Optional[int] = None,
+        compass_heading: Optional[float] = None,
+        horizontal_accuracy: Optional[float] = None,
+        vertical_accuracy: Optional[float] = None,
+        fix_type: Optional[str] = None,
+        source_type: Optional[str] = None,
+    ):
+        """
+        Publish raw GPS data for a twin.
+
+        The GPS payload is stored as a ``twin_gps_update`` telemetry event.
+        It does **not** update the twin's rendered position — use
+        ``update_twin_position`` for that.
+
+        Args:
+            twin_uuid: UUID of the twin.
+            latitude: WGS-84 latitude in decimal degrees.
+            longitude: WGS-84 longitude in decimal degrees.
+            altitude: Altitude in meters (MSL or HAE depending on receiver).
+            satellite_count: Number of satellites used in fix.
+            signal_level: GPS signal quality level (receiver-specific).
+            compass_heading: Compass heading in degrees (0-360).
+            horizontal_accuracy: Horizontal accuracy estimate in meters.
+            vertical_accuracy: Vertical accuracy estimate in meters.
+            fix_type: Fix type string (e.g. ``'3d'``, ``'rtk_fixed'``).
+            source_type: Override the default source type.
+        """
+        effective_source_type = self._get_effective_source_type(source_type)
+
+        if fix_type == "none":
+            return
+
+        rate_key = f"twin:{twin_uuid}:gps"
+        if self._is_rate_limited(rate_key, self._gps_min_update_interval):
+            logger.debug(f"GPS rate limited for twin {twin_uuid}")
+            return
+
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/gps"
+        message: Dict[str, Any] = {
+            "source_type": effective_source_type,
+            "latitude": latitude,
+            "longitude": longitude,
+            "altitude": altitude,
+            "timestamp": time.time(),
+        }
+        if satellite_count is not None:
+            message["satellite_count"] = satellite_count
+        if signal_level is not None:
+            message["signal_level"] = signal_level
+        if compass_heading is not None:
+            message["compass_heading"] = compass_heading
+        if horizontal_accuracy is not None:
+            message["horizontal_accuracy"] = horizontal_accuracy
+        if vertical_accuracy is not None:
+            message["vertical_accuracy"] = vertical_accuracy
+        if fix_type is not None:
+            message["fix_type"] = fix_type
+
         self.publish(topic, message)
 
     # Joint state MQTT methods
@@ -734,11 +1100,11 @@ class CyberwaveMQTTClient:
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
-        self._handle_twin_update_with_telemetry(twin_uuid)
-        # Check rate limiting
         rate_key = f"joint:{twin_uuid}:{joint_name}"
         if self._is_rate_limited(rate_key):
             return
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
 
         joint_state = {}
         if position is not None:
@@ -773,9 +1139,27 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
+        as_targets: bool = False,
+        stream_instance_id: Optional[str] = None,
     ):
         """
         Update multiple joints at once via MQTT.
+
+        When ``as_targets`` is True the payload is published as a *command*
+        using the ``target_positions`` / ``target_velocities`` /
+        ``target_efforts`` fields (always aggregated). These describe a desired
+        setpoint a plant should track and must never be rendered as measured
+        robot state. When False (default) the payload describes measured state
+        and uses ``positions`` / ``velocities`` / ``efforts``.
+
+        Commands may omit positions (pass ``joint_positions={}``) when sending
+        only velocity or effort targets. Unspecified channels are not filled
+        with zeros. Measured-state updates still require positions.
+
+        Targets do not start or take ownership of a telemetry session. The
+        plant/driver producing measured state owns that lifecycle; ending a
+        command-only client must not disconnect its cameras or recordings.
 
         Supports two formats based on provided parameters:
 
@@ -797,11 +1181,14 @@ class CyberwaveMQTTClient:
                "timestamp": 1709123456.789,
                "source_subtype": "openvla",
                "workload_uuid": "uuid-here",
-               "session_id": "session-id"
+               "session_id": "session-id",
+               "camera_frame_counters": {
+                   "<track_id>": {"frame_count": 1234, "sensor_id": "wrist"}
+               }
            }
            ```
 
-        Both formats are parsed by Vector into individual joint_state_update telemetry events.
+        Both formats are parsed into individual joint_state_update telemetry events.
 
         Args:
             twin_uuid: UUID of the twin
@@ -813,42 +1200,67 @@ class CyberwaveMQTTClient:
             source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
             workload_uuid: Optional UUID of the workload generating this update
             session_id: Optional session ID for grouping related updates
+            camera_frame_counters: Optional dict mapping camera track_id to frame info.
+                Each value is a dict with "frame_count" (int) and "sensor_id" (str).
+                Used for robot-camera synchronization. Only included in aggregated format.
+            stream_instance_id: Optional id of the producing sim/stream process. Lets
+                consumers detect two producers publishing measured state to one twin
+                (source_type alone cannot). Only included in aggregated format.
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
-        if not joint_positions:
+        if not joint_positions and not (as_targets and (velocities or efforts)):
             raise ValueError("joint_positions cannot be empty")
 
-        self._handle_twin_update_with_telemetry(twin_uuid)
+        if not as_targets:
+            self._handle_twin_update_with_telemetry(twin_uuid)
 
         topic = f"{self.topic_prefix}cyberwave/joint/{twin_uuid}/update"
 
+        # Command payloads (targets) are always aggregated so they carry the
+        # explicit target_* field names and never collide with measured state.
         # Determine format: use aggregated if any extended parameters are provided
         use_aggregated = (
-            velocities is not None
+            as_targets
+            or velocities is not None
             or efforts is not None
             or timestamp is not None
             or source_subtype is not None
             or workload_uuid is not None
             or session_id is not None
+            or camera_frame_counters is not None
+            or stream_instance_id is not None
         )
 
         if use_aggregated:
+            positions_key = "target_positions" if as_targets else "positions"
+            velocities_key = "target_velocities" if as_targets else "velocities"
+            efforts_key = "target_efforts" if as_targets else "efforts"
             message: Dict[str, Any] = {
                 "source_type": effective_source_type,
-                "positions": joint_positions,
                 "timestamp": timestamp if timestamp is not None else time.time(),
             }
+            if joint_positions:
+                message[positions_key] = joint_positions
             if velocities:
-                message["velocities"] = velocities
+                message[velocities_key] = velocities
             if efforts:
-                message["efforts"] = efforts
+                message[efforts_key] = efforts
             if source_subtype:
                 message["source_subtype"] = source_subtype
             if workload_uuid:
                 message["workload_uuid"] = workload_uuid
             if session_id:
                 message["session_id"] = session_id
+            if stream_instance_id:
+                # Identifies the specific sim/stream process that produced this
+                # measured state. Lets a consumer detect when two producers (e.g.
+                # a stale sim not torn down + a fresh one) publish to the same twin
+                # joint topic — otherwise indistinguishable, since source_type is
+                # identical ("sim") and command_seq is per-process.
+                message["stream_instance_id"] = stream_instance_id
+            if camera_frame_counters:
+                message["camera_frame_counters"] = camera_frame_counters
 
             logger.debug(
                 f"Publishing aggregated joint state for {twin_uuid}: "
@@ -878,6 +1290,7 @@ class CyberwaveMQTTClient:
         source_subtype: Optional[str] = None,
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
+        camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """
         Alias for update_joints_state with aggregated format.
@@ -899,6 +1312,7 @@ class CyberwaveMQTTClient:
             source_subtype=source_subtype,
             workload_uuid=workload_uuid,
             session_id=session_id,
+            camera_frame_counters=camera_frame_counters,
         )
 
     def publish_initial_observation(
@@ -952,13 +1366,105 @@ class CyberwaveMQTTClient:
         depth_data: Dict[str, Any],
         timestamp: Optional[float] = None,
     ):
-        """Publish depth frame data via MQTT."""
+        """Publish depth frame data via MQTT.
+
+        Publishes **only** the depth frame. Producers that also want a 3-D
+        cloud call :meth:`publish_pointcloud` themselves (the
+        ``send_depth`` workflow node does) — deriving one here would fan every
+        depth publisher out onto ``twin/{uuid}/pointcloud``, which already has a
+        backend producer (``point_cloud_tasks.process_colored_point_cloud``,
+        using the twin's real calibration) and a Vector→Postgres ingestion sink.
+        """
         self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/depth"
+        ts = timestamp or time.time()
         message = {
             "type": "depth_data",
             "data": depth_data,
-            "timestamp": timestamp or time.time(),
+            "timestamp": ts,
+        }
+        self.publish(topic, message)
+
+    def publish_pointcloud(
+        self,
+        twin_uuid: str,
+        point_cloud_data: Any,
+        timestamp: Optional[float] = None,
+        *,
+        stride: int = 6,
+    ):
+        """Publish a point-cloud frame via MQTT.
+
+        ``point_cloud_data`` is a ``float32`` ``numpy.ndarray`` holding either
+        ``[x, y, z]`` or ``[x, y, z, r, g, b]`` per point, in one of two shapes:
+
+        * ``(N, 3)`` / ``(N, 6)`` — self-describing, ``stride`` is ignored;
+        * flat ``(N * stride,)`` interleaved — what
+          :func:`cyberwave.utils.depth.depth_to_colored_pointcloud` returns (it
+          fills a flat buffer directly to avoid a copy).  A flat buffer cannot
+          say whether it is 3- or 6-wide, so ``stride`` supplies it; the default
+          of ``6`` matches that helper.
+
+        The array is base64-encoded and published to
+        ``cyberwave/twin/{twin_uuid}/pointcloud`` in the wire format expected by
+        the frontend ``ColoredPointCloud`` component.
+
+        ``rows``/``cols``/``source_type``/``source_subtype`` mirror the backend
+        producer's payload (``build_colored_pointcloud_payload``) so the Vector
+        sink records these frames with the right shape and provenance instead of
+        falling back to its "lean producer" defaults, which would label an
+        edge-published cloud as backend-generated.
+
+        ``point_stride`` carries the same dimensionality as ``cols``: the topic
+        multiplexes 3- and 6-wide clouds, Vector reads ``cols`` while the SDK
+        consumer (:func:`cyberwave.twin.sensors.pointcloud._decode_pointcloud`)
+        reads ``point_stride``, and without it that consumer falls back to a
+        heuristic that can silently drop or duplicate points.  We know the
+        stride exactly here, so both are stamped.
+        """
+        import base64
+
+        import numpy as np
+
+        arr = np.ascontiguousarray(np.asarray(point_cloud_data, dtype=np.float32))
+        if arr.ndim == 2:
+            # 2-D carries its own stride; a caller-supplied one cannot disagree.
+            stride = int(arr.shape[1])
+            if stride not in (3, 6):
+                raise ValueError(
+                    "point_cloud_data must be (N, 3) [x,y,z] or (N, 6) "
+                    f"[x,y,z,r,g,b], got shape {arr.shape}"
+                )
+        elif arr.ndim == 1:
+            stride = int(stride)
+            if stride not in (3, 6):
+                raise ValueError(f"stride must be 3 or 6, got {stride!r}")
+            if arr.size % stride:
+                raise ValueError(
+                    f"flat point_cloud_data of size {arr.size} is not divisible "
+                    f"by stride {stride}"
+                )
+            arr = arr.reshape(-1, stride)
+        else:
+            raise ValueError(
+                "point_cloud_data must be a flat interleaved array or 2-D "
+                f"(N, 3) / (N, 6), got shape {arr.shape}"
+            )
+
+        self._handle_twin_update_with_telemetry(twin_uuid)
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/pointcloud"
+        ts = timestamp or time.time()
+        message = {
+            "type": "pointcloud",
+            "data": base64.b64encode(arr.tobytes()).decode("utf-8"),
+            "timestamp": ts,
+            "timestamp_us": int(ts * 1e6),
+            "twin_uuid": str(twin_uuid),
+            "rows": int(arr.shape[0]),
+            "cols": stride,
+            "point_stride": stride,
+            "source_type": SOURCE_TYPE_EDGE,
+            "source_subtype": "edge",
         }
         self.publish(topic, message)
 

@@ -1,0 +1,68 @@
+name: SDK contributors
+
+# Privileged metadata automation. NEVER check out a PR head, install SDK
+# dependencies, restore caches, or execute files from the contribution here.
+# Public repositories may need an Actions event policy allowing this trigger.
+on:
+  pull_request_target:
+    branches: [main, dev]
+    types: [opened, reopened, ready_for_review, synchronize, closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to process (also supports recovery after setup)
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  community:
+    if: github.repository == 'cyberwave-os/cyberwave-python'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: sdk-community-${{ github.event.pull_request.number || inputs.pr_number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: Welcome, route, or celebrate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          SDK_MAINTAINERS: ${{ vars.SDK_MAINTAINERS }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.SDK_DISCORD_WEBHOOK_URL }}
+        run: python3 .github/scripts/contributors.py community
+
+  advisory-review:
+    if: >-
+      github.repository == 'cyberwave-os/cyberwave-python' &&
+      github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: sdk-advisory-${{ github.event.pull_request.number || inputs.pr_number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: Advisory review (never approves or requests changes)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          ANTHROPIC_API_KEY: ${{ secrets.SDK_ANTHROPIC_API_KEY }}
+          SDK_REVIEW_MODEL: ${{ vars.SDK_REVIEW_MODEL }}
+        run: python3 .github/scripts/contributors.py review

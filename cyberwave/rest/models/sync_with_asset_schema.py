@@ -17,19 +17,24 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class SyncWithAssetSchema(BaseModel):
     """
-    Schema for sync with asset response
+    Schema for sync with asset response.  `synced_fields` is kept for backward compatibility with existing callers — it is the union of `synced` and `overwritten`. Prefer the three explicit lists: a field can be synced from the asset, preserved because it carries a user's field-level override, or overwritten (a divergence that was discarded — the `sync-with-asset` docstring's namesake behavior, now reported honestly instead of folded into \"synced\").
     """ # noqa: E501
     synced_fields: List[StrictStr]
+    synced: Optional[List[StrictStr]] = None
+    preserved: Optional[List[StrictStr]] = None
+    overwritten: Optional[List[StrictStr]] = None
     message: StrictStr
-    __properties: ClassVar[List[str]] = ["synced_fields", "message"]
+    preserved_home_positions: Optional[StrictInt] = 0
+    dropped_home_positions: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["synced_fields", "synced", "preserved", "overwritten", "message", "preserved_home_positions", "dropped_home_positions"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -83,7 +88,12 @@ class SyncWithAssetSchema(BaseModel):
 
         _obj = cls.model_validate({
             "synced_fields": obj.get("synced_fields"),
-            "message": obj.get("message")
+            "synced": obj.get("synced"),
+            "preserved": obj.get("preserved"),
+            "overwritten": obj.get("overwritten"),
+            "message": obj.get("message"),
+            "preserved_home_positions": obj.get("preserved_home_positions") if obj.get("preserved_home_positions") is not None else 0,
+            "dropped_home_positions": obj.get("dropped_home_positions")
         })
         return _obj
 

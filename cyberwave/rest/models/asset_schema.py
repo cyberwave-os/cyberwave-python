@@ -18,8 +18,9 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.configuration_feedback_schema import ConfigurationFeedbackSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -34,20 +35,32 @@ class AssetSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     visibility: Optional[StrictStr] = None
+    origin_environment_uuid: Optional[StrictStr] = None
     owner_uuid: Optional[StrictStr] = None
     registry_id: Optional[StrictStr] = None
     registry_id_alias: Optional[StrictStr] = None
+    slug: Optional[StrictStr] = None
     glb_file: Optional[StrictStr] = None
+    splat_file: Optional[StrictStr] = None
     urdf_file: Optional[StrictStr] = None
+    zip_file: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     kinematics: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
+    configuration_feedback: Optional[List[ConfigurationFeedbackSchema]] = None
     thumbnail: Optional[StrictStr] = None
     has_universal_schema: Optional[StrictBool] = False
+    build_status: Optional[StrictStr] = None
+    universal_schema_source: Optional[StrictStr] = None
     universal_schema: Optional[Dict[str, Any]] = None
     fixed_base: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "owner_uuid", "registry_id", "registry_id_alias", "glb_file", "urdf_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "thumbnail", "has_universal_schema", "universal_schema", "fixed_base"]
+    supported_simulation_backends: Optional[List[StrictStr]] = None
+    purchase_price: Optional[Union[StrictFloat, StrictInt]] = None
+    monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
+    is_purchasable: Optional[StrictBool] = True
+    is_rentable: Optional[StrictBool] = True
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "origin_environment_uuid", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "configuration_feedback", "thumbnail", "has_universal_schema", "build_status", "universal_schema_source", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -88,10 +101,22 @@ class AssetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in configuration_feedback (list)
+        _items = []
+        if self.configuration_feedback:
+            for _item_configuration_feedback in self.configuration_feedback:
+                if _item_configuration_feedback:
+                    _items.append(_item_configuration_feedback.to_dict())
+            _dict['configuration_feedback'] = _items
         # set to None if visibility (nullable) is None
         # and model_fields_set contains the field
         if self.visibility is None and "visibility" in self.model_fields_set:
             _dict['visibility'] = None
+
+        # set to None if origin_environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin_environment_uuid is None and "origin_environment_uuid" in self.model_fields_set:
+            _dict['origin_environment_uuid'] = None
 
         # set to None if owner_uuid (nullable) is None
         # and model_fields_set contains the field
@@ -108,15 +133,30 @@ class AssetSchema(BaseModel):
         if self.registry_id_alias is None and "registry_id_alias" in self.model_fields_set:
             _dict['registry_id_alias'] = None
 
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if glb_file (nullable) is None
         # and model_fields_set contains the field
         if self.glb_file is None and "glb_file" in self.model_fields_set:
             _dict['glb_file'] = None
 
+        # set to None if splat_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.splat_file is None and "splat_file" in self.model_fields_set:
+            _dict['splat_file'] = None
+
         # set to None if urdf_file (nullable) is None
         # and model_fields_set contains the field
         if self.urdf_file is None and "urdf_file" in self.model_fields_set:
             _dict['urdf_file'] = None
+
+        # set to None if zip_file (nullable) is None
+        # and model_fields_set contains the field
+        if self.zip_file is None and "zip_file" in self.model_fields_set:
+            _dict['zip_file'] = None
 
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
@@ -143,10 +183,30 @@ class AssetSchema(BaseModel):
         if self.thumbnail is None and "thumbnail" in self.model_fields_set:
             _dict['thumbnail'] = None
 
+        # set to None if build_status (nullable) is None
+        # and model_fields_set contains the field
+        if self.build_status is None and "build_status" in self.model_fields_set:
+            _dict['build_status'] = None
+
+        # set to None if universal_schema_source (nullable) is None
+        # and model_fields_set contains the field
+        if self.universal_schema_source is None and "universal_schema_source" in self.model_fields_set:
+            _dict['universal_schema_source'] = None
+
         # set to None if universal_schema (nullable) is None
         # and model_fields_set contains the field
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
             _dict['universal_schema'] = None
+
+        # set to None if purchase_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.purchase_price is None and "purchase_price" in self.model_fields_set:
+            _dict['purchase_price'] = None
+
+        # set to None if monthly_price (nullable) is None
+        # and model_fields_set contains the field
+        if self.monthly_price is None and "monthly_price" in self.model_fields_set:
+            _dict['monthly_price'] = None
 
         return _dict
 
@@ -166,19 +226,31 @@ class AssetSchema(BaseModel):
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "visibility": obj.get("visibility"),
+            "origin_environment_uuid": obj.get("origin_environment_uuid"),
             "owner_uuid": obj.get("owner_uuid"),
             "registry_id": obj.get("registry_id"),
             "registry_id_alias": obj.get("registry_id_alias"),
+            "slug": obj.get("slug"),
             "glb_file": obj.get("glb_file"),
+            "splat_file": obj.get("splat_file"),
             "urdf_file": obj.get("urdf_file"),
+            "zip_file": obj.get("zip_file"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "metadata": obj.get("metadata"),
             "kinematics": obj.get("kinematics"),
             "capabilities": obj.get("capabilities"),
+            "configuration_feedback": [ConfigurationFeedbackSchema.from_dict(_item) for _item in obj["configuration_feedback"]] if obj.get("configuration_feedback") is not None else None,
             "thumbnail": obj.get("thumbnail"),
             "has_universal_schema": obj.get("has_universal_schema") if obj.get("has_universal_schema") is not None else False,
+            "build_status": obj.get("build_status"),
+            "universal_schema_source": obj.get("universal_schema_source"),
             "universal_schema": obj.get("universal_schema"),
-            "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False
+            "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False,
+            "supported_simulation_backends": obj.get("supported_simulation_backends"),
+            "purchase_price": obj.get("purchase_price"),
+            "monthly_price": obj.get("monthly_price"),
+            "is_purchasable": obj.get("is_purchasable") if obj.get("is_purchasable") is not None else True,
+            "is_rentable": obj.get("is_rentable") if obj.get("is_rentable") is not None else True
         })
         return _obj
 

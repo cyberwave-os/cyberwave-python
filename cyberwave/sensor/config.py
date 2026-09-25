@@ -22,6 +22,63 @@ except ImportError:
     _has_realsense = False
 
 
+# ``physical_port`` embeds the sysfs path of the V4L2 node, e.g.
+# ``/sys/devices/.../usb4/4-1/4-1:1.0/video4linux/video0``. The segment right
+# after ``usbN`` is the USB bus id, which names the device under
+# ``/sys/bus/usb/devices``. Parsed by splitting rather than by regex: the
+# pattern has to survive being shipped through build tooling and shell
+# heredocs, where a mangled backslash fails silently and disables the alias.
+_SYS_USB_DEVICES = "/sys/bus/usb/devices"
+
+
+def _usb_busid_from_physical_port(port: str) -> Optional[str]:
+    """The ``2-1`` style USB bus id inside a sysfs *port* path, or ``None``.
+
+    Returns the segment following ``usbN``, which is the USB *device*. The
+    segment after that (``2-1:1.0``) is an interface and has no sysfs entry of
+    its own, so matching it would silently break the lookup.
+    """
+    segments = (port or "").split("/")
+    for i, segment in enumerate(segments[:-1]):
+        if segment.startswith("usb") and segment[3:].isdigit():
+            return segments[i + 1] or None
+    return None
+
+
+def _usb_descriptor_serial(device) -> Optional[str]:
+    """The USB ``iSerial`` of a RealSense device, or ``None``.
+
+    A D400-series camera carries two unrelated serials: the one librealsense
+    reports (``camera_info.serial_number``, what ``enable_device`` matches) and
+    the USB descriptor's ``iSerial``. They are different values, and only the
+    USB one is visible to udev, ``v4l2-ctl`` and anything else reading the host
+    device tree -- which is everything that could have written a twin's
+    ``metadata.serial_number`` in the first place.
+
+    Resolved through sysfs because librealsense does not expose the descriptor
+    serial at all. Best-effort: any failure means the caller simply cannot
+    alias that device, which is no worse than not having the alias.
+
+    Lives here rather than in ``camera_rs`` because discovery needs it too and
+    ``camera_rs`` already imports this module.
+    """
+    try:
+        if not device.supports(rs.camera_info.physical_port):
+            return None
+        port = device.get_info(rs.camera_info.physical_port)
+    except Exception:
+        return None
+
+    busid = _usb_busid_from_physical_port(port)
+    if not busid:
+        return None
+    try:
+        with open(f"{_SYS_USB_DEVICES}/{busid}/serial") as handle:
+            return handle.read().strip() or None
+    except OSError:
+        return None
+
+
 # =============================================================================
 # Camera Types and Resolution - Shared enums for SDK and Edge
 # =============================================================================
@@ -237,7 +294,8 @@ class EdgeCameraConfig:
 
     # IP camera authentication (optional)
     username: Optional[str] = None
-    password: Optional[str] = None
+    # repr=False: the generated __repr__ would print the password in full.
+    password: Optional[str] = field(default=None, repr=False)
 
     # NVR settings (optional)
     channel: Optional[int] = None
@@ -893,16 +951,59 @@ class RealSenseDiscovery:
 
         # Find the requested device
         target_device = None
+        readable_devices = []
         for dev in devices:
+            # ``get_info`` *raises* on a device that cannot report the field --
+            # it does not return None -- so this must be guarded the same way
+            # ``usb_type_descriptor`` and ``product_line`` are below.
+            #
+            # librealsense surfaces serial-less entries for real: a unit already
+            # opened by another process, one in recovery/DFU mode, or one caught
+            # mid-enumeration. Reading through one of those aborted the entire
+            # search before it reached the device the caller asked for, so a
+            # correctly pinned camera became unopenable purely because another
+            # camera sorted ahead of it. Skipping is right on both paths -- such
+            # a device can never match a requested serial, and it cannot fill in
+            # ``RealSenseDeviceInfo.serial_number`` below either.
+            if not dev.supports(rs.camera_info.serial_number):
+                logger.debug(
+                    "Skipping RealSense device with no readable serial number "
+                    "(held by another process, in recovery, or still enumerating)"
+                )
+                continue
             if serial_number is None:
                 target_device = dev
                 break
             if dev.get_info(rs.camera_info.serial_number) == serial_number:
                 target_device = dev
                 break
+            readable_devices.append(dev)
+
+        # A twin pinned from host tooling carries the USB descriptor serial,
+        # which never equals the librealsense one. The streamer accepts either
+        # (``RealSenseVideoTrack._initialize_realsense``), so discovery must as
+        # well: ``RealSenseConfig.from_device`` runs first and raising here kept
+        # a correctly pinned camera from ever reaching that alias. Tried only
+        # after every librealsense serial, so an exact match always wins.
+        if target_device is None and serial_number is not None:
+            for dev in readable_devices:
+                if _usb_descriptor_serial(dev) == serial_number:
+                    logger.info(
+                        "Serial %s is the USB descriptor serial; resolved to "
+                        "librealsense serial %s",
+                        serial_number,
+                        dev.get_info(rs.camera_info.serial_number),
+                    )
+                    target_device = dev
+                    break
 
         if target_device is None:
-            logger.warning(f"Device with serial {serial_number} not found")
+            if serial_number is None:
+                logger.warning(
+                    "No RealSense device with a readable serial number is available"
+                )
+            else:
+                logger.warning(f"Device with serial {serial_number} not found")
             return None
 
         # Build device info

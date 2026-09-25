@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
-from cyberwave.rest.models.metadata import Metadata
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -35,7 +34,7 @@ class MapStreamFinalizeSchema(BaseModel):
     origin_roll: Optional[Union[StrictFloat, StrictInt]] = None
     origin_pitch: Optional[Union[StrictFloat, StrictInt]] = None
     origin_yaw: Optional[Union[StrictFloat, StrictInt]] = None
-    metadata: Optional[Metadata] = None
+    metadata: Optional[StrictStr] = None
     __properties: ClassVar[List[str]] = ["resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "metadata"]
 
     model_config = ConfigDict(
@@ -77,9 +76,6 @@ class MapStreamFinalizeSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of metadata
-        if self.metadata:
-            _dict['metadata'] = self.metadata.to_dict()
         # set to None if resolution (nullable) is None
         # and model_fields_set contains the field
         if self.resolution is None and "resolution" in self.model_fields_set:
@@ -139,7 +135,7 @@ class MapStreamFinalizeSchema(BaseModel):
             "origin_roll": obj.get("origin_roll"),
             "origin_pitch": obj.get("origin_pitch"),
             "origin_yaw": obj.get("origin_yaw"),
-            "metadata": Metadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None
+            "metadata": obj.get("metadata")
         })
         return _obj
 

@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.workflow_execution_progress_schema import WorkflowExecutionProgressSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -36,7 +37,8 @@ class WorkflowRunSchema(BaseModel):
     error: Optional[StrictStr] = None
     started_at: datetime
     finished_at: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["uuid", "workflow_id", "status", "inputs", "result", "error", "started_at", "finished_at"]
+    progress: Optional[WorkflowExecutionProgressSchema] = None
+    __properties: ClassVar[List[str]] = ["uuid", "workflow_id", "status", "inputs", "result", "error", "started_at", "finished_at", "progress"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,6 +79,9 @@ class WorkflowRunSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of progress
+        if self.progress:
+            _dict['progress'] = self.progress.to_dict()
         # set to None if result (nullable) is None
         # and model_fields_set contains the field
         if self.result is None and "result" in self.model_fields_set:
@@ -91,6 +96,11 @@ class WorkflowRunSchema(BaseModel):
         # and model_fields_set contains the field
         if self.finished_at is None and "finished_at" in self.model_fields_set:
             _dict['finished_at'] = None
+
+        # set to None if progress (nullable) is None
+        # and model_fields_set contains the field
+        if self.progress is None and "progress" in self.model_fields_set:
+            _dict['progress'] = None
 
         return _dict
 
@@ -111,7 +121,8 @@ class WorkflowRunSchema(BaseModel):
             "result": obj.get("result"),
             "error": obj.get("error"),
             "started_at": obj.get("started_at"),
-            "finished_at": obj.get("finished_at")
+            "finished_at": obj.get("finished_at"),
+            "progress": WorkflowExecutionProgressSchema.from_dict(obj["progress"]) if obj.get("progress") is not None else None
         })
         return _obj
 

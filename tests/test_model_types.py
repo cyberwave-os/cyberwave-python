@@ -2,7 +2,15 @@
 
 import pytest
 
-from cyberwave.models.types import BoundingBox, Detection, PredictionResult
+from cyberwave.models.types import (
+    BoundingBox,
+    ClassificationCandidate,
+    ClassificationResult,
+    Detection,
+    DetectionResult,
+    PredictionResult,
+    TextResult,
+)
 
 
 # ── BoundingBox ───────────────────────────────────────────────────
@@ -125,6 +133,42 @@ class TestDetection:
         det = Detection(label="person", confidence=1.0, bbox=bbox)
         assert det.confidence == 1.0
 
+    def test_describe_line(self) -> None:
+        bbox = BoundingBox(x1=1.0, y1=2.0, x2=101.5, y2=92.75)
+        det = Detection(label="cup", confidence=0.8125, bbox=bbox)
+        line = det.describe_line(3)
+        assert line.startswith("  [3]")
+        assert "'cup'" in line
+        assert "conf=0.812" in line
+        assert "bbox=(1.0,2.0)-(101.5,92.8)" in line
+
+    def test_describe_parts_with_mask_shape(self) -> None:
+        class _Arr:
+            shape = (2, 4, 8)
+
+        bbox = BoundingBox(x1=0, y1=0, x2=10, y2=10)
+        det = Detection(label="a", confidence=0.9, bbox=bbox, mask=_Arr())
+        parts = det.describe_parts()
+        assert parts[-1] == "mask shape=(2, 4, 8)"
+
+    def test_describe_parts_keypoints_without_shape(self) -> None:
+        # When keypoints has no `.shape` attribute (plain list, not numpy array)
+        # the fallback label reflects the actual type name.
+        bbox = BoundingBox(x1=0, y1=0, x2=10, y2=10)
+        det = Detection(label="x", confidence=0.9, bbox=bbox, keypoints=[(1, 1)])
+        parts = det.describe_parts(include_mask=False)
+        assert parts[-1] == "keypoints=<list>"
+
+    def test_describe_parts_keypoints_numpy_shape(self) -> None:
+        # When keypoints IS a numpy array, `.shape` is present and shown.
+        import numpy as np
+
+        bbox = BoundingBox(x1=0, y1=0, x2=10, y2=10)
+        kp = np.zeros((3, 2), dtype=np.float32)
+        det = Detection(label="x", confidence=0.9, bbox=bbox, keypoints=kp)
+        parts = det.describe_parts(include_mask=False)
+        assert parts[-1] == "keypoints shape=(3, 2)"
+
 
 # ── PredictionResult ──────────────────────────────────────────────
 
@@ -184,8 +228,41 @@ class TestPredictionResult:
         result = PredictionResult(metadata={"model": "yolov8n"})
         assert result.metadata["model"] == "yolov8n"
 
-    def test_detections_default_empty(self) -> None:
-        a = PredictionResult()
-        b = PredictionResult()
-        a.detections.append(self._make_det())
-        assert len(b.detections) == 0
+    def test_text_result_has_no_detections_attribute(self) -> None:
+        assert not hasattr(TextResult(text="hi"), "detections")
+
+    def test_empty_factory_returns_detection_result(self) -> None:
+        result = PredictionResult()
+        assert isinstance(result, DetectionResult)
+        assert result.detections == []
+
+    def test_legacy_factory_output(self) -> None:
+        inner = DetectionResult(
+            detections=[self._make_det("cup")],
+            raw={"n": 1},
+        )
+        wrapped = PredictionResult(output=inner, metadata={"source": "test"})
+        assert wrapped is inner
+        assert len(wrapped.detections) == 1
+        assert wrapped.metadata["source"] == "test"
+
+    def test_classification_result(self) -> None:
+        result = ClassificationResult(
+            top=[ClassificationCandidate("cat", 0.9, 0)],
+            raw="raw",
+        )
+        assert isinstance(result, ClassificationResult)
+        assert result.top1 is not None
+        assert result.top1.label == "cat"
+        assert result.raw == "raw"
+        assert not hasattr(result, "detections")
+
+    def test_describe_detections_lines_empty(self) -> None:
+        assert PredictionResult().describe_detections_lines() == ["(no detections)"]
+
+    def test_describe_detections_text(self) -> None:
+        r = PredictionResult(detections=[self._make_det("cup"), self._make_det("tv")])
+        text = r.describe_detections_text()
+        assert "[0]" in text and "'cup'" in text
+        assert "[1]" in text and "'tv'" in text
+        assert "\n" in text

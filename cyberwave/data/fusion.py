@@ -482,7 +482,7 @@ class ChannelBuffer:
 class FusionLayer:
     """Manages per-channel ring buffers for time-aware fusion.
 
-    Created and owned by the ``DataBus`` (CYB-1554).  Workers interact
+    Created and owned by the ``DataBus``.  Workers interact
     with it indirectly through ``cw.data.at()`` and ``cw.data.window()``.
 
     Parameters

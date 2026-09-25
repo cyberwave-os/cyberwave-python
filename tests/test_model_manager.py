@@ -30,7 +30,9 @@ class _FakeRuntime(ModelRuntime):
     def load(self, model_path, *, device=None, **kwargs):
         return {"path": model_path, "device": device}
 
-    def predict(self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs):
+    def predict(
+        self, model_handle, input_data, *, confidence=0.5, classes=None, **kwargs
+    ):
         return PredictionResult()
 
 
@@ -103,6 +105,9 @@ class TestDetectRuntime:
             ("yolov11s", "ultralytics"),
             ("YOLO-custom", "ultralytics"),
             ("yolov5m", "ultralytics"),
+            ("yolov8n-pose-onnx", "onnxruntime"),
+            ("yolov8n-onnx", "onnxruntime"),
+            ("custom-detector-onnx", "onnxruntime"),
             ("haar-face", "opencv"),
             ("background-subtraction-mog2", "opencv"),
             ("cascade-classifier", "opencv"),
@@ -151,6 +156,14 @@ class TestDetectRuntimeFromExtension:
 
 
 class TestDetectDevice:
+    @pytest.fixture(autouse=True)
+    def _reset_probe_cache(self):
+        from cyberwave.models import manager as mgr_mod
+
+        mgr_mod._CUDA_PROBE_CACHE = None
+        yield
+        mgr_mod._CUDA_PROBE_CACHE = None
+
     def test_cpu_when_torch_unavailable(self):
         with patch.dict("sys.modules", {"torch": None}):
             assert ModelManager._detect_device() == "cpu"
@@ -161,11 +174,121 @@ class TestDetectDevice:
         with patch.dict("sys.modules", {"torch": mock_torch}):
             assert ModelManager._detect_device() == "cpu"
 
-    def test_cuda_when_available(self):
+    def test_cuda_when_available_and_probe_ok(self):
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 0)
+        mock_torch.cuda.get_arch_list.return_value = ["sm_80", "sm_90"]
         with patch.dict("sys.modules", {"torch": mock_torch}):
             assert ModelManager._detect_device() == "cuda:0"
+
+        mock_torch.nn.functional.conv2d.assert_called_once()
+        zeros_calls = mock_torch.zeros.call_args_list
+        assert len(zeros_calls) == 2, (
+            "probe must allocate exactly two tensors (input + weights)"
+        )
+        assert zeros_calls[0].args == (1, 3, 8, 8)
+        assert zeros_calls[1].args == (1, 3, 3, 3)
+        mock_torch.cuda.synchronize.assert_called_once()
+        mock_torch.nn.functional.conv2d.return_value.cpu.assert_called_once()
+
+    def test_cuda_when_available_and_probe_ok_cc_in_list(self):
+        """Probe passes and device CC is in arch list → cuda:0."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.return_value = ["sm_80", "sm_87", "sm_90"]
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
+
+    def test_cpu_when_device_cc_excluded_from_arch_list(self, caplog):
+        """Probe passes but device CC is absent from arch list → cpu + warning.
+
+        This is the Jetson Orin (sm_87) scenario: SBSA cu126/cu132 wheels
+        include sm_80 and sm_90 but explicitly exclude sm_87, so the conv2d
+        probe succeeds via PTX JIT while complex op kernels silently run on
+        CPU.
+        """
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_device_name.return_value = "Orin"
+        mock_torch.cuda.get_arch_list.return_value = ["sm_80", "sm_90"]
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            with caplog.at_level("WARNING", logger="cyberwave.models.manager"):
+                assert ModelManager._detect_device() == "cpu"
+
+        assert any("sm_87" in rec.message for rec in caplog.records), (
+            "expected a warning mentioning the missing sm_87 arch"
+        )
+        assert any("CYBERWAVE_MODEL_DEVICE" in rec.message for rec in caplog.records), (
+            "expected the warning to mention the CYBERWAVE_MODEL_DEVICE escape hatch"
+        )
+
+    def test_cuda_when_arch_list_empty(self):
+        """Empty arch list means we cannot tell — don't block, return cuda:0."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.return_value = []
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
+
+    def test_cuda_when_get_arch_list_raises(self):
+        """If get_arch_list() raises, we don't block — return cuda:0."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.side_effect = RuntimeError("not implemented")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
+
+    def test_cuda_arch_list_with_compute_prefix(self):
+        """``compute_87`` notation (older torch) should also be accepted."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_arch_list.return_value = ["compute_80", "compute_87", "compute_90"]
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cuda:0"
+
+    def test_cuda_is_available_itself_raising(self):
+        """If torch.cuda.is_available() raises, we must still return cpu."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.side_effect = RuntimeError("driver broken")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert ModelManager._detect_device() == "cpu"
+        mock_torch.nn.functional.conv2d.assert_not_called()
+
+    def test_cpu_when_conv2d_probe_fails(self, caplog):
+        """cuDNN with no engine for the host GPU → fall back to CPU + warn."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (6, 1)
+        mock_torch.cuda.get_device_name.return_value = "Quadro P3200"
+        mock_torch.cuda.get_arch_list.return_value = ["sm_75", "sm_90"]
+        mock_torch.backends.cudnn.version.return_value = 90100
+        mock_torch.nn.functional.conv2d.side_effect = RuntimeError(
+            "GET was unable to find an engine to execute this computation"
+        )
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            with caplog.at_level("WARNING", logger="cyberwave.models.manager"):
+                assert ModelManager._detect_device() == "cpu"
+
+        assert any("falling back to CPU" in rec.message for rec in caplog.records), (
+            "expected a warning explaining the CPU fallback"
+        )
+
+    def test_probe_result_is_cached(self):
+        """_detect_device must only run the conv2d probe once per process."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.nn.functional.conv2d.side_effect = RuntimeError("no engine")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            ModelManager._detect_device()
+            ModelManager._detect_device()
+            ModelManager._detect_device()
+        assert mock_torch.nn.functional.conv2d.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +321,142 @@ class TestResolveModelPath:
         with pytest.raises(FileNotFoundError, match="not found"):
             mgr._resolve_model_path("missing", "onnxruntime")
 
+    # ----------------------------------------------------------------------
+    # Self-heal: orphan staging directory left by a previously failed
+    # Edge Core download.
+    #
+    # Regression for the ``IsADirectoryError`` wedge described in
+    # ``cyberwave-edge-core/cyberwave_edge_core/model_manager.py`` —
+    # ``_download_runtime_managed`` / ``_download_model`` ``mkdir`` the
+    # per-model directory *before* the network fetch, so any download
+    # error leaves it on disk. Without the SDK-side prune the resolver
+    # would return that directory and ``torch.load`` would crash on
+    # every worker start.
+    # ----------------------------------------------------------------------
+
+    def test_empty_orphan_subdir_pruned_for_ultralytics(self, tmp_path):
+        """Empty staging dir + ultralytics → prune dir, return non-existent file."""
+        orphan = tmp_path / "yoloe-26m-seg.pt"
+        orphan.mkdir()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == tmp_path / "yoloe-26m-seg.pt"
+        assert not orphan.exists(), "empty orphan staging dir must be pruned"
+        assert not result.exists(), (
+            "resolver must hand back a non-existent path so the runtime "
+            "auto-download branch can take over"
+        )
+
+    def test_metadata_only_orphan_subdir_pruned_for_ultralytics(self, tmp_path):
+        """Dir with only a metadata sidecar counts as orphan and is pruned."""
+        orphan = tmp_path / "yoloe-26m-seg.pt"
+        orphan.mkdir()
+        (orphan / "metadata.json").write_text("{}")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == tmp_path / "yoloe-26m-seg.pt"
+        assert not orphan.exists()
+
+    def test_partial_download_orphan_subdir_pruned_for_ultralytics(self, tmp_path):
+        """Dir with only ``.dl_*.part`` cruft is also treated as orphan."""
+        orphan = tmp_path / "yoloe-26m-seg.pt"
+        orphan.mkdir()
+        (orphan / ".dl_abc123.part").write_bytes(b"partial")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == tmp_path / "yoloe-26m-seg.pt"
+        assert not orphan.exists()
+
+    def test_orphan_subdir_with_real_weight_file_left_alone(self, tmp_path):
+        """Directory with a recognized weight file must NEVER be pruned."""
+        sub = tmp_path / "yoloe-26m-seg.pt"
+        sub.mkdir()
+        (sub / "yoloe-26m-seg.pt").write_bytes(b"fake weights")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        result = mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        assert result == sub / "yoloe-26m-seg.pt"
+        assert sub.exists()
+
+    def test_orphan_subdir_with_unknown_file_raises_actionable_error(
+        self, tmp_path
+    ):
+        """Operator-staged content (a README, a half-staged weight) +
+        no recognized weight file → raise a clear error and **preserve**
+        the directory. Returning the directory path here would only
+        relocate the ``IsADirectoryError`` to ``torch.load`` later, and
+        rmtree-ing it would destroy the operator's hand-staged work.
+        """
+        sub = tmp_path / "yoloe-26m-seg.pt"
+        sub.mkdir()
+        (sub / "README.txt").write_text("hand-staged by operator")
+        mgr = ModelManager(model_dir=str(tmp_path))
+        with pytest.raises(FileNotFoundError) as excinfo:
+            mgr._resolve_model_path("yoloe-26m-seg.pt", "ultralytics")
+        msg = str(excinfo.value)
+        assert "no recognized weight file" in msg
+        assert "README.txt" in msg, "error must name the offending file(s)"
+        # Operator's hand-staged content survives.
+        assert sub.exists()
+        assert (sub / "README.txt").exists()
+
+    def test_empty_orphan_subdir_for_non_ultralytics_raises_explicit_error(
+        self, tmp_path
+    ):
+        """Non-ultralytics runtimes get a clear error mentioning the prune."""
+        orphan = tmp_path / "my_model.onnx"
+        orphan.mkdir()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        with pytest.raises(FileNotFoundError, match="staging directory"):
+            mgr._resolve_model_path("my_model.onnx", "onnxruntime")
+        assert not orphan.exists()
+
+
+# ---------------------------------------------------------------------------
+# local public weight auto-download
+# ---------------------------------------------------------------------------
+
+
+class TestLocalPublicWeightDownload:
+    def test_download_url_populates_missing_local_model_path(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from cyberwave.models.runtimes import _RUNTIME_REGISTRY, register_runtime
+
+        class _FakeWhisperCpp(_FakeRuntime):
+            name = "whisper_cpp"
+
+        old = _RUNTIME_REGISTRY.get("whisper_cpp")
+        register_runtime(_FakeWhisperCpp)
+        calls: list[tuple[str, Path]] = []
+
+        def fake_stream(url: str, dest: Path) -> None:
+            calls.append((url, dest))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"whisper-weights")
+
+        monkeypatch.setattr(
+            ModelManager, "_stream_download_to", staticmethod(fake_stream)
+        )
+
+        try:
+            mgr = ModelManager(model_dir=str(tmp_path))
+            loaded = mgr.load(
+                "models/whisper/ggml-tiny.en-q5_1.bin",
+                runtime="whisper_cpp",
+                download_url="https://example.com/ggml-tiny.en-q5_1.bin",
+            )
+        finally:
+            if old is None:
+                _RUNTIME_REGISTRY.pop("whisper_cpp", None)
+            else:
+                _RUNTIME_REGISTRY["whisper_cpp"] = old
+
+        expected_path = tmp_path / "models" / "whisper" / "ggml-tiny.en-q5_1.bin"
+        assert calls == [("https://example.com/ggml-tiny.en-q5_1.bin", expected_path)]
+        assert expected_path.read_bytes() == b"whisper-weights"
+        assert loaded.runtime == "whisper_cpp"
+        assert loaded._model_handle["path"] == str(expected_path)
+
 
 # ---------------------------------------------------------------------------
 # load() caching
@@ -227,6 +486,38 @@ class TestLoadCaching:
         assert m.name == "yolov8n"
         assert m.runtime == "fake"
         assert m.device == "cpu"
+
+    def test_different_load_kwargs_not_cached(self, tmp_path):
+        """Two ``call_model`` nodes on one depth checkpoint can declare
+        different ``input_size`` values. Keyed on model/runtime/device alone,
+        the second silently ran at the first's resolution."""
+        (tmp_path / "depth_anything_v2_vits.pth").touch()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        m1 = mgr.load(
+            "depth_anything_v2_vits.pth", runtime="fake", device="cpu", input_size=322
+        )
+        m2 = mgr.load(
+            "depth_anything_v2_vits.pth", runtime="fake", device="cpu", input_size=518
+        )
+        m3 = mgr.load(
+            "depth_anything_v2_vits.pth", runtime="fake", device="cpu", input_size=322
+        )
+        assert m1 is not m2
+        assert m1 is m3
+
+    def test_kwarg_order_does_not_split_the_cache(self, tmp_path):
+        (tmp_path / "yolov8n.pt").touch()
+        mgr = ModelManager(model_dir=str(tmp_path))
+        m1 = mgr.load("yolov8n", runtime="fake", device="cpu", a=1, b=2)
+        m2 = mgr.load("yolov8n", runtime="fake", device="cpu", b=2, a=1)
+        assert m1 is m2
+
+    def test_no_kwargs_key_is_unchanged(self):
+        """Pins the shape everything cached before load kwargs joined the key."""
+        assert (
+            ModelManager._cache_key("yolov8n", "ultralytics", "cuda:0", {})
+            == "yolov8n:ultralytics:cuda:0"
+        )
 
     def test_cache_key_uses_resolved_runtime(self, tmp_path):
         """Explicit runtime= and auto-detected runtime share the same

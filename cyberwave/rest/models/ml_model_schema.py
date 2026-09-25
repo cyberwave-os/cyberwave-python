@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.io_schema_schema import IOSchemaSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,11 +32,14 @@ class MLModelSchema(BaseModel):
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
+    slug: Optional[StrictStr] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     workspace_uuid: StrictStr
+    workspace_name: Optional[StrictStr] = None
+    workspace_slug: Optional[StrictStr] = None
     metadata: Dict[str, Any]
     visibility: StrictStr
     tags: List[StrictStr]
@@ -44,6 +48,8 @@ class MLModelSchema(BaseModel):
     mapped_model_id: Optional[StrictStr] = None
     output_format: Optional[StrictStr] = None
     deployment: StrictStr
+    is_trainable: StrictBool
+    supported_level: StrictStr
     can_take_video_as_input: StrictBool
     can_take_audio_as_input: StrictBool
     can_take_image_as_input: StrictBool
@@ -51,7 +57,24 @@ class MLModelSchema(BaseModel):
     can_take_action_as_input: StrictBool
     is_edge_compatible: StrictBool
     is_cloud_compatible: StrictBool
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible"]
+    playground_kind: Optional[StrictStr] = None
+    playground_base_catalog_key: Optional[StrictStr] = None
+    playground_base_model_slug: Optional[StrictStr] = None
+    playground_base_model_name: Optional[StrictStr] = None
+    output_family: Optional[StrictStr] = None
+    allowed_structured_tasks: Optional[List[StrictStr]] = None
+    execution_surfaces: Optional[List[StrictStr]] = None
+    sdk_load_id: Optional[StrictStr] = None
+    edge_catalog_id: Optional[StrictStr] = None
+    edge_runtime: Optional[StrictStr] = None
+    supports_builtin_vad_filter: Optional[StrictBool] = False
+    weights_url: Optional[StrictStr] = None
+    required_inputs: Optional[List[Any]] = None
+    has_credential: Optional[StrictBool] = False
+    credential_auth_type: Optional[StrictStr] = None
+    credential_header_name: Optional[StrictStr] = None
+    io_schema: Optional[IOSchemaSchema] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs", "has_credential", "credential_auth_type", "credential_header_name", "io_schema"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -92,6 +115,14 @@ class MLModelSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of io_schema
+        if self.io_schema:
+            _dict['io_schema'] = self.io_schema.to_dict()
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -102,6 +133,16 @@ class MLModelSchema(BaseModel):
         if self.updated_by is None and "updated_by" in self.model_fields_set:
             _dict['updated_by'] = None
 
+        # set to None if workspace_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_name is None and "workspace_name" in self.model_fields_set:
+            _dict['workspace_name'] = None
+
+        # set to None if workspace_slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_slug is None and "workspace_slug" in self.model_fields_set:
+            _dict['workspace_slug'] = None
+
         # set to None if mapped_model_id (nullable) is None
         # and model_fields_set contains the field
         if self.mapped_model_id is None and "mapped_model_id" in self.model_fields_set:
@@ -111,6 +152,66 @@ class MLModelSchema(BaseModel):
         # and model_fields_set contains the field
         if self.output_format is None and "output_format" in self.model_fields_set:
             _dict['output_format'] = None
+
+        # set to None if playground_kind (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_kind is None and "playground_kind" in self.model_fields_set:
+            _dict['playground_kind'] = None
+
+        # set to None if playground_base_catalog_key (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_base_catalog_key is None and "playground_base_catalog_key" in self.model_fields_set:
+            _dict['playground_base_catalog_key'] = None
+
+        # set to None if playground_base_model_slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_base_model_slug is None and "playground_base_model_slug" in self.model_fields_set:
+            _dict['playground_base_model_slug'] = None
+
+        # set to None if playground_base_model_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.playground_base_model_name is None and "playground_base_model_name" in self.model_fields_set:
+            _dict['playground_base_model_name'] = None
+
+        # set to None if output_family (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_family is None and "output_family" in self.model_fields_set:
+            _dict['output_family'] = None
+
+        # set to None if sdk_load_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.sdk_load_id is None and "sdk_load_id" in self.model_fields_set:
+            _dict['sdk_load_id'] = None
+
+        # set to None if edge_catalog_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.edge_catalog_id is None and "edge_catalog_id" in self.model_fields_set:
+            _dict['edge_catalog_id'] = None
+
+        # set to None if edge_runtime (nullable) is None
+        # and model_fields_set contains the field
+        if self.edge_runtime is None and "edge_runtime" in self.model_fields_set:
+            _dict['edge_runtime'] = None
+
+        # set to None if weights_url (nullable) is None
+        # and model_fields_set contains the field
+        if self.weights_url is None and "weights_url" in self.model_fields_set:
+            _dict['weights_url'] = None
+
+        # set to None if credential_auth_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.credential_auth_type is None and "credential_auth_type" in self.model_fields_set:
+            _dict['credential_auth_type'] = None
+
+        # set to None if credential_header_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.credential_header_name is None and "credential_header_name" in self.model_fields_set:
+            _dict['credential_header_name'] = None
+
+        # set to None if io_schema (nullable) is None
+        # and model_fields_set contains the field
+        if self.io_schema is None and "io_schema" in self.model_fields_set:
+            _dict['io_schema'] = None
 
         return _dict
 
@@ -127,11 +228,14 @@ class MLModelSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),
+            "slug": obj.get("slug"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
             "created_by": obj.get("created_by"),
             "updated_by": obj.get("updated_by"),
             "workspace_uuid": obj.get("workspace_uuid"),
+            "workspace_name": obj.get("workspace_name"),
+            "workspace_slug": obj.get("workspace_slug"),
             "metadata": obj.get("metadata"),
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),
@@ -140,13 +244,32 @@ class MLModelSchema(BaseModel):
             "mapped_model_id": obj.get("mapped_model_id"),
             "output_format": obj.get("output_format"),
             "deployment": obj.get("deployment"),
+            "is_trainable": obj.get("is_trainable"),
+            "supported_level": obj.get("supported_level"),
             "can_take_video_as_input": obj.get("can_take_video_as_input"),
             "can_take_audio_as_input": obj.get("can_take_audio_as_input"),
             "can_take_image_as_input": obj.get("can_take_image_as_input"),
             "can_take_text_as_input": obj.get("can_take_text_as_input"),
             "can_take_action_as_input": obj.get("can_take_action_as_input"),
             "is_edge_compatible": obj.get("is_edge_compatible"),
-            "is_cloud_compatible": obj.get("is_cloud_compatible")
+            "is_cloud_compatible": obj.get("is_cloud_compatible"),
+            "playground_kind": obj.get("playground_kind"),
+            "playground_base_catalog_key": obj.get("playground_base_catalog_key"),
+            "playground_base_model_slug": obj.get("playground_base_model_slug"),
+            "playground_base_model_name": obj.get("playground_base_model_name"),
+            "output_family": obj.get("output_family"),
+            "allowed_structured_tasks": obj.get("allowed_structured_tasks"),
+            "execution_surfaces": obj.get("execution_surfaces"),
+            "sdk_load_id": obj.get("sdk_load_id"),
+            "edge_catalog_id": obj.get("edge_catalog_id"),
+            "edge_runtime": obj.get("edge_runtime"),
+            "supports_builtin_vad_filter": obj.get("supports_builtin_vad_filter") if obj.get("supports_builtin_vad_filter") is not None else False,
+            "weights_url": obj.get("weights_url"),
+            "required_inputs": obj.get("required_inputs"),
+            "has_credential": obj.get("has_credential") if obj.get("has_credential") is not None else False,
+            "credential_auth_type": obj.get("credential_auth_type"),
+            "credential_header_name": obj.get("credential_header_name"),
+            "io_schema": IOSchemaSchema.from_dict(obj["io_schema"]) if obj.get("io_schema") is not None else None
         })
         return _obj
 

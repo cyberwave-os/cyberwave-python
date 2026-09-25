@@ -157,7 +157,6 @@ Class | Method | HTTP request | Description
 *DefaultApi* | [**src_app_api_twins_delete_twin**](docs/DefaultApi.md#src_app_api_twins_delete_twin) | **DELETE** /api/v1/twins/{uuid} | Delete Twin
 *DefaultApi* | [**src_app_api_twins_get_actuation_data**](docs/DefaultApi.md#src_app_api_twins_get_actuation_data) | **GET** /api/v1/twins/{uuid}/telemetry | Get Actuation Data
 *DefaultApi* | [**src_app_api_twins_get_twin**](docs/DefaultApi.md#src_app_api_twins_get_twin) | **GET** /api/v1/twins/{uuid} | Get Twin
-*DefaultApi* | [**src_app_api_twins_get_twin_relationships**](docs/DefaultApi.md#src_app_api_twins_get_twin_relationships) | **GET** /api/v1/twins/{uuid}/relationships | Get Twin Relationships
 *DefaultApi* | [**src_app_api_twins_list_all_twins**](docs/DefaultApi.md#src_app_api_twins_list_all_twins) | **GET** /api/v1/twins | List All Twins
 *DefaultApi* | [**src_app_api_twins_save_actuation_data**](docs/DefaultApi.md#src_app_api_twins_save_actuation_data) | **POST** /api/v1/twins/{uuid}/telemetry | Save Actuation Data
 *DefaultApi* | [**src_app_api_twins_update_twin**](docs/DefaultApi.md#src_app_api_twins_update_twin) | **PUT** /api/v1/twins/{uuid} | Update Twin
@@ -177,7 +176,6 @@ Class | Method | HTTP request | Description
 *DefaultApi* | [**src_app_api_urdf_upload_zip_file**](docs/DefaultApi.md#src_app_api_urdf_upload_zip_file) | **POST** /api/v1/urdf-projects/{uuid}/zip-file | Upload Zip File
 *DefaultApi* | [**src_users_api_members_leave_team**](docs/DefaultApi.md#src_users_api_members_leave_team) | **DELETE** /api/v1users/workspaces/{team_uuid}/members/{uuid}/leave | Leave Team
 *DefaultApi* | [**src_users_api_members_list_team_members**](docs/DefaultApi.md#src_users_api_members_list_team_members) | **GET** /api/v1users/workspaces/{team_uuid}/members | List Team Members
-*DefaultApi* | [**src_users_api_members_remove_team_member**](docs/DefaultApi.md#src_users_api_members_remove_team_member) | **DELETE** /api/v1users/workspaces/{team_uuid}/members/{uuid} | Remove Team Member
 *DefaultApi* | [**src_users_api_organizations_delete_organization**](docs/DefaultApi.md#src_users_api_organizations_delete_organization) | **DELETE** /api/v1users/organizations/{uuid} | Delete Organization
 *DefaultApi* | [**src_users_api_organizations_get_organization**](docs/DefaultApi.md#src_users_api_organizations_get_organization) | **GET** /api/v1users/organizations/{uuid} | Get Organization
 *DefaultApi* | [**src_users_api_organizations_get_organization_by_slug**](docs/DefaultApi.md#src_users_api_organizations_get_organization_by_slug) | **GET** /api/v1users/organizations/by-slug/{slug} | Get Organization By Slug
@@ -233,7 +231,6 @@ Class | Method | HTTP request | Description
  - [TeamMemberResponse](docs/TeamMemberResponse.md)
  - [TeamShareSchema](docs/TeamShareSchema.md)
  - [TwinCreateSchema](docs/TwinCreateSchema.md)
- - [TwinRelationshipSchema](docs/TwinRelationshipSchema.md)
  - [TwinSchema](docs/TwinSchema.md)
  - [TwinStateUpdateSchema](docs/TwinStateUpdateSchema.md)
  - [TwinTelemetrySchema](docs/TwinTelemetrySchema.md)

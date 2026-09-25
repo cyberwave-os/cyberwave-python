@@ -1,0 +1,37 @@
+{
+  "type": "edge_health",
+  "edge_id": "twin-fixture",
+  "twin_uuid": "twin-fixture",
+  "stream_count": 2,
+  "healthy_streams": 2,
+  "streams": {
+    "depth-0": {
+      "camera_id": "depth-0",
+      "stream_config": {
+        "kind": "camera",
+        "source": "0",
+        "resolution": "640x480",
+        "fps": 30,
+        "camera_type": "realsense"
+      }
+    },
+    "rgb-0": {
+      "camera_id": "rgb-0",
+      "stream_config": {
+        "kind": "camera",
+        "source": "0",
+        "resolution": "1280x720",
+        "fps": 30,
+        "camera_type": "realsense"
+      }
+    }
+  },
+  "camera_config": {
+    "camera_id": "depth-0",
+    "camera_type": "realsense",
+    "source": "0",
+    "fps": 30,
+    "resolution": "640x480",
+    "enabled": true
+  }
+}

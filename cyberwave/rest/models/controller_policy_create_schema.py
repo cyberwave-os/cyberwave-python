@@ -28,13 +28,16 @@ class ControllerPolicyCreateSchema(BaseModel):
     ControllerPolicyCreateSchema
     """ # noqa: E501
     name: Optional[StrictStr] = ''
+    slug: Optional[StrictStr] = None
     visibility: Optional[StrictStr] = 'private'
     description: Optional[StrictStr] = ''
     controller_type: StrictStr
     metadata: Optional[Dict[str, Any]] = None
     workspace_uuid: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["name", "visibility", "description", "controller_type", "metadata", "workspace_uuid", "asset_uuids"]
+    asset_registry_ids: Optional[List[StrictStr]] = None
+    device: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["name", "slug", "visibility", "description", "controller_type", "metadata", "workspace_uuid", "asset_uuids", "asset_registry_ids", "device"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -75,6 +78,11 @@ class ControllerPolicyCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -84,6 +92,11 @@ class ControllerPolicyCreateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
+
+        # set to None if device (nullable) is None
+        # and model_fields_set contains the field
+        if self.device is None and "device" in self.model_fields_set:
+            _dict['device'] = None
 
         return _dict
 
@@ -98,12 +111,15 @@ class ControllerPolicyCreateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "name": obj.get("name") if obj.get("name") is not None else '',
+            "slug": obj.get("slug"),
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
             "description": obj.get("description") if obj.get("description") is not None else '',
             "controller_type": obj.get("controller_type"),
             "metadata": obj.get("metadata"),
             "workspace_uuid": obj.get("workspace_uuid"),
-            "asset_uuids": obj.get("asset_uuids")
+            "asset_uuids": obj.get("asset_uuids"),
+            "asset_registry_ids": obj.get("asset_registry_ids"),
+            "device": obj.get("device")
         })
         return _obj
 

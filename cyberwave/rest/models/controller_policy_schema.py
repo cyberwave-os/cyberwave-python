@@ -31,6 +31,7 @@ class ControllerPolicySchema(BaseModel):
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
+    slug: Optional[StrictStr] = None
     controller_type: StrictStr
     metadata: Dict[str, Any]
     visibility: StrictStr
@@ -40,7 +41,8 @@ class ControllerPolicySchema(BaseModel):
     workspace_uuid: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
     can_write: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write"]
+    device: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "device"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +83,11 @@ class ControllerPolicySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -90,6 +97,11 @@ class ControllerPolicySchema(BaseModel):
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
+
+        # set to None if device (nullable) is None
+        # and model_fields_set contains the field
+        if self.device is None and "device" in self.model_fields_set:
+            _dict['device'] = None
 
         return _dict
 
@@ -106,6 +118,7 @@ class ControllerPolicySchema(BaseModel):
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),
+            "slug": obj.get("slug"),
             "controller_type": obj.get("controller_type"),
             "metadata": obj.get("metadata"),
             "visibility": obj.get("visibility"),
@@ -114,7 +127,8 @@ class ControllerPolicySchema(BaseModel):
             "created_by": obj.get("created_by"),
             "workspace_uuid": obj.get("workspace_uuid"),
             "asset_uuids": obj.get("asset_uuids"),
-            "can_write": obj.get("can_write") if obj.get("can_write") is not None else False
+            "can_write": obj.get("can_write") if obj.get("can_write") is not None else False,
+            "device": obj.get("device")
         })
         return _obj
 

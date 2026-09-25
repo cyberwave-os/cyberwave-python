@@ -89,7 +89,8 @@ class EdgeController:
                 
                 command_type = payload.get("command")
                 if command_type:
-                    if command_type not in ["start_video", "stop_video"]:
+                    _EDGE_CORE_COMMANDS = {"sync_workflows", "remove_workflow_worker"}
+                    if command_type not in ["start_video", "stop_video"] and command_type not in _EDGE_CORE_COMMANDS:
                         logger.warning(f"Unknown command type: {command_type}")
             except Exception as e:
                 logger.error(f"Error processing command message: {e}", exc_info=True)

@@ -24,7 +24,7 @@ Debug / replay::
 
     replay(backend, "/tmp/session", speed=1.0)
 
-Time-aware fusion (Phases 3–4)::
+Time-aware fusion::
 
     from cyberwave.data import FusionLayer
 
@@ -72,6 +72,8 @@ from .header import (
 )
 from .keys import (
     COMMAND_CHANNELS,
+    FILTERED_FRAME_CHANNEL,
+    FRAME_OVERLAY_CHANNEL,
     LATEST_VALUE_CHANNELS,
     STREAM_CHANNELS,
     WELL_KNOWN_CHANNELS,
@@ -127,17 +129,19 @@ __all__ = [
     "STREAM_CHANNELS",
     "LATEST_VALUE_CHANNELS",
     "WELL_KNOWN_CHANNELS",
+    "FILTERED_FRAME_CHANNEL",
+    "FRAME_OVERLAY_CHANNEL",
     # Recording / replay
     "RecordingSession",
     "ReplayResult",
     "RecordingManifest",
     "record",
     "replay",
-    # Ring buffer (CYB-1584)
+    # Ring buffer
     "TimeIndexedRingBuffer",
     "TimestampedSample",
     "BracketResult",
-    # Fusion (CYB-1584)
+    # Fusion
     "FusionLayer",
     "ChannelBuffer",
     "Quaternion",

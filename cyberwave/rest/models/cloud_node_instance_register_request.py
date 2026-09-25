@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,7 +28,8 @@ class CloudNodeInstanceRegisterRequest(BaseModel):
     CloudNodeInstanceRegisterRequest
     """ # noqa: E501
     profile_slug: StrictStr
-    __properties: ClassVar[List[str]] = ["profile_slug"]
+    environment_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["profile_slug", "environment_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -69,6 +70,11 @@ class CloudNodeInstanceRegisterRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -81,7 +87,8 @@ class CloudNodeInstanceRegisterRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "profile_slug": obj.get("profile_slug")
+            "profile_slug": obj.get("profile_slug"),
+            "environment_uuid": obj.get("environment_uuid")
         })
         return _obj
 

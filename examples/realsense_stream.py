@@ -1,15 +1,14 @@
 """
-Depth Camera Streaming Example
+RealSense Streaming — stream an Intel RealSense D455 to a twin.
 
-Stream RealSense camera feed to a digital twin. Press Ctrl+C to stop.
+Press Ctrl+C to stop.
 
 Requirements:
     pip install cyberwave[realsense]
 """
 
-import os
 from cyberwave import Cyberwave
 
-cw = Cyberwave(api_key=os.getenv("CYBERWAVE_API_KEY"))
+cw = Cyberwave()
 camera = cw.twin("intel/realsensed455")
 camera.start_streaming()

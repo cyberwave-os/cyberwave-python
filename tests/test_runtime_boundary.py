@@ -65,5 +65,6 @@ def test_hooks_registered_but_not_active(tmp_path):
     hooks = fake_cw._hook_registry.hooks
 
     assert len(hooks) == 2
-    assert hooks[0].channel == "frames/default"
+    # Default is wildcard: channel is just "frames"; explicit sensor keeps "frames/back".
+    assert hooks[0].channel == "frames"
     assert hooks[1].channel == "frames/back"
