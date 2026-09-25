@@ -162,3 +162,8 @@ markers = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+nl-arm-controller = [
+    "openai-agents>=0.18.2",
+]
