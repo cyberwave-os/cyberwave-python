@@ -18,7 +18,8 @@ Once the program automation is activated, your
 PR receives one welcome comment. When it is ready for review, we request a
 maintainer and post a custom Claude advisory review using the Anthropic API. That
 review reads eligible patch excerpts; it does not run your code, approve your
-PR, or replace CI and human review. Draft PRs are welcome.
+PR, or replace CI and human review. Draft PRs are welcome: mark your PR ready
+for review when you want maintainer feedback and the automated advisory review.
 
 Merged contributions are celebrated on Discord using your GitHub username and
 the PR title/link. To opt out, check the PR template's Discord opt-out box or
