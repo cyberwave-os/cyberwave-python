@@ -12,6 +12,19 @@ Adjust asset slugs (`the-robot-studio/so101`, `unitree/go2`, …) to match your 
 catalog. Some examples need optional extras (e.g. `cyberwave[camera]`, `cyberwave[ml]`,
 `cyberwave[zenoh]`) — see the [installation docs](https://docs.cyberwave.com/overview).
 
+## Introductory example prerequisites
+
+All four introductory examples require the base `cyberwave` package and a
+`CYBERWAVE_API_KEY`. They connect to the Cyberwave backend, so none of them
+works completely offline.
+
+| Script | Required extras | Backend / API access | Simulation support | Physical hardware |
+| --- | --- | --- | --- | --- |
+| [quickstart.py](quickstart.py) | None | API key and Cyberwave backend required | Uses `cw.affect("simulation")` for the Go2 locomotion portion | Not required for scene editing or simulated locomotion; the earlier joint command uses the default live runtime and depends on a connected twin/edge driver for live actuation |
+| [compact.py](compact.py) | None | API key and Cyberwave backend required | Does not explicitly select simulation; uses the client's default live runtime | No hardware is hard-coded, but meaningful live joint state requires a connected twin/edge source |
+| [joints.py](joints.py) | None | API key and Cyberwave backend required | Does not explicitly select simulation; uses the client's default live runtime | Live joint reads and writes require a connected twin/edge driver |
+| [locomotion.py](locomotion.py) | None | API key and Cyberwave backend required | Explicitly selects simulation with `cw.affect("simulation")` | No physical robot required for the simulation path |
+
 ## Getting started
 
 | Script | Description |
