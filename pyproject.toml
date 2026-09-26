@@ -146,6 +146,7 @@ pytest-asyncio = "^0.23"
 pytest-xdist = "^3.5"
 mypy = "^1.5"
 types-python-dateutil = "^2.8.19.14"
+python-dotenv = "^1.0"
 croniter = ">=6.2.2"
 pillow = ">=10.0.0"
 

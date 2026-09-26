@@ -23,6 +23,7 @@ from ._helpers import (
     _policy_is_sdk_joint_teleop_candidate,
     _sdk_auto_attach_controller_enabled,
 )
+from ..universal_schema_camera import camera_sensor_ids_from_schema
 from .commands import TwinCommandsHandle
 from .driver import TwinDriverHandle
 from .telemetry import TwinTelemetry
@@ -1295,6 +1296,33 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             stacklevel=2,
         )
         return controllable_joint_names(self)
+
+    def list_camera_sensor_ids(self, *, max_ids: int = 16) -> List[str]:
+        """
+        List camera sensor id strings from the live universal schema.
+
+        Use these values as ``sensor_id`` for :meth:`get_latest_frame` and
+        :meth:`capture_frame` when the twin exposes multiple cameras. The schema
+        is fetched via :meth:`get_schema` (same source as the platform editor).
+
+        Args:
+            max_ids: Nonnegative maximum number of ids to return (default ``16``).
+                Zero returns an empty list.
+
+        Raises:
+            ValueError: If ``max_ids`` is negative.
+
+        Returns:
+            Ordered unique ids from ``sensors`` and ``capabilities.sensors`` entries
+            whose ``type`` is camera-like.
+
+        Example:
+            >>> ids = twin.list_camera_sensor_ids()
+            >>> if ids:
+            ...     frame = twin.capture_frame(sensor_id=ids[0])
+        """
+        schema = self.get_schema()
+        return camera_sensor_ids_from_schema(schema, max_ids=max_ids)
 
     def get_schema(self, path: str = "") -> Any:
         """Get value at a specific JSON Pointer path in the twin's universal schema.
