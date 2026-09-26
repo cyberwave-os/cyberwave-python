@@ -511,9 +511,24 @@ class BaseVideoStreamer(abc.ABC):
     async def start(self, twin_uuid: Optional[str] = None):
         """Start streaming camera to Cyberwave.
 
+        With auto_reconnect, this also starts the connection monitor so a
+        dropped stream is renegotiated. stop() ends it.
+
         Args:
             twin_uuid: UUID of the digital twin (uses instance twin_uuid if not provided)
         """
+        await self._start_webrtc(twin_uuid)
+
+        if self.auto_reconnect:
+            self._is_running = True
+            self._should_reconnect = True
+            if self._monitor_task is None or self._monitor_task.done():
+                self._monitor_task = asyncio.create_task(
+                    self._monitor_connection(asyncio.Event())
+                )
+
+    async def _start_webrtc(self, twin_uuid: Optional[str] = None):
+        """Set up the peer connection and send the offer."""
         self._reset_state()
 
         if twin_uuid is not None:
@@ -561,7 +576,21 @@ class BaseVideoStreamer(abc.ABC):
             self._start_health_check()
 
     async def stop(self):
-        """Stop streaming and cleanup resources.
+        """Stop streaming and cleanup resources."""
+        self._should_reconnect = False
+        if self._monitor_task is not None:
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._monitor_task = None
+
+        await self._close_peer_connection()
+        logger.info("Camera streaming stopped")
+
+    async def _close_peer_connection(self):
+        """Close the peer connection and track, leaving the monitor running.
 
         IMPORTANT: Close peer connection BEFORE stopping tracks. aiortc can segfault
         if tracks are stopped before pc.close() (see aiortc/aiortc#283).
@@ -587,7 +616,6 @@ class BaseVideoStreamer(abc.ABC):
             finally:
                 self.streamer = None
         self._reset_state()
-        logger.info("Camera streaming stopped")
 
     async def run_with_auto_reconnect(
         self,
@@ -621,7 +649,7 @@ class BaseVideoStreamer(abc.ABC):
                         command_callback("connecting", "Starting camera stream")
                     except TypeError:
                         pass
-                await self.start()
+                await self._start_webrtc()
                 self._should_reconnect = self.auto_reconnect
                 if command_callback:
                     command_callback("ok", "Camera streaming started")
@@ -633,12 +661,16 @@ class BaseVideoStreamer(abc.ABC):
                     except TypeError:
                         pass
 
-        if self.auto_reconnect:
+        # start() may already have one running
+        if self.auto_reconnect and (
+            self._monitor_task is None or self._monitor_task.done()
+        ):
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
 
         _next_retry_at: float = time.monotonic() + 15.0
         _retry_backoff: float = 30.0
-        _initial_stream_connected: bool = False
+        # Once connected, drops are the monitor's job, not this loop's
+        _initial_stream_connected: bool = self.pc is not None
 
         try:
             while not stop.is_set() and self._is_running:
@@ -652,7 +684,7 @@ class BaseVideoStreamer(abc.ABC):
                             logger.info(
                                 "No active camera stream — retrying offer (pc is None)..."
                             )
-                            await self.start()
+                            await self._start_webrtc()
                             self._should_reconnect = self.auto_reconnect
                             logger.info("Camera stream retry succeeded.")
                             _initial_stream_connected = True
@@ -999,7 +1031,7 @@ class BaseVideoStreamer(abc.ABC):
                 return
 
             logger.info(f"Starting video stream - Recording: {self._should_record}")
-            await self.start()
+            await self._start_webrtc()
             self._should_reconnect = self.auto_reconnect
             logger.info("Camera streaming started successfully!")
 
@@ -1014,6 +1046,7 @@ class BaseVideoStreamer(abc.ABC):
     async def _handle_stop_command(self, callback: Optional[Callable] = None):
         """Handle stop_video command."""
         try:
+            self._should_reconnect = False
             if self.pc is None:
                 logger.info("Video stream not running")
                 if callback:
@@ -1021,8 +1054,7 @@ class BaseVideoStreamer(abc.ABC):
                 return
 
             logger.info("Stopping video stream")
-            self._should_reconnect = False
-            await self.stop()
+            await self._close_peer_connection()
             logger.info("Camera stream stopped successfully")
 
             if callback:
@@ -1044,19 +1076,20 @@ class BaseVideoStreamer(abc.ABC):
         reconnect_attempt = 0
 
         while not stop_event.is_set() and self._is_running:
-            if not self._should_reconnect or self.pc is None:
+            # pc is also None after a failed attempt, and that one needs a retry
+            if not self._should_reconnect or (
+                self.pc is None and reconnect_attempt == 0
+            ):
                 await asyncio.sleep(1.0)
                 continue
 
-            if self._is_connection_lost():
+            if self.pc is None or self._is_connection_lost():
                 reconnect_attempt = await self._attempt_reconnect(
                     stop_event,
                     reconnect_attempt,
                     reconnect_delay,
                     max_reconnect_attempts,
                 )
-                if reconnect_attempt < 0:
-                    break
 
             await asyncio.sleep(1.0)
 
@@ -1108,11 +1141,12 @@ class BaseVideoStreamer(abc.ABC):
         """Attempt to reconnect the WebRTC connection.
 
         Returns:
-            New attempt count, or -1 to signal stopping
+            New attempt count, 0 after a success or when the stream was stopped
         """
         try:
             try:
-                await self.stop()
+                # Not stop(): that would cancel this task.
+                await self._close_peer_connection()
             except Exception as e:
                 logger.warning(f"Error stopping old streamer during reconnect: {e}")
 
@@ -1120,10 +1154,10 @@ class BaseVideoStreamer(abc.ABC):
 
             if not self._should_reconnect or stop_event.is_set():
                 logger.info("Reconnect cancelled (stream was stopped)")
-                return -1
+                return 0
 
             logger.info(f"Reconnecting camera stream (attempt {attempt + 1})...")
-            await self.start()
+            await self._start_webrtc()
             logger.info("Camera stream reconnected successfully!")
             return 0
 
@@ -1136,8 +1170,9 @@ class BaseVideoStreamer(abc.ABC):
                     f"Max reconnection attempts ({max_attempts}) reached. "
                     "Stopping reconnection attempts."
                 )
+                # Stay alive so a later start_video brings reconnects back
                 self._should_reconnect = False
-                return -1
+                return 0
 
             backoff_delay = min(base_delay * (2**attempt), 30.0)
             await asyncio.sleep(backoff_delay)
