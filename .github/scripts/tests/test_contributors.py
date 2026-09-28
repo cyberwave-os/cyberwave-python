@@ -290,12 +290,18 @@ class SlackTests(unittest.TestCase):
 
     def test_untrusted_title_is_only_plain_text_and_cannot_override_url(self):
         github = FakeGitHub(pull(title="<!channel> <@U123> <https://evil.test|review>"))
-        payload = app.slack_payload(github, github.pr, "opened")
-        self.assertNotIn("<!channel>", payload["text"])
-        sections = [block for block in payload["blocks"] if block["type"] == "section"]
-        self.assertTrue(all(block["text"]["type"] == "plain_text" for block in sections))
-        self.assertEqual(payload["blocks"][-1]["elements"][0]["url"],
-                         "https://github.com/cyberwave-os/cyberwave-python/pull/42")
+        url = "https://github.com/cyberwave-os/cyberwave-python/pull/42"
+        for stage in ("draft", "opened", "merged"):
+            with self.subTest(stage=stage):
+                payload = app.slack_payload(github, github.pr, stage)
+                self.assertNotIn("<!channel>", payload["text"])
+                self.assertIn(url, payload["text"])
+                sections = [block for block in payload["blocks"] if block["type"] == "section"]
+                self.assertEqual(sections[0]["text"]["type"], "plain_text")
+                self.assertIn(github.pr["title"], sections[0]["text"]["text"])
+                self.assertEqual(sections[1]["text"], {"type": "mrkdwn", "text": f"<{url}>"})
+                self.assertEqual(sections[2]["text"]["type"], "plain_text")
+                self.assertEqual(payload["blocks"][-1]["elements"][0]["url"], url)
 
     def test_contributor_cannot_spoof_slack_delivery_record(self):
         github = FakeGitHub()
