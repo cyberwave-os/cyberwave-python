@@ -274,7 +274,7 @@ def slack_payload(github, pr, stage):
                 "text": {"type": "plain_text", "text": "View merged PR" if stage == "merged" else "Review PR"},
                 "url": url}]},
         ],
-        "unfurl_links": False, "unfurl_media": False,
+        "unfurl_links": True, "unfurl_media": True,
     }
 
 
