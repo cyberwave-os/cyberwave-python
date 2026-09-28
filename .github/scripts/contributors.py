@@ -253,10 +253,14 @@ def validate_slack_webhook(webhook):
 def slack_payload(github, pr, stage):
     titles = {"draft": "Draft Python SDK PR opened", "opened": "Python SDK PR ready for review",
               "merged": "Python SDK PR merged"}
-    title = titles[stage]
-    # All user-controlled content uses plain_text blocks. The fallback contains
-    # no user strings, so crafted titles cannot ping Slack users or channels.
-    details = (f"#{pr['number']}: {pr['title'][:250]}\n"
+    status = titles[stage]
+    title = " ".join(pr["title"].split())
+    # Slack headers allow 150 characters. Keep the full title in fallback text.
+    heading = title if len(title) <= 150 else title[:149] + "…"
+    # Block content stays plain_text; escape Slack's special syntax in fallback
+    # text so a contributor's title cannot introduce links or channel mentions.
+    fallback_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("@", "@\u200b")
+    details = (f"{status} · #{pr['number']}\n"
                f"GitHub author: {pr['user']['login']}\n"
                f"Target branch: {pr['base']['ref']}")
     action = {"draft": "Draft — review will be requested when ready.",
@@ -264,9 +268,9 @@ def slack_payload(github, pr, stage):
               "merged": "This contribution has been merged into the SDK."}[stage]
     url = f"https://github.com/{github.repository}/pull/{pr['number']}"
     return {
-        "text": f"{title} · {github.repository} #{pr['number']}\n{url}",
+        "text": f"{fallback_title}\n{status} · {github.repository} #{pr['number']}\n{url}",
         "blocks": [
-            {"type": "header", "text": {"type": "plain_text", "text": title}},
+            {"type": "header", "text": {"type": "plain_text", "text": heading}},
             {"type": "section", "text": {"type": "plain_text", "text": details}},
             {"type": "section", "text": {"type": "mrkdwn", "text": f"<{url}>"}},
             {"type": "section", "text": {"type": "plain_text", "text": action}},
