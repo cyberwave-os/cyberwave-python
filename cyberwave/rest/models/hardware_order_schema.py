@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from cyberwave.rest.models.hardware_order_line_item_schema import HardwareOrderLineItemSchema
@@ -35,6 +35,8 @@ class HardwareOrderSchema(BaseModel):
     created_by_uuid: StrictStr
     status: StrictStr
     purchase_type: StrictStr
+    booked_amount_minor: Optional[StrictInt] = None
+    booked_currency: Optional[StrictStr] = ''
     total_cost_credits: Annotated[str, Field(strict=True)]
     tracking_number: StrictStr
     delivery_address_uuid: Optional[StrictStr] = None
@@ -52,7 +54,7 @@ class HardwareOrderSchema(BaseModel):
     created_at: StrictStr
     updated_at: StrictStr
     line_items: List[HardwareOrderLineItemSchema]
-    __properties: ClassVar[List[str]] = ["uuid", "organization_uuid", "workspace_uuid", "created_by_uuid", "status", "purchase_type", "total_cost_credits", "tracking_number", "delivery_address_uuid", "shipping_label", "shipping_contact_name", "shipping_contact_phone", "shipping_contact_email", "shipping_address_line1", "shipping_address_line2", "shipping_city", "shipping_state", "shipping_postal_code", "shipping_country", "metadata", "created_at", "updated_at", "line_items"]
+    __properties: ClassVar[List[str]] = ["uuid", "organization_uuid", "workspace_uuid", "created_by_uuid", "status", "purchase_type", "booked_amount_minor", "booked_currency", "total_cost_credits", "tracking_number", "delivery_address_uuid", "shipping_label", "shipping_contact_name", "shipping_contact_phone", "shipping_contact_email", "shipping_address_line1", "shipping_address_line2", "shipping_city", "shipping_state", "shipping_postal_code", "shipping_country", "metadata", "created_at", "updated_at", "line_items"]
 
     @field_validator('total_cost_credits')
     def total_cost_credits_validate_regular_expression(cls, value):
@@ -107,6 +109,11 @@ class HardwareOrderSchema(BaseModel):
                 if _item_line_items:
                     _items.append(_item_line_items.to_dict())
             _dict['line_items'] = _items
+        # set to None if booked_amount_minor (nullable) is None
+        # and model_fields_set contains the field
+        if self.booked_amount_minor is None and "booked_amount_minor" in self.model_fields_set:
+            _dict['booked_amount_minor'] = None
+
         # set to None if delivery_address_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.delivery_address_uuid is None and "delivery_address_uuid" in self.model_fields_set:
@@ -130,6 +137,8 @@ class HardwareOrderSchema(BaseModel):
             "created_by_uuid": obj.get("created_by_uuid"),
             "status": obj.get("status"),
             "purchase_type": obj.get("purchase_type"),
+            "booked_amount_minor": obj.get("booked_amount_minor"),
+            "booked_currency": obj.get("booked_currency") if obj.get("booked_currency") is not None else '',
             "total_cost_credits": obj.get("total_cost_credits"),
             "tracking_number": obj.get("tracking_number"),
             "delivery_address_uuid": obj.get("delivery_address_uuid"),

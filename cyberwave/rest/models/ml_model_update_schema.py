@@ -17,6 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
@@ -30,6 +31,7 @@ class MLModelUpdateSchema(BaseModel):
     name: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
+    expected_updated_at: Optional[datetime] = None
     visibility: Optional[StrictStr] = None
     tags: Optional[List[StrictStr]] = None
     model_external_id: Optional[StrictStr] = None
@@ -47,7 +49,7 @@ class MLModelUpdateSchema(BaseModel):
     edge_runtime: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     weights_url: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "edge_runtime", "workspace_uuid", "weights_url"]
+    __properties: ClassVar[List[str]] = ["name", "description", "metadata", "expected_updated_at", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "edge_runtime", "workspace_uuid", "weights_url"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -102,6 +104,11 @@ class MLModelUpdateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
+
+        # set to None if expected_updated_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_updated_at is None and "expected_updated_at" in self.model_fields_set:
+            _dict['expected_updated_at'] = None
 
         # set to None if visibility (nullable) is None
         # and model_fields_set contains the field
@@ -203,6 +210,7 @@ class MLModelUpdateSchema(BaseModel):
             "name": obj.get("name"),
             "description": obj.get("description"),
             "metadata": obj.get("metadata"),
+            "expected_updated_at": obj.get("expected_updated_at"),
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),
             "model_external_id": obj.get("model_external_id"),

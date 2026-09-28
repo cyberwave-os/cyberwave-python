@@ -170,6 +170,8 @@ class ZenohBackend(DataBackend):
     """Zenoh-backed data bus.
 
     Args:
+        mode: Optional ``peer`` or routed ``client`` mode. ``None`` preserves
+            Zenoh's default discovery. Client mode needs a reachable router.
         connect: Zenoh router endpoints (e.g. ``["tcp/localhost:7447"]``).
             ``None`` uses peer-to-peer discovery.
         listen: Zenoh listener endpoints (e.g. ``["tcp/0.0.0.0:7447"]``).
@@ -191,6 +193,7 @@ class ZenohBackend(DataBackend):
     def __init__(
         self,
         *,
+        mode: str | None = None,
         connect: list[str] | None = None,
         listen: list[str] | None = None,
         shared_memory: bool = False,
@@ -210,6 +213,9 @@ class ZenohBackend(DataBackend):
                 f"Must be one of: {', '.join(SHM_EXHAUSTION_POLICIES)}."
             )
 
+        if mode is not None and mode not in ("peer", "client"):
+            raise ValueError("Zenoh mode must be peer or client")
+        self._mode = mode
         self._connect = connect
         self._listen = listen
         self._shared_memory = shared_memory
@@ -279,6 +285,8 @@ class ZenohBackend(DataBackend):
 
     def _build_config(self) -> Any:
         cfg = zenoh.Config()
+        if self._mode:
+            cfg.insert_json5("mode", json.dumps(self._mode))
         if self._connect:
             cfg.insert_json5("connect/endpoints", json.dumps(self._connect))
         if self._listen:

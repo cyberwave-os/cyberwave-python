@@ -19,18 +19,18 @@ import json
 
 from pydantic import BaseModel, ConfigDict
 from typing import Any, ClassVar, Dict, List, Optional
-from cyberwave.rest.models.quaternion_schema import QuaternionSchema
-from cyberwave.rest.models.vector3_schema import Vector3Schema
+from cyberwave.rest.models.required_quaternion_schema import RequiredQuaternionSchema
+from cyberwave.rest.models.required_vector3_schema import RequiredVector3Schema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class EnvironmentWaypointPositionUpdateSchema(BaseModel):
     """
-    Partial update for a single waypoint's position/rotation.  Deliberately excludes ``frame`` — see ``update_environment_waypoint_position`` in ``src.app.api.environments``. Fields not sent are left untouched (the endpoint reads this via ``.dict(exclude_unset=True)``).
+    Partial update for a single waypoint's position/rotation.  Deliberately excludes ``frame`` — see ``update_environment_waypoint_position`` in ``src.app.api.environments``. Fields not sent are left untouched (the endpoint reads this via ``.dict(exclude_unset=True)``).  Either pose may be omitted, but a pose that *is* sent must carry every axis: the ``Required*`` variants exist so the generated client cannot zero-fill one on its way out (CYB-3809).
     """ # noqa: E501
-    position: Optional[Vector3Schema] = None
-    rotation: Optional[QuaternionSchema] = None
+    position: Optional[RequiredVector3Schema] = None
+    rotation: Optional[RequiredQuaternionSchema] = None
     __properties: ClassVar[List[str]] = ["position", "rotation"]
 
     model_config = ConfigDict(
@@ -100,8 +100,8 @@ class EnvironmentWaypointPositionUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "position": Vector3Schema.from_dict(obj["position"]) if obj.get("position") is not None else None,
-            "rotation": QuaternionSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None
+            "position": RequiredVector3Schema.from_dict(obj["position"]) if obj.get("position") is not None else None,
+            "rotation": RequiredQuaternionSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None
         })
         return _obj
 

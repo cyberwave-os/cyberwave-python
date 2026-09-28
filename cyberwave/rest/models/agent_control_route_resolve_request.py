@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.agent_saved_control_action_reference import AgentSavedControlActionReference
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,6 +29,7 @@ class AgentControlRouteResolveRequest(BaseModel):
     Normalize a route id plus user inputs into a plan.  \"Resolve\" here means deterministic backend normalization of a user-facing route and small input dict into the canonical Control Assistant action contract. ``prompt_motion_mlmodel_uuid`` is a user override; backend defaults apply when omitted.
     """ # noqa: E501
     route_id: StrictStr
+    saved_action: Optional[AgentSavedControlActionReference] = None
     inputs: Optional[Dict[str, Any]] = None
     summary: Optional[StrictStr] = 'Resolved control route.'
     target_twin_uuid: Optional[StrictStr] = None
@@ -39,7 +41,7 @@ class AgentControlRouteResolveRequest(BaseModel):
     requires_confirmation: Optional[StrictBool] = None
     current_joint_states: Optional[Dict[str, Any]] = None
     current_sensor_states: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["route_id", "inputs", "summary", "target_twin_uuid", "twin_uuid", "mode", "simulation_backend", "perception_evidence", "prompt_motion_mlmodel_uuid", "requires_confirmation", "current_joint_states", "current_sensor_states"]
+    __properties: ClassVar[List[str]] = ["route_id", "saved_action", "inputs", "summary", "target_twin_uuid", "twin_uuid", "mode", "simulation_backend", "perception_evidence", "prompt_motion_mlmodel_uuid", "requires_confirmation", "current_joint_states", "current_sensor_states"]
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -90,6 +92,14 @@ class AgentControlRouteResolveRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of saved_action
+        if self.saved_action:
+            _dict['saved_action'] = self.saved_action.to_dict()
+        # set to None if saved_action (nullable) is None
+        # and model_fields_set contains the field
+        if self.saved_action is None and "saved_action" in self.model_fields_set:
+            _dict['saved_action'] = None
+
         # set to None if target_twin_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.target_twin_uuid is None and "target_twin_uuid" in self.model_fields_set:
@@ -143,6 +153,7 @@ class AgentControlRouteResolveRequest(BaseModel):
 
         _obj = cls.model_validate({
             "route_id": obj.get("route_id"),
+            "saved_action": AgentSavedControlActionReference.from_dict(obj["saved_action"]) if obj.get("saved_action") is not None else None,
             "inputs": obj.get("inputs"),
             "summary": obj.get("summary") if obj.get("summary") is not None else 'Resolved control route.',
             "target_twin_uuid": obj.get("target_twin_uuid"),

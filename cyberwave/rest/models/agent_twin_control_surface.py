@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.agent_bound_control_capability_schema import AgentBoundControlCapabilitySchema
 from cyberwave.rest.models.agent_control_capability_details_schema import AgentControlCapabilityDetailsSchema
 from cyberwave.rest.models.agent_twin_control import AgentTwinControl
 from cyberwave.rest.models.agent_twin_control_route import AgentTwinControlRoute
@@ -30,6 +31,7 @@ class AgentTwinControlSurface(BaseModel):
     """
     Metadata-derived controls exposed by one twin.
     """ # noqa: E501
+    runtimes: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
     twin_uuid: StrictStr
     twin_name: StrictStr
     asset_uuid: Optional[StrictStr] = None
@@ -38,8 +40,9 @@ class AgentTwinControlSurface(BaseModel):
     capabilities: Optional[List[StrictStr]] = None
     capability_details: Optional[AgentControlCapabilityDetailsSchema] = None
     controls: Optional[List[AgentTwinControl]] = None
+    control_capabilities: Optional[List[AgentBoundControlCapabilitySchema]] = None
     routes: Optional[List[AgentTwinControlRoute]] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "twin_name", "asset_uuid", "asset_name", "control_status_label", "capabilities", "capability_details", "controls", "routes"]
+    __properties: ClassVar[List[str]] = ["runtimes", "twin_uuid", "twin_name", "asset_uuid", "asset_name", "control_status_label", "capabilities", "capability_details", "controls", "control_capabilities", "routes"]
 
     @field_validator('capabilities')
     def capabilities_validate_enum(cls, value):
@@ -101,6 +104,13 @@ class AgentTwinControlSurface(BaseModel):
                 if _item_controls:
                     _items.append(_item_controls.to_dict())
             _dict['controls'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in control_capabilities (list)
+        _items = []
+        if self.control_capabilities:
+            for _item_control_capabilities in self.control_capabilities:
+                if _item_control_capabilities:
+                    _items.append(_item_control_capabilities.to_dict())
+            _dict['control_capabilities'] = _items
         # override the default output from pydantic by calling `to_dict()` of each item in routes (list)
         _items = []
         if self.routes:
@@ -135,6 +145,7 @@ class AgentTwinControlSurface(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "runtimes": obj.get("runtimes"),
             "twin_uuid": obj.get("twin_uuid"),
             "twin_name": obj.get("twin_name"),
             "asset_uuid": obj.get("asset_uuid"),
@@ -143,6 +154,7 @@ class AgentTwinControlSurface(BaseModel):
             "capabilities": obj.get("capabilities"),
             "capability_details": AgentControlCapabilityDetailsSchema.from_dict(obj["capability_details"]) if obj.get("capability_details") is not None else None,
             "controls": [AgentTwinControl.from_dict(_item) for _item in obj["controls"]] if obj.get("controls") is not None else None,
+            "control_capabilities": [AgentBoundControlCapabilitySchema.from_dict(_item) for _item in obj["control_capabilities"]] if obj.get("control_capabilities") is not None else None,
             "routes": [AgentTwinControlRoute.from_dict(_item) for _item in obj["routes"]] if obj.get("routes") is not None else None
         })
         return _obj

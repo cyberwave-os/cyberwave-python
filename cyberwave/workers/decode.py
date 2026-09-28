@@ -80,7 +80,11 @@ def _decode_payload(header: Any, payload: bytes) -> Any:
     Numpy arrays are returned as read-only views backed by the wire
     buffer.  Hooks that need to mutate the array should call ``.copy()``.
     """
-    from cyberwave.data.header import CONTENT_TYPE_JSON, CONTENT_TYPE_NUMPY
+    from cyberwave.data.header import (
+        CONTENT_TYPE_BYTES,
+        CONTENT_TYPE_JSON,
+        CONTENT_TYPE_NUMPY,
+    )
 
     if header.content_type == CONTENT_TYPE_NUMPY:
         if header.shape is None or header.dtype is None:
@@ -92,6 +96,11 @@ def _decode_payload(header: Any, payload: bytes) -> Any:
         import json
 
         return json.loads(payload)
+    if (
+        header.content_type == CONTENT_TYPE_BYTES
+        and (header.metadata or {}).get("format") == "jpeg"
+    ):
+        return _jpeg_to_ndarray(payload)
     return payload
 
 

@@ -150,6 +150,32 @@ def test_publish_flat_colored_cloud_roundtrips_without_guessing(
     assert not any("point_stride" in r.message for r in caplog.records)
 
 
+@pytest.mark.parametrize(
+    "source_type,expected", [(None, "edge"), ("edge", "edge"), ("sim", "sim")]
+)
+def test_depth_and_cloud_preserve_runtime_source(
+    publishing_client, source_type, expected
+):
+    publishing_client.source_type = source_type
+    publishing_client.publish_depth_frame("twin-uuid", {"width": 2, "height": 1}, 123.0)
+    publishing_client.publish_pointcloud("twin-uuid", np.ones((2, 3)), 123.0)
+    for _, message in publishing_client.published:
+        assert message["source_type"] == expected
+        assert message["timestamp"] == 123.0
+    assert publishing_client.published[-1][1]["source_subtype"] == expected
+
+
+def test_publish_preserves_capture_time_and_optional_sensor(publishing_client) -> None:
+    publishing_client.publish_pointcloud(
+        "twin-uuid", np.ones((2, 3)), timestamp=123.25, sensor_id="front_camera"
+    )
+    message = publishing_client.published[-1][1]
+    assert message["timestamp"] == 123.25
+    assert message["sensor_id"] == "front_camera"
+    publishing_client.publish_pointcloud("twin-uuid", np.ones((2, 3)))
+    assert "sensor_id" not in publishing_client.published[-1][1]
+
+
 def test_publish_xyz_cloud_declares_stride3(publishing_client, caplog) -> None:
     """A stride-3 cloud inside the unit cube is the documented worst case for the
     heuristic (see above) — declaring the stride is what makes it survive."""
@@ -177,6 +203,22 @@ def test_publish_flat_cloud_honours_explicit_stride3(publishing_client) -> None:
     _topic, message = publishing_client.published[-1]
     assert message["point_stride"] == 3
     assert message["rows"] == 2
+
+
+def test_publish_capture_pose_does_not_transform_legacy_optical_coordinates(publishing_client):
+    cloud = np.array([[1, 2, 3]], dtype=np.float32)
+    pose = {"position": [10, 20, 30], "quaternion": [1, 0, 0, 0], "frame_id": "world"}
+    publishing_client.publish_pointcloud("twin-uuid", cloud, timestamp=123.5, camera_pose=pose)
+    _, message = publishing_client.published[-1]
+    assert message["camera_pose"] == pose and message["timestamp"] == 123.5
+    np.testing.assert_array_equal(_decode_pointcloud(message), cloud)
+
+
+@pytest.mark.parametrize("timestamp", [None, False, 0, float("nan")])
+def test_publish_pose_without_capture_time_is_rejected(publishing_client, timestamp):
+    with pytest.raises(ValueError, match="capture timestamp"):
+        publishing_client.publish_pointcloud("twin", np.zeros((1, 3)), timestamp=timestamp, camera_pose={})
+    assert not publishing_client.published
 
 
 @pytest.mark.parametrize(

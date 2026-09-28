@@ -21,6 +21,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.io_schema_schema import IOSchemaSchema
+from cyberwave.rest.models.model_task_contract_schema import ModelTaskContractSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -34,7 +35,7 @@ class MLModelSchema(BaseModel):
     description: StrictStr
     slug: Optional[StrictStr] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: StrictStr
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
     workspace_uuid: StrictStr
@@ -64,6 +65,7 @@ class MLModelSchema(BaseModel):
     output_family: Optional[StrictStr] = None
     allowed_structured_tasks: Optional[List[StrictStr]] = None
     execution_surfaces: Optional[List[StrictStr]] = None
+    inference_issue: Optional[StrictStr] = None
     sdk_load_id: Optional[StrictStr] = None
     edge_catalog_id: Optional[StrictStr] = None
     edge_runtime: Optional[StrictStr] = None
@@ -74,7 +76,8 @@ class MLModelSchema(BaseModel):
     credential_auth_type: Optional[StrictStr] = None
     credential_header_name: Optional[StrictStr] = None
     io_schema: Optional[IOSchemaSchema] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs", "has_credential", "credential_auth_type", "credential_header_name", "io_schema"]
+    task_contracts: Optional[List[ModelTaskContractSchema]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "inference_issue", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs", "has_credential", "credential_auth_type", "credential_header_name", "io_schema", "task_contracts"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -118,6 +121,13 @@ class MLModelSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of io_schema
         if self.io_schema:
             _dict['io_schema'] = self.io_schema.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each item in task_contracts (list)
+        _items = []
+        if self.task_contracts:
+            for _item_task_contracts in self.task_contracts:
+                if _item_task_contracts:
+                    _items.append(_item_task_contracts.to_dict())
+            _dict['task_contracts'] = _items
         # set to None if slug (nullable) is None
         # and model_fields_set contains the field
         if self.slug is None and "slug" in self.model_fields_set:
@@ -177,6 +187,11 @@ class MLModelSchema(BaseModel):
         # and model_fields_set contains the field
         if self.output_family is None and "output_family" in self.model_fields_set:
             _dict['output_family'] = None
+
+        # set to None if inference_issue (nullable) is None
+        # and model_fields_set contains the field
+        if self.inference_issue is None and "inference_issue" in self.model_fields_set:
+            _dict['inference_issue'] = None
 
         # set to None if sdk_load_id (nullable) is None
         # and model_fields_set contains the field
@@ -260,6 +275,7 @@ class MLModelSchema(BaseModel):
             "output_family": obj.get("output_family"),
             "allowed_structured_tasks": obj.get("allowed_structured_tasks"),
             "execution_surfaces": obj.get("execution_surfaces"),
+            "inference_issue": obj.get("inference_issue"),
             "sdk_load_id": obj.get("sdk_load_id"),
             "edge_catalog_id": obj.get("edge_catalog_id"),
             "edge_runtime": obj.get("edge_runtime"),
@@ -269,7 +285,8 @@ class MLModelSchema(BaseModel):
             "has_credential": obj.get("has_credential") if obj.get("has_credential") is not None else False,
             "credential_auth_type": obj.get("credential_auth_type"),
             "credential_header_name": obj.get("credential_header_name"),
-            "io_schema": IOSchemaSchema.from_dict(obj["io_schema"]) if obj.get("io_schema") is not None else None
+            "io_schema": IOSchemaSchema.from_dict(obj["io_schema"]) if obj.get("io_schema") is not None else None,
+            "task_contracts": [ModelTaskContractSchema.from_dict(_item) for _item in obj["task_contracts"]] if obj.get("task_contracts") is not None else None
         })
         return _obj
 

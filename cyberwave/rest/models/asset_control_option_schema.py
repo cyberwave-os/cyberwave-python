@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.control_input_compatibility_schema import ControlInputCompatibilitySchema
 from cyberwave.rest.models.controller_policy_schema import ControllerPolicySchema
 from cyberwave.rest.models.controller_ref_schema import ControllerRefSchema
 from typing import Optional, Set
@@ -36,7 +37,8 @@ class AssetControlOptionSchema(BaseModel):
     can_write: Optional[StrictBool] = False
     runtime_targets: Optional[Dict[str, Any]] = None
     controller_policy: ControllerPolicySchema
-    __properties: ClassVar[List[str]] = ["option_id", "label", "controller_ref", "controller_policy_uuid", "can_write", "runtime_targets", "controller_policy"]
+    input_compatibility: Optional[Dict[str, ControlInputCompatibilitySchema]] = None
+    __properties: ClassVar[List[str]] = ["option_id", "label", "controller_ref", "controller_policy_uuid", "can_write", "runtime_targets", "controller_policy", "input_compatibility"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -83,6 +85,18 @@ class AssetControlOptionSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of controller_policy
         if self.controller_policy:
             _dict['controller_policy'] = self.controller_policy.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each value in input_compatibility (dict)
+        _field_dict = {}
+        if self.input_compatibility:
+            for _key_input_compatibility in self.input_compatibility:
+                if self.input_compatibility[_key_input_compatibility]:
+                    _field_dict[_key_input_compatibility] = self.input_compatibility[_key_input_compatibility].to_dict()
+            _dict['input_compatibility'] = _field_dict
+        # set to None if input_compatibility (nullable) is None
+        # and model_fields_set contains the field
+        if self.input_compatibility is None and "input_compatibility" in self.model_fields_set:
+            _dict['input_compatibility'] = None
+
         return _dict
 
     @classmethod
@@ -101,7 +115,13 @@ class AssetControlOptionSchema(BaseModel):
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "can_write": obj.get("can_write") if obj.get("can_write") is not None else False,
             "runtime_targets": obj.get("runtime_targets"),
-            "controller_policy": ControllerPolicySchema.from_dict(obj["controller_policy"]) if obj.get("controller_policy") is not None else None
+            "controller_policy": ControllerPolicySchema.from_dict(obj["controller_policy"]) if obj.get("controller_policy") is not None else None,
+            "input_compatibility": dict(
+                (_k, ControlInputCompatibilitySchema.from_dict(_v))
+                for _k, _v in obj["input_compatibility"].items()
+            )
+            if obj.get("input_compatibility") is not None
+            else None
         })
         return _obj
 

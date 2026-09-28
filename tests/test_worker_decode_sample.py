@@ -66,11 +66,45 @@ def _shape_mismatch_sample() -> Sample:
     )
 
 
+@pytest.mark.parametrize("hint", ["numpy", ""])
+def test_sdk_jpeg_preserves_capture_metadata_and_decodes_like_native_camera(hint):
+    cv2 = pytest.importorskip("cv2")
+    image = np.full((24, 32, 3), (10, 40, 220), dtype=np.uint8)
+    ok, jpeg = cv2.imencode(".jpg", image)
+    assert ok
+    raw = jpeg.tobytes()
+    metadata = {"format": "jpeg", "sensor_id": "front", "source_type": "sim"}
+    sample = _sdk_sample(raw, content_type=CONTENT_TYPE_BYTES, metadata=metadata)
+
+    data, ts, meta = decode_sample(sample, content_hint=hint)
+    native, _, _ = decode_sample(Sample(channel="ch", payload=raw), content_hint=hint)
+    np.testing.assert_array_equal(data, native)
+    assert ts == 1234.5
+    assert meta.items() >= metadata.items()
+    old_data, old_ts = decode_sample_payload(sample, content_hint=hint)
+    np.testing.assert_array_equal(data, old_data)
+    assert old_ts == ts
+
+
+def test_invalid_sdk_jpeg_keeps_worker_dispatch_alive():
+    sample = _sdk_sample(
+        b"corrupt image", content_type=CONTENT_TYPE_BYTES, metadata={"format": "jpeg"}
+    )
+    data, _, metadata = decode_sample(sample, content_hint="numpy")
+    assert isinstance(data, bytes)
+    assert metadata["format"] == "jpeg"
+
+
+def test_undeclared_jpeg_bytes_keep_their_original_contract():
+    sample = _sdk_sample(b"\xff\xd8bytes", content_type=CONTENT_TYPE_BYTES)
+    data, ts, _ = decode_sample(sample, content_hint="numpy")
+    assert data == b"\xff\xd8bytes"
+    assert ts == 1234.5
+
+
 def _cases() -> list[tuple[str, Sample, str]]:
     """(name, sample, content_hint) covering every wire format the loop sees."""
-    numpy_no_shape = _sdk_sample(
-        b"\x01\x02\x03\x04", content_type=CONTENT_TYPE_NUMPY
-    )
+    numpy_no_shape = _sdk_sample(b"\x01\x02\x03\x04", content_type=CONTENT_TYPE_NUMPY)
     return [
         ("sdk numpy frame, hinted", _frame_sample(), "numpy"),
         ("sdk numpy frame, unhinted", _frame_sample(), ""),
@@ -190,6 +224,7 @@ def test_resize_failure_falls_back_instead_of_raising(monkeypatch):
     perfectly well-formed arrays (2-D bool/int8/uint32/int64), so this is
     reachable without any malformed data on the wire.
     """
+
     def boom(_data):
         raise RuntimeError("cv2.resize rejected this array")
 

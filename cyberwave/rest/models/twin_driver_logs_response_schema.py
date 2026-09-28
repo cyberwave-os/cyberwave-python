@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.twin_driver_log_schema import TwinDriverLogSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -26,10 +26,10 @@ from pydantic_core import to_jsonable_python
 
 class TwinDriverLogsResponseSchema(BaseModel):
     """
-    Paginated response for twin driver logs.
+    Paginated driver-log response, shared by both read paths.  ``total`` is ``None`` when the caller passed ``include_total=false``: the count is a second pass over the window on the busiest table in the schema, so a caller that only tails the newest rows can opt out of paying for it and read ``has_more`` instead.
     """ # noqa: E501
     items: List[TwinDriverLogSchema]
-    total: StrictInt
+    total: Optional[StrictInt] = None
     limit: StrictInt
     offset: StrictInt
     has_more: StrictBool
@@ -81,6 +81,11 @@ class TwinDriverLogsResponseSchema(BaseModel):
                 if _item_items:
                     _items.append(_item_items.to_dict())
             _dict['items'] = _items
+        # set to None if total (nullable) is None
+        # and model_fields_set contains the field
+        if self.total is None and "total" in self.model_fields_set:
+            _dict['total'] = None
+
         return _dict
 
     @classmethod

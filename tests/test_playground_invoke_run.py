@@ -144,3 +144,79 @@ def test_serializes_a_schema_without_to_dict() -> None:
     )
 
     assert transport.serialize_kwargs["body"] == {"prompt": "hi"}
+
+
+def test_typed_run_uses_explicit_route_revision_and_synchronous_response():
+    transport = _FakeTransport()
+    contract = {"semantics_version": 1, "task": "detect_points"}
+    revision = "2026-09-13T10:00:00Z"
+    invoke_mlmodel_run(
+        transport,
+        uuid=_UUID,
+        schema=_Schema(),
+        task_contract=contract,
+        expected_model_updated_at=revision,
+    )
+    assert (
+        transport.serialize_kwargs["resource_path"]
+        == "/api/v1/mlmodels/{uuid}/run-task"
+    )
+    assert transport.serialize_kwargs["body"] == {
+        "prompt": "hello",
+        "task_contract": contract,
+        "expected_model_updated_at": revision,
+    }
+    assert transport.serialize_kwargs["auth_settings"]
+    assert transport.deserialize_kwargs["response_types_map"] == {
+        "200": "MLModelRunResultSchema"
+    }
+
+
+def test_typed_run_old_server_error_never_retries_untyped():
+    import pytest
+
+    class OldServer(_FakeTransport):
+        def call_api(self, *args):
+            raise RuntimeError("404: no task run endpoint")
+
+    transport = OldServer()
+    with pytest.raises(RuntimeError, match="404"):
+        invoke_mlmodel_run(
+            transport,
+            uuid=_UUID,
+            schema=_Schema(),
+            task_contract={"task": "detect_points"},
+            expected_model_updated_at="2026-09-13T10:00:00Z",
+        )
+    assert transport.serialize_kwargs["resource_path"].endswith("/run-task")
+
+
+def test_partial_task_configuration_rejected_before_network():
+    import pytest
+
+    for kwargs in (
+        {"task_contract": {}},
+        {"expected_model_updated_at": "2026-09-13T10:00:00Z"},
+    ):
+        transport = _FakeTransport()
+        with pytest.raises(ValueError, match="both"):
+            invoke_mlmodel_run(transport, uuid=_UUID, schema=_Schema(), **kwargs)
+        assert transport.serialize_kwargs == {}
+
+
+def test_handle_rejects_conflicting_task_or_empty_revision_before_model_lookup():
+    import pytest
+    from cyberwave.models.playground import PlaygroundHandle
+
+    handle = PlaygroundHandle(_UUID, SimpleNamespace())
+    for kwargs in (
+        {"task_contract": {"task": "detect_points"}, "expected_model_updated_at": ""},
+        {"task_contract": {}, "expected_model_updated_at": "2026-09-13T10:00:00Z"},
+        {
+            "task_contract": {"task": "detect_points"},
+            "expected_model_updated_at": "2026-09-13T10:00:00Z",
+            "structured_task": "detect_boxes",
+        },
+    ):
+        with pytest.raises(ValueError):
+            handle.run(prompt="cup", **kwargs)

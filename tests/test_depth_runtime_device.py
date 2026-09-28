@@ -11,6 +11,7 @@ without torch installed.
 from __future__ import annotations
 
 import types
+import sys
 from typing import Any
 
 import pytest
@@ -57,6 +58,33 @@ def _fake_torch(*, cuda_available: bool = True) -> Any:
         cuda=types.SimpleNamespace(is_available=lambda: cuda_available),
         device=device,
     )
+
+
+@pytest.mark.parametrize("has_torch", [True, False])
+def test_da2_resolves_installed_dependency_outside_docker(
+    monkeypatch, tmp_path, has_torch
+):
+    from cyberwave.models.runtimes import get_runtime
+    from cyberwave.models.runtimes import depth_anything_v2_rt as runtime
+
+    monkeypatch.setattr(
+        runtime, "DEFAULT_REPOSITORY_PATH", str(tmp_path / "missing-vendor")
+    )
+    monkeypatch.setitem(
+        sys.modules, "torch", types.ModuleType("torch") if has_torch else None
+    )
+    package = tmp_path / "video_depth_anything"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    if has_torch:
+        assert isinstance(
+            get_runtime("depth_anything_v2"), runtime.DepthAnythingV2Runtime
+        )
+    else:
+        with pytest.raises(ImportError, match="dependencies"):
+            get_runtime("depth_anything_v2")
 
 
 @DEVICE_RESOLVERS

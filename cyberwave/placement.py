@@ -45,6 +45,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from typing import Sequence, Tuple
+from ._geometry import core as _geometry_core
 
 Vec3 = Tuple[float, float, float]
 Quat = Tuple[float, float, float, float]  # (x, y, z, w) — matches SDK convention
@@ -142,19 +143,14 @@ def _as_quat(value: Sequence[float] | None) -> Quat:
 def _quat_rotate(q: Quat, v: Vec3) -> Vec3:
     """Rotate vector ``v`` by quaternion ``q`` (xyzw order).
 
-    Uses the standard ``v + 2*q_vec \u00d7 (q_vec \u00d7 v + q_w * v)`` formulation,
-    which is numerically stable and avoids constructing a 3x3 matrix.
+    ``rotate_unit`` rather than ``rotate``: every caller here passes a
+    quaternion that ``_as_quat`` has already normalized and validated.
     """
-    qx, qy, qz, qw = q
-    vx, vy, vz = v
-    tx = 2.0 * (qy * vz - qz * vy)
-    ty = 2.0 * (qz * vx - qx * vz)
-    tz = 2.0 * (qx * vy - qy * vx)
-    return (
-        vx + qw * tx + (qy * tz - qz * ty),
-        vy + qw * ty + (qz * tx - qx * tz),
-        vz + qw * tz + (qx * ty - qy * tx),
+    geometry = _geometry_core()
+    rotated = geometry.quat.rotate_unit(
+        geometry.Quaternion.from_xyzw(q), geometry.Vector3(v[0], v[1], v[2])
     )
+    return (rotated.x, rotated.y, rotated.z)
 
 
 def _bounds_local_center_and_size(bounds: Bounds) -> tuple[Vec3, Vec3]:

@@ -48,8 +48,9 @@ class TwinNavigationCommandSchema(BaseModel):
     source_type: Optional[StrictStr] = None
     constraints: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
+    planner: Optional[StrictStr] = None
     skip_nav_anchor_transform: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "orientation", "yaw", "coordinate_frame", "geodetic_position", "waypoints", "actions", "relative_translation", "frame", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata", "skip_nav_anchor_transform"]
+    __properties: ClassVar[List[str]] = ["command", "position", "rotation", "orientation", "yaw", "coordinate_frame", "geodetic_position", "waypoints", "actions", "relative_translation", "frame", "controller_policy_uuid", "reference_frame", "environment_uuid", "source_type", "constraints", "metadata", "planner", "skip_nav_anchor_transform"]
 
     @field_validator('command')
     def command_validate_enum(cls, value):
@@ -197,6 +198,11 @@ class TwinNavigationCommandSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if planner (nullable) is None
+        # and model_fields_set contains the field
+        if self.planner is None and "planner" in self.model_fields_set:
+            _dict['planner'] = None
+
         return _dict
 
     @classmethod
@@ -226,6 +232,7 @@ class TwinNavigationCommandSchema(BaseModel):
             "source_type": obj.get("source_type"),
             "constraints": obj.get("constraints"),
             "metadata": obj.get("metadata"),
+            "planner": obj.get("planner"),
             "skip_nav_anchor_transform": obj.get("skip_nav_anchor_transform") if obj.get("skip_nav_anchor_transform") is not None else False
         })
         return _obj

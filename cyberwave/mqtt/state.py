@@ -52,7 +52,11 @@ def attach_topic_listener(
             on_payload(payload)
 
     no_local = "/joint/" in topic and topic.endswith("/update")
-    mqtt_client_for(twin).subscribe(topic, _callback, no_local=no_local)
+    # Named handles can share a twin topic. The default MQTT subscriber key
+    # replaces the previous handler; each independently cached stream owns one.
+    mqtt_client_for(twin).subscribe(
+        topic, _callback, no_local=no_local, subscriber_key=on_payload
+    )
     attached_topics.add(topic)
 
 

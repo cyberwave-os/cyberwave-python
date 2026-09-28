@@ -18,6 +18,18 @@ except ImportError:
 
 
 class TestBackendConfig:
+    def test_session_mode_is_opt_in_and_explicit_config_wins(self, monkeypatch):
+        monkeypatch.delenv("ZENOH_MODE", raising=False)
+        assert BackendConfig().zenoh_mode == ""
+        monkeypatch.setenv("ZENOH_MODE", " client ")
+        assert BackendConfig().zenoh_mode == "client"
+        assert BackendConfig(zenoh_mode="peer").zenoh_mode == "peer"
+
+    def test_invalid_session_mode_fails_before_opening_transport(self, monkeypatch):
+        monkeypatch.setenv("ZENOH_MODE", "cleint")
+        with pytest.raises(BackendConfigError, match="ZENOH_MODE"):
+            BackendConfig()
+
     def test_default_backend_is_zenoh(self):
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("CYBERWAVE_DATA_BACKEND", None)
@@ -130,6 +142,12 @@ class TestShmConfig:
 
 
 class TestGetBackendFactory:
+    @pytest.mark.parametrize("mode", ["", "peer", "client"])
+    def test_session_mode_reaches_the_shared_backend(self, mode):
+        with patch("cyberwave.data.zenoh_backend.ZenohBackend") as backend:
+            get_backend(BackendConfig(zenoh_mode=mode))
+        assert backend.call_args.kwargs["mode"] == (mode or None)
+
     def test_filesystem_backend_created(self, tmp_path):
         cfg = BackendConfig(
             backend="filesystem",
@@ -169,3 +187,22 @@ class TestGetBackendFactory:
                 get_backend(cfg)
         finally:
             zenoh_backend._has_zenoh = orig
+
+
+@pytest.mark.parametrize("mode", ["router", "cleint"])
+@pytest.mark.parametrize(
+    "backend,publish_mode",
+    [
+        ("filesystem", "dual"),
+        ("zenoh", "mqtt_only"),
+    ],
+)
+def test_unused_zenoh_mode_does_not_disable_other_transports(
+    monkeypatch, mode, backend, publish_mode
+):
+    monkeypatch.setenv("ZENOH_MODE", mode)
+    monkeypatch.setenv("CYBERWAVE_DATA_BACKEND", backend)
+    monkeypatch.setenv("CYBERWAVE_PUBLISH_MODE", publish_mode)
+    config = BackendConfig()
+    assert config.backend == backend
+    assert config.publish_mode == publish_mode

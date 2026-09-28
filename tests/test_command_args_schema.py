@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from cyberwave.driver import CommandArg, CommandArgs
+from cyberwave.driver import CallbackGroup, CommandArg, CommandArgs, TopicSpec
+from cyberwave.driver.interface.registry import DriverInterfaceRegistry
+from cyberwave.manifest.driver_config import command_args
 
 
 def test_command_args_carries_arg_declarations() -> None:
@@ -23,14 +25,11 @@ def test_command_args_carries_arg_declarations() -> None:
 
 def test_command_args_defaults_to_empty_tuple() -> None:
     assert CommandArgs(name="grab").args == ()
+    assert CommandArgs(name="grab").required_any_of is None
 
 
 def test_command_args_description_defaults_to_empty_string() -> None:
     assert CommandArgs(name="grab").description == ""
-
-
-from cyberwave.driver import CallbackGroup, TopicSpec
-from cyberwave.driver.interface.registry import DriverInterfaceRegistry
 
 
 def _command_topic() -> TopicSpec:
@@ -57,7 +56,25 @@ def test_cw_driver_emits_command_args() -> None:
     assert entry["args"] == [{"name": "forward", "default": 0.0, "unit": "m"}]
 
 
-from cyberwave.manifest.driver_config import command_args
+def test_cw_driver_preserves_alternative_argument_contract_without_defaults() -> None:
+    reg = DriverInterfaceRegistry()
+    reg.add_listener(
+        _command_topic(),
+        CallbackGroup(callback=lambda payload: None),
+        command=CommandArgs(
+            "lights",
+            args=(CommandArg("pwm", type="number"), CommandArg("io4", type="number")),
+            required_any_of=("pwm", "io4"),
+        ),
+    )
+    entry = reg.to_cw_driver_dict(registry_id="waveshare/ugv-beast")["mqtt"][
+        "commands"
+    ]["supported"][0]
+    assert entry == {
+        "name": "lights",
+        "args": [{"name": "pwm", "type": "number"}, {"name": "io4", "type": "number"}],
+        "required_any_of": ["pwm", "io4"],
+    }
 
 
 def test_command_args_reads_specs_args() -> None:

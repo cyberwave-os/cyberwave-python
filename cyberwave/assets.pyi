@@ -2888,6 +2888,40 @@ class RobotiqepickTwin(Twin):
     """
     pass
 
+class ParrotanafiAiTwin(Twin):
+    """
+    Digital twin for ANAFI Ai
+    Registry ID: parrot/anafi-ai
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class CyberwaveDroneKitsrainShelterDockForParrotAnafiAiPrototypeTwin(Twin):
+    """
+    Digital twin for Rain-Shelter Dock for Parrot ANAFI Ai - Prototype
+    Registry ID: cyberwave-drone-kits/rain-shelter-dock-for-parrot-anafi-ai-prototype
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class CyberwaveopenCartonBoxTwin(Twin):
+    """
+    Digital twin for Open Carton Box
+    Registry ID: cyberwave/open-carton-box
+    """
+    pass
+
+class SappenguinPlushTwin(Twin):
+    """
+    Digital twin for SAP Penguin Plush
+    Registry ID: sap/penguin-plush
+    """
+    pass
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -3147,4 +3181,8 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "mujoco/fruit-fly-flybody": MujocofruitFlyFlybodyTwin,
     "pollen/microduck": PollenmicroduckTwin,
     "robotiq/epick": RobotiqepickTwin,
+    "parrot/anafi-ai": ParrotanafiAiTwin,
+    "cyberwave-drone-kits/rain-shelter-dock-for-parrot-anafi-ai-prototype": CyberwaveDroneKitsrainShelterDockForParrotAnafiAiPrototypeTwin,
+    "cyberwave/open-carton-box": CyberwaveopenCartonBoxTwin,
+    "sap/penguin-plush": SappenguinPlushTwin,
 }

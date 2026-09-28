@@ -8,7 +8,7 @@ from the mqtt module to work with the CyberwaveConfig object used by the main cl
 import logging
 from typing import Callable, Optional, Dict, Any
 
-from .config import CyberwaveConfig, DEFAULT_MQTT_PORT
+from .config import CyberwaveConfig, DEFAULT_MQTT_PORT, DEFAULT_MQTT_USERNAME
 from .mqtt import CyberwaveMQTTClient as BaseMQTTClient
 from .mqtt import TELEMETRY_CUT_SENDER, TELEMETRY_CUT_SOURCE_SUBTYPE, _UNSET
 
@@ -41,12 +41,15 @@ class CyberwaveMQTTClient:
         # Determine broker, port, username, and API key from config.
         mqtt_broker = config.mqtt_host or "mqtt.cyberwave.com"
         mqtt_port = config.mqtt_port or DEFAULT_MQTT_PORT
-        mqtt_username = config.mqtt_username or "mqttcyb"
+        mqtt_username = config.mqtt_username or DEFAULT_MQTT_USERNAME
         api_key = config.api_key
         # Explicit MQTT password (ctor arg or CYBERWAVE_MQTT_PASSWORD) wins over API key
         # so CI can use legacy broker credentials while REST keeps the API token.
-        effective_mqtt_password = mqtt_password or config.mqtt_password or api_key
-        if not effective_mqtt_password:
+        # Forwarded only when genuinely explicit: the base client reads a password
+        # here as legacy credentials unless it is an API token, in which case it
+        # still derives the username from it.
+        explicit_mqtt_password = mqtt_password or config.mqtt_password
+        if not (explicit_mqtt_password or api_key):
             raise ValueError(
                 "API key or mqtt_password is required. "
                 "Set CYBERWAVE_API_KEY or pass mqtt_password explicitly"
@@ -64,7 +67,7 @@ class CyberwaveMQTTClient:
             mqtt_port=mqtt_port,
             mqtt_username=mqtt_username,
             api_key=api_key,
-            mqtt_password=effective_mqtt_password,
+            mqtt_password=explicit_mqtt_password,
             use_tls=config.mqtt_use_tls,
             tls_ca_cert=config.mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,
@@ -460,10 +463,17 @@ class CyberwaveMQTTClient:
         timestamp: Optional[float] = None,
         *,
         stride: int = 6,
+        sensor_id: str | None = None,
+        camera_pose: dict[str, Any] | None = None,
     ):
         """Publish a point cloud frame via MQTT."""
         return self._client.publish_pointcloud(
-            twin_uuid, point_cloud_data, timestamp, stride=stride
+            twin_uuid,
+            point_cloud_data,
+            timestamp,
+            stride=stride,
+            **({"sensor_id": sensor_id} if sensor_id is not None else {}),
+            **({"camera_pose": camera_pose} if camera_pose is not None else {}),
         )
 
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):
@@ -543,9 +553,11 @@ class CyberwaveMQTTClient:
         """
         return self._client.unsubscribe(topic, subscriber_key)
 
-    def publish(self, topic: str, message: Dict[str, Any], qos: int = 0):
+    def publish(self, topic: str, message: Dict[str, Any], qos: int = 0) -> bool:
         """
         Publish a message to any MQTT topic.
+
+        Returns local client acceptance, not broker or robot acknowledgement.
 
         Args:
             topic: MQTT topic

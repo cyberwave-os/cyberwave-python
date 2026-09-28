@@ -95,6 +95,28 @@ def test_update_joints_state_measured_uses_positions(mqtt_client):
     assert "target_positions" not in message
 
 
+def test_plant_report_preserves_commands_separately_from_measured_positions(mqtt_client):
+    mqtt_client._handle_twin_update_with_telemetry = MagicMock()
+    mqtt_client.publish = MagicMock()
+    mqtt_client.update_joints_state(
+        "robot", {"elbow": .009}, source_type="sim",
+        applied_position_targets={"elbow": 0.0}, stream_instance_id="simulation-a",
+    )
+    _, message = mqtt_client.publish.call_args.args[:2]
+    assert message["positions"] == {"elbow": .009}
+    assert message["applied_position_targets"] == {"elbow": 0.0}
+    assert "target_positions" not in message
+
+
+def test_command_cannot_claim_applied_position_evidence(mqtt_client):
+    mqtt_client.publish = MagicMock()
+    with pytest.raises(ValueError, match="measured-state"):
+        mqtt_client.update_joints_state(
+            "robot", {"elbow": 1.0}, as_targets=True, applied_position_targets={"elbow": 1.0}
+        )
+    mqtt_client.publish.assert_not_called()
+
+
 def test_update_joints_state_as_targets_uses_target_fields(mqtt_client):
     mqtt_client._handle_twin_update_with_telemetry = MagicMock()
     mqtt_client.publish = MagicMock()

@@ -4,6 +4,7 @@ These are skipped when ``eclipse-zenoh`` is not installed.
 """
 
 import contextlib
+import json
 import threading
 from unittest.mock import patch
 
@@ -31,6 +32,19 @@ def backend():
 
 
 class TestZenohSession:
+    @pytest.mark.parametrize("mode", [None, "peer", "client"])
+    def test_session_mode_is_a_valid_native_zenoh_configuration(self, mode):
+        from cyberwave.data.zenoh_backend import ZenohBackend
+
+        # Inspect the native config without connecting a client to a router.
+        with patch.object(ZenohBackend, "_open_session") as session:
+            backend = ZenohBackend(mode=mode)
+        try:
+            assert json.loads(backend._build_config().get_json("mode")) == mode
+            assert session.called
+        finally:
+            backend.close()
+
     def test_session_opens(self, backend):
         assert backend._session is not None
 
@@ -139,8 +153,6 @@ class TestPeerLinkLogging:
 class TestImportError:
     def test_missing_zenoh_gives_clear_error(self):
         with patch.dict("sys.modules", {"zenoh": None}):
-            import importlib
-
             from cyberwave.data import zenoh_backend
 
             orig = zenoh_backend._has_zenoh

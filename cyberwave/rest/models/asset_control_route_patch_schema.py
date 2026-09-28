@@ -27,8 +27,9 @@ class AssetControlRoutePatchSchema(BaseModel):
     """
     AssetControlRoutePatchSchema
     """ # noqa: E501
+    expected_revision: Optional[StrictStr] = None
     option_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["option_id"]
+    __properties: ClassVar[List[str]] = ["expected_revision", "option_id"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -69,6 +70,11 @@ class AssetControlRoutePatchSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if expected_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_revision is None and "expected_revision" in self.model_fields_set:
+            _dict['expected_revision'] = None
+
         # set to None if option_id (nullable) is None
         # and model_fields_set contains the field
         if self.option_id is None and "option_id" in self.model_fields_set:
@@ -86,6 +92,7 @@ class AssetControlRoutePatchSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "expected_revision": obj.get("expected_revision"),
             "option_id": obj.get("option_id")
         })
         return _obj

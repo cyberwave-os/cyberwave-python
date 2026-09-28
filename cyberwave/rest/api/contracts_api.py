@@ -55,7 +55,7 @@ class ContractsApi:
     ) -> None:
         """Get Contract Schema
 
-        Return the JSON Schema for a single contract.
+        Return the JSON Schema for a single contract.  ``contract_id`` is a single path segment, so it cannot contain ``/``; the ``..`` case is still rejected explicitly rather than left to that accident. The cache is keyed only after that check, so a malformed id cannot grow it.
 
         :param contract_id: (required)
         :type contract_id: str
@@ -122,7 +122,7 @@ class ContractsApi:
     ) -> ApiResponse[None]:
         """Get Contract Schema
 
-        Return the JSON Schema for a single contract.
+        Return the JSON Schema for a single contract.  ``contract_id`` is a single path segment, so it cannot contain ``/``; the ``..`` case is still rejected explicitly rather than left to that accident. The cache is keyed only after that check, so a malformed id cannot grow it.
 
         :param contract_id: (required)
         :type contract_id: str
@@ -189,7 +189,7 @@ class ContractsApi:
     ) -> RESTResponseType:
         """Get Contract Schema
 
-        Return the JSON Schema for a single contract.
+        Return the JSON Schema for a single contract.  ``contract_id`` is a single path segment, so it cannot contain ``/``; the ``..`` case is still rejected explicitly rather than left to that accident. The cache is keyed only after that check, so a malformed id cannot grow it.
 
         :param contract_id: (required)
         :type contract_id: str
@@ -307,7 +307,7 @@ class ContractsApi:
     ) -> List[Optional[str]]:
         """List Contracts
 
-        Return the identifiers of all available contracts.
+        Return the identifiers of all available contracts.  The suffix is stripped whole: ``Path.stem`` drops only ``.json`` and leaves a trailing ``.schema``, which every caller then re-appends, so each listed id resolved to ``<id>.schema.schema.json`` and 404'd.
 
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -370,7 +370,7 @@ class ContractsApi:
     ) -> ApiResponse[List[Optional[str]]]:
         """List Contracts
 
-        Return the identifiers of all available contracts.
+        Return the identifiers of all available contracts.  The suffix is stripped whole: ``Path.stem`` drops only ``.json`` and leaves a trailing ``.schema``, which every caller then re-appends, so each listed id resolved to ``<id>.schema.schema.json`` and 404'd.
 
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -433,7 +433,7 @@ class ContractsApi:
     ) -> RESTResponseType:
         """List Contracts
 
-        Return the identifiers of all available contracts.
+        Return the identifiers of all available contracts.  The suffix is stripped whole: ``Path.stem`` drops only ``.json`` and leaves a trailing ``.schema``, which every caller then re-appends, so each listed id resolved to ``<id>.schema.schema.json`` and 404'd.
 
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request

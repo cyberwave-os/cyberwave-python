@@ -374,6 +374,7 @@ class BaseVideoStreamer(abc.ABC):
         self._should_reconnect = False
         self._is_running = False
         self._monitor_task: Optional[asyncio.Task] = None
+        self._sync_frame_task: Optional[asyncio.Task] = None
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Recording state
@@ -555,7 +556,9 @@ class BaseVideoStreamer(abc.ABC):
             raise
 
         logger.debug("WebRTC connection established")
-        asyncio.create_task(self._wait_and_publish_camera_sync_frame())
+        self._sync_frame_task = asyncio.create_task(
+            self._wait_and_publish_camera_sync_frame()
+        )
 
         if self.enable_health_check:
             self._start_health_check()
@@ -566,6 +569,18 @@ class BaseVideoStreamer(abc.ABC):
         IMPORTANT: Close peer connection BEFORE stopping tracks. aiortc can segfault
         if tracks are stopped before pc.close() (see aiortc/aiortc#283).
         """
+        # Drain the synchronization waiter before replacing its track or closing
+        # the event loop; otherwise it can survive Stop and observe the next run.
+        if self._sync_frame_task is not None:
+            self._sync_frame_task.cancel()
+            try:
+                await self._sync_frame_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as error:
+                logger.warning("Camera synchronization failed before stop: %s", error)
+            finally:
+                self._sync_frame_task = None
         self._stop_health_check()
 
         if self.pc:

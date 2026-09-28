@@ -37,11 +37,13 @@ class AgentClientBase:
         *,
         path_params: dict[str, str] | None = None,
         body: Any = None,
+        query_params: list[tuple[str, str]] | None = None,
     ) -> Any:
         _param = self._api_client.param_serialize(
             method=method,
             resource_path=path,
             path_params=path_params or {},
+            query_params=query_params,
             body=body,
             header_params={"Content-Type": "application/json"}
             if body is not None
@@ -115,19 +117,24 @@ class ControlAgentClient(AgentClientBase):
         except Exception as exc:
             raise CyberwaveAPIError(f"Failed to plan control action: {exc}") from exc
 
-    def surfaces(self, environment_uuid: str) -> list[dict[str, Any]]:
-        return self.list_surfaces(environment_uuid)
+    def surfaces(
+        self, environment_uuid: str, *, mode: ControlMode | None = None
+    ) -> list[dict[str, Any]]:
+        return self.list_surfaces(environment_uuid, mode=mode)
 
-    def list_surfaces(self, environment_uuid: str) -> list[dict[str, Any]]:
-        """List metadata-derived twin control surfaces for an environment."""
+    def list_surfaces(
+        self, environment_uuid: str, *, mode: ControlMode | None = None
+    ) -> list[dict[str, Any]]:
+        """List controls for the chosen mode; an omitted mode is evaluated as live."""
         if not environment_uuid:
             raise ValueError("environment_uuid is required")
 
         try:
-            payload = self._environment_call(
+            payload = self._call(
                 "GET",
                 "/api/v1/agents/environments/{environment_uuid}/control/surfaces",
-                environment_uuid,
+                path_params={"environment_uuid": environment_uuid},
+                query_params=[("mode", mode)] if mode is not None else None,
             )
             return payload if isinstance(payload, list) else []
         except Exception as exc:
@@ -156,6 +163,7 @@ class ControlAgentClient(AgentClientBase):
         *,
         mode: ControlMode = "simulation",
         simulation_backend: str | None = None,
+        saved_action: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Resolve one backend route into a plan without executing it."""
         if not environment_uuid or not route_id or not twin_uuid:
@@ -166,6 +174,8 @@ class ControlAgentClient(AgentClientBase):
             "inputs": inputs or {},
             "mode": mode,
         }
+        if saved_action is not None:
+            body["saved_action"] = saved_action
         if simulation_backend is not None:
             body["simulation_backend"] = simulation_backend
         try:
@@ -188,8 +198,9 @@ class ControlAgentClient(AgentClientBase):
         mode: ControlMode = "simulation",
         simulation_backend: str | None = None,
         source_type: str | None = None,
+        plan_id: str | None = None,
     ) -> dict[str, Any]:
-        """Dispatch one explicit action returned by plan() or resolve_route()."""
+        """Dispatch an explicit planned action; pass its plan_id for live control."""
         if not environment_uuid or not action:
             raise ValueError("environment_uuid and action are required")
         body = {"action": action, "mode": mode, "confirmed": confirmed}
@@ -199,6 +210,7 @@ class ControlAgentClient(AgentClientBase):
                 for key, value in {
                     "simulation_backend": simulation_backend,
                     "source_type": source_type,
+                    "plan_id": plan_id,
                 }.items()
                 if value is not None
             }

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing_extensions import Annotated
 from typing import Optional, Set
@@ -28,19 +28,37 @@ class AssetListQuerySchema(BaseModel):
     """
     AssetListQuerySchema
     """ # noqa: E501
+    ordering: Optional[StrictStr] = None
     limit: Optional[Annotated[int, Field(le=1000, strict=True, ge=1)]] = None
     offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None
     registry_id: Optional[StrictStr] = None
     registry_vendor: Optional[StrictStr] = None
     owned: Optional[StrictStr] = None
+    public_only: Optional[StrictBool] = False
+    exclude_owned: Optional[StrictBool] = False
     search: Optional[StrictStr] = None
     tag: Optional[StrictStr] = None
+    tags_any: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = None
+    tags_all: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = None
+    vendor: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = None
+    sensor_tags: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = None
+    capability_tags: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = None
     metadata_key: Optional[StrictStr] = None
     metadata_value: Optional[StrictStr] = None
     min_price: Optional[Union[StrictFloat, StrictInt]] = None
     max_price: Optional[Union[StrictFloat, StrictInt]] = None
     workspace_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["limit", "offset", "registry_id", "registry_vendor", "owned", "search", "tag", "metadata_key", "metadata_value", "min_price", "max_price", "workspace_uuid"]
+    __properties: ClassVar[List[str]] = ["ordering", "limit", "offset", "registry_id", "registry_vendor", "owned", "public_only", "exclude_owned", "search", "tag", "tags_any", "tags_all", "vendor", "sensor_tags", "capability_tags", "metadata_key", "metadata_value", "min_price", "max_price", "workspace_uuid"]
+
+    @field_validator('ordering')
+    def ordering_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['created_at', '-created_at', 'name', '-name', 'monthly_price', '-monthly_price']):
+            raise ValueError("must be one of enum values ('created_at', '-created_at', 'name', '-name', 'monthly_price', '-monthly_price')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +99,11 @@ class AssetListQuerySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if ordering (nullable) is None
+        # and model_fields_set contains the field
+        if self.ordering is None and "ordering" in self.model_fields_set:
+            _dict['ordering'] = None
+
         # set to None if limit (nullable) is None
         # and model_fields_set contains the field
         if self.limit is None and "limit" in self.model_fields_set:
@@ -115,6 +138,31 @@ class AssetListQuerySchema(BaseModel):
         # and model_fields_set contains the field
         if self.tag is None and "tag" in self.model_fields_set:
             _dict['tag'] = None
+
+        # set to None if tags_any (nullable) is None
+        # and model_fields_set contains the field
+        if self.tags_any is None and "tags_any" in self.model_fields_set:
+            _dict['tags_any'] = None
+
+        # set to None if tags_all (nullable) is None
+        # and model_fields_set contains the field
+        if self.tags_all is None and "tags_all" in self.model_fields_set:
+            _dict['tags_all'] = None
+
+        # set to None if vendor (nullable) is None
+        # and model_fields_set contains the field
+        if self.vendor is None and "vendor" in self.model_fields_set:
+            _dict['vendor'] = None
+
+        # set to None if sensor_tags (nullable) is None
+        # and model_fields_set contains the field
+        if self.sensor_tags is None and "sensor_tags" in self.model_fields_set:
+            _dict['sensor_tags'] = None
+
+        # set to None if capability_tags (nullable) is None
+        # and model_fields_set contains the field
+        if self.capability_tags is None and "capability_tags" in self.model_fields_set:
+            _dict['capability_tags'] = None
 
         # set to None if metadata_key (nullable) is None
         # and model_fields_set contains the field
@@ -153,13 +201,21 @@ class AssetListQuerySchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "ordering": obj.get("ordering"),
             "limit": obj.get("limit"),
             "offset": obj.get("offset"),
             "registry_id": obj.get("registry_id"),
             "registry_vendor": obj.get("registry_vendor"),
             "owned": obj.get("owned"),
+            "public_only": obj.get("public_only") if obj.get("public_only") is not None else False,
+            "exclude_owned": obj.get("exclude_owned") if obj.get("exclude_owned") is not None else False,
             "search": obj.get("search"),
             "tag": obj.get("tag"),
+            "tags_any": obj.get("tags_any"),
+            "tags_all": obj.get("tags_all"),
+            "vendor": obj.get("vendor"),
+            "sensor_tags": obj.get("sensor_tags"),
+            "capability_tags": obj.get("capability_tags"),
             "metadata_key": obj.get("metadata_key"),
             "metadata_value": obj.get("metadata_value"),
             "min_price": obj.get("min_price"),

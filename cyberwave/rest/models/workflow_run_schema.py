@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.workflow_execution_pending_reason_schema import WorkflowExecutionPendingReasonSchema
 from cyberwave.rest.models.workflow_execution_progress_schema import WorkflowExecutionProgressSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -38,7 +39,8 @@ class WorkflowRunSchema(BaseModel):
     started_at: datetime
     finished_at: Optional[datetime] = None
     progress: Optional[WorkflowExecutionProgressSchema] = None
-    __properties: ClassVar[List[str]] = ["uuid", "workflow_id", "status", "inputs", "result", "error", "started_at", "finished_at", "progress"]
+    pending_reason: Optional[WorkflowExecutionPendingReasonSchema] = None
+    __properties: ClassVar[List[str]] = ["uuid", "workflow_id", "status", "inputs", "result", "error", "started_at", "finished_at", "progress", "pending_reason"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -82,6 +84,9 @@ class WorkflowRunSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of progress
         if self.progress:
             _dict['progress'] = self.progress.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of pending_reason
+        if self.pending_reason:
+            _dict['pending_reason'] = self.pending_reason.to_dict()
         # set to None if result (nullable) is None
         # and model_fields_set contains the field
         if self.result is None and "result" in self.model_fields_set:
@@ -101,6 +106,11 @@ class WorkflowRunSchema(BaseModel):
         # and model_fields_set contains the field
         if self.progress is None and "progress" in self.model_fields_set:
             _dict['progress'] = None
+
+        # set to None if pending_reason (nullable) is None
+        # and model_fields_set contains the field
+        if self.pending_reason is None and "pending_reason" in self.model_fields_set:
+            _dict['pending_reason'] = None
 
         return _dict
 
@@ -122,7 +132,8 @@ class WorkflowRunSchema(BaseModel):
             "error": obj.get("error"),
             "started_at": obj.get("started_at"),
             "finished_at": obj.get("finished_at"),
-            "progress": WorkflowExecutionProgressSchema.from_dict(obj["progress"]) if obj.get("progress") is not None else None
+            "progress": WorkflowExecutionProgressSchema.from_dict(obj["progress"]) if obj.get("progress") is not None else None,
+            "pending_reason": WorkflowExecutionPendingReasonSchema.from_dict(obj["pending_reason"]) if obj.get("pending_reason") is not None else None
         })
         return _obj
 

@@ -28,15 +28,63 @@ def test_locomotion_contract_helpers_are_exported_from_package() -> None:
     )
 
 
+#: Where the schemas live in a monorepo checkout. They moved out of
+#: ``cyberwave-backend/src/app/contracts`` into the shared package; this test went
+#: on resolving the old path, found no directory, and skipped -- passing green for
+#: every one of the drift cases it exists to catch.
+_SCHEMAS_IN_CHECKOUT = "cyberwave-contracts/cyberwave_contracts/schemas"
+
+
+def _schemas_dir() -> Path | None:
+    """The shipped schema directory, or ``None`` when neither source is present.
+
+    Two sources, because this file runs in two places. In the monorepo the
+    checkout is authoritative, and in a standalone SDK environment the installed
+    package is the only copy. ``None`` means genuinely neither -- a standalone
+    environment that also has no contracts package -- which is the one context
+    where there is nothing to compare against.
+    """
+    try:
+        from cyberwave_contracts.manifest import SCHEMAS_DIR
+    except ImportError:
+        pass
+    else:
+        return SCHEMAS_DIR
+
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / _SCHEMAS_IN_CHECKOUT
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _schema(contract_id: str) -> dict:
+    """Load one contract schema, failing rather than skipping when it should exist.
+
+    The distinction is the whole point: absence of the *directory* means this is a
+    standalone environment and there is nothing to check, but absence of a
+    *schema* inside a directory that exists is drift, and skipping on it would
+    pass in exactly the case worth catching.
+    """
+    directory = _schemas_dir()
+    if directory is None:
+        pytest.skip(
+            "no cyberwave_contracts package and no monorepo checkout -- the "
+            "standalone SDK environment, the one context with nothing to compare "
+            f"against. In a checkout the schemas are at {_SCHEMAS_IN_CHECKOUT}."
+        )
+    path = directory / f"{contract_id}.schema.json"
+    if not path.is_file():
+        pytest.fail(
+            f"{path} is missing, but {directory} exists. The contract this SDK "
+            "copy claims to implement is gone or renamed; skipping here would "
+            "report that as success."
+        )
+    return json.loads(path.read_text())
+
+
 def test_build_locomotion_velocity_command_matches_repo_schema_required_fields() -> None:
-    schema_path = (
-        Path(__file__).resolve().parents[3]
-        / "contracts"
-        / "locomotion.velocity_command.v1.schema.json"
-    )
-    if not schema_path.exists():
-        pytest.skip("Repository contract schema is not available in this test context")
-    schema = json.loads(schema_path.read_text())
+    schema = _schema(LOCOMOTION_VELOCITY_COMMAND_CONTRACT)
     payload = build_locomotion_velocity_command(
         linear_x=0.2,
         angular_z=0.1,

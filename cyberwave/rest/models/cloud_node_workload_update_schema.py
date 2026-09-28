@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -36,7 +37,8 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
     rejection_reason: Optional[StrictStr] = None
     rejecting_instance_uuid: Optional[StrictStr] = None
     simulation_ready: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid", "simulation_ready"]
+    simulation_elapsed_s: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
+    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid", "simulation_ready", "simulation_elapsed_s"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -122,6 +124,11 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
         if self.simulation_ready is None and "simulation_ready" in self.model_fields_set:
             _dict['simulation_ready'] = None
 
+        # set to None if simulation_elapsed_s (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_elapsed_s is None and "simulation_elapsed_s" in self.model_fields_set:
+            _dict['simulation_elapsed_s'] = None
+
         return _dict
 
     @classmethod
@@ -142,7 +149,8 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
             "exit_code": obj.get("exit_code"),
             "rejection_reason": obj.get("rejection_reason"),
             "rejecting_instance_uuid": obj.get("rejecting_instance_uuid"),
-            "simulation_ready": obj.get("simulation_ready")
+            "simulation_ready": obj.get("simulation_ready"),
+            "simulation_elapsed_s": obj.get("simulation_elapsed_s")
         })
         return _obj
 

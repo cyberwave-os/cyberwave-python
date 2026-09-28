@@ -76,6 +76,30 @@ class MqttSensorStreamHandle:
     def _on_payload(
         self, stream: str, state: _StreamState, payload: dict[str, Any]
     ) -> None:
+        # A twin topic may multiplex several cameras/range sensors. Preserve
+        # untagged legacy feeds, but never update a named handle from another
+        # explicitly identified sensor's frame.
+        data = payload.get("data")
+        source_sensor = payload.get("sensor_id") or (
+            data.get("sensor_id") if isinstance(data, dict) else None
+        )
+        target_sensor = getattr(self, "sensor_id", None)
+        if source_sensor and target_sensor:
+            aliases = {str(target_sensor)}
+            for sensor in (getattr(self._twin, "capabilities", None) or {}).get(
+                "sensors", []
+            ):
+                if not isinstance(sensor, dict):
+                    continue
+                names = {
+                    name
+                    for key in ("id", "name")
+                    if isinstance(name := sensor.get(key), str) and name
+                }
+                if target_sensor in names:
+                    aliases.update(str(name) for name in names if name)
+            if str(source_sensor) not in aliases:
+                return
         try:
             value = state.decode(payload)
         except Exception:

@@ -28,6 +28,7 @@ class ControllerPolicyExecuteSchema(BaseModel):
     """
     ControllerPolicyExecuteSchema
     """ # noqa: E501
+    policy_joint_binding_uuid: Optional[Annotated[str, Field(strict=True)]] = None
     twin_uuid: StrictStr
     execution: Optional[StrictStr] = 'async'
     mode: Optional[StrictStr] = None
@@ -53,7 +54,17 @@ class ControllerPolicyExecuteSchema(BaseModel):
     server_mode: Optional[StrictBool] = False
     inference_command: Optional[Dict[str, Any]] = None
     runtime_params: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "execution", "mode", "transport", "confirm_live", "runtime_kind", "simulation_backend", "payload", "instruction", "max_steps", "device", "velocity_command", "linear_x", "linear_y", "linear_z", "angular_z", "duration_ms", "gait", "origin", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode", "inference_command", "runtime_params"]
+    __properties: ClassVar[List[str]] = ["policy_joint_binding_uuid", "twin_uuid", "execution", "mode", "transport", "confirm_live", "runtime_kind", "simulation_backend", "payload", "instruction", "max_steps", "device", "velocity_command", "linear_x", "linear_y", "linear_z", "angular_z", "duration_ms", "gait", "origin", "target_left_pos", "target_right_pos", "current_joint_states", "server_mode", "inference_command", "runtime_params"]
+
+    @field_validator('policy_joint_binding_uuid')
+    def policy_joint_binding_uuid_validate_regular_expression(cls, value):
+        """Validates the regular expression"""
+        if value is None:
+            return value
+
+        if not re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", value):
+            raise ValueError(r"must validate the regular expression /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/")
+        return value
 
     @field_validator('mode')
     def mode_validate_enum(cls, value):
@@ -154,6 +165,11 @@ class ControllerPolicyExecuteSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if policy_joint_binding_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.policy_joint_binding_uuid is None and "policy_joint_binding_uuid" in self.model_fields_set:
+            _dict['policy_joint_binding_uuid'] = None
+
         # set to None if mode (nullable) is None
         # and model_fields_set contains the field
         if self.mode is None and "mode" in self.model_fields_set:
@@ -266,6 +282,7 @@ class ControllerPolicyExecuteSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "policy_joint_binding_uuid": obj.get("policy_joint_binding_uuid"),
             "twin_uuid": obj.get("twin_uuid"),
             "execution": obj.get("execution") if obj.get("execution") is not None else 'async',
             "mode": obj.get("mode"),

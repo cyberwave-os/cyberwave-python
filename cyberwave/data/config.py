@@ -16,6 +16,7 @@ from .exceptions import BackendConfigError
 SUPPORTED_BACKENDS = ("zenoh", "filesystem")
 PUBLISH_MODES = ("dual", "zenoh_only", "mqtt_only")
 SHM_EXHAUSTION_POLICIES = ("copy", "drop")
+ZENOH_MODES = ("peer", "client")
 
 
 def _parse_bool_env(value: str | None, default: bool = False) -> bool:
@@ -97,7 +98,16 @@ class BackendConfig:
     Env: ``CYBERWAVE_PUBLISH_MODE``.
     """
 
+    zenoh_mode: str = ""
+    """Optional session mode. Env: ``ZENOH_MODE``; unset preserves peer discovery.
+
+    Use ``client`` with ``ZENOH_CONNECT`` when the participants can reach a
+    router but cannot reach each other's advertised addresses (e.g. Docker NAT).
+    """
+
     def __post_init__(self) -> None:
+        if not self.zenoh_mode:
+            self.zenoh_mode = os.environ.get("ZENOH_MODE", "").strip().lower()
         if not self.backend:
             self.backend = os.environ.get("CYBERWAVE_DATA_BACKEND", "zenoh")
 
@@ -159,6 +169,16 @@ class BackendConfig:
                 raw = "dual"
             self.publish_mode = raw
 
+        # Edge hosts share environment variables with drivers that never open
+        # Zenoh. Validate its mode only when that transport is selected.
+        if (
+            self.backend == "zenoh"
+            and self.publish_mode != "mqtt_only"
+            and self.zenoh_mode
+            and self.zenoh_mode not in ZENOH_MODES
+        ):
+            raise BackendConfigError("ZENOH_MODE must be peer or client")
+
 
 def is_zenoh_publish_enabled(config: BackendConfig | None = None) -> bool:
     """Return True when the publish mode includes a Zenoh path."""
@@ -190,6 +210,7 @@ def get_backend(config: BackendConfig | None = None) -> DataBackend:
         )
 
         return ZenohBackend(
+            mode=cfg.zenoh_mode or None,
             connect=cfg.zenoh_connect or None,
             listen=cfg.zenoh_listen or None,
             shared_memory=bool(cfg.zenoh_shared_memory),

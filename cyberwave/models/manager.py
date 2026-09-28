@@ -48,7 +48,6 @@ from cyberwave.models.runtimes import (
 )
 
 if TYPE_CHECKING:
-    from cyberwave.ml_model_lookup import MLModelMatch
     from cyberwave.models.cascade import CascadeModel
     from cyberwave.rest import MLModelSchema
 
@@ -256,56 +255,6 @@ class ModelManager:
         if filters:
             results = _apply_filter_shorthands(results, filters)
         return results
-
-    def search(
-        self,
-        query: str,
-        *,
-        deployment: str | None = None,
-        edge_compatible: bool | None = None,
-        request_timeout: float = 60.0,
-        limit: int = 20,
-    ) -> list[MLModelMatch]:
-        """Find models by case-insensitive name or external-ID substring.
-
-        Fetches the full visible catalog; ``limit`` only caps returned matches
-        and must be a positive integer. Matches include provider, workspace,
-        visibility, and slug metadata to help distinguish similar entries.
-        """
-        from cyberwave.ml_model_lookup import search_ml_models
-
-        return search_ml_models(
-            self._require_catalog().api,
-            query,
-            deployment=deployment,
-            edge_compatible=edge_compatible,
-            request_timeout=request_timeout,
-            limit=limit,
-        )
-
-    def resolve_uuid(
-        self,
-        query: str,
-        *,
-        deployment: str | None = None,
-        edge_compatible: bool | None = None,
-        request_timeout: float = 60.0,
-    ) -> str:
-        """Resolve an unambiguous external ID or name to a catalog UUID.
-
-        Prefers exact external ID, then case-insensitive exact name, then
-        substring matches. Raises MLModelLookupError on no match or ambiguity
-        at the winning priority. Fetches the full visible catalog each time.
-        """
-        from cyberwave.ml_model_lookup import resolve_ml_model_uuid
-
-        return resolve_ml_model_uuid(
-            self._require_catalog().api,
-            query,
-            deployment=deployment,
-            edge_compatible=edge_compatible,
-            request_timeout=request_timeout,
-        )
 
     def list_public(self, *, deployment: str | None = None) -> list[MLModelSchema]:
         """List public ML models (no workspace membership required)."""
@@ -1390,9 +1339,9 @@ def _device_cc_is_natively_supported(torch: Any) -> bool:
 
 
 def _cuda_is_usable() -> bool:
-    """Return True iff CUDA is present *and* cuDNN can actually run a conv2d,
-    *and* the device's compute capability has native SASS coverage in this
-    PyTorch build.
+    """Return True iff CUDA is present, cuDNN can run a conv2d *and* cuBLAS
+    can run a matmul, *and* the device's compute capability has native SASS
+    coverage in this PyTorch build.
 
     Auto-device detection used to return ``cuda:0`` whenever
     ``torch.cuda.is_available()`` was True, but on some hosts the CUDA runtime
@@ -1409,11 +1358,17 @@ def _cuda_is_usable() -> bool:
     configurations. :func:`_device_cc_is_natively_supported` catches this case
     and logs a clear warning before returning False.
 
-    This helper runs a tiny conv2d on ``cuda:0`` once per module-load; on
-    failure it logs the GPU / cuDNN / arch list and falls back to CPU so
-    workers stay up. Set ``CYBERWAVE_MODEL_DEVICE=cuda:0`` to bypass this
-    probe when you're sure CUDA is fine (e.g. the probe itself hit a
-    transient OOM).
+    cuDNN and cuBLAS also fail independently: ``cublasCreate`` allocates a
+    fresh device workspace on the first matmul, so on a memory-starved or
+    version-mismatched host convolutions keep succeeding inside memory the
+    allocator already reserved while every matmul raises
+    ``CUBLAS_STATUS_ALLOC_FAILED``.  Both libraries are therefore probed.
+
+    This helper runs a tiny conv2d and a tiny matmul on ``cuda:0`` once per
+    module-load; on failure it logs which probe failed plus the GPU / cuDNN /
+    arch list and falls back to CPU so workers stay up. Set
+    ``CYBERWAVE_MODEL_DEVICE=cuda:0`` to bypass this probe when you're sure
+    CUDA is fine (e.g. the probe itself hit a transient OOM).
     """
     global _CUDA_PROBE_CACHE
     if _CUDA_PROBE_CACHE is not None:
@@ -1433,36 +1388,52 @@ def _cuda_is_usable() -> bool:
         _CUDA_PROBE_CACHE = False
         return False
 
-    try:
-        dev = torch.device("cuda:0")
-        x = torch.zeros(1, 3, 8, 8, device=dev)
-        w = torch.zeros(1, 3, 3, 3, device=dev)
-        y = torch.nn.functional.conv2d(x, w)
-        # Force the graph to flush and a D2H copy, so asynchronous
-        # kernel-launch failures (e.g. cudaErrorNoKernelImageForDevice)
-        # surface HERE rather than at the caller's first real predict().
-        y.cpu()
-        torch.cuda.synchronize()
-    except Exception as exc:
-        name = _safe_call(lambda: torch.cuda.get_device_name(0))
-        cap = _safe_call(lambda: torch.cuda.get_device_capability(0))
-        archs = _safe_call(torch.cuda.get_arch_list)
-        cudnn_ver = _safe_call(torch.backends.cudnn.version)
-        first_line = str(exc).splitlines()[0] if str(exc) else ""
-        logger.warning(
-            "CUDA device detected (%s, compute capability %s) but cuDNN "
-            "cannot execute a conv2d probe — falling back to CPU. "
-            "torch cuDNN=%s, build archs=%s. Error: %s: %s. "
-            "Set CYBERWAVE_MODEL_DEVICE=cuda:0 to bypass this probe.",
-            name,
-            cap,
-            cudnn_ver,
-            archs,
-            type(exc).__name__,
-            first_line,
-        )
-        _CUDA_PROBE_CACHE = False
-        return False
+    probes: tuple[tuple[str, Callable[[], Any]], ...] = (
+        (
+            "cuDNN conv2d",
+            lambda: torch.nn.functional.conv2d(
+                torch.zeros(1, 3, 8, 8, device="cuda:0"),
+                torch.zeros(1, 3, 3, 3, device="cuda:0"),
+            ),
+        ),
+        (
+            "cuBLAS matmul",
+            lambda: torch.matmul(
+                torch.zeros(8, 8, device="cuda:0"),
+                torch.zeros(8, 8, device="cuda:0"),
+            ),
+        ),
+    )
+
+    for label, run_probe in probes:
+        try:
+            out = run_probe()
+            # Force the graph to flush and a D2H copy, so asynchronous
+            # kernel-launch failures (e.g. cudaErrorNoKernelImageForDevice)
+            # surface HERE rather than at the caller's first real predict().
+            out.cpu()
+            torch.cuda.synchronize()
+        except Exception as exc:
+            name = _safe_call(lambda: torch.cuda.get_device_name(0))
+            cap = _safe_call(lambda: torch.cuda.get_device_capability(0))
+            archs = _safe_call(torch.cuda.get_arch_list)
+            cudnn_ver = _safe_call(torch.backends.cudnn.version)
+            first_line = str(exc).splitlines()[0] if str(exc) else ""
+            logger.warning(
+                "CUDA device detected (%s, compute capability %s) but the %s "
+                "probe failed — falling back to CPU. "
+                "torch cuDNN=%s, build archs=%s. Error: %s: %s. "
+                "Set CYBERWAVE_MODEL_DEVICE=cuda:0 to bypass this probe.",
+                name,
+                cap,
+                label,
+                cudnn_ver,
+                archs,
+                type(exc).__name__,
+                first_line,
+            )
+            _CUDA_PROBE_CACHE = False
+            return False
 
     if not _device_cc_is_natively_supported(torch):
         _CUDA_PROBE_CACHE = False

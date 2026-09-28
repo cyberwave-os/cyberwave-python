@@ -8,17 +8,13 @@ import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
-DEFAULT_BURST_DURATION_S = 1.0
-DEFAULT_BURST_RATE_HZ = 20.0
-
 from typing_extensions import Self
 
 from ..constants import (
     EDGE_STATE_SOURCE_TYPES,
     SOURCE_TYPES,
-    SOURCE_TYPE_SIM_TELE,
-    SOURCE_TYPE_TELE,
 )
+from ..exceptions import CyberwaveMQTTError
 from ..manifest.driver_config import (
     mqtt_topic_slugs,
     resolve_outbound_topic_slug,
@@ -32,6 +28,9 @@ from ._helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_BURST_DURATION_S = 1.0
+DEFAULT_BURST_RATE_HZ = 20.0
 
 OutboundChannel = Literal["twin_command", "joint_update", "sensor_actuation"]
 
@@ -118,7 +117,11 @@ class TwinTransportMixin:
         mqtt = getattr(self.client, "mqtt", None)
         if mqtt is not None:
             self._ensure_mqtt_connected()
-            mqtt.publish(resolved.topic, resolved.payload)
+            if mqtt.publish(resolved.topic, resolved.payload) is False:
+                raise CyberwaveMQTTError(
+                    f"Command {resolved.command!r} could not be sent for twin "
+                    f"{self.uuid}. Check the MQTT connection before retrying."
+                )
         logger.debug(
             "twin outbound publish: twin=%s command=%s topic=%s",
             self.uuid,

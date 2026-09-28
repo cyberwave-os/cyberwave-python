@@ -36,6 +36,9 @@ from .source_type_policy import (
     accepts_navigation_command,
     accepts_inbound,
     filtered_listener,
+    provenance_drop_counts,
+    record_provenance_drop,
+    reset_provenance_drop_counts,
 )
 from .stream_publish_rate import StreamPublishRateLimiter
 
@@ -58,6 +61,9 @@ __all__ = [
     "accepts_navigation_command",
     "accepts_inbound",
     "filtered_listener",
+    "provenance_drop_counts",
+    "record_provenance_drop",
+    "reset_provenance_drop_counts",
     "StreamPublishRateLimiter",
     "CW_DRIVER_FILE_NAME",
     "dump_cw_driver_yml",

@@ -154,6 +154,18 @@ def test_control_agent_dispatch_posts_explicit_action():
     }
 
 
+@pytest.mark.parametrize("mode", ["live", "simulation"])
+def test_control_agent_dispatch_preserves_plan_id_and_result(mode):
+    result = {"action_id": "action-1", "status": "queued", "metadata": {"plan_id": "approved-plan"}}
+    api_client = FakeApiClient(result)
+    action = {"kind": "joint_control", "target_twin_uuid": "twin-uuid", "payload": {"joints": {"joint_1": 0.1}}}
+    response = AgentManager(api_client).control.dispatch(
+        "env-uuid", action, mode=mode, confirmed=True, plan_id="approved-plan",
+    )
+    assert api_client.serialized[0]["body"] == {"action": action, "mode": mode, "confirmed": True, "plan_id": "approved-plan"}
+    assert response == result
+
+
 def test_environment_agent_uses_canonical_routes():
     api_client = FakeApiClient(
         {"models": []},
@@ -357,3 +369,10 @@ def test_actions_wait_names_the_poll_failure_in_the_timeout(monkeypatch):
 
     with pytest.raises(TimeoutError, match="last status poll failed.*HTTP 404"):
         actions.wait("action-1", twin_uuid="twin-uuid", timeout=0.2, poll_interval=0.1)
+
+
+@pytest.mark.parametrize("mode", ["simulation", "live", "preview"])
+def test_control_surface_discovery_forwards_mode(mode):
+    api_client = FakeApiClient([])
+    AgentManager(api_client).control.surfaces("env-uuid", mode=mode)
+    assert api_client.serialized[0]["query_params"] == [("mode", mode)]

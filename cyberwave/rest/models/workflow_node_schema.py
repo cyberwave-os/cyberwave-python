@@ -40,9 +40,10 @@ class WorkflowNodeSchema(BaseModel):
     notes: StrictStr
     is_disabled: StrictBool
     created_at: datetime
-    updated_at: datetime
+    updated_at: StrictStr
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "workflow_uuid", "name", "node_type", "node_subtype", "trigger_type", "parameters", "position_x", "position_y", "notes", "is_disabled", "created_at", "updated_at", "metadata"]
+    supports_model_task_binding: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "workflow_uuid", "name", "node_type", "node_subtype", "trigger_type", "parameters", "position_x", "position_y", "notes", "is_disabled", "created_at", "updated_at", "metadata", "supports_model_task_binding"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -113,7 +114,8 @@ class WorkflowNodeSchema(BaseModel):
             "is_disabled": obj.get("is_disabled"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "supports_model_task_binding": obj.get("supports_model_task_binding") if obj.get("supports_model_task_binding") is not None else False
         })
         return _obj
 

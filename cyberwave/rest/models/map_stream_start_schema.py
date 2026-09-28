@@ -31,7 +31,8 @@ class MapStreamStartSchema(BaseModel):
     map_type: StrictStr
     resolution: Optional[Union[StrictFloat, StrictInt]] = None
     map_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "map_type", "resolution", "map_name"]
+    service_provider: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["twin_uuid", "map_type", "resolution", "map_name", "service_provider"]
 
     @field_validator('map_type')
     def map_type_validate_enum(cls, value):
@@ -89,6 +90,11 @@ class MapStreamStartSchema(BaseModel):
         if self.map_name is None and "map_name" in self.model_fields_set:
             _dict['map_name'] = None
 
+        # set to None if service_provider (nullable) is None
+        # and model_fields_set contains the field
+        if self.service_provider is None and "service_provider" in self.model_fields_set:
+            _dict['service_provider'] = None
+
         return _dict
 
     @classmethod
@@ -104,7 +110,8 @@ class MapStreamStartSchema(BaseModel):
             "twin_uuid": obj.get("twin_uuid"),
             "map_type": obj.get("map_type"),
             "resolution": obj.get("resolution"),
-            "map_name": obj.get("map_name")
+            "map_name": obj.get("map_name"),
+            "service_provider": obj.get("service_provider")
         })
         return _obj
 

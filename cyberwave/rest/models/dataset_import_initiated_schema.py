@@ -30,11 +30,12 @@ class DatasetImportInitiatedSchema(BaseModel):
     status: Optional[StrictStr] = 'awaiting_upload'
     dataset_uuid: StrictStr
     upload_url: StrictStr
+    upload_method: Optional[StrictStr] = 'signed_url'
     upload_path: StrictStr
     expires_at: StrictStr
     poll_url: StrictStr
     message: Optional[StrictStr] = 'Upload the zip to the signed URL, then call POST /datasets/import/complete.'
-    __properties: ClassVar[List[str]] = ["status", "dataset_uuid", "upload_url", "upload_path", "expires_at", "poll_url", "message"]
+    __properties: ClassVar[List[str]] = ["status", "dataset_uuid", "upload_url", "upload_method", "upload_path", "expires_at", "poll_url", "message"]
 
     @field_validator('status')
     def status_validate_enum(cls, value):
@@ -44,6 +45,16 @@ class DatasetImportInitiatedSchema(BaseModel):
 
         if value not in set(['awaiting_upload']):
             raise ValueError("must be one of enum values ('awaiting_upload')")
+        return value
+
+    @field_validator('upload_method')
+    def upload_method_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['signed_url', 'multipart']):
+            raise ValueError("must be one of enum values ('signed_url', 'multipart')")
         return value
 
     model_config = ConfigDict(
@@ -100,6 +111,7 @@ class DatasetImportInitiatedSchema(BaseModel):
             "status": obj.get("status") if obj.get("status") is not None else 'awaiting_upload',
             "dataset_uuid": obj.get("dataset_uuid"),
             "upload_url": obj.get("upload_url"),
+            "upload_method": obj.get("upload_method") if obj.get("upload_method") is not None else 'signed_url',
             "upload_path": obj.get("upload_path"),
             "expires_at": obj.get("expires_at"),
             "poll_url": obj.get("poll_url"),

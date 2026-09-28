@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 from .exceptions import CyberwaveError
 from .constants import SOURCE_TYPE_SIM, SOURCE_TYPE_SIM_TELE, SOURCE_TYPE_TELE
+from ._geometry import core as _geometry_core
 
 
 # Load capabilities cache for runtime class selection
@@ -1279,6 +1280,12 @@ class Twin:
                 client_config = getattr(self.client, "config", None)
                 configured_source_type = getattr(client_config, "source_type", None)
                 if isinstance(configured_source_type, str):
+                    # Frame-stream vocabulary, not the MQTT source_type enum.
+                    # These spellings mirror the backend's
+                    # ``_FRAME_STREAM_SOURCE_ALIASES`` and must agree with it or
+                    # reader and writer name different subjects — so unlike the
+                    # stray ``"simulation"`` removed from ``runtime_state.py``,
+                    # they belong here.
                     normalized_source_type = configured_source_type.strip().lower()
                     if normalized_source_type in {"sim", "simulation"}:
                         resolved_source_type = "sim"
@@ -1534,20 +1541,10 @@ class Twin:
         pitch = math.radians(pitch)
         yaw = math.radians(yaw)
 
-        # Calculate quaternion
-        cy = math.cos(yaw * 0.5)
-        sy = math.sin(yaw * 0.5)
-        cp = math.cos(pitch * 0.5)
-        sp = math.sin(pitch * 0.5)
-        cr = math.cos(roll * 0.5)
-        sr = math.sin(roll * 0.5)
-
-        w = cr * cp * cy + sr * sp * sy
-        x = sr * cp * cy - cr * sp * sy
-        y = cr * sp * cy + sr * cp * sy
-        z = cr * cp * sy - sr * sp * cy
-
-        return [x, y, z, w]
+        # Fixed-axis XYZ, which is what the expanded half-angle formula this
+        # replaced computed. `to_xyzw` states the output order rather than
+        # leaving it to the return statement's variable names.
+        return list(_geometry_core().quat.from_rpy(roll, pitch, yaw).to_xyzw())
 
     def __repr__(self) -> str:
         return f"Twin(uuid='{self.uuid}', name='{self.name}')"

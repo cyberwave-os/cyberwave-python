@@ -42,6 +42,11 @@ from .joint_teleop import coerce_joint_timestamp
 
 logger = logging.getLogger(__name__)
 
+# Overrides the ``COMMAND_SOURCE_TYPES`` default ``registry_mixin`` would apply.
+# ``edit`` is absent by design — an editor write's substrate is the scene, so it
+# reaches no plant — and ``filtered_listener`` drops it before actuation. Anyone
+# citing ``COMMAND_SOURCE_TYPES`` as proof that ``edit`` actuates is reading a
+# default this line overrides.
 _TARGET_SOURCE_TYPES = ("tele",)
 
 
@@ -149,7 +154,9 @@ class JointControllerMixin:
                 description="Joint position targets (shaped by JointController)",
             ),
             CallbackGroup(callback=self._on_joint_target),
-            protocol=ProtocolArgs(source_types=list(_TARGET_SOURCE_TYPES)),
+            protocol=ProtocolArgs(
+                source_types=list(_TARGET_SOURCE_TYPES), command_input=True
+            ),
             operation_modes=TELEOP_MODES,
         )
 
@@ -195,9 +202,7 @@ class JointControllerMixin:
         if ctrl is None:
             return super()._apply_joint_targets(positions)  # type: ignore[misc]
         try:
-            self._dispatch_plan(
-                ctrl.plan(self._current_joint_positions(), positions)
-            )
+            self._dispatch_plan(ctrl.plan(self._current_joint_positions(), positions))
         except Exception:
             logger.exception("joint target planning failed")
 

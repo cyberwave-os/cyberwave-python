@@ -212,11 +212,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "CyberwaveMQTTClient": (".mqtt", "CyberwaveMQTTClient"),
     # Edge controller
     "EdgeController": (".controller", "EdgeController"),
-    # ML model lookup helpers
-    "MLModelLookupError": (".ml_model_lookup", "MLModelLookupError"),
-    "MLModelMatch": (".ml_model_lookup", "MLModelMatch"),
-    "search_ml_models": (".ml_model_lookup", "search_ml_models"),
-    "resolve_ml_model_uuid": (".ml_model_lookup", "resolve_ml_model_uuid"),
     # Utils
     "TimeReference": (".utils", "TimeReference"),
     # Device fingerprinting
@@ -421,11 +416,6 @@ __all__ = [
     "SOURCE_TYPES",
     # Utils
     "TimeReference",
-    # ML model lookup
-    "MLModelLookupError",
-    "MLModelMatch",
-    "search_ml_models",
-    "resolve_ml_model_uuid",
     # Device fingerprinting
     "generate_fingerprint",
     "get_device_info",

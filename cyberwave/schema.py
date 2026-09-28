@@ -22,7 +22,6 @@ format-specific information through extensions.
 """
 
 from __future__ import annotations
-import math
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -30,6 +29,7 @@ from enum import Enum
 from typing import Any
 
 import numpy as np
+from ._geometry import core as _geometry_core
 
 
 class JointType(Enum):
@@ -107,20 +107,8 @@ class Quaternion:
     @classmethod
     def from_rpy(cls, roll: float, pitch: float, yaw: float) -> "Quaternion":
         """Create quaternion from roll-pitch-yaw angles (Fixed XYZ convention)."""
-
-        cy = math.cos(yaw * 0.5)
-        sy = math.sin(yaw * 0.5)
-        cp = math.cos(pitch * 0.5)
-        sp = math.sin(pitch * 0.5)
-        cr = math.cos(roll * 0.5)
-        sr = math.sin(roll * 0.5)
-
-        w = cr * cp * cy + sr * sp * sy
-        x = sr * cp * cy - cr * sp * sy
-        y = cr * sp * cy + sr * cp * sy
-        z = cr * cp * sy - sr * sp * cy
-
-        return cls(x, y, z, w)
+        rotation = _geometry_core().quat.from_rpy(roll, pitch, yaw)
+        return cls(x=rotation.x, y=rotation.y, z=rotation.z, w=rotation.w)
 
 
 @dataclass

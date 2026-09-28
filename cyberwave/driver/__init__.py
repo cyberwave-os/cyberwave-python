@@ -74,6 +74,9 @@ from .interface import (
     default_management_commands,
     dump_cw_driver_yml,
     filtered_listener,
+    provenance_drop_counts,
+    record_provenance_drop,
+    reset_provenance_drop_counts,
     resolve_topic_path,
 )
 from .sensors import AudioStreamMixin, VideoStreamMixin
@@ -129,6 +132,9 @@ __all__ = [
     "DEFAULT_SIM_PUBLISH_SOURCE_TYPE",
     "accepts_inbound",
     "filtered_listener",
+    "provenance_drop_counts",
+    "record_provenance_drop",
+    "reset_provenance_drop_counts",
     "AudioStreamMixin",
     "VideoStreamMixin",
     "ZenohPublisherMixin",

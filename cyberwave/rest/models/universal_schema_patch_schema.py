@@ -25,12 +25,13 @@ from pydantic_core import to_jsonable_python
 
 class UniversalSchemaPatchSchema(BaseModel):
     """
-    UniversalSchemaPatchSchema
+    One JSON Pointer operation against an asset's ``universal_schema``.  ``expected_schema_hash``, if given, must match the asset's stored ``extensions.cyberwave.schema_hash`` or the request is rejected with 409. It is the same token ``GET /assets/{uuid}/schemas/base`` returns, and the same one carried inside the schema document itself.
     """ # noqa: E501
     op: StrictStr
     path: StrictStr
     value: Optional[Any]
-    __properties: ClassVar[List[str]] = ["op", "path", "value"]
+    expected_schema_hash: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["op", "path", "value", "expected_schema_hash"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,6 +77,11 @@ class UniversalSchemaPatchSchema(BaseModel):
         if self.value is None and "value" in self.model_fields_set:
             _dict['value'] = None
 
+        # set to None if expected_schema_hash (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_schema_hash is None and "expected_schema_hash" in self.model_fields_set:
+            _dict['expected_schema_hash'] = None
+
         return _dict
 
     @classmethod
@@ -90,7 +96,8 @@ class UniversalSchemaPatchSchema(BaseModel):
         _obj = cls.model_validate({
             "op": obj.get("op"),
             "path": obj.get("path"),
-            "value": obj.get("value")
+            "value": obj.get("value"),
+            "expected_schema_hash": obj.get("expected_schema_hash")
         })
         return _obj
 

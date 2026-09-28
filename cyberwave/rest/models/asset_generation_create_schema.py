@@ -30,7 +30,10 @@ class AssetGenerationCreateSchema(BaseModel):
     """ # noqa: E501
     name: Annotated[str, Field(min_length=1, strict=True, max_length=255)]
     prompt: Annotated[str, Field(min_length=3, strict=True, max_length=8000)]
-    environment_uuid: StrictStr
+    environment_uuid: Optional[StrictStr] = None
+    workspace_uuid: Optional[StrictStr] = None
+    visibility: Optional[StrictStr] = 'private'
+    design_review: Optional[Dict[str, Any]] = None
     strategy: Optional[StrictStr] = 'auto'
     builder: StrictStr
     position: Optional[List[Union[StrictFloat, StrictInt]]] = None
@@ -39,7 +42,17 @@ class AssetGenerationCreateSchema(BaseModel):
     target_twin_uuid: Optional[StrictStr] = None
     assistant_session_id: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
     review_on_complete: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["name", "prompt", "environment_uuid", "strategy", "builder", "position", "dimensions", "source_asset_uuid", "target_twin_uuid", "assistant_session_id", "review_on_complete"]
+    __properties: ClassVar[List[str]] = ["name", "prompt", "environment_uuid", "workspace_uuid", "visibility", "design_review", "strategy", "builder", "position", "dimensions", "source_asset_uuid", "target_twin_uuid", "assistant_session_id", "review_on_complete"]
+
+    @field_validator('visibility')
+    def visibility_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['private', 'public']):
+            raise ValueError("must be one of enum values ('private', 'public')")
+        return value
 
     @field_validator('strategy')
     def strategy_validate_enum(cls, value):
@@ -54,8 +67,8 @@ class AssetGenerationCreateSchema(BaseModel):
     @field_validator('builder')
     def builder_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['pencil', 'gearbox', 'forklift', 'hinged_enclosure', 'deployable_solar_array', 'wind_turbine', 'cement_cyclone', 'generic_enclosure']):
-            raise ValueError("must be one of enum values ('pencil', 'gearbox', 'forklift', 'hinged_enclosure', 'deployable_solar_array', 'wind_turbine', 'cement_cyclone', 'generic_enclosure')")
+        if value not in set(['pencil', 'gearbox', 'forklift', 'hinged_enclosure', 'hinged_box', 'deployable_solar_array', 'wind_turbine', 'cement_cyclone', 'generic_enclosure']):
+            raise ValueError("must be one of enum values ('pencil', 'gearbox', 'forklift', 'hinged_enclosure', 'hinged_box', 'deployable_solar_array', 'wind_turbine', 'cement_cyclone', 'generic_enclosure')")
         return value
 
     model_config = ConfigDict(
@@ -97,6 +110,21 @@ class AssetGenerationCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
+        # set to None if design_review (nullable) is None
+        # and model_fields_set contains the field
+        if self.design_review is None and "design_review" in self.model_fields_set:
+            _dict['design_review'] = None
+
         # set to None if position (nullable) is None
         # and model_fields_set contains the field
         if self.position is None and "position" in self.model_fields_set:
@@ -137,6 +165,9 @@ class AssetGenerationCreateSchema(BaseModel):
             "name": obj.get("name"),
             "prompt": obj.get("prompt"),
             "environment_uuid": obj.get("environment_uuid"),
+            "workspace_uuid": obj.get("workspace_uuid"),
+            "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
+            "design_review": obj.get("design_review"),
             "strategy": obj.get("strategy") if obj.get("strategy") is not None else 'auto',
             "builder": obj.get("builder"),
             "position": obj.get("position"),

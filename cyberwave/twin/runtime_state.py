@@ -18,14 +18,26 @@ RUNTIME_MODE_LIVE = "live"
 RUNTIME_MODE_SIMULATION = "simulation"
 RUNTIME_MODES = (RUNTIME_MODE_LIVE, RUNTIME_MODE_SIMULATION)
 
+# Stated positively: ``substrate in (sim, scene)``. ``edit`` is here by that rule,
+# not as an exception — an editor write's substrate is the scene. The negative form
+# ``substrate != hardware`` would also be true of every v1 payload, which carries no
+# substrate at all.
+#
+# ``"simulation"`` was removed: it is a runtime *mode* name (see just above), in no
+# source_type enum anywhere. The word means three unrelated things in this tree —
+# this mode, the backend frame-stream producer (where ``simulation`` is canonical and
+# ``sim`` the alias, the reverse of here), and an ``affect(...)`` profile — so in a
+# source_type set it was a vocabulary mix-up. Unknown values fall through to the
+# client's configured mode.
 _SIM_MQTT_SOURCE_TYPES = frozenset(
     {
         SOURCE_TYPE_SIM,
         SOURCE_TYPE_SIM_TELE,
-        "simulation",
         "edit",
     }
 )
+# The complement: ``substrate == hardware``, all directions and roles. Identical to
+# the backend's ``mqtt_schemas.HARDWARE_SUBSTRATE_SOURCE_TYPES``.
 _LIVE_MQTT_SOURCE_TYPES = frozenset(
     {
         SOURCE_TYPE_TELE,

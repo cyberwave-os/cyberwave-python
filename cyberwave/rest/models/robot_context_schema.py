@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,9 +30,20 @@ class RobotContextSchema(BaseModel):
     """ # noqa: E501
     twin_uuid: Optional[StrictStr] = None
     asset_uuid: Optional[StrictStr] = None
+    policy_joint_binding_uuid: Optional[Annotated[str, Field(strict=True)]] = None
     frame_id: Optional[StrictStr] = None
     checkpoint: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "asset_uuid", "frame_id", "checkpoint"]
+    __properties: ClassVar[List[str]] = ["twin_uuid", "asset_uuid", "policy_joint_binding_uuid", "frame_id", "checkpoint"]
+
+    @field_validator('policy_joint_binding_uuid')
+    def policy_joint_binding_uuid_validate_regular_expression(cls, value):
+        """Validates the regular expression"""
+        if value is None:
+            return value
+
+        if not re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", value):
+            raise ValueError(r"must validate the regular expression /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -82,6 +94,11 @@ class RobotContextSchema(BaseModel):
         if self.asset_uuid is None and "asset_uuid" in self.model_fields_set:
             _dict['asset_uuid'] = None
 
+        # set to None if policy_joint_binding_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.policy_joint_binding_uuid is None and "policy_joint_binding_uuid" in self.model_fields_set:
+            _dict['policy_joint_binding_uuid'] = None
+
         # set to None if frame_id (nullable) is None
         # and model_fields_set contains the field
         if self.frame_id is None and "frame_id" in self.model_fields_set:
@@ -106,6 +123,7 @@ class RobotContextSchema(BaseModel):
         _obj = cls.model_validate({
             "twin_uuid": obj.get("twin_uuid"),
             "asset_uuid": obj.get("asset_uuid"),
+            "policy_joint_binding_uuid": obj.get("policy_joint_binding_uuid"),
             "frame_id": obj.get("frame_id"),
             "checkpoint": obj.get("checkpoint")
         })

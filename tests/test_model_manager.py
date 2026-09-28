@@ -183,14 +183,18 @@ class TestDetectDevice:
             assert ModelManager._detect_device() == "cuda:0"
 
         mock_torch.nn.functional.conv2d.assert_called_once()
+        mock_torch.matmul.assert_called_once()
         zeros_calls = mock_torch.zeros.call_args_list
-        assert len(zeros_calls) == 2, (
-            "probe must allocate exactly two tensors (input + weights)"
+        assert len(zeros_calls) == 4, (
+            "probe must allocate the conv input + weights and both matmul operands"
         )
         assert zeros_calls[0].args == (1, 3, 8, 8)
         assert zeros_calls[1].args == (1, 3, 3, 3)
-        mock_torch.cuda.synchronize.assert_called_once()
+        assert zeros_calls[2].args == (8, 8)
+        assert zeros_calls[3].args == (8, 8)
+        assert mock_torch.cuda.synchronize.call_count == 2
         mock_torch.nn.functional.conv2d.return_value.cpu.assert_called_once()
+        mock_torch.matmul.return_value.cpu.assert_called_once()
 
     def test_cuda_when_available_and_probe_ok_cc_in_list(self):
         """Probe passes and device CC is in arch list → cuda:0."""
@@ -278,9 +282,42 @@ class TestDetectDevice:
         assert any("falling back to CPU" in rec.message for rec in caplog.records), (
             "expected a warning explaining the CPU fallback"
         )
+        assert any("cuDNN conv2d" in rec.message for rec in caplog.records), (
+            "expected the warning to name the probe that failed"
+        )
+        mock_torch.matmul.assert_not_called()
+
+    def test_cpu_when_matmul_probe_fails(self, caplog):
+        """cuBLAS can fail while cuDNN still works — fall back to CPU + warn.
+
+        Seen on a JetPack 6 Orin running a CUDA 12.9 wheel: convolutions keep
+        succeeding inside memory the allocator already reserved, while
+        ``cublasCreate`` cannot get a fresh workspace and every matmul dies.
+        A conv2d-only probe passes and the model lands on a dead GPU.
+        """
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_capability.return_value = (8, 7)
+        mock_torch.cuda.get_device_name.return_value = "Orin (nvgpu)"
+        mock_torch.cuda.get_arch_list.return_value = ["sm_87"]
+        mock_torch.backends.cudnn.version.return_value = 91000
+        mock_torch.matmul.side_effect = RuntimeError(
+            "CUDA error: CUBLAS_STATUS_ALLOC_FAILED when calling `cublasCreate(handle)`"
+        )
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            with caplog.at_level("WARNING", logger="cyberwave.models.manager"):
+                assert ModelManager._detect_device() == "cpu"
+
+        mock_torch.nn.functional.conv2d.assert_called_once()
+        assert any("cuBLAS matmul" in rec.message for rec in caplog.records), (
+            "expected the warning to name the cuBLAS probe, not the conv2d one"
+        )
+        assert any(
+            "CUBLAS_STATUS_ALLOC_FAILED" in rec.message for rec in caplog.records
+        ), "expected the underlying cuBLAS error to be logged"
 
     def test_probe_result_is_cached(self):
-        """_detect_device must only run the conv2d probe once per process."""
+        """_detect_device must only run the GPU probes once per process."""
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
         mock_torch.nn.functional.conv2d.side_effect = RuntimeError("no engine")

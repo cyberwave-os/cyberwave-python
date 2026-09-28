@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, field_validator
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -30,7 +30,18 @@ class CloudNodeWorkloadAttachmentResponseSchema(BaseModel):
     signed_url: StrictStr
     filename: StrictStr
     expiration_hours: StrictInt
-    __properties: ClassVar[List[str]] = ["signed_url", "filename", "expiration_hours"]
+    upload_method: Optional[StrictStr] = 'signed_url'
+    __properties: ClassVar[List[str]] = ["signed_url", "filename", "expiration_hours", "upload_method"]
+
+    @field_validator('upload_method')
+    def upload_method_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['signed_url', 'multipart']):
+            raise ValueError("must be one of enum values ('signed_url', 'multipart')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -85,7 +96,8 @@ class CloudNodeWorkloadAttachmentResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "signed_url": obj.get("signed_url"),
             "filename": obj.get("filename"),
-            "expiration_hours": obj.get("expiration_hours")
+            "expiration_hours": obj.get("expiration_hours"),
+            "upload_method": obj.get("upload_method") if obj.get("upload_method") is not None else 'signed_url'
         })
         return _obj
 

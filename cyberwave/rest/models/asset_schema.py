@@ -29,11 +29,12 @@ class AssetSchema(BaseModel):
     """
     AssetSchema
     """ # noqa: E501
+    is_kit: Optional[StrictBool] = False
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
     created_at: datetime
-    updated_at: datetime
+    updated_at: StrictStr
     visibility: Optional[StrictStr] = None
     origin_environment_uuid: Optional[StrictStr] = None
     owner_uuid: Optional[StrictStr] = None
@@ -60,7 +61,7 @@ class AssetSchema(BaseModel):
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "created_at", "updated_at", "visibility", "origin_environment_uuid", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "configuration_feedback", "thumbnail", "has_universal_schema", "build_status", "universal_schema_source", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["is_kit", "uuid", "name", "description", "created_at", "updated_at", "visibility", "origin_environment_uuid", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "configuration_feedback", "thumbnail", "has_universal_schema", "build_status", "universal_schema_source", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -220,6 +221,7 @@ class AssetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "is_kit": obj.get("is_kit") if obj.get("is_kit") is not None else False,
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),

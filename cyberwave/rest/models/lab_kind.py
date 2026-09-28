@@ -20,7 +20,7 @@ from typing_extensions import Self
 
 class LabKind(str, Enum):
     """
-    The class of hardware a lab environment exposes.  Each kind is its own pool with its own FIFO queue: a user who asked for an arm must never be handed a rover, and ``LabQueueService._promote_next`` must not promote a queued arm user onto a freed UGV.
+    Hardware class exposed by a remote-lab environment.
     """
 
     """

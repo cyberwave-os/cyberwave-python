@@ -36,13 +36,14 @@ class ControllerPolicySchema(BaseModel):
     metadata: Dict[str, Any]
     visibility: StrictStr
     created_at: datetime
-    updated_at: datetime
+    updated_at: StrictStr
     created_by: Optional[StrictStr] = None
     workspace_uuid: Optional[StrictStr] = None
     asset_uuids: Optional[List[StrictStr]] = None
     can_write: Optional[StrictBool] = False
+    command_key_revision: Optional[StrictStr] = None
     device: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "device"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "command_key_revision", "device"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -98,6 +99,11 @@ class ControllerPolicySchema(BaseModel):
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
             _dict['workspace_uuid'] = None
 
+        # set to None if command_key_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.command_key_revision is None and "command_key_revision" in self.model_fields_set:
+            _dict['command_key_revision'] = None
+
         # set to None if device (nullable) is None
         # and model_fields_set contains the field
         if self.device is None and "device" in self.model_fields_set:
@@ -128,6 +134,7 @@ class ControllerPolicySchema(BaseModel):
             "workspace_uuid": obj.get("workspace_uuid"),
             "asset_uuids": obj.get("asset_uuids"),
             "can_write": obj.get("can_write") if obj.get("can_write") is not None else False,
+            "command_key_revision": obj.get("command_key_revision"),
             "device": obj.get("device")
         })
         return _obj

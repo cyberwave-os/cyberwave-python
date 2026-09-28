@@ -639,6 +639,7 @@ class TwinNavigationHandle:
         skip_nav_anchor_transform: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
         actions: Optional[List[Dict[str, Any]]] = None,
+        planner: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Navigate the twin to a specific position.
@@ -681,6 +682,11 @@ class TwinNavigationHandle:
                 run on arrival — the ``goto`` equivalent of a waypoint's
                 per-point ``actions`` in :class:`~cyberwave.navigation.NavigationPlan`
                 (there's no waypoints list here to attach one to).
+            planner: Motion type for arms that plan Cartesian moves themselves,
+                e.g. ``"LIN"`` (exact straight line, cannot reconfigure the arm)
+                or ``"PTP"`` (joint space, reaches any pose but the path is not
+                guaranteed straight). Omit to keep the driver's default; drivers
+                that plan only one way ignore it.
 
         Returns:
             Response from the navigation endpoint
@@ -757,6 +763,8 @@ class TwinNavigationHandle:
             payload["metadata"] = metadata
         if actions:
             payload["actions"] = list(actions)
+        if planner:
+            payload["planner"] = planner
 
         # Subscribe to navigate/status before firing the REST call
         # so a fast ``completed`` (e.g. sim_tele) cannot arrive before
@@ -841,6 +849,7 @@ class TwinNavigationHandle:
         reference_frame: Optional[str] = None,
         skip_nav_anchor_transform: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
+        planner: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Follow a path of waypoints.
@@ -862,6 +871,8 @@ class TwinNavigationHandle:
                 than environment-absolute poses. Skips the nav-anchor
                 (environment->map) transform server-side. Mirrors ``goto``.
             metadata: Additional metadata
+            planner: Motion type for arms that plan Cartesian moves themselves
+                (``"LIN"`` / ``"PTP"``). Mirrors ``goto``.
 
         Returns:
             Response from the navigation endpoint
@@ -883,6 +894,8 @@ class TwinNavigationHandle:
             payload["reference_frame"] = reference_frame
         if skip_nav_anchor_transform:
             payload["skip_nav_anchor_transform"] = True
+        if planner:
+            payload["planner"] = planner
 
         nav_metadata = dict(metadata or {})
         if wait_s > 0:

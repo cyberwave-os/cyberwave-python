@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 
 import pytest
 
 from cyberwave.driver import (
     CallbackGroup,
+    CommandArg,
     CommandArgs,
     DriverInterfaceRegistry,
     DriverOperationMode,
@@ -17,6 +20,66 @@ from cyberwave.driver import (
 from cyberwave.driver.interface.args import PublisherArgs, effective_publish_mode
 from cyberwave.driver.interface.registry_mixin import InterfaceRegistryMixin
 from cyberwave.manifest.driver_config import TWIN_IMU_TOPIC_SLUG
+
+
+def test_typed_command_export_matches_shared_contract_and_yaml_round_trip(
+    tmp_path,
+) -> None:
+    from cyberwave.driver.interface.cw_driver import (
+        dump_cw_driver_yml,
+        load_cw_driver_yml,
+        resolve_driver_config_dict,
+    )
+
+    args = (
+        CommandArg(
+            "action",
+            type="string",
+            required=True,
+            enum=("grip", "release", "reset"),
+            description="Gripper action",
+        ),
+        CommandArg("speed", 0, "m/s", type="number", minimum=0, maximum=1),
+        CommandArg("joints", type="array", required=True, min_items=1),
+        CommandArg("enabled", False, type="boolean"),
+        CommandArg("repetitions", 1, type="integer", minimum=1),
+        CommandArg("options", {}, type="object"),
+    )
+    registry = DriverInterfaceRegistry()
+    registry.add_listener(
+        TopicSpec(
+            namespace="twin",
+            leaf="command",
+            description="Commands",
+            payload_schema_ref="TwinCommandPayload",
+        ),
+        CallbackGroup(lambda _e: None),
+        command=CommandArgs(name="configured", args=args),
+    )
+    root = registry.to_cw_driver_dict(registry_id="test/typed-command")
+    expected = json.loads(
+        (Path(__file__).parent / "fixtures/driver-command-arguments.json").read_text()
+    )
+    assert root["mqtt"]["commands"]["supported"][0]["args"] == expected
+    exported = dump_cw_driver_yml(root, tmp_path / "cw-driver.yml")
+    assert resolve_driver_config_dict(load_cw_driver_yml(exported)) == root
+
+
+def test_legacy_command_args_keep_positional_constructor_and_exact_wire_shape() -> None:
+    assert CommandArg("forward", 0, "m").to_catalog_dict() == {
+        "name": "forward",
+        "default": 0,
+        "unit": "m",
+    }
+    assert CommandArg("action").to_catalog_dict() == {
+        "name": "action",
+        "default": None,
+        "unit": None,
+    }
+    with pytest.raises(TypeError):
+        CommandArg("action", None, None, "string")
+    with pytest.raises(ValueError, match="require type"):
+        CommandArg("action", required=True).to_catalog_dict()
 
 
 def test_async_mqtt_handler_runs_on_driver_loop() -> None:
@@ -67,7 +130,9 @@ def test_default_management_commands() -> None:
     assert "teleoperate" in table
 
 
-def test_default_management_commands_always_hides_teleop_controller_from_catalog() -> None:
+def test_default_management_commands_always_hides_teleop_controller_from_catalog() -> (
+    None
+):
     """controller-changed/teleoperate/remoteoperate are internal plumbing, never
     advertised as robot capabilities — even when catalog_hidden defaults to False.
     ``stop`` is unaffected and stays visible (existing behavior)."""

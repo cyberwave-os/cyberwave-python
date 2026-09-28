@@ -136,6 +136,32 @@ def _apply_sdk_identity_headers(header_params: dict[str, Any]) -> dict[str, Any]
     return header_params
 
 
+def _with_workspace_query_param(url: str, workspace_id: Optional[str]) -> str:
+    """Attach the configured workspace to a request URL.
+
+    The backend no longer guesses which workspace a request means: a request
+    that names none resolves through the token's scope and, when that is
+    ambiguous, fails with ``400 workspace_required``. A token scoped to exactly
+    one workspace still resolves without this, so setting
+    ``CYBERWAVE_WORKSPACE_ID`` only becomes necessary with a multi-workspace
+    token.
+
+    A ``workspace_uuid`` already on the URL wins — that is a deliberate
+    per-call choice, not ambient context.
+    """
+    if not workspace_id:
+        return url
+
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    if any(key == "workspace_uuid" for key, _ in query):
+        return url
+    query.append(("workspace_uuid", workspace_id))
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
 _RUNTIME_MODE_MAP = {
     "live": "live",
     "real-world": "live",
@@ -152,6 +178,10 @@ _RUNTIME_MODE_MAP = {
 # Simulation profiles that spin up a MuJoCo cloud instance when selected via
 # ``affect(...)``. ``playground`` is a simulation runtime too, but a lightweight
 # kinematic one with no MuJoCo instance to start (level-0 only), so it is absent.
+#
+# *Profile* names, not MQTT source types, despite ``sim``/``sim_tele`` being spelled
+# the same in both — a namespace collision, not a gate. Nothing here gates
+# actuation, so ``simulation`` and ``mujoco`` are legitimate members.
 _AFFECT_MUJOCO_PROFILES = frozenset({"sim", "simulation", "sim_tele", "mujoco"})
 
 
@@ -375,6 +405,8 @@ class Cyberwave:
                 header_params["Authorization"] = f"Bearer {self.config.api_key}"
 
             _apply_sdk_identity_headers(header_params)
+
+            url = _with_workspace_query_param(url, self.config.workspace_id)
 
             last_request_headers.clear()
             if header_params:
@@ -1569,9 +1601,22 @@ class Cyberwave:
         The runtime is stored as ``self._runtime`` so that external code
         (e.g. a health-check thread or edge-core shutdown message) can call
         ``client._runtime.stop()`` without relying on signals.
+
+        Each step publishes a startup milestone for the supervisor (see
+        :mod:`cyberwave.workers.status`). ``docker inspect`` reports this
+        container as ``running`` before any of this work begins, so these
+        are the only signals that distinguish a started container from a
+        worker that can actually accept a run.
         """
         from cyberwave.workers.runtime import WorkerRuntime
+        from cyberwave.workers.status import (
+            PHASE_CONNECTING_MQTT,
+            PHASE_LOADING_MODELS,
+            get_status_reporter,
+        )
 
+        status = get_status_reporter()
+        status.publish(PHASE_CONNECTING_MQTT)
         try:
             self.mqtt.connect()
         except Exception:
@@ -1581,6 +1626,10 @@ class Cyberwave:
                 exc_info=True,
             )
         self._runtime = WorkerRuntime(self)
+        # Worker modules construct their models at import time, so ``load``
+        # is where a cold device downloads weights — the single longest step
+        # after the image pull.
+        status.publish(PHASE_LOADING_MODELS)
         self._runtime.load(workers_dir)
         self._runtime.start()
         self._runtime.run()

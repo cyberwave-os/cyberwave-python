@@ -19,7 +19,7 @@ import json
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -30,7 +30,7 @@ class MLTrainingSchema(BaseModel):
     """ # noqa: E501
     uuid: StrictStr
     dataset_uuid: StrictStr
-    mlmodel_uuid: StrictStr
+    mlmodel_uuid: Optional[StrictStr]
     created_by_uuid: StrictStr
     workspace_uuid: StrictStr
     status: StrictStr
@@ -78,6 +78,11 @@ class MLTrainingSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if mlmodel_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.mlmodel_uuid is None and "mlmodel_uuid" in self.model_fields_set:
+            _dict['mlmodel_uuid'] = None
+
         return _dict
 
     @classmethod

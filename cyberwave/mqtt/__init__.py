@@ -20,7 +20,9 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion  # type: ignore
 # Try to import CallbackAPIVersion for paho-mqtt 2.x, fallback for older versions
 
+from ..config import DEFAULT_MQTT_USERNAME
 from ..constants import SOURCE_TYPE_EDGE, SOURCE_TYPES
+from ..mqtt_identity import is_api_token, mqtt_username_for_token
 
 logger = logging.getLogger(__name__)
 SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
@@ -81,11 +83,15 @@ class CyberwaveMQTTClient:
     Args:
         mqtt_broker: MQTT broker hostname or IP address
         mqtt_port: MQTT broker port (default: 8883)
-        mqtt_username: MQTT username placeholder (default: "mqttcyb")
+        mqtt_username: MQTT username. Left at the default it is derived from
+            the API key so authorization checks can identify the session.
         api_key: Cyberwave API key used for MQTT authN/authZ
         mqtt_password: Explicit MQTT password (overrides api_key when provided)
         client_id: Custom MQTT client ID (auto-generated if not provided)
-        client_id_prefix: Prefix for auto-generated MQTT client IDs
+        client_id_prefix: Prefix for auto-generated MQTT client IDs. Keep it to 11
+            characters or fewer: the generated suffix is 12, and 23 bytes is the
+            client id length every MQTT 3.1.1 broker must accept. Nothing
+            validates this — a longer prefix is only as portable as your broker.
         use_tls: Enable TLS transport for MQTT
         tls_ca_cert: Path to CA certificate bundle for broker verification
         topic_prefix: Prefix for MQTT topics (default: "")
@@ -98,7 +104,7 @@ class CyberwaveMQTTClient:
         self,
         mqtt_broker: str = "mqtt.cyberwave.com",
         mqtt_port: int = 8883,
-        mqtt_username: str = "mqttcyb",
+        mqtt_username: str = DEFAULT_MQTT_USERNAME,
         api_key: Optional[str] = None,
         mqtt_password: Optional[str] = None,
         client_id: Optional[str] = None,
@@ -113,7 +119,6 @@ class CyberwaveMQTTClient:
     ):
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
-        self.mqtt_username = mqtt_username
 
         self.api_key = api_key
         self.mqtt_password = mqtt_password
@@ -125,11 +130,36 @@ class CyberwaveMQTTClient:
                 "Set CYBERWAVE_API_KEY or pass mqtt_password explicitly"
             )
 
+        # "mqttcyb" is a placeholder, not a name: authorization checks arrive
+        # without the password, and a username every client shares leaves the
+        # backend guessing which of them is asking. Derived from the API key it
+        # names one token. A legacy broker password is a static account whose
+        # username must reach the broker unchanged -- but an API token under
+        # mqtt_password is the very credential the derivation expects, and the
+        # cloud node sets both names to it when it scopes a workload token.
+        legacy_broker_credentials = bool(self.mqtt_password) and not is_api_token(
+            self.mqtt_password
+        )
+        if mqtt_username == DEFAULT_MQTT_USERNAME and not legacy_broker_credentials:
+            self.mqtt_username = mqtt_username_for_token(auth_password)
+        else:
+            self.mqtt_username = mqtt_username
+
         # Topic prefix (empty by default, can be set for custom deployments)
         self.topic_prefix = topic_prefix
 
-        # Generate unique client ID
-        self.client_id = client_id or f"{client_id_prefix}{uuid.uuid4().hex[:8]}"
+        # Generate unique client ID.
+        #
+        # 48 bits, not 32. ``publish`` stamps this onto every payload as
+        # ``session_id``, and the backend now derives a durable clock-domain name
+        # from it, so a birthday collision no longer merely re-uses a broker
+        # session: two unrelated machines get filed as one clock and their
+        # measurements blend. 32 bits reaches an even chance around 77k process
+        # starts, which a fleet restarting drivers daily passes inside a year;
+        # 48 bits puts it past 20M. Held to 12 hex chars so the longest prefix in
+        # use ("sdk_sim_") still fits the 23-byte client id every MQTT 3.1.1
+        # broker is required to accept.
+        self.client_id = client_id or f"{client_id_prefix}{uuid.uuid4().hex[:12]}"
 
         self._protocol = protocol if protocol is not None else mqtt.MQTTv311
         self.client = mqtt.Client(
@@ -622,11 +652,15 @@ class CyberwaveMQTTClient:
             self.client.disconnect()
             self.connected = False
 
-    def publish(self, topic: str, message: Dict[str, Any], qos: int = 0):
-        """Publish message to MQTT topic."""
+    def publish(self, topic: str, message: Dict[str, Any], qos: int = 0) -> bool:
+        """Return whether the local MQTT client accepted the message.
+
+        This is not a broker acknowledgement or evidence of robot execution.
+        Failures remain non-raising for best-effort telemetry callers.
+        """
         if not self.connected:
             logger.warning(f"Cannot publish to {topic}: not connected to MQTT broker")
-            return
+            return False
 
         try:
             if isinstance(message, dict):
@@ -645,8 +679,11 @@ class CyberwaveMQTTClient:
 
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
                 logger.error(f"Failed to publish to {topic}: {result.rc}")
+                return False
+            return True
         except Exception as e:
             logger.error(f"Error publishing to {topic}: {e}")
+            return False
 
     def subscribe(
         self,
@@ -1142,6 +1179,7 @@ class CyberwaveMQTTClient:
         camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
         as_targets: bool = False,
         stream_instance_id: Optional[str] = None,
+        applied_position_targets: Optional[Dict[str, float]] = None,
     ):
         """
         Update multiple joints at once via MQTT.
@@ -1206,8 +1244,15 @@ class CyberwaveMQTTClient:
             stream_instance_id: Optional id of the producing sim/stream process. Lets
                 consumers detect two producers publishing measured state to one twin
                 (source_type alone cannot). Only included in aggregated format.
+            applied_position_targets: Optional position-servo setpoints reported by
+                the plant alongside measured state, in the same joint units. These
+                are recording evidence, never a new command or measured position.
+                Omit unsupported joints; do not substitute velocity/effort controls.
         """
         effective_source_type = self._get_effective_source_type(source_type)
+
+        if applied_position_targets is not None and as_targets:
+            raise ValueError("applied_position_targets belong to measured-state updates")
 
         if not joint_positions and not (as_targets and (velocities or efforts)):
             raise ValueError("joint_positions cannot be empty")
@@ -1230,6 +1275,7 @@ class CyberwaveMQTTClient:
             or session_id is not None
             or camera_frame_counters is not None
             or stream_instance_id is not None
+            or applied_position_targets is not None
         )
 
         if use_aggregated:
@@ -1261,6 +1307,8 @@ class CyberwaveMQTTClient:
                 message["stream_instance_id"] = stream_instance_id
             if camera_frame_counters:
                 message["camera_frame_counters"] = camera_frame_counters
+            if applied_position_targets is not None:
+                message["applied_position_targets"] = applied_position_targets
 
             logger.debug(
                 f"Publishing aggregated joint state for {twin_uuid}: "
@@ -1382,6 +1430,7 @@ class CyberwaveMQTTClient:
             "type": "depth_data",
             "data": depth_data,
             "timestamp": ts,
+            "source_type": self._get_effective_source_type(None),
         }
         self.publish(topic, message)
 
@@ -1392,6 +1441,8 @@ class CyberwaveMQTTClient:
         timestamp: Optional[float] = None,
         *,
         stride: int = 6,
+        sensor_id: str | None = None,
+        camera_pose: dict[str, Any] | None = None,
     ):
         """Publish a point-cloud frame via MQTT.
 
@@ -1421,11 +1472,28 @@ class CyberwaveMQTTClient:
         reads ``point_stride``, and without it that consumer falls back to a
         heuristic that can silently drop or duplicate points.  We know the
         stride exactly here, so both are stamped.
+
+        ``camera_pose`` optionally carries the optical camera's acquisition pose
+        (position in metres, quaternion [w,x,y,z], explicit world/environment
+        frame). It requires the matching capture ``timestamp``. XYZ stays in
+        optical coordinates; consumers can use ``pointcloud_to_world`` when the
+        depth is metric. Never attach a newer robot pose to an older image.
         """
         import base64
 
         import numpy as np
 
+        if camera_pose is not None:
+            import math
+
+            if (
+                not isinstance(camera_pose, dict)
+                or isinstance(timestamp, bool)
+                or not isinstance(timestamp, (int, float))
+                or not math.isfinite(timestamp)
+                or timestamp <= 0
+            ):
+                raise ValueError("Camera pose requires an explicit positive capture timestamp and a pose object")
         arr = np.ascontiguousarray(np.asarray(point_cloud_data, dtype=np.float32))
         if arr.ndim == 2:
             # 2-D carries its own stride; a caller-supplied one cannot disagree.
@@ -1454,6 +1522,7 @@ class CyberwaveMQTTClient:
         self._handle_twin_update_with_telemetry(twin_uuid)
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/pointcloud"
         ts = timestamp or time.time()
+        source_type = self._get_effective_source_type(None)
         message = {
             "type": "pointcloud",
             "data": base64.b64encode(arr.tobytes()).decode("utf-8"),
@@ -1463,9 +1532,15 @@ class CyberwaveMQTTClient:
             "rows": int(arr.shape[0]),
             "cols": stride,
             "point_stride": stride,
-            "source_type": SOURCE_TYPE_EDGE,
-            "source_subtype": "edge",
+            "source_type": source_type,
+            "source_subtype": source_type,
         }
+        if sensor_id is not None:
+            message["sensor_id"] = sensor_id
+        if camera_pose is not None:
+            # Acquisition pose accompanies optical XYZ; existing viewers/readers
+            # retain their coordinate convention. Consumers choose world projection.
+            message["camera_pose"] = camera_pose
         self.publish(topic, message)
 
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):

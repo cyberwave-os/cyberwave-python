@@ -16,6 +16,7 @@ access is required. Tests focus on:
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -224,6 +225,74 @@ class TestNodeAndFinishEvents:
         assert started["activation_index"] == 2
         assert finished["activation_index"] == 2
         assert errored["activation_index"] == 3
+
+    def test_node_event_omits_timing_when_the_caller_measures_nothing(self):
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+        client.mqtt.publish.reset_mock()
+
+        reporter.node_finished(NODE_UUID, output_data=[{"ok": True}])
+
+        payload = _payloads(client)[0]
+        assert "started_at" not in payload
+        assert "finished_at" not in payload
+
+    def test_node_event_carries_the_reporter_clock_when_given(self):
+        """A buffered worker publishes after the fact.
+
+        Its events all reach the backend at flush time, so the reading it
+        took when the node actually ran has to travel on the wire or the
+        whole run collapses onto one instant.
+        """
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+        client.mqtt.publish.reset_mock()
+        ran_at = datetime(2026, 9, 8, 9, 25, 29, tzinfo=timezone.utc)
+
+        reporter.node_started(NODE_UUID, started_at=ran_at)
+        reporter.node_finished(NODE_UUID, finished_at=ran_at.timestamp() + 7)
+
+        started, finished = _payloads(client)
+        assert started["started_at"] == "2026-09-08T09:25:29+00:00"
+        assert "finished_at" not in started
+        assert finished["finished_at"] == "2026-09-08T09:25:36+00:00"
+
+    def test_node_event_reads_a_naive_reporter_clock_as_utc(self):
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+        client.mqtt.publish.reset_mock()
+
+        reporter.node_finished(
+            NODE_UUID, finished_at=datetime(2026, 9, 8, 9, 25, 29)
+        )
+
+        assert _payloads(client)[0]["finished_at"] == "2026-09-08T09:25:29+00:00"
+
+    def test_node_event_rejects_a_nonsense_reporter_clock(self):
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+        with pytest.raises(TypeError, match="timestamp"):
+            reporter.node_finished(NODE_UUID, finished_at=object())
+
+    def test_reporter_advertises_node_timing_support(self):
+        """The generated worker checks this before passing the kwargs:
+        its source comes from the backend, which can be newer than the
+        SDK installed on the device.
+        """
+        client = _make_client()
+        reporter = WorkflowExecutionManager(client).start(
+            workflow_uuid=WORKFLOW_UUID
+        )
+
+        assert reporter.reports_node_timing is True
 
     def test_node_event_rejects_negative_activation_index(self):
         client = _make_client()

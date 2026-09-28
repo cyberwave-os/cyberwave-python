@@ -50,6 +50,7 @@ class TestCatalogShape:
             "detections_3d",
             "grasps",
             "relations",
+            "json",
         }
         for a in STRUCTURED_ACTIONS:
             assert a.output_format in allowed, a

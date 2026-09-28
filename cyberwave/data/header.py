@@ -160,10 +160,10 @@ class HeaderTemplate:
     """Pre-compiled header for repeated publishing on the same channel.
 
     Encodes the static JSON (content_type, shape, dtype, metadata) once
-    during ``__init__``.  On each :meth:`pack` call, only ``ts`` and ``seq``
-    are packed as binary — no JSON serialisation, no string formatting.
+    during ``__init__``. Without per-sample metadata, :meth:`pack` only
+    packs ``ts`` and ``seq`` as binary, without JSON serialisation.
 
-    Typical per-sample overhead of :meth:`pack` is **< 500 ns**.
+    Typical overhead of the cached :meth:`pack` path is **< 500 ns**.
     """
 
     __slots__ = (
@@ -208,14 +208,41 @@ class HeaderTemplate:
             _HEADER_LEN_FMT, cached_header_len
         )
 
-    def pack(self, payload: bytes, *, ts: float | None = None) -> bytes:
+    def pack(
+        self,
+        payload: bytes,
+        *,
+        ts: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> bytes:
         """Combine the cached header with *payload*.
 
-        Per-sample cost: one ``struct.pack`` (16 bytes) + one ``b"".join``.
+        Without per-sample metadata, retain the cached binary-only fast path.
+        Dynamic metadata (for example a camera's capture pose) is serialized for
+        this sample only, without changing the template or resetting its sequence.
         """
         if ts is None:
             ts = time.time()
         seq = next(self._seq_counter)
+        if metadata:
+            reserved = {"content_type", "shape", "dtype"}
+            if reserved.intersection(metadata):
+                raise WireFormatError("Per-sample metadata cannot change content_type, shape or dtype")
+            # Read the immutable encoded snapshot, not the caller's potentially
+            # mutated metadata object. Reuse the standard encoder's size guard.
+            fields = json.loads(self._cached_json_bytes)
+            fields.update(metadata)
+            return encode(
+                HeaderMeta(
+                    content_type=self.content_type,
+                    shape=self.shape,
+                    dtype=self.dtype,
+                    ts=ts,
+                    seq=seq,
+                    metadata={key: value for key, value in fields.items() if key not in reserved},
+                ),
+                payload,
+            )
         return b"".join((
             self._cached_header_len_packed,
             struct.pack(_TS_SEQ_FMT, ts, seq),

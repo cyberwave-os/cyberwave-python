@@ -17,10 +17,11 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from cyberwave.rest.models.position import Position
 from cyberwave.rest.models.rotation import Rotation
+from cyberwave.rest.models.size import Size
 from cyberwave.rest.models.style1 import Style1
 from typing import Optional, Set
 from typing_extensions import Self
@@ -38,6 +39,8 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
     material: Optional[StrictStr] = None
     style: Optional[Style1] = None
     parameters: Optional[Dict[str, Any]] = None
+    size: Optional[Size] = None
+    dimensions: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None
     json_patch: Optional[List[Dict[str, Any]]] = None
     pose: Optional[Dict[str, Any]] = None
     position: Optional[Position] = None
@@ -47,7 +50,7 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
     locked: Optional[StrictBool] = None
     fixed_base: Optional[StrictBool] = None
     expected_revision: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["template_key", "template_version", "primitive_type", "name", "color", "material", "style", "parameters", "json_patch", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "expected_revision"]
+    __properties: ClassVar[List[str]] = ["template_key", "template_version", "primitive_type", "name", "color", "material", "style", "parameters", "size", "dimensions", "json_patch", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "expected_revision"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -91,6 +94,9 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of style
         if self.style:
             _dict['style'] = self.style.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of size
+        if self.size:
+            _dict['size'] = self.size.to_dict()
         # override the default output from pydantic by calling `to_dict()` of position
         if self.position:
             _dict['position'] = self.position.to_dict()
@@ -136,6 +142,16 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
         # and model_fields_set contains the field
         if self.parameters is None and "parameters" in self.model_fields_set:
             _dict['parameters'] = None
+
+        # set to None if size (nullable) is None
+        # and model_fields_set contains the field
+        if self.size is None and "size" in self.model_fields_set:
+            _dict['size'] = None
+
+        # set to None if dimensions (nullable) is None
+        # and model_fields_set contains the field
+        if self.dimensions is None and "dimensions" in self.model_fields_set:
+            _dict['dimensions'] = None
 
         # set to None if json_patch (nullable) is None
         # and model_fields_set contains the field
@@ -202,6 +218,8 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
             "material": obj.get("material"),
             "style": Style1.from_dict(obj["style"]) if obj.get("style") is not None else None,
             "parameters": obj.get("parameters"),
+            "size": Size.from_dict(obj["size"]) if obj.get("size") is not None else None,
+            "dimensions": obj.get("dimensions"),
             "json_patch": obj.get("json_patch"),
             "pose": obj.get("pose"),
             "position": Position.from_dict(obj["position"]) if obj.get("position") is not None else None,

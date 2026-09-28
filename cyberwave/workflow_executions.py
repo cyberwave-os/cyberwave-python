@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid as _uuid_mod
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .exceptions import CyberwaveError
@@ -54,6 +55,28 @@ _EXECUTION_TERMINAL_STATUSES = frozenset({"success", "error", "canceled"})
 _NODE_TERMINAL_STATUSES = frozenset({"success", "error", "skipped"})
 
 
+def _iso_timestamp(value: Any) -> Optional[str]:
+    """Render a node event timestamp for the wire, or None to omit it.
+
+    Accepts a ``datetime`` (naive is read as UTC), epoch seconds, or an
+    already-formatted string. A reporter that buffers its events needs to
+    say when each node actually ran, since the backend otherwise has only
+    the moment the event was ingested.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        moment = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return moment.isoformat()
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        raise TypeError(f"Invalid node event timestamp: {value!r}")
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
+    raise TypeError(f"Invalid node event timestamp: {value!r}")
+
+
 class WorkflowExecutionReporter:
     """Stateful MQTT reporter that owns a single execution.
 
@@ -64,6 +87,12 @@ class WorkflowExecutionReporter:
     need strict error propagation can construct the reporter with
     ``strict=True``.
     """
+
+    #: Advertises that the ``node_*`` methods accept ``started_at`` /
+    #: ``finished_at``. A generated edge worker checks this before passing
+    #: them: its source comes from the backend, which can be newer than the
+    #: SDK installed on the device.
+    reports_node_timing = True
 
     def __init__(
         self,
@@ -101,6 +130,7 @@ class WorkflowExecutionReporter:
         metadata: Optional[Dict[str, Any]] = None,
         activation_index: int = 0,
         caller_uuid: Optional[str] = None,
+        started_at: Any = None,
     ) -> None:
         """Mark a node as running.
 
@@ -119,6 +149,7 @@ class WorkflowExecutionReporter:
             metadata=metadata,
             activation_index=activation_index,
             caller_uuid=caller_uuid,
+            started_at=started_at,
         )
 
     def node_finished(
@@ -130,6 +161,7 @@ class WorkflowExecutionReporter:
         metadata: Optional[Dict[str, Any]] = None,
         activation_index: int = 0,
         caller_uuid: Optional[str] = None,
+        finished_at: Any = None,
     ) -> None:
         """Mark a node as having finished successfully."""
         self._send_node_event(
@@ -140,6 +172,7 @@ class WorkflowExecutionReporter:
             metadata=metadata,
             activation_index=activation_index,
             caller_uuid=caller_uuid,
+            finished_at=finished_at,
         )
 
     def node_error(
@@ -151,6 +184,7 @@ class WorkflowExecutionReporter:
         metadata: Optional[Dict[str, Any]] = None,
         activation_index: int = 0,
         caller_uuid: Optional[str] = None,
+        finished_at: Any = None,
     ) -> None:
         """Mark a node as failed."""
         self._send_node_event(
@@ -161,6 +195,7 @@ class WorkflowExecutionReporter:
             metadata=metadata,
             activation_index=activation_index,
             caller_uuid=caller_uuid,
+            finished_at=finished_at,
         )
 
     def node_skipped(
@@ -170,6 +205,7 @@ class WorkflowExecutionReporter:
         metadata: Optional[Dict[str, Any]] = None,
         activation_index: int = 0,
         caller_uuid: Optional[str] = None,
+        finished_at: Any = None,
     ) -> None:
         """Mark a node as skipped (e.g. conditional branch not taken)."""
         self._send_node_event(
@@ -178,6 +214,7 @@ class WorkflowExecutionReporter:
             metadata=metadata,
             activation_index=activation_index,
             caller_uuid=caller_uuid,
+            finished_at=finished_at,
         )
 
     def finished(
@@ -243,6 +280,8 @@ class WorkflowExecutionReporter:
         metadata: Optional[Dict[str, Any]] = None,
         activation_index: int = 0,
         caller_uuid: Optional[str] = None,
+        started_at: Any = None,
+        finished_at: Any = None,
     ) -> None:
         valid = _NODE_TERMINAL_STATUSES | {"pending", "running"}
         if status not in valid:
@@ -272,6 +311,15 @@ class WorkflowExecutionReporter:
             payload["activation_index"] = int(activation_index)
         if caller_uuid is not None:
             payload["caller_uuid"] = str(caller_uuid)
+        # When the reporter measured the node itself, say so: a buffered
+        # publisher's events all reach the backend at flush time, and ingest
+        # time would collapse a whole run onto one instant.
+        for field, value in (
+            ("started_at", _iso_timestamp(started_at)),
+            ("finished_at", _iso_timestamp(finished_at)),
+        ):
+            if value is not None:
+                payload[field] = value
 
         topic = (
             f"cyberwave/workflow/{self._workflow_uuid}/execution/"

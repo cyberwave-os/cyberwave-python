@@ -1,0 +1,43 @@
+[
+  {
+    "name": "action",
+    "type": "string",
+    "required": true,
+    "enum": [
+      "grip",
+      "release",
+      "reset"
+    ],
+    "description": "Gripper action"
+  },
+  {
+    "name": "speed",
+    "default": 0,
+    "unit": "m/s",
+    "type": "number",
+    "minimum": 0,
+    "maximum": 1
+  },
+  {
+    "name": "joints",
+    "type": "array",
+    "required": true,
+    "minItems": 1
+  },
+  {
+    "name": "enabled",
+    "default": false,
+    "type": "boolean"
+  },
+  {
+    "name": "repetitions",
+    "default": 1,
+    "type": "integer",
+    "minimum": 1
+  },
+  {
+    "name": "options",
+    "default": {},
+    "type": "object"
+  }
+]

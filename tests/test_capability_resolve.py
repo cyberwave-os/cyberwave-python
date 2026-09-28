@@ -43,3 +43,44 @@ def test_resolve_gps_imu_compass() -> None:
     assert resolve_handler_from_capabilities(caps, "gps").sensor_ids == ("nav_gps",)
     assert resolve_handler_from_capabilities(caps, "imu").sensor_ids == ("body_imu",)
     assert resolve_handler_from_capabilities(caps, "compass").sensor_ids == ("mag",)
+
+
+def test_resolve_microphone_and_speaker() -> None:
+    caps = {
+        "sensors": [
+            {"id": "g1-vui-mic", "type": "microphone"},
+            {"id": "g1-vui-speaker", "type": "speaker"},
+        ]
+    }
+    mic = resolve_handler_from_capabilities(caps, "microphone")
+    speaker = resolve_handler_from_capabilities(caps, "speaker")
+    assert mic.available
+    assert mic.sensor_ids == ("g1-vui-mic",)
+    assert mic.default_sensor_id == "g1-vui-mic"
+    assert speaker.available
+    assert speaker.sensor_ids == ("g1-vui-speaker",)
+    assert speaker.default_sensor_id == "g1-vui-speaker"
+    # "mic" is an accepted alias for "microphone".
+    assert resolve_handler_from_capabilities(caps, "mic").sensor_ids == ("g1-vui-mic",)
+
+
+def test_resolve_microphone_accepts_type_aliases() -> None:
+    for alias in ("mic", "microphone", "audio_in", "audio", "audio_mono", "audio_stereo"):
+        caps = {"sensors": [{"id": "s1", "type": alias}]}
+        assert resolve_handler_from_capabilities(caps, "microphone").available, alias
+
+
+def test_resolve_speaker_accepts_type_aliases() -> None:
+    for alias in ("speaker", "loudspeaker", "speakerphone", "audio_out"):
+        caps = {"sensors": [{"id": "s1", "type": alias}]}
+        assert resolve_handler_from_capabilities(caps, "speaker").available, alias
+
+
+def test_resolve_microphone_unavailable_when_twin_has_no_such_sensor() -> None:
+    # A twin that only declares a camera must not report a microphone/speaker
+    # available -- callers rely on this to skip starting a sensor the twin
+    # never declared, rather than assuming every unit of a given asset model
+    # has the same physically-installed sensors.
+    caps = {"sensors": [{"id": "front_camera", "type": "rgb"}]}
+    assert not resolve_handler_from_capabilities(caps, "microphone").available
+    assert not resolve_handler_from_capabilities(caps, "speaker").available

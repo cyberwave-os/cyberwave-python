@@ -51,6 +51,44 @@ def test_get_latest_returns_decoded_value() -> None:
     sub.cancel()
 
 
+@pytest.mark.parametrize("stream,nested", [("depth", True), ("pointcloud", False)])
+def test_named_sensors_isolate_frames_and_keep_legacy_feeds(stream, nested):
+    twin, callbacks = _fake_twin()
+    listeners = {}
+
+    def subscribe(topic, callback, *, subscriber_key=None, **kwargs):
+        # Match the MQTT client's replacement semantics for an omitted key.
+        listeners[(topic, subscriber_key)] = callback
+
+    twin.client.mqtt.subscribe = subscribe
+    twin.capabilities = {
+        "sensors": [
+            {"id": "front", "name": "front_camera"},
+            {"id": "rear", "name": "rear_camera"},
+        ]
+    }
+    front = MqttSensorStreamHandle(twin, sensor_id="front")
+    rear = MqttSensorStreamHandle(twin, sensor_id="rear_camera")
+    front_frames, rear_frames = [], []
+    front_sub = front._register_callback(stream, _identity, front_frames.append)
+    rear_sub = rear._register_callback(stream, _identity, rear_frames.append)
+
+    def publish(payload):
+        for listener in listeners.values():
+            listener(payload)
+
+    for sensor, value in [("front_camera", 1), ("rear", 2), ("unknown", 3)]:
+        frame = {"sensor_id": sensor, "value": value}
+        publish({"data": frame} if nested else frame)
+    assert len(front_frames) == len(rear_frames) == 1
+    assert (front_frames[0]["data"] if nested else front_frames[0])["value"] == 1
+    assert (rear_frames[0]["data"] if nested else rear_frames[0])["value"] == 2
+    publish({"value": "legacy"})
+    assert front_frames[-1] == rear_frames[-1] == {"value": "legacy"}
+    front_sub.cancel()
+    rear_sub.cancel()
+
+
 def test_get_latest_waits_for_a_fresh_message_on_repeat_calls() -> None:
     """Regression test: a call must not return a stale cached value forever —
     it should wait (up to timeout) for a message newer than what's already

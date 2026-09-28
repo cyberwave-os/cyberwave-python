@@ -10,6 +10,11 @@
       "has_legs": false,
       "has_wheels": false,
       "locomotion_mode": "stationary",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": true,
       "manipulator_count": 1,
       "payload_capacity_kg": 0.4,
@@ -19,6 +24,7 @@
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
+      "calibration_hand_eye": true,
       "sensors": []
     },
     "registry_id": "the-robot-studio/so101",
@@ -480,18 +486,30 @@
       "navigation_obstacle_avoidance": true,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
+      "mapping_service": {
+        "version": 1,
+        "provider": "cyberwave_slam",
+        "label": "Cyberwave SLAM \u00b7 RTAB-Map",
+        "interface": "map_stream.v1",
+        "map_types": [
+          "occupancy_grid"
+        ],
+        "sensor_ids": [
+          "lidar_3d"
+        ]
+      },
+      "mapping_service_issue": null,
       "sensors": [
         {
-          "id": "Unitree G1 camera",
-          "name": "Unitree G1 camera",
+          "id": "camera",
+          "name": "camera",
           "type": "rgb",
-          "model": null,
-          "fov_degrees": 59.99999999999999,
+          "model": "G1 head camera",
           "parent_link": "head_servo_link",
           "offset": {
             "position": {
               "x": 0.0632,
-              "y": 5.000000000032756e-06,
+              "y": 5e-06,
               "z": 0.4783
             },
             "rotation": {
@@ -502,39 +520,38 @@
             }
           },
           "parameters": {
-            "width": 640,
-            "height": 480,
-            "update_rate": 30,
-            "vfov_rad": 1.0471975511965976
+            "width": 1280,
+            "height": 720,
+            "update_rate": 25.0
           }
         },
         {
-          "id": "Unitree G1 camera2",
-          "name": "Unitree G1 camera2",
-          "type": "depth",
-          "model": null,
-          "fov_degrees": 90.0,
-          "parent_link": "d455_link",
+          "id": "lidar_3d",
+          "name": "lidar_3d",
+          "type": "lidar_3d",
+          "model": "Livox Mid-360",
+          "fov_degrees": 59.00000000000001,
+          "parent_link": "mid360_link",
           "offset": {
             "position": {
-              "x": 0.04340108302542229,
-              "y": 5.000000000032756e-06,
-              "z": -0.021927091980219634
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             },
             "rotation": {
-              "w": 0.6089707903708289,
-              "x": 0.3755387815433645,
-              "y": -0.3428373177982935,
-              "z": -0.608717277196011
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
             }
           },
           "parameters": {
-            "width": 640,
-            "height": 480,
-            "update_rate": 30,
-            "fov_degrees": 90,
-            "min_depth": 0.1,
-            "max_depth": 10
+            "update_rate": 10.0,
+            "vfov_rad": 1.0297442586766545,
+            "hfov_rad": 6.283185307179586,
+            "min_range": 0.1,
+            "max_range": 40.0,
+            "points_per_second": 200000
           }
         }
       ]
@@ -553,6 +570,11 @@
       "has_legs": true,
       "has_wheels": false,
       "locomotion_mode": "legged",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
       "can_grip": false,
       "manipulator_count": 0,
       "payload_capacity_kg": 7,
@@ -562,6 +584,19 @@
       "navigation_obstacle_avoidance": true,
       "maximum_frequency_hz": 0,
       "minimum_frequency_hz": 0,
+      "mapping_service": {
+        "version": 1,
+        "provider": "cyberwave_slam",
+        "label": "Cyberwave SLAM \u00b7 RTAB-Map",
+        "interface": "map_stream.v1",
+        "map_types": [
+          "occupancy_grid"
+        ],
+        "sensor_ids": [
+          "lidar_4d"
+        ]
+      },
+      "mapping_service_issue": null,
       "sensors": [
         {
           "id": "lidar_4d",
@@ -3525,8 +3560,8 @@
               "z": -0.005
             },
             "rotation": {
-              "w": 0.0,
-              "x": -1.0,
+              "w": 1.0,
+              "x": 0.0,
               "y": 0.0,
               "z": 0.0
             }
@@ -4339,6 +4374,20 @@
       "navigation_obstacle_avoidance": false,
       "maximum_frequency_hz": 30,
       "minimum_frequency_hz": 0,
+      "mapping_service": {
+        "version": 1,
+        "provider": "mir250_mapping_bridge",
+        "label": "MiR mapping \u00b7 slam_toolbox",
+        "interface": "map_stream.v1",
+        "map_types": [
+          "occupancy_grid"
+        ],
+        "sensor_ids": [
+          "front_laser_link",
+          "back_laser_link"
+        ]
+      },
+      "mapping_service_issue": null,
       "sensors": [
         {
           "id": "front_laser_link",
@@ -11800,11 +11849,11 @@
       "minimum_frequency_hz": 0,
       "sensors": [
         {
-          "id": "default",
-          "name": "default",
+          "id": "thermal_camera",
+          "name": "thermal_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 58.00000000000001,
+          "fov_degrees": 37.0,
           "parent_link": "ax8_link",
           "offset": {
             "position": {
@@ -11813,17 +11862,26 @@
               "z": 0.0693
             },
             "rotation": {
-              "w": 0.459,
-              "x": 0.4885,
-              "y": -0.5082,
-              "z": -0.5408
+              "w": 0.5,
+              "x": 0.5,
+              "y": -0.5,
+              "z": -0.5
             }
           },
           "parameters": {
             "width": 640,
             "height": 480,
-            "update_rate": 30,
-            "vfov_rad": 1.0122909661567112
+            "update_rate": 9,
+            "vfov_rad": 0.6457718232379019,
+            "thermal_width": 80,
+            "thermal_height": 60,
+            "min_temperature_c": -10.0,
+            "max_temperature_c": 150.0
+          },
+          "extensions": {
+            "cyberwave": {
+              "display_palette": "thermal"
+            }
           }
         }
       ]
@@ -12129,6 +12187,106 @@
       "sensors": []
     },
     "registry_id": "robotiq/epick",
+    "registry_id_alias": null
+  },
+  "parrot/anafi-ai": {
+    "uuid": "b363d0b1-f780-4e50-902f-bbab6b01ca38",
+    "name": "ANAFI Ai",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "parrot/anafi-ai",
+    "registry_id_alias": null
+  },
+  "cyberwave-drone-kits/rain-shelter-dock-for-parrot-anafi-ai-prototype": {
+    "uuid": "cffef54d-e972-477a-9c87-a268be128a99",
+    "name": "Rain-Shelter Dock for Parrot ANAFI Ai - Prototype",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave-drone-kits/rain-shelter-dock-for-parrot-anafi-ai-prototype",
+    "registry_id_alias": null
+  },
+  "cyberwave/open-carton-box": {
+    "uuid": "8faea9dd-34d4-4bc2-8da9-e9c5f47fb682",
+    "name": "Open Carton Box",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/open-carton-box",
+    "registry_id_alias": null
+  },
+  "sap/penguin-plush": {
+    "uuid": "281397cd-2701-4f41-acd6-1c52b522154e",
+    "name": "SAP Penguin Plush",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "sap/penguin-plush",
     "registry_id_alias": null
   }
 }

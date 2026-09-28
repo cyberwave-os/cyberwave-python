@@ -25,9 +25,10 @@ from pydantic_core import to_jsonable_python
 
 class TwinDriverLogSchema(BaseModel):
     """
-    Schema for persisted twin driver logs.
+    One persisted driver-log row.  Shared by both driver-log read paths, so the row shape cannot drift between them: ``GET /twins/{uuid}/logs`` and ``GET /environments/{uuid}/driver-logs``.  ``twin_uuid`` says which twin the row came from. It is redundant on the twin route and load-bearing on the environment route, where rows from several twins are interleaved and position in ``items`` no longer identifies the twin. It comes off the FK's raw column value, so it costs no join.
     """ # noqa: E501
     uuid: StrictStr
+    twin_uuid: Optional[StrictStr] = None
     timestamp: StrictStr
     level: StrictStr
     message: StrictStr
@@ -37,7 +38,7 @@ class TwinDriverLogSchema(BaseModel):
     sdk_version: Optional[StrictStr] = None
     driver_image: Optional[StrictStr] = None
     metadata: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["uuid", "timestamp", "level", "message", "container_name", "source", "edge_core_version", "sdk_version", "driver_image", "metadata"]
+    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "timestamp", "level", "message", "container_name", "source", "edge_core_version", "sdk_version", "driver_image", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -78,6 +79,11 @@ class TwinDriverLogSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if twin_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.twin_uuid is None and "twin_uuid" in self.model_fields_set:
+            _dict['twin_uuid'] = None
+
         # set to None if container_name (nullable) is None
         # and model_fields_set contains the field
         if self.container_name is None and "container_name" in self.model_fields_set:
@@ -116,6 +122,7 @@ class TwinDriverLogSchema(BaseModel):
 
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
+            "twin_uuid": obj.get("twin_uuid"),
             "timestamp": obj.get("timestamp"),
             "level": obj.get("level"),
             "message": obj.get("message"),

@@ -17,7 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -27,8 +28,12 @@ class AssetControlProfileSettingsPatchSchema(BaseModel):
     """
     AssetControlProfileSettingsPatchSchema
     """ # noqa: E501
-    keyboard_bindings: Optional[List[Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["keyboard_bindings"]
+    expected_revision: Optional[StrictStr] = None
+    expected_policy_updated_at: Optional[datetime] = None
+    keyboard_bindings: Optional[List[Dict[str, Any]]] = None
+    leader_arm_bindings: Optional[List[Dict[str, Any]]] = None
+    custom_leader_arm_bindings: Optional[List[Dict[str, Any]]] = None
+    __properties: ClassVar[List[str]] = ["expected_revision", "expected_policy_updated_at", "keyboard_bindings", "leader_arm_bindings", "custom_leader_arm_bindings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -69,10 +74,30 @@ class AssetControlProfileSettingsPatchSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if expected_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_revision is None and "expected_revision" in self.model_fields_set:
+            _dict['expected_revision'] = None
+
+        # set to None if expected_policy_updated_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_policy_updated_at is None and "expected_policy_updated_at" in self.model_fields_set:
+            _dict['expected_policy_updated_at'] = None
+
         # set to None if keyboard_bindings (nullable) is None
         # and model_fields_set contains the field
         if self.keyboard_bindings is None and "keyboard_bindings" in self.model_fields_set:
             _dict['keyboard_bindings'] = None
+
+        # set to None if leader_arm_bindings (nullable) is None
+        # and model_fields_set contains the field
+        if self.leader_arm_bindings is None and "leader_arm_bindings" in self.model_fields_set:
+            _dict['leader_arm_bindings'] = None
+
+        # set to None if custom_leader_arm_bindings (nullable) is None
+        # and model_fields_set contains the field
+        if self.custom_leader_arm_bindings is None and "custom_leader_arm_bindings" in self.model_fields_set:
+            _dict['custom_leader_arm_bindings'] = None
 
         return _dict
 
@@ -86,7 +111,11 @@ class AssetControlProfileSettingsPatchSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "keyboard_bindings": obj.get("keyboard_bindings")
+            "expected_revision": obj.get("expected_revision"),
+            "expected_policy_updated_at": obj.get("expected_policy_updated_at"),
+            "keyboard_bindings": obj.get("keyboard_bindings"),
+            "leader_arm_bindings": obj.get("leader_arm_bindings"),
+            "custom_leader_arm_bindings": obj.get("custom_leader_arm_bindings")
         })
         return _obj
 

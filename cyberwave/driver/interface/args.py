@@ -7,7 +7,7 @@ inside :meth:`~cyberwave.driver.interface.registry_mixin.InterfaceRegistryMixin.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, Literal
@@ -97,7 +97,7 @@ class CallbackGroup:
 
     For ROS-fed publishers (``from_ros`` on :meth:`~cyberwave.driver.interface.registry.DriverInterfaceRegistry.add_publisher`),
     ``callback=None`` uses the default :func:`~cyberwave.driver.ros2.message_payload.ros_message_to_transport_payload`.
-  """
+    """
 
     callback: ListenerCallback | PublisherCallback | None = None
     label: str | None = None
@@ -117,8 +117,12 @@ class ProtocolArgs:
     units: Mapping[str, str] | None = None
     direction_notes: str | None = None
     related_topics: tuple[str, ...] | None = None
+    command_input: bool | None = field(default=None, kw_only=True)
+    """Whether the device accepts commands on this topic, independent of direction wording."""
 
     def __post_init__(self) -> None:
+        if self.command_input is not None and type(self.command_input) is not bool:
+            raise ValueError("command_input must be a boolean when declared")
         if self.source_types is not None:
             object.__setattr__(self, "source_types", tuple(self.source_types))
         if self.related_topics is not None:
@@ -129,11 +133,52 @@ class ProtocolArgs:
 
 @dataclass(frozen=True)
 class CommandArg:
-    """One declared argument of a ``twin/command`` catalog command."""
+    """One declared command argument; typed fields are compiled by the backend.
+
+    The original three positional fields and their untyped wire shape remain
+    supported. Set ``type`` to opt into complete, typed parameter collection
+    instead of legacy numeric direction expansion.
+    """
 
     name: str
     default: Any = None
     unit: str | None = None
+    type: (
+        Literal["string", "number", "integer", "boolean", "array", "object"] | None
+    ) = field(default=None, kw_only=True)
+    required: bool | None = field(default=None, kw_only=True)
+    enum: tuple[str | int | float | bool, ...] | None = field(
+        default=None, kw_only=True
+    )
+    minimum: int | float | None = field(default=None, kw_only=True)
+    maximum: int | float | None = field(default=None, kw_only=True)
+    min_items: int | None = field(default=None, kw_only=True)
+    description: str | None = field(default=None, kw_only=True)
+
+    def to_catalog_dict(self) -> dict[str, Any]:
+        """Export the authoring shape consumed by the canonical server compiler."""
+        optional = {
+            "type": self.type,
+            "required": self.required,
+            "enum": list(self.enum) if self.enum is not None else None,
+            "minimum": self.minimum,
+            "maximum": self.maximum,
+            "minItems": self.min_items,
+            "description": self.description,
+        }
+        legacy = {"name": self.name, "default": self.default, "unit": self.unit}
+        if self.type is None:
+            if any(value is not None for value in optional.values()):
+                raise ValueError(f"{self.name}: typed argument fields require type")
+            return legacy
+        # None remains the legacy constructor's omitted-default sentinel. Typed
+        # null is not a supported argument type; do not manufacture a null value
+        # for a required field that the user still needs to configure.
+        return {
+            key: value
+            for key, value in {**legacy, **optional}.items()
+            if value is not None
+        }
 
 
 @dataclass(frozen=True)
@@ -154,6 +199,8 @@ class CommandArgs:
     # the compiled catalog (``commands.specs[name].description``). Defaults to "".
     description: str = ""
     args: tuple[CommandArg, ...] = ()
+    # At least one declared typed argument must be supplied; validated by the server compiler.
+    required_any_of: tuple[str, ...] | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -165,7 +212,9 @@ class PublisherArgs:
 
 
 # Modes where management commands are always active.
-MANAGEMENT_MODES: frozenset[DriverOperationMode] = frozenset({DriverOperationMode.NO_OP})
+MANAGEMENT_MODES: frozenset[DriverOperationMode] = frozenset(
+    {DriverOperationMode.NO_OP}
+)
 
 # Default: actuation listeners/publishers require teleop.
 TELEOP_MODES: frozenset[DriverOperationMode] = frozenset(
@@ -176,7 +225,9 @@ TELEOP_MODES: frozenset[DriverOperationMode] = frozenset(
 )
 
 
-def default_operation_modes(*, management: bool = False) -> frozenset[DriverOperationMode]:
+def default_operation_modes(
+    *, management: bool = False
+) -> frozenset[DriverOperationMode]:
     if management:
         return frozenset(DriverOperationMode)
     return TELEOP_MODES

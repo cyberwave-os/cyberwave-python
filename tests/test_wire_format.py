@@ -253,6 +253,28 @@ class TestGoldenFixtures:
 
 
 class TestHeaderTemplate:
+    def test_dynamic_metadata_is_paired_with_one_sample_without_resetting_sequence(self):
+        template = HeaderTemplate("application/octet-stream", metadata={"sensor_id": "front", "gain": 2})
+        pose = {"position": [1, 2, 3]}
+        first = template.pack(b"first", ts=10, metadata={"camera_pose": pose})
+        pose["position"][0] = 9
+        second = template.pack(b"second", ts=20, metadata={"camera_pose": pose})
+        third = template.pack(b"legacy", ts=30)
+        for index, (wire, expected_x) in enumerate(((first, 1), (second, 9), (third, None))):
+            header, _ = decode(wire)
+            assert header.seq == index and header.ts == 10 * (index + 1)
+            assert header.metadata["sensor_id"] == "front"
+            assert header.metadata["gain"] == 2
+            if expected_x is None:
+                assert "camera_pose" not in header.metadata
+            else:
+                assert header.metadata["camera_pose"]["position"][0] == expected_x
+
+    @pytest.mark.parametrize("key", ["content_type", "shape", "dtype"])
+    def test_sample_metadata_cannot_change_wire_contract(self, key):
+        with pytest.raises(WireFormatError):
+            HeaderTemplate("application/octet-stream").pack(b"pixels", metadata={key: "invalid"})
+
     def test_pack_decode_roundtrip(self) -> None:
         tmpl = HeaderTemplate("numpy/ndarray", shape=(10,), dtype="float32")
         payload = b"\x00" * 40

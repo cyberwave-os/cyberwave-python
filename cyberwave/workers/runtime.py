@@ -269,6 +269,13 @@ class WorkerRuntime:
         invariant this ordering exists to protect for backends that are
         not thread-safe (e.g. whisper.cpp).
         """
+        from cyberwave.workers.status import (
+            PHASE_READY,
+            PHASE_SUBSCRIBED,
+            get_status_reporter,
+        )
+
+        status = get_status_reporter()
         mqtt_hooks = [h for h in self._registry.hooks if h.hook_type == "mqtt"]
         other_hooks = [h for h in self._registry.hooks if h.hook_type != "mqtt"]
 
@@ -280,6 +287,7 @@ class WorkerRuntime:
                 hook.twin_uuid[:8] + "..." if hook.twin_uuid else "<none>",
                 hook.callback.__name__,
             )
+        status.publish(PHASE_SUBSCRIBED)
 
         self._warm_up_models()
         with self._pending_mqtt_lock:
@@ -288,6 +296,13 @@ class WorkerRuntime:
             self._pending_mqtt_messages = []
         for replay in pending:
             replay()
+        # After the replay, not before: the loop above hands every message
+        # buffered during warm-up to its drain thread, and a run command that
+        # arrived while models were loading is in that backlog. Announcing
+        # readiness first would let the supervisor resolve the startup alert
+        # on a worker that has not yet taken delivery of the run it is
+        # holding.
+        status.publish(PHASE_READY)
 
         for hook in other_hooks:
             self._subscribe_hook(hook)
@@ -581,18 +596,30 @@ class WorkerRuntime:
         ]
 
     def _warm_up_models(self) -> None:
-        """Run warm-up inference on all loaded models to eliminate cold-start latency."""
+        """Run warm-up inference on all loaded models to eliminate cold-start latency.
+
+        Reports per-model progress to the process-wide status reporter as
+        each model finishes. Warm-up inference is the slowest startup step on
+        an accelerator-backed device and the one the user waits through with
+        no other signal, so the count is what turns the supervisor's progress
+        bar from a guess into a measurement.
+        """
         models_mgr = getattr(self._cw, "models", None)
         if models_mgr is None:
             return
         loaded_models: dict[str, Any] = getattr(models_mgr, "_loaded", {})
         if not loaded_models:
             return
+        from cyberwave.workers.status import PHASE_WARMING_UP, get_status_reporter
+
+        status = get_status_reporter()
+        total = len(loaded_models)
         logger.info(
             "Warming up %d loaded model(s) (startup inference only — not a wake-word trigger)...",
-            len(loaded_models),
+            total,
         )
-        for model in loaded_models.values():
+        status.publish(PHASE_WARMING_UP, models_total=total, models_ready=0)
+        for index, model in enumerate(loaded_models.values(), start=1):
             warm_up_fn = getattr(model, "warm_up", None)
             if warm_up_fn is not None:
                 try:
@@ -601,6 +628,16 @@ class WorkerRuntime:
                     logger.warning(
                         "Model warm-up failed for %s", getattr(model, "name", "?"), exc_info=True,
                     )
+            # Counted whether or not the model warmed up cleanly: a failed
+            # warm-up still advances startup (the model stays loaded and
+            # usable, just cold), and stalling the bar on it would report a
+            # hang that isn't happening.
+            status.publish(
+                PHASE_WARMING_UP,
+                models_total=total,
+                models_ready=index,
+                detail=str(getattr(model, "name", "") or "") or None,
+            )
 
     def _publish_hook_error_alert(
         self,

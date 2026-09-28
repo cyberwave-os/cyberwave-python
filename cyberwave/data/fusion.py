@@ -22,12 +22,13 @@ Typical usage (inside a worker callback)::
 
 from __future__ import annotations
 
-import math
 import threading
 import time
 import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
+
+from .._geometry import core as _geometry_core
 
 from .ring_buffer import (
     BracketResult,
@@ -97,8 +98,11 @@ class Quaternion:
     ``list[float]`` of length 4 will **not** trigger SLERP — it must
     be an explicit ``Quaternion`` instance.
 
-    Convention: Hamilton ``(x, y, z, w)`` — the same as ROS, MuJoCo,
-    and the Cyberwave wire format.  Defaults to the identity rotation.
+    Convention: Hamilton ``(x, y, z, w)`` — the same as ROS, protobuf and
+    the Cyberwave wire format.  Defaults to the identity rotation.  MuJoCo is
+    the exception and is ``(w, x, y, z)``; convert at that seam rather than
+    handing a MuJoCo array to this constructor positionally (see
+    ``common/geometry/CONVENTIONS.md`` section 1).
     """
 
     x: float = 0.0
@@ -165,46 +169,57 @@ def _warn_schema_drift(
 
 
 def _normalize_quaternion(q: list[float]) -> list[float]:
-    """Normalise a quaternion [x, y, z, w] to unit length."""
-    norm = math.sqrt(sum(c * c for c in q))
+    """Normalise a quaternion [x, y, z, w] to unit length.
+
+    Degenerate input yields identity rather than raising, which is what
+    ``_quat_nlerp`` needs for an antipodal pair that cancels.
+
+    Takes the magnitude from the core but keeps this module's own 1e-12 cut
+    rather than deferring to ``quat.normalize``, whose ``kMinQuaternionNorm``
+    is 1e-9. Between the two thresholds ``normalize`` refuses where this
+    returned a direction, which in a published SDK is a replay difference --
+    identity instead of a half turn -- on a blend that used to interpolate.
+    """
+    geometry = _geometry_core()
+    norm = geometry.quat.norm(geometry.Quaternion.from_xyzw(q))
     if norm < 1e-12:
         return [0.0, 0.0, 0.0, 1.0]
     return [c / norm for c in q]
 
 
-def _dot_quaternion(a: list[float], b: list[float]) -> float:
-    """Dot product of two quaternions."""
-    return sum(ai * bi for ai, bi in zip(a, b))
-
-
 def _slerp_quaternion(a: list[float], b: list[float], alpha: float) -> list[float]:
     """Spherical linear interpolation between two unit quaternions [x,y,z,w].
 
-    Handles the antipodal case (negative dot product) by flipping ``b``.
-    Falls back to linear interpolation for nearly-parallel quaternions to
-    avoid division by a near-zero sine.
+    Handles the antipodal case by flipping ``b`` and falls back to a normalized
+    linear blend for nearly-parallel inputs -- both now in the shared core,
+    which uses the same 0.9995 threshold this did.
+
+    Each endpoint is normalized *separately* first, through the same 1e-12 cut
+    ``_quat_nlerp`` uses, rather than handing raw values to the core and
+    catching whatever it refuses. Two reasons, both about a published SDK:
+
+    * the core's cut is 1e-9, so deferring to it would turn a real direction
+      into identity across the 1e-12..1e-9 band -- the replay difference
+      ``_normalize_quaternion`` exists to avoid, and the one ``linear``
+      interpolation on the same buffer still avoids;
+    * a call-scoped ``except`` discards the *good* endpoint along with the bad
+      one, so a buffer holding a single uninitialized sample (an IMU
+      publishing (0,0,0,0) during EKF warm-up) returned a constant identity
+      for every alpha instead of converging on the sample it did have.
     """
-    a = _normalize_quaternion(a)
-    b = _normalize_quaternion(b)
-
-    dot = _dot_quaternion(a, b)
-
-    if dot < 0.0:
-        b = [-c for c in b]
-        dot = -dot
-
-    dot = min(dot, 1.0)
-
-    if dot > 0.9995:
-        result = [ai + alpha * (bi - ai) for ai, bi in zip(a, b)]
-        return _normalize_quaternion(result)
-
-    theta = math.acos(dot)
-    sin_theta = math.sin(theta)
-    wa = math.sin((1.0 - alpha) * theta) / sin_theta
-    wb = math.sin(alpha * theta) / sin_theta
-
-    return _normalize_quaternion([wa * ai + wb * bi for ai, bi in zip(a, b)])
+    geometry = _geometry_core()
+    left = _normalize_quaternion(a)
+    right = _normalize_quaternion(b)
+    try:
+        result = geometry.quat.slerp(
+            geometry.Quaternion.from_xyzw(left),
+            geometry.Quaternion.from_xyzw(right),
+            alpha,
+        )
+    except geometry.GeometryError:
+        # Only a non-finite alpha can reach here now: both endpoints are unit.
+        return [0.0, 0.0, 0.0, 1.0]
+    return list(result.to_xyzw())
 
 
 def _quat_nlerp(va: Quaternion, vb: Quaternion, alpha: float) -> Quaternion:
@@ -212,14 +227,21 @@ def _quat_nlerp(va: Quaternion, vb: Quaternion, alpha: float) -> Quaternion:
 
     Cheaper than SLERP but produces non-constant angular velocity for large
     angle differences.  Used by ``interpolation="linear"`` on quaternion data.
+
+    Deliberately blends the two quaternions exactly as given rather than
+    calling the core's ``quat.nlerp``, which takes the shortest arc: for an
+    antipodal pair the two disagree, and this is the published SDK, so a
+    recording replayed after an upgrade has to produce the numbers it produced
+    before. ``interpolation="slerp"`` is the shortest-arc path.
     """
-    lerped = _lerp_list(va.as_list(), vb.as_list(), alpha)
-    return Quaternion(*_normalize_quaternion(lerped))
+    x, y, z, w = _normalize_quaternion(_lerp_list(va.as_list(), vb.as_list(), alpha))
+    return Quaternion(x=x, y=y, z=z, w=w)
 
 
 def _quat_slerp_fn(va: Quaternion, vb: Quaternion, alpha: float) -> Quaternion:
     """Spherical linear interpolation (SLERP) between two quaternions."""
-    return Quaternion(*_slerp_quaternion(va.as_list(), vb.as_list(), alpha))
+    x, y, z, w = _slerp_quaternion(va.as_list(), vb.as_list(), alpha)
+    return Quaternion(x=x, y=y, z=z, w=w)
 
 
 def _interp_dict(

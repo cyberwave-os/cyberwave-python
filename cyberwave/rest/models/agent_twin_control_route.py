@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.control_operator_ui_schema import ControlOperatorUISchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -30,6 +31,8 @@ class AgentTwinControlRoute(BaseModel):
     id: StrictStr
     label: StrictStr
     route_kind: StrictStr
+    capability_label: Optional[StrictStr] = None
+    capability_id: Optional[StrictStr] = None
     input_kinds: Optional[List[StrictStr]] = None
     output_action_kind: StrictStr
     readiness: StrictStr
@@ -45,7 +48,8 @@ class AgentTwinControlRoute(BaseModel):
     setup_hint: Optional[StrictStr] = None
     setup_target: Optional[StrictStr] = None
     resolver_metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "label", "route_kind", "input_kinds", "output_action_kind", "readiness", "reason", "missing_capabilities", "requires_confirmation", "priority", "operator_label", "operator_description", "developer_label", "configuration_hint", "configuration_target", "setup_hint", "setup_target", "resolver_metadata"]
+    operator_ui: Optional[ControlOperatorUISchema] = None
+    __properties: ClassVar[List[str]] = ["id", "label", "route_kind", "capability_label", "capability_id", "input_kinds", "output_action_kind", "readiness", "reason", "missing_capabilities", "requires_confirmation", "priority", "operator_label", "operator_description", "developer_label", "configuration_hint", "configuration_target", "setup_hint", "setup_target", "resolver_metadata", "operator_ui"]
 
     @field_validator('output_action_kind')
     def output_action_kind_validate_enum(cls, value):
@@ -100,6 +104,19 @@ class AgentTwinControlRoute(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of operator_ui
+        if self.operator_ui:
+            _dict['operator_ui'] = self.operator_ui.to_dict()
+        # set to None if capability_label (nullable) is None
+        # and model_fields_set contains the field
+        if self.capability_label is None and "capability_label" in self.model_fields_set:
+            _dict['capability_label'] = None
+
+        # set to None if capability_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.capability_id is None and "capability_id" in self.model_fields_set:
+            _dict['capability_id'] = None
+
         # set to None if reason (nullable) is None
         # and model_fields_set contains the field
         if self.reason is None and "reason" in self.model_fields_set:
@@ -155,6 +172,8 @@ class AgentTwinControlRoute(BaseModel):
             "id": obj.get("id"),
             "label": obj.get("label"),
             "route_kind": obj.get("route_kind"),
+            "capability_label": obj.get("capability_label"),
+            "capability_id": obj.get("capability_id"),
             "input_kinds": obj.get("input_kinds"),
             "output_action_kind": obj.get("output_action_kind"),
             "readiness": obj.get("readiness"),
@@ -169,7 +188,8 @@ class AgentTwinControlRoute(BaseModel):
             "configuration_target": obj.get("configuration_target"),
             "setup_hint": obj.get("setup_hint"),
             "setup_target": obj.get("setup_target"),
-            "resolver_metadata": obj.get("resolver_metadata")
+            "resolver_metadata": obj.get("resolver_metadata"),
+            "operator_ui": ControlOperatorUISchema.from_dict(obj["operator_ui"]) if obj.get("operator_ui") is not None else None
         })
         return _obj
 

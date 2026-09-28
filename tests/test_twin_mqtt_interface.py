@@ -15,6 +15,8 @@ from cyberwave.manifest.driver_config import (
 )
 from cyberwave.twin import FlyingTwin, LocomoteTwin
 from cyberwave.twin.classes import JointTwin
+from cyberwave.twin.capabilities.gripper import GripperHandle
+from cyberwave.exceptions import CyberwaveMQTTError
 
 
 def _make_locomote_twin(
@@ -66,6 +68,26 @@ def test_get_mqtt_schema_returns_twin_mqtt_bundle() -> None:
     assert TWIN_COMMAND_TOPIC_SLUG in schema["topics"]
 
 
+@pytest.mark.parametrize("command", ["grip", "release"])
+@pytest.mark.parametrize("accepted", [True, False, None])
+def test_gripper_reports_failed_publish_and_retains_legacy_clients(command, accepted):
+    twin = _make_locomote_twin(metadata={
+        "mqtt": {
+            "topics": {TWIN_COMMAND_TOPIC_SLUG: {}},
+            "commands": {"supported": ["grip", "release"]},
+        }
+    })
+    twin.client.mqtt.publish.return_value = accepted
+    invoke = getattr(GripperHandle(twin), command)
+    with patch.object(twin, "_prepare_outbound_command"):
+        if accepted is False:
+            with pytest.raises(CyberwaveMQTTError, match="could not be sent"):
+                invoke()
+        else:
+            invoke()
+    assert twin.client.mqtt.publish.call_args.args[1]["command"] == command
+
+
 def test_driver_set_schema_persists_metadata_and_rebinds_commands() -> None:
     twin = _make_locomote_twin()
     updated_metadata = {
@@ -106,6 +128,65 @@ def test_driver_set_schema_persists_metadata_and_rebinds_commands() -> None:
     assert "custom_ping" in schemas["mqtt"]["commands"]["supported"]
     assert hasattr(twin.commands, "custom_ping")
     assert "custom_ping" in twin.commands._bound_catalog_commands
+
+
+def test_typed_driver_schema_refresh_keeps_arguments_and_existing_command_transport() -> (
+    None
+):
+    from cyberwave.driver import (
+        CallbackGroup,
+        CommandArg,
+        CommandArgs,
+        DriverInterfaceRegistry,
+        TopicSpec,
+    )
+
+    registry = DriverInterfaceRegistry()
+    registry.add_listener(
+        TopicSpec(
+            namespace="twin",
+            leaf="command",
+            payload_schema_ref="TwinCommandPayload",
+            description="Commands",
+        ),
+        CallbackGroup(lambda _e: None),
+        command=CommandArgs(
+            name="gripper",
+            args=(
+                CommandArg(
+                    "action", type="string", required=True, enum=("grip", "release")
+                ),
+            ),
+        ),
+    )
+    root = registry.to_cw_driver_dict(registry_id="test/gripper")
+    spec = root["mqtt"]["commands"]["supported"][0]
+    # API response is a fixture here; backend tests cover actual compilation.
+    twin = _make_locomote_twin()
+    twin.client.twins = MagicMock()
+    twin.client.twins.set_driver_schema.return_value = SimpleNamespace(
+        uuid="twin-uuid",
+        metadata={
+            "mqtt": {
+                "topics": {TWIN_COMMAND_TOPIC_SLUG: {}},
+                "commands": {
+                    "supported": ["gripper"],
+                    "specs": {"gripper": {"args": spec["args"]}},
+                },
+            }
+        },
+    )
+    schemas = twin.driver.set_schema(root)
+    twin.client.twins.set_driver_schema.assert_called_once_with(
+        "twin-uuid", driver_config=root, merge=True
+    )
+    assert schemas["mqtt"]["commands"]["specs"]["gripper"]["args"] == spec["args"]
+    with patch.object(twin, "_prepare_outbound_command"):
+        twin.commands.gripper(action="grip")
+    topic, payload = twin.client.mqtt.publish.call_args[0]
+    assert topic == "cyberwave/twin/twin-uuid/command"
+    assert payload["command"] == "gripper"
+    assert payload["data"] == {"action": "grip"}
 
 
 def test_get_mqtt_schema_cache_and_force_refresh() -> None:

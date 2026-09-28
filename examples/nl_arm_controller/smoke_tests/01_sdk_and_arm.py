@@ -1,9 +1,9 @@
-"""Smoke test 1/4 — Cyberwave SDK + AgileX PiPER twin.
+"""Smoke test 1/4 — Cyberwave SDK + SO-101 twin.
 
-Connects, instantiates a PiPER twin in the given environment, and sends one
-joint command to verify the publish path works. In simulation mode this
+Connects, instantiates an SO-101 twin in the default environment, and sends
+one joint command to verify the publish path works. In simulation mode this
 animates the 3D twin in the browser viewer; in live mode it also drives the
-physical arm (requires the PiPER edge driver running on the edge device).
+physical arm (requires `so101-remoteoperate` running on the edge device).
 """
 
 from __future__ import annotations
@@ -25,14 +25,11 @@ except ImportError as exc:
     sys.exit(1)
 
 
-# Platform joint names for the PiPER: joint1..joint6 are the arm, joint7 is
-# the gripper (prismatic — commanded in native units, with joint8 mimicking
-# it at -1.0 on the platform side).
-JOINTS = ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6"]
+JOINTS = ["1", "2", "3", "4", "5", "6"]
 
 
 def home(robot) -> None:
-    """Send every arm joint to 0° — the canonical zero pose for the PiPER."""
+    """Send every joint to 0° — the canonical zero pose for SO-101."""
     for joint in JOINTS:
         robot.joints.set(joint, 0)
 
@@ -54,7 +51,7 @@ def main() -> None:
     cw.affect(os.environ.get("CW_MODE", "simulation"))
 
     robot = cw.twin(
-        os.environ.get("CW_ASSET_KEY", "agile-x-robotics/piper"),
+        "the-robot-studio/so101",
         twin_id=twin_id,
         environment_id=env_id,
     )
@@ -69,20 +66,12 @@ def main() -> None:
     home(robot)
     time.sleep(1.5)
 
-    print("→ Sending joint1 → +30°  (watch the 3D viewer)")
-    robot.joints.set("joint1", 30)
+    print("→ Sending joint 1 → +30°  (watch the 3D viewer)")
+    robot.joints.set("1", 30)
     time.sleep(1.5)
 
-    print("→ Returning joint1 → 0°")
-    robot.joints.set("joint1", 0)
-    time.sleep(1.5)
-
-    print("→ Opening the gripper: joint7 → 0.035 m  (native units, not degrees)")
-    robot.joints.set("joint7", 0.035, degrees=False)
-    time.sleep(1.5)
-
-    print("→ Closing the gripper: joint7 → 0.0 m")
-    robot.joints.set("joint7", 0.0, degrees=False)
+    print("→ Returning joint 1 → 0°")
+    robot.joints.set("1", 0)
     time.sleep(1.5)
 
     cw.disconnect()

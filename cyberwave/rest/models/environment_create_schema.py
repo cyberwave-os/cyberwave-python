@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.lab_kind import LabKind
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -39,11 +40,14 @@ class EnvironmentCreateSchema(BaseModel):
     visibility: Optional[StrictStr] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = None
+    is_lab: Optional[StrictBool] = None
+    lab_kind: Optional[LabKind] = None
+    preserve_template_visibility: Optional[StrictBool] = False
     control_plane_access: Optional[StrictStr] = None
     expected_object_revisions: Optional[Dict[str, Dict[str, StrictStr]]] = None
     twin_asset_uuid: Optional[StrictStr] = None
     mlmodel_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "settings_base", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template", "control_plane_access", "expected_object_revisions", "twin_asset_uuid", "mlmodel_uuid"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "settings", "settings_base", "universal_schema", "asset_uuid", "workspace_uuid", "project_uuid", "visibility", "tags", "is_template", "is_lab", "lab_kind", "preserve_template_visibility", "control_plane_access", "expected_object_revisions", "twin_asset_uuid", "mlmodel_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -134,6 +138,16 @@ class EnvironmentCreateSchema(BaseModel):
         if self.is_template is None and "is_template" in self.model_fields_set:
             _dict['is_template'] = None
 
+        # set to None if is_lab (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_lab is None and "is_lab" in self.model_fields_set:
+            _dict['is_lab'] = None
+
+        # set to None if lab_kind (nullable) is None
+        # and model_fields_set contains the field
+        if self.lab_kind is None and "lab_kind" in self.model_fields_set:
+            _dict['lab_kind'] = None
+
         # set to None if control_plane_access (nullable) is None
         # and model_fields_set contains the field
         if self.control_plane_access is None and "control_plane_access" in self.model_fields_set:
@@ -178,6 +192,9 @@ class EnvironmentCreateSchema(BaseModel):
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),
             "is_template": obj.get("is_template"),
+            "is_lab": obj.get("is_lab"),
+            "lab_kind": obj.get("lab_kind"),
+            "preserve_template_visibility": obj.get("preserve_template_visibility") if obj.get("preserve_template_visibility") is not None else False,
             "control_plane_access": obj.get("control_plane_access"),
             "expected_object_revisions": obj.get("expected_object_revisions"),
             "twin_asset_uuid": obj.get("twin_asset_uuid"),

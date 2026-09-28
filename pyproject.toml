@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.7.2"
+version = "0.7.3"
 description = "Python SDK for Cyberwave"
 authors = [
     "Simone Di Somma <sdisomma@cyberwave.com>",
@@ -9,10 +9,26 @@ authors = [
 ]
 readme = "README.md"
 packages = [{ include = "cyberwave" }]
-include = [{ path = "cyberwave/rest", format = ["sdist", "wheel"] }]
+include = [
+    { path = "cyberwave/rest", format = ["sdist", "wheel"] },
+    # Gitignored CI build stamp; poetry drops VCS-ignored files unless listed.
+    { path = "cyberwave/_build_version.py", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.dependencies]
 python = "^3.10" # Required by av package (>=3.10)
+# The SDK holds no rotation maths of its own: `data/fusion.py`, `placement.py`,
+# `schema.py` and `twin.py` all call the shared geometry core. It reaches it
+# through the lazy `cyberwave/_geometry.py` shim, so `import cyberwave` does not
+# pull in a native library for a consumer that never touches a rotation -- but
+# the dependency is real, and undeclared it would raise ImportError from every
+# rotation entry point of a released SDK.
+#
+# Platform wheels (cp310-cp314 on manylinux x86_64/aarch64, macOS arm64/x86_64
+# and Windows AMD64) are on PyPI from 0.2.0, so this resolves for a plain
+# `pip install cyberwave`. The minor version is the core's ABI/binding pin: an
+# incompatible surface change bumps it, which is why the ceiling is <0.3.0.
+cyberwave-geometry = ">=0.2.0,<0.3.0"
 # Core dependencies for REST API client
 urllib3 = "^2.1.0"
 python-dateutil = "^2.8.2"
@@ -98,6 +114,10 @@ barcode = ["zxing-cpp"]
 # Robot-arm kinematics (BaseKinematics / ArmCapabilityMixin). pinocchio + numpy.
 # scipy powers the default trapezoidal JointController motion generator.
 drivers = ["pin", "scipy"]
+# Eye-in-hand camera calibration (``cyberwave.calibration``). Needs cv2.aruco and
+# cv2.calibrateHandEye, both in main OpenCV modules since 4.7 — no contrib build.
+# Pair with the ``drivers`` extra to derive gripper poses from joint angles.
+calibration = ["opencv-python-headless"]
 # Hailo HEF support runs on the worker container; the ``hailo_platform`` wheel
 # ships out-of-band with HailoRT (the .deb installs it into the system
 # site-packages alongside the kernel-matched driver), so this extra is an
@@ -146,7 +166,6 @@ pytest-asyncio = "^0.23"
 pytest-xdist = "^3.5"
 mypy = "^1.5"
 types-python-dateutil = "^2.8.19.14"
-python-dotenv = "^1.0"
 croniter = ">=6.2.2"
 pillow = ">=10.0.0"
 
@@ -163,8 +182,3 @@ markers = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[dependency-groups]
-nl-arm-controller = [
-    "openai-agents>=0.18.2",
-]

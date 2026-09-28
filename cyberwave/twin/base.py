@@ -23,12 +23,12 @@ from ._helpers import (
     _policy_is_sdk_joint_teleop_candidate,
     _sdk_auto_attach_controller_enabled,
 )
-from ..universal_schema_camera import camera_sensor_ids_from_schema
 from .commands import TwinCommandsHandle
 from .driver import TwinDriverHandle
 from .telemetry import TwinTelemetry
 from .editor import TwinEditorMixin
 from .transport import TwinTransportMixin
+from .._geometry import core as _geometry_core
 
 if TYPE_CHECKING:
     from ..client import Cyberwave
@@ -667,6 +667,8 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             flat_methods.extend(["get_joints", "set_joints", "get_pose", "set_pose"])
         elif hasattr(type(self), "get_pose") and not hasattr(type(self), "joints"):
             flat_methods.extend(["get_pose", "set_pose"])
+        if hasattr(type(self), "calibration"):
+            handles["calibration"] = {"methods": ["get", "set", "delete"]}
         flat_methods.append("get_latest_frame")
         camera_res = self._resolve_handler("camera")
         if camera_res.available:
@@ -845,6 +847,10 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             self._scale = None
             self._mqtt_catalog_cache = None
             self._driver_catalog_cache = None
+            if self._commands_handle is not None:
+                from .command_factory import rebind_catalog_commands
+
+                rebind_catalog_commands(self._commands_handle)
         except Exception as e:
             raise CyberwaveError(f"Failed to refresh twin: {e}")
 
@@ -1132,20 +1138,10 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
         pitch = math.radians(pitch)
         yaw = math.radians(yaw)
 
-        # Calculate quaternion
-        cy = math.cos(yaw * 0.5)
-        sy = math.sin(yaw * 0.5)
-        cp = math.cos(pitch * 0.5)
-        sp = math.sin(pitch * 0.5)
-        cr = math.cos(roll * 0.5)
-        sr = math.sin(roll * 0.5)
-
-        w = cr * cp * cy + sr * sp * sy
-        x = sr * cp * cy - cr * sp * sy
-        y = cr * sp * cy + sr * cp * sy
-        z = cr * cp * sy - sr * sp * cy
-
-        return [x, y, z, w]
+        # Fixed-axis XYZ, which is what the expanded half-angle formula this
+        # replaced computed. `to_xyzw` states the output order rather than
+        # leaving it to the return statement's variable names.
+        return list(_geometry_core().quat.from_rpy(roll, pitch, yaw).to_xyzw())
 
     def __repr__(self) -> str:
         return f"Twin(uuid='{self.uuid}', name='{self.name}')"
@@ -1272,6 +1268,10 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             return self.resolve_handler_from_capabilities("flashlight").available
         if t in {"rgb", "depth", "camera", "imaging"}:
             return self.resolve_handler_from_capabilities("camera").available
+        if t in {"mic", "microphone", "audio_in", "audio", "audio_mono", "audio_stereo"}:
+            return self.resolve_handler_from_capabilities("microphone").available
+        if t in {"speaker", "loudspeaker", "speakerphone", "audio_out"}:
+            return self.resolve_handler_from_capabilities("speaker").available
         return any(
             isinstance(s, dict) and s.get("type") == sensor_type
             for s in self.capabilities.get("sensors", [])
@@ -1296,33 +1296,6 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
             stacklevel=2,
         )
         return controllable_joint_names(self)
-
-    def list_camera_sensor_ids(self, *, max_ids: int = 16) -> List[str]:
-        """
-        List camera sensor id strings from the live universal schema.
-
-        Use these values as ``sensor_id`` for :meth:`get_latest_frame` and
-        :meth:`capture_frame` when the twin exposes multiple cameras. The schema
-        is fetched via :meth:`get_schema` (same source as the platform editor).
-
-        Args:
-            max_ids: Nonnegative maximum number of ids to return (default ``16``).
-                Zero returns an empty list.
-
-        Raises:
-            ValueError: If ``max_ids`` is negative.
-
-        Returns:
-            Ordered unique ids from ``sensors`` and ``capabilities.sensors`` entries
-            whose ``type`` is camera-like.
-
-        Example:
-            >>> ids = twin.list_camera_sensor_ids()
-            >>> if ids:
-            ...     frame = twin.capture_frame(sensor_id=ids[0])
-        """
-        schema = self.get_schema()
-        return camera_sensor_ids_from_schema(schema, max_ids=max_ids)
 
     def get_schema(self, path: str = "") -> Any:
         """Get value at a specific JSON Pointer path in the twin's universal schema.

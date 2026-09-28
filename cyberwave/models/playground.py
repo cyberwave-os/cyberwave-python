@@ -56,6 +56,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Generated task-aware workers check this before attempting network execution.
+TYPED_MODEL_RUN_VERSION = 1
+
 
 # ---------------------------------------------------------------------------
 # Structured-action catalog (local mirror)
@@ -84,6 +87,12 @@ STRUCTURED_ACTIONS: tuple[StructuredAction, ...] = (
         description="Pass the user prompt through unchanged.",
         output_format="text",
         requires_image=False,
+    ),
+    StructuredAction(
+        id="choose_embodied_action",
+        label="Choose embodied action",
+        description="Propose one available operation; execution requires runtime validation.",
+        output_format="json",
     ),
     StructuredAction(
         id="caption",
@@ -239,6 +248,8 @@ class PlaygroundHandle:
         audio_base64: str | None = None,
         audio_url: str | None = None,
         structured_task: str | None = None,
+        task_contract: dict[str, Any] | None = None,
+        expected_model_updated_at: str | None = None,
         twin_uuid: str | None = None,
         params: dict[str, Any] | None = None,
         frames: list[dict[str, Any]] | None = None,
@@ -249,8 +260,8 @@ class PlaygroundHandle:
     ) -> MLModelRunResultSchema | MLModelRunQueuedSchema:
         """Execute a run against the bound model.
 
-        Always hits ``POST /mlmodels/{uuid}/run`` — the authenticated,
-        credit-gated endpoint for SDK, workflow, and automation callers.
+        Uses authenticated, credit-gated model execution: ``/run`` for ordinary
+        calls, or ``/run-task`` when a reviewed task contract is supplied.
 
         ``POST /mlmodels/{uuid}/playground/run`` is deliberately not reachable
         from the SDK. It backs the in-app catalog try-it surface: unauthenticated,
@@ -274,6 +285,9 @@ class PlaygroundHandle:
             audio_url: URL the backend can fetch (alternative to ``audio_base64``).
             structured_task: Hint for provider-specific prompt building.
                 See :data:`STRUCTURED_ACTIONS` for valid ids.
+            task_contract: Reviewed native task requirement. Uses the authenticated
+                ``/run-task`` operation and requires synchronous validated output.
+            expected_model_updated_at: Exact catalog revision reviewed with the task.
             twin_uuid: Reserved for VLA playground runs.
             params: Extra provider-specific parameters forwarded verbatim.
             frames: Ordered list of extra image frames for temporal /
@@ -292,6 +306,21 @@ class PlaygroundHandle:
             ValueError: for invalid or missing inputs.
             :class:`~cyberwave.exceptions.CyberwaveAPIError`: for HTTP errors.
         """
+        if (task_contract is None) != (expected_model_updated_at is None):
+            raise ValueError("Provide both the task contract and model revision.")
+        if task_contract is not None:
+            if (
+                not isinstance(expected_model_updated_at, str)
+                or not expected_model_updated_at.strip()
+            ):
+                raise ValueError("The model revision must be a non-empty timestamp.")
+            task_name = task_contract.get("task")
+            if not isinstance(task_name, str) or not task_name:
+                raise ValueError("The task contract must name a task.")
+            if structured_task not in (None, task_name):
+                raise ValueError("The selected task does not match its contract.")
+            structured_task = task_name
+
         if sum(bool(x) for x in (image, image_url, image_base64)) > 1:
             raise ValueError("Pass at most one of image, image_url, image_base64.")
 
@@ -351,6 +380,14 @@ class PlaygroundHandle:
             self._api,
             uuid=entry.uuid,
             schema=schema,
+            **(
+                {
+                    "task_contract": task_contract,
+                    "expected_model_updated_at": expected_model_updated_at,
+                }
+                if task_contract is not None
+                else {}
+            ),
         )
         return self._last_result
 
@@ -544,21 +581,36 @@ def invoke_mlmodel_run(
     *,
     uuid: str,
     schema: Any,
+    task_contract: dict[str, Any] | None = None,
+    expected_model_updated_at: str | None = None,
 ) -> MLModelRunResultSchema | MLModelRunQueuedSchema:
     """POST to the ML model run endpoint.
 
-    Always ``/run`` — the authenticated, credit-gated route. There is
+    Uses ``/run`` or explicit typed ``/run-task``, both authenticated and
+    credit-gated. Old servers reject ``/run-task`` before inference. There is
     deliberately no switch for ``/playground/run``: that endpoint backs the
     in-app try-it surface and is browser-only server-side, so the SDK must
     never reach it. See :meth:`PlaygroundHandle.run`.
     """
-    resource_path = "/api/v1/mlmodels/{uuid}/run"
+    if (task_contract is None) != (expected_model_updated_at is None):
+        raise ValueError("Provide both the task contract and model revision.")
+    resource_path = (
+        "/api/v1/mlmodels/{uuid}/run-task"
+        if task_contract is not None
+        else "/api/v1/mlmodels/{uuid}/run"
+    )
     if hasattr(schema, "to_dict"):
         body: dict[str, Any] = schema.to_dict()
     elif hasattr(schema, "model_dump"):
         body = schema.model_dump(exclude_none=True)
     else:
         body = dict(schema)
+    if task_contract is not None:
+        body = {
+            **body,
+            "task_contract": task_contract,
+            "expected_model_updated_at": expected_model_updated_at,
+        }
     # ``param_serialize`` / ``call_api`` / ``response_deserialize`` live on the
     # generated ``ApiClient``, not on the ``DefaultApi`` operations facade that
     # merely holds one. Accept either so callers can pass whichever they have.
@@ -574,10 +626,11 @@ def invoke_mlmodel_run(
     response.read()
     return transport.response_deserialize(
         response_data=response,
-        response_types_map={
-            "200": "MLModelRunResultSchema",
-            "202": "MLModelRunQueuedSchema",
-        },
+        response_types_map=(
+            {"200": "MLModelRunResultSchema"}
+            if task_contract is not None
+            else {"200": "MLModelRunResultSchema", "202": "MLModelRunQueuedSchema"}
+        ),
     ).data
 
 

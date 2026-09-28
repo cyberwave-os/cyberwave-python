@@ -215,15 +215,20 @@ class TestIntegrationWorkflow:
             # Step 6: Update twin rotation using lower-level API
             import math
 
-            # Convert 45 degree yaw to quaternion (rotation around Z axis)
-            yaw_rad = math.radians(45)
+            from cyberwave._geometry import core
+
+            # Convert 45 degree yaw to quaternion (rotation around Z axis).
+            # Built by the shared geometry core rather than by hand: a test that
+            # spells the half-angle formula out itself is a second
+            # implementation, and would keep passing if the real one drifted.
+            rotation = core().quat.from_yaw(math.radians(45))
             updated_twin = client.twins.update_state(
                 twin_data.uuid,
                 {
-                    "rotation_w": math.cos(yaw_rad / 2),
-                    "rotation_x": 0.0,
-                    "rotation_y": 0.0,
-                    "rotation_z": math.sin(yaw_rad / 2),
+                    "rotation_w": rotation.w,
+                    "rotation_x": rotation.x,
+                    "rotation_y": rotation.y,
+                    "rotation_z": rotation.z,
                 },
             )
             print("✓ Step 6: Rotated twin by 45 degrees (yaw)")

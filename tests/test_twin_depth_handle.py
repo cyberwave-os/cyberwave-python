@@ -138,6 +138,94 @@ def test_depth_get_frame_mqtt_uint16_is_millimetres_to_metres() -> None:
     assert out[0, 2] == pytest.approx(0.611)  # 611 mm = 0.611 m
 
 
+@pytest.mark.parametrize("nested", [True, False])
+def test_depth_get_frame_honors_scale_and_keeps_raw_callbacks(nested) -> None:
+    twin, callbacks = _depth_twin()
+    handle = twin.camera[0]
+    observed = []
+    handle.on_update(observed.append)
+    arr = np.array([[0, 5000]], dtype=np.uint16)
+    payload = _depth_payload(arr)
+    (payload["data"] if nested else payload).update(
+        output_mode="metric_mm",
+        depth_scale=0.0001,
+        depth_map_metric=True,
+    )
+    callbacks["cyberwave/twin/rs/depth"](payload)
+    np.testing.assert_allclose(handle.get_frame(source="mqtt", timeout=0), [[0, 0.5]])
+    np.testing.assert_array_equal(observed[0], arr)
+    np.testing.assert_array_equal(
+        handle.get_frame(source="mqtt", raw=True, timeout=0), arr
+    )
+    # The next frame's calibration belongs only to that frame.
+    payload["data"]["depth_scale"] = 0.001
+    callbacks["cyberwave/twin/rs/depth"](payload)
+    np.testing.assert_allclose(handle.get_frame(source="mqtt", timeout=0), [[0, 5]])
+
+
+def test_normalized_metric_depth_agrees_with_pointcloud_distance() -> None:
+    from cyberwave.utils.depth import depth_to_colored_pointcloud
+
+    twin, callbacks = _depth_twin()
+    handle = twin.camera[0]
+    handle.on_update(lambda _: None)
+    arr = np.array([[0, 1, 32768, 65535]], dtype=np.uint16)
+    payload = _depth_payload(arr)
+    params = dict(output_mode="normalized_uint16", min_depth=0.5, max_depth=4.5)
+    payload["data"].update(**params, depth_map_metric=True)
+    callbacks["cyberwave/twin/rs/depth"](payload)
+    depths = handle.get_frame(source="mqtt", timeout=0)
+    np.testing.assert_allclose(depths, [[0, 0.50006104, 2.5000305, 4.5]])
+    cloud = depth_to_colored_pointcloud(arr, **params, step=1)
+    np.testing.assert_allclose(cloud.reshape(-1, 6)[:, 2], depths[0, 1:])
+
+
+@pytest.mark.parametrize(
+    "encoding",
+    [
+        {"depth_map_metric": False},
+        {"depth_map_metric": None},
+        {"depth_map_metric": "true"},
+        {"output_mode": "normalized_uint16"},
+    ],
+)
+def test_nonmetric_depth_is_available_raw_but_not_as_metres(encoding) -> None:
+    twin, callbacks = _depth_twin()
+    handle = twin.camera[0]
+    handle.on_update(lambda _: None)
+    arr = np.array([[1234]], dtype=np.uint16)
+    payload = _depth_payload(arr)
+    payload["data"].update(encoding)
+    callbacks["cyberwave/twin/rs/depth"](payload)
+    with pytest.raises(CyberwaveError, match="no confirmed metric scale"):
+        handle.get_frame(source="mqtt", timeout=0)
+    np.testing.assert_array_equal(
+        handle.get_frame(source="mqtt", raw=True, timeout=0), arr
+    )
+
+
+@pytest.mark.parametrize(
+    "encoding",
+    [
+        {"depth_scale": 0},
+        {"depth_scale": -1},
+        {"depth_scale": float("nan")},
+        {"depth_scale": True},
+        {"output_mode": "unknown"},
+        {"output_mode": "normalized_uint16", "depth_map_metric": True},
+    ],
+)
+def test_invalid_depth_encoding_does_not_silently_use_millimetres(encoding) -> None:
+    twin, callbacks = _depth_twin()
+    handle = twin.camera[0]
+    handle.on_update(lambda _: None)
+    payload = _depth_payload(np.array([[1000]], dtype=np.uint16))
+    payload["data"].update(encoding)
+    callbacks["cyberwave/twin/rs/depth"](payload)
+    with pytest.raises(CyberwaveError, match="Invalid depth encoding"):
+        handle.get_frame(source="mqtt", timeout=0)
+
+
 def test_depth_get_frame_uses_rest_when_available() -> None:
     # A 1x1 white JPEG so _decode_frame can decode it.
     cv2 = pytest.importorskip("cv2")

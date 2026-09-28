@@ -16,7 +16,10 @@ import inspect
 
 import pytest
 
-pytest.importorskip("av", reason="pyav not installed (extras: realsense)")
+pytest.importorskip("av", reason="pyav not installed (install with extras: realsense)")
+pytest.importorskip(
+    "aiortc", reason="aiortc not installed (install with extras: realsense)"
+)
 
 from cyberwave.sensor.camera_rs import RealSenseStreamer, RealSenseVideoTrack  # noqa: E402
 from cyberwave.sensor.manager import _infer_config_from_twin  # noqa: E402

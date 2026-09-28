@@ -879,13 +879,33 @@ class EnvironmentManager(BaseResourceManager):
         server-side (a true partial update), so e.g. passing only
         ``position`` leaves the current rotation as-is.
 
+        A pose that is passed must carry every axis. The generated model
+        substitutes the OpenAPI default of ``0.0`` for a missing one, and the
+        server cannot tell that from a measured coordinate — it would write
+        the waypoint's frame origin and report success (CYB-3809). Refuse here
+        so a producer that dropped its pose fails the step instead.
+
         Returns the updated, normalized waypoint dict.
         """
         update_fields: Dict[str, Any] = {}
-        if position is not None:
-            update_fields["position"] = position
-        if rotation is not None:
-            update_fields["rotation"] = rotation
+        for name, value, axes in (
+            ("position", position, ("x", "y", "z")),
+            ("rotation", rotation, ("w", "x", "y", "z")),
+        ):
+            if value is None:
+                continue
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"update_waypoint {name} must be a dict with "
+                    f"{', '.join(axes)}, got {type(value).__name__}"
+                )
+            missing = [axis for axis in axes if value.get(axis) is None]
+            if missing:
+                raise ValueError(
+                    f"update_waypoint {name} needs every axis "
+                    f"({', '.join(axes)}); missing {', '.join(missing)}"
+                )
+            update_fields[name] = value
         if not update_fields:
             raise ValueError("update_waypoint requires position and/or rotation")
 
@@ -1243,6 +1263,95 @@ class AssetManager(BaseResourceManager):
         self._asset_cache: Dict[str, AssetSchema] = {}
         self._cache_timestamps: Dict[str, float] = {}
         self._cache_ttl: float = 60.0  # Cache TTL in seconds
+
+    def _kit_request(
+        self, method: str, path: str, body: Optional[Dict[str, Any]] = None
+    ) -> Any:
+        try:
+            params = self.api.api_client.param_serialize(
+                method=method,
+                resource_path=path,
+                body=body,
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response = self.api.api_client.call_api(*params)
+            response.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as exc:
+            self._handle_error(exc, "access asset kit")
+            raise
+
+    def create_kit(
+        self,
+        name: str,
+        components: List[Dict[str, Any]],
+        *,
+        workspace_uuid: Optional[str] = None,
+        description: str = "",
+        visibility: str = "private",
+    ) -> Dict[str, Any]:
+        """Create a catalog kit. Components are ordered parent-before-child.
+
+        Each component specifies key, asset_uuid, optional parent_key and
+        attach_to_link, position [x,y,z] in metres and rotation [w,x,y,z].
+        Exactly one component is the root; nested kits are not supported.
+        """
+        return self._kit_request(
+            "POST",
+            "/api/v1/asset-kits",
+            {
+                "name": name,
+                "description": description,
+                "components": components,
+                "workspace_uuid": workspace_uuid,
+                "visibility": visibility,
+            },
+        )
+
+    def get_kit(self, kit_uuid: str) -> Dict[str, Any]:
+        """Read the kit definition and its accessible component assets."""
+        return self._kit_request("GET", f"/api/v1/asset-kits/{kit_uuid}")
+
+    def update_kit(
+        self,
+        kit_uuid: str,
+        *,
+        name: str,
+        components: List[Dict[str, Any]],
+        description: Optional[str] = None,
+        visibility: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Replace a kit definition. Existing deployed twins are unchanged."""
+        body: Dict[str, Any] = {"name": name, "components": components}
+        if description is not None:
+            body["description"] = description
+        if visibility is not None:
+            body["visibility"] = visibility
+        return self._kit_request("PUT", f"/api/v1/asset-kits/{kit_uuid}", body)
+
+    def instantiate_kit(
+        self,
+        kit_uuid: str,
+        environment_uuid: str,
+        *,
+        position: Optional[List[float]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Atomically add all component twins and their saved docking layout."""
+        body: Dict[str, Any] = {"environment_uuid": environment_uuid}
+        if position is not None:
+            if len(position) != 3:
+                raise ValueError("position must contain x, y, z")
+            body.update(zip(("position_x", "position_y", "position_z"), position))
+        return self._kit_request(
+            "POST", f"/api/v1/asset-kits/{kit_uuid}/instantiate", body
+        )
 
     def _get_cached(self, asset_uuid: str) -> Optional[AssetSchema]:
         """Get asset from cache if not expired."""
@@ -2600,14 +2709,18 @@ class TwinManager(BaseResourceManager):
         *,
         driver_config: Dict[str, Any],
         merge: bool = True,
+        expected_revision: str | None = None,
     ) -> TwinSchema:
         """Compile cw-driver.yml root dict on the backend and persist twin metadata catalogs."""
         try:
+            body: Dict[str, Any] = {"driver_config": driver_config, "merge": merge}
+            if expected_revision is not None:
+                body["expected_revision"] = expected_revision
             _param = self.api.api_client.param_serialize(
                 method="POST",
                 resource_path="/api/v1/twins/{uuid}/driver-schema",
                 path_params={"uuid": twin_id},
-                body={"driver_config": driver_config, "merge": merge},
+                body=body,
                 auth_settings=["CustomTokenAuthentication"],
             )
             response_data = self.api.api_client.call_api(*_param)

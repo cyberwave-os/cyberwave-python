@@ -40,6 +40,7 @@ class MapDataSchema(BaseModel):
     origin_pitch: Optional[Union[StrictFloat, StrictInt]] = None
     origin_yaw: Optional[Union[StrictFloat, StrictInt]] = None
     data_file_uuid: StrictStr
+    data_format: Optional[StrictStr] = None
     image_width: Optional[StrictInt] = None
     image_height: Optional[StrictInt] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -47,7 +48,7 @@ class MapDataSchema(BaseModel):
     updated_at: datetime
     twin_name: Optional[StrictStr] = None
     twin_is_deleted: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "data_file_uuid", "image_width", "image_height", "metadata", "created_at", "updated_at", "twin_name", "twin_is_deleted"]
+    __properties: ClassVar[List[str]] = ["uuid", "twin_uuid", "environment_uuid", "map_type", "resolution", "origin_x", "origin_y", "origin_z", "origin_roll", "origin_pitch", "origin_yaw", "data_file_uuid", "data_format", "image_width", "image_height", "metadata", "created_at", "updated_at", "twin_name", "twin_is_deleted"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -133,6 +134,11 @@ class MapDataSchema(BaseModel):
         if self.origin_yaw is None and "origin_yaw" in self.model_fields_set:
             _dict['origin_yaw'] = None
 
+        # set to None if data_format (nullable) is None
+        # and model_fields_set contains the field
+        if self.data_format is None and "data_format" in self.model_fields_set:
+            _dict['data_format'] = None
+
         # set to None if image_width (nullable) is None
         # and model_fields_set contains the field
         if self.image_width is None and "image_width" in self.model_fields_set:
@@ -177,6 +183,7 @@ class MapDataSchema(BaseModel):
             "origin_pitch": obj.get("origin_pitch"),
             "origin_yaw": obj.get("origin_yaw"),
             "data_file_uuid": obj.get("data_file_uuid"),
+            "data_format": obj.get("data_format"),
             "image_width": obj.get("image_width"),
             "image_height": obj.get("image_height"),
             "metadata": obj.get("metadata"),

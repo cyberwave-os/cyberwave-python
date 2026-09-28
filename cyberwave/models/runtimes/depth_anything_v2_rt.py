@@ -24,6 +24,7 @@ metric depth should use the Video-Depth-Anything metric checkpoints instead.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import sys
@@ -72,7 +73,10 @@ class DepthAnythingV2Runtime(ModelRuntime):
             import torch  # noqa: F401
         except ImportError:
             return False
-        return os.path.isdir(DEFAULT_REPOSITORY_PATH)
+        return (
+            os.path.isdir(DEFAULT_REPOSITORY_PATH)
+            or importlib.util.find_spec("video_depth_anything") is not None
+        )
 
     def load(
         self,
@@ -90,7 +94,6 @@ class DepthAnythingV2Runtime(ModelRuntime):
             sys.path.insert(0, repository_path)
 
         try:
-            import torch
             from video_depth_anything.dpt import DPTHead
             from video_depth_anything.video_depth import DINOv2
         except Exception as exc:

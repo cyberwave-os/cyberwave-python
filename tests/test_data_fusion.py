@@ -25,6 +25,9 @@ from cyberwave.data.ring_buffer import TimestampedSample
 # ---------------------------------------------------------------------------
 
 
+_HALF_SQRT2 = math.sqrt(2.0) / 2.0
+
+
 def _approx(a: float, b: float, tol: float = 1e-6) -> bool:
     return abs(a - b) < tol
 
@@ -102,6 +105,38 @@ class TestInterpolateLinear:
         result = interpolate_linear(s1, s2, 0.5)
         np.testing.assert_allclose(result, [5.0, 10.0, 15.0])
 
+    def test_antipodal_quaternions_blend_the_long_way(self) -> None:
+        """``linear`` blends the quaternions as given -- no shortest-arc flip.
+
+        ``interpolate_slerp`` flips instead; the sibling test in
+        ``TestInterpolateSlerp`` asserts the other half of the pair. The two
+        deliberately disagree, so replaying a recording through ``linear``
+        keeps yielding what it did before the geometry-core migration.
+        """
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=-_HALF_SQRT2, w=-_HALF_SQRT2)
+        s1 = TimestampedSample(ts=0.0, value=q1)
+        s2 = TimestampedSample(ts=1.0, value=q2)
+
+        result = interpolate_linear(s1, s2, 0.5)
+        assert isinstance(result, Quaternion)
+        expected = [0.0, 0.0, -math.cos(math.pi / 8), math.sin(math.pi / 8)]
+        for a, b in zip(result.as_list(), expected):
+            assert _approx(a, b, tol=1e-9)
+
+    def test_exactly_opposite_quaternions_yield_identity(self) -> None:
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=0.0, w=-1.0)
+        s1 = TimestampedSample(ts=0.0, value=q1)
+        s2 = TimestampedSample(ts=1.0, value=q2)
+
+        # The blend cancels to (0, 0, 0, 0), which normalizes to identity
+        # rather than raising -- a fusion buffer replaying a sparse stream
+        # needs a value here.
+        result = interpolate_linear(s1, s2, 0.5)
+        assert isinstance(result, Quaternion)
+        assert result.as_list() == [0.0, 0.0, 0.0, 1.0]
+
 
 # ---------------------------------------------------------------------------
 # SLERP interpolation
@@ -110,7 +145,7 @@ class TestInterpolateLinear:
 
 class TestInterpolateSlerp:
     def test_identity_quaternion(self) -> None:
-        q = Quaternion(0.0, 0.0, 0.0, 1.0)
+        q = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
         s1 = TimestampedSample(ts=0.0, value=q)
         s2 = TimestampedSample(ts=1.0, value=q)
         result = interpolate_slerp(s1, s2, 0.5)
@@ -118,8 +153,8 @@ class TestInterpolateSlerp:
         assert _quat_approx(result, q)
 
     def test_90_degree_rotation(self) -> None:
-        q1 = Quaternion(0.0, 0.0, 0.0, 1.0)
-        q2 = Quaternion(0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4))
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=math.sin(math.pi / 4), w=math.cos(math.pi / 4))
         s1 = TimestampedSample(ts=0.0, value=q1)
         s2 = TimestampedSample(ts=1.0, value=q2)
 
@@ -130,17 +165,81 @@ class TestInterpolateSlerp:
             assert _approx(a, b, tol=1e-4)
 
     def test_antipodal_quaternions(self) -> None:
-        q1 = Quaternion(0.0, 0.0, 0.0, 1.0)
-        q2 = Quaternion(0.0, 0.0, 0.0, -1.0)
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=0.0, w=-1.0)
         s1 = TimestampedSample(ts=0.0, value=q1)
         s2 = TimestampedSample(ts=1.0, value=q2)
         result = interpolate_slerp(s1, s2, 0.5)
         assert isinstance(result, Quaternion)
         assert _quat_approx(result, q1)
 
+    def test_antipodal_quaternions_take_the_short_way(self) -> None:
+        """``slerp`` flips the second quaternion; ``linear`` does not.
+
+        Same inputs as
+        ``TestInterpolateLinear.test_antipodal_quaternions_blend_the_long_way``:
+        the two results are a quarter turn apart in quaternion space, so
+        neither test would pass against the other path.
+        """
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=-_HALF_SQRT2, w=-_HALF_SQRT2)
+        s1 = TimestampedSample(ts=0.0, value=q1)
+        s2 = TimestampedSample(ts=1.0, value=q2)
+
+        result = interpolate_slerp(s1, s2, 0.5)
+        assert isinstance(result, Quaternion)
+        expected = [0.0, 0.0, math.sin(math.pi / 8), math.cos(math.pi / 8)]
+        for a, b in zip(result.as_list(), expected):
+            assert _approx(a, b, tol=1e-9)
+
+    def test_degenerate_endpoint_still_converges_on_the_good_one(self) -> None:
+        """A zero quaternion is one endpoint, not a reason to discard both.
+
+        An IMU publishes ``(0, 0, 0, 0)`` with ``orientation_covariance[0] =
+        -1`` to mean "no estimate yet", so a buffer spanning EKF warm-up holds
+        one. Handing it straight to the core makes the whole ``slerp`` refuse,
+        and a call-scoped ``except`` then throws away the *good* endpoint too
+        -- a constant identity for every alpha. Normalising each endpoint
+        first reduces it to identity and the blend still converges on ``q2``.
+        """
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=0.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=1.0, w=0.0)
+        s1 = TimestampedSample(ts=0.0, value=q1)
+        s2 = TimestampedSample(ts=1.0, value=q2)
+
+        midpoint = interpolate_slerp(s1, s2, 0.5)
+        assert isinstance(midpoint, Quaternion)
+        expected = [0.0, 0.0, _HALF_SQRT2, _HALF_SQRT2]
+        for a, b in zip(midpoint.as_list(), expected):
+            assert _approx(a, b, tol=1e-9)
+
+        endpoint = interpolate_slerp(s1, s2, 1.0)
+        assert isinstance(endpoint, Quaternion)
+        assert _quat_approx(endpoint, q2)
+
+    def test_subnormal_endpoint_keeps_its_direction(self) -> None:
+        """The two interpolation modes must agree on what counts as degenerate.
+
+        ``_normalize_quaternion`` cuts at 1e-12; the core's
+        ``kMinQuaternionNorm`` is 1e-9. Deferring to the core would turn a
+        real direction in that band into identity on the ``slerp`` path while
+        ``linear`` kept interpolating it -- the same recording replaying two
+        different ways.
+        """
+        q1 = Quaternion(x=1e-10, y=0.0, z=0.0, w=0.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        s1 = TimestampedSample(ts=0.0, value=q1)
+        s2 = TimestampedSample(ts=1.0, value=q2)
+
+        result = interpolate_slerp(s1, s2, 0.5)
+        assert isinstance(result, Quaternion)
+        expected = [_HALF_SQRT2, 0.0, 0.0, _HALF_SQRT2]
+        for a, b in zip(result.as_list(), expected):
+            assert _approx(a, b, tol=1e-9)
+
     def test_nearly_parallel_fallback_to_lerp(self) -> None:
-        q1 = Quaternion(0.0, 0.0, 0.0, 1.0)
-        q2 = Quaternion(0.0, 0.0, 1e-6, 1.0)
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=1e-6, w=1.0)
         s1 = TimestampedSample(ts=0.0, value=q1)
         s2 = TimestampedSample(ts=1.0, value=q2)
         result = interpolate_slerp(s1, s2, 0.5)
@@ -149,25 +248,23 @@ class TestInterpolateSlerp:
         assert _approx(norm, 1.0, tol=1e-4)
 
     def test_same_timestamp(self) -> None:
-        q = Quaternion(0.0, 0.0, 0.0, 1.0)
+        q = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
         s1 = TimestampedSample(ts=1.0, value=q)
-        s2 = TimestampedSample(ts=1.0, value=Quaternion(0.0, 0.0, 0.7071, 0.7071))
+        s2 = TimestampedSample(ts=1.0, value=Quaternion(x=0.0, y=0.0, z=0.7071, w=0.7071))
         assert interpolate_slerp(s1, s2, 0.5) == q
 
     def test_dict_with_quaternion_field(self) -> None:
         s1 = TimestampedSample(
             ts=0.0,
             value={
-                "orientation": Quaternion(0.0, 0.0, 0.0, 1.0),
+                "orientation": Quaternion(x=0.0, y=0.0, z=0.0, w=1.0),
                 "position": [0.0, 0.0, 0.0],
             },
         )
         s2 = TimestampedSample(
             ts=1.0,
             value={
-                "orientation": Quaternion(
-                    0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)
-                ),
+                "orientation": Quaternion(x=0.0, y=0.0, z=math.sin(math.pi / 4), w=math.cos(math.pi / 4)),
                 "position": [10.0, 0.0, 0.0],
             },
         )
@@ -380,8 +477,8 @@ class TestFusionLayer:
 
     def test_at_slerp(self) -> None:
         fl = FusionLayer()
-        q1 = Quaternion(0.0, 0.0, 0.0, 1.0)
-        q2 = Quaternion(0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4))
+        q1 = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+        q2 = Quaternion(x=0.0, y=0.0, z=math.sin(math.pi / 4), w=math.cos(math.pi / 4))
         fl.ingest("orient", 0.0, q1)
         fl.ingest("orient", 1.0, q2)
         result = fl.at("orient", t=0.5, interpolation="slerp")

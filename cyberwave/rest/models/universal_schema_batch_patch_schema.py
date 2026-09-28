@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, ClassVar, Dict, List
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from cyberwave.rest.models.universal_schema_patch_schema import UniversalSchemaPatchSchema
 from typing import Optional, Set
@@ -27,10 +27,11 @@ from pydantic_core import to_jsonable_python
 
 class UniversalSchemaBatchPatchSchema(BaseModel):
     """
-    Many JSON Pointer operations applied in order as one all-or-nothing batch.
+    Many JSON Pointer operations applied in order as one all-or-nothing batch.  ``expected_schema_hash`` is the batch-level precondition; a per-operation one would be meaningless since the batch resolves against a single locked read.  The item model declares the field anyway, because the single-op endpoint uses that same model as its entire request body and genuinely honours it there. So a caller scaling up from one edit to a batch can carry the token along with the operations and have it silently dropped -- the batch reads only its own top-level field. Losing a concurrency precondition quietly is worse than not offering one, because the caller stops watching for the overwrite it was meant to prevent. Refuse it instead.
     """ # noqa: E501
     operations: Annotated[List[UniversalSchemaPatchSchema], Field(min_length=1, max_length=1000)]
-    __properties: ClassVar[List[str]] = ["operations"]
+    expected_schema_hash: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["operations", "expected_schema_hash"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -78,6 +79,11 @@ class UniversalSchemaBatchPatchSchema(BaseModel):
                 if _item_operations:
                     _items.append(_item_operations.to_dict())
             _dict['operations'] = _items
+        # set to None if expected_schema_hash (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_schema_hash is None and "expected_schema_hash" in self.model_fields_set:
+            _dict['expected_schema_hash'] = None
+
         return _dict
 
     @classmethod
@@ -90,7 +96,8 @@ class UniversalSchemaBatchPatchSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "operations": [UniversalSchemaPatchSchema.from_dict(_item) for _item in obj["operations"]] if obj.get("operations") is not None else None
+            "operations": [UniversalSchemaPatchSchema.from_dict(_item) for _item in obj["operations"]] if obj.get("operations") is not None else None,
+            "expected_schema_hash": obj.get("expected_schema_hash")
         })
         return _obj
 

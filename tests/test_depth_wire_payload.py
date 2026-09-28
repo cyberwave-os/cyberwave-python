@@ -18,7 +18,38 @@ from cyberwave.utils.depth import (
     build_depth_mqtt_payload,
     depth_to_colored_pointcloud,
     depth_to_uint16,
+    ground_depth_pixel,
+    pointcloud_to_world,
 )
+
+
+def test_capture_calibration_scales_to_model_output_and_world_pose_preserves_rgb():
+    depth = np.full((2, 4), 2000, dtype=np.uint16)
+    cloud = depth_to_colored_pointcloud(
+        depth, output_mode="metric_mm", step=1, fx=999, fy=999,
+        intrinsics={"fx": 8, "fy": 4, "cx": 4, "cy": 2, "width": 8, "height": 4},
+    ).reshape(-1, 6)
+    np.testing.assert_allclose(cloud[0, :3], [-1, -1, 2])
+    original = cloud.copy()
+    pose = {"position": [10, 20, 30], "quaternion": [0, 1, 0, 0], "frame_id": "world"}
+    world = pointcloud_to_world(cloud, pose)
+    np.testing.assert_allclose(world[0, :3], [9, 21, 28])
+    np.testing.assert_array_equal(world[:, 3:], cloud[:, 3:])
+    np.testing.assert_array_equal(cloud, original)
+
+
+@pytest.mark.parametrize("pose", [None, {}, {"frame_id": "base_link"},
+    {"frame_id": "world", "position": [0, 0, float("nan")], "quaternion": [1, 0, 0, 0]},
+    {"frame_id": "world", "position": [0, 0, 0], "quaternion": [0, 0, 0, 0]}])
+def test_world_projection_requires_an_explicit_valid_capture_pose(pose):
+    with pytest.raises(ValueError):
+        pointcloud_to_world(np.zeros((1, 3)), pose)
+
+
+@pytest.mark.parametrize("intrinsics", [{}, {"fx": 0, "fy": 1, "cx": 0, "cy": 0, "width": 2, "height": 2}])
+def test_bad_declared_calibration_cannot_fall_back_to_guessed_focals(intrinsics):
+    with pytest.raises(ValueError, match="intrinsics"):
+        depth_to_colored_pointcloud(np.ones((2, 2), dtype=np.uint16), intrinsics=intrinsics)
 
 
 def _as_depth_payload(wire: dict) -> dict:
@@ -476,3 +507,38 @@ class TestSentinelIsReservedForInvalidPixels:
         )
         assert cloud is not None
         assert cloud.size // 6 == disparity.size, "the near plane was dropped"
+
+
+def test_grounded_pixel_matches_shared_pointcloud_with_resized_capture():
+    depth = np.full((3, 4), 2.0, dtype=np.float32)
+    calibration = {"fx": 8, "fy": 12, "cx": 4, "cy": 6, "width": 8, "height": 12}
+    pose = {"frame_id": "world", "position": [10, 20, 30], "quaternion": [0, 1, 0, 0]}
+    point = ground_depth_pixel(depth, pixel_xy=(0, 0), intrinsics=calibration, camera_pose=pose)
+    np.testing.assert_allclose(point, [9, 21, 28])
+    cloud = depth_to_colored_pointcloud(
+        (depth * 1000).astype(np.uint16), output_mode="metric_mm", intrinsics=calibration, step=1
+    ).reshape(-1, 6)
+    np.testing.assert_allclose(point, pointcloud_to_world(cloud, pose)[0, :3])
+
+
+@pytest.mark.parametrize("depth", [np.ones((2, 2), dtype=np.uint16), np.ones((2, 2, 1)),
+    np.zeros((2, 2)), np.full((2, 2), np.nan), np.full((2, 2), np.inf), np.full((2, 2), -1.)])
+def test_grounding_rejects_unconverted_or_missing_metric_depth(depth):
+    with pytest.raises(ValueError):
+        ground_depth_pixel(depth, pixel_xy=(0, 0),
+            intrinsics={"fx": 2, "fy": 2, "cx": 1, "cy": 1, "width": 2, "height": 2},
+            camera_pose={"frame_id": "world", "position": [0, 0, 0], "quaternion": [1, 0, 0, 0]})
+
+
+@pytest.mark.parametrize("pixel", [(-1, 0), (0, 2), (2, 0), (float("nan"), 0), (1,)])
+def test_grounding_rejects_outside_or_malformed_pixel(pixel):
+    with pytest.raises(ValueError, match="pixel"):
+        ground_depth_pixel(np.ones((2, 2)), pixel_xy=pixel, intrinsics={}, camera_pose={})
+
+
+def test_grounding_requires_capture_calibration_and_world_pose():
+    calibration = {"fx": 2, "fy": 2, "cx": 1, "cy": 1, "width": 2, "height": 2}
+    with pytest.raises(ValueError, match="intrinsics"):
+        ground_depth_pixel(np.ones((2, 2)), pixel_xy=(0, 0), intrinsics={}, camera_pose={})
+    with pytest.raises(ValueError, match="camera pose"):
+        ground_depth_pixel(np.ones((2, 2)), pixel_xy=(0, 0), intrinsics=calibration, camera_pose={})

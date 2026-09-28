@@ -257,7 +257,26 @@ class CameraCapableMixin:
     ``camera`` is injected on :class:`~cyberwave.twin.base.Twin` via ``__getattr__``
     (not a class property). ``twin.camera.get_frame()`` uses the first sensor;
     ``twin.camera['depth_camera']`` / ``twin.camera[1]`` select a specific one.
+
+    ``twin.calibration`` holds this camera's hand-eye calibration (see
+    :class:`~cyberwave.calibration.persistence.CameraCalibrationHandle`).
     """
+
+    _camera_calibration: Optional[Any] = None
+
+    @property
+    def calibration(self) -> Any:
+        """Hand-eye calibration for this camera (REST only, mirrors ``joints.calibration``).
+
+        Twin-level rather than per-sensor under ``camera[...]``: the solved transform
+        is stored in the twin's ``attach_offset_*`` fields, and there is only one of
+        those per twin.
+        """
+        if self._camera_calibration is None:
+            from ..calibration.persistence import CameraCalibrationHandle
+
+            self._camera_calibration = CameraCalibrationHandle(self)
+        return self._camera_calibration
 
     def stream(
         self,

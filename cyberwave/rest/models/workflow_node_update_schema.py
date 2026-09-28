@@ -17,6 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
@@ -37,7 +38,9 @@ class WorkflowNodeUpdateSchema(BaseModel):
     notes: Optional[StrictStr] = None
     is_disabled: Optional[StrictBool] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["name", "node_type", "node_subtype", "trigger_type", "parameters", "position_x", "position_y", "notes", "is_disabled", "metadata"]
+    expected_updated_at: Optional[datetime] = None
+    expected_model_updated_at: Optional[datetime] = None
+    __properties: ClassVar[List[str]] = ["name", "node_type", "node_subtype", "trigger_type", "parameters", "position_x", "position_y", "notes", "is_disabled", "metadata", "expected_updated_at", "expected_model_updated_at"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -128,6 +131,16 @@ class WorkflowNodeUpdateSchema(BaseModel):
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
+        # set to None if expected_updated_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_updated_at is None and "expected_updated_at" in self.model_fields_set:
+            _dict['expected_updated_at'] = None
+
+        # set to None if expected_model_updated_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_model_updated_at is None and "expected_model_updated_at" in self.model_fields_set:
+            _dict['expected_model_updated_at'] = None
+
         return _dict
 
     @classmethod
@@ -149,7 +162,9 @@ class WorkflowNodeUpdateSchema(BaseModel):
             "position_y": obj.get("position_y"),
             "notes": obj.get("notes"),
             "is_disabled": obj.get("is_disabled"),
-            "metadata": obj.get("metadata")
+            "metadata": obj.get("metadata"),
+            "expected_updated_at": obj.get("expected_updated_at"),
+            "expected_model_updated_at": obj.get("expected_model_updated_at")
         })
         return _obj
 

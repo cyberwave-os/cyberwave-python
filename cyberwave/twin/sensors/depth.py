@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import base64
 import math
+from functools import partial
 from typing import TYPE_CHECKING, Any, Callable
 
 from ...consumers.callback_hub import StateSubscription
 from ...consumers.mqtt_snapshot import FIRST_READ_TIMEOUT_S, MqttSensorStreamHandle
 from ...exceptions import CyberwaveError, DepthTransportNotMQTTError
+from ...utils.depth import depth_array_to_meters
 from ..simulation_support import SimLevel, simulation_level
 from .camera import TwinCameraHandle
 from .pointcloud import PointCloudCapableMixin
@@ -31,12 +33,11 @@ def _coerce_finite_float(value: Any, default: float) -> float:
     return parsed if math.isfinite(parsed) else default
 
 
-def _decode_depth(payload: dict[str, Any]) -> Any:
+def _decode_depth(payload: dict[str, Any], *, with_encoding: bool = False) -> Any:
     """``/depth`` payload -> numpy ``H×W`` depth (new or legacy format), or None.
 
-    Parsed with the payload's declared ``dtype``; unit interpretation (float
-    metres vs ``uint16`` millimetres) happens in
-    :meth:`DepthSensorHandle._to_meters`.
+    Parsed with the payload's declared ``dtype``; encoding metadata travels with
+    the cached array so numeric reads cannot mix calibration between frames.
     """
     import numpy as np
 
@@ -62,7 +63,25 @@ def _decode_depth(payload: dict[str, Any]) -> Any:
     arr = np.frombuffer(base64.b64decode(b64), dtype=np_dtype)
     if width and height:
         arr = arr.reshape(int(height), int(width))
+    if with_encoding:
+        # Keep encoding and pixels in the same cached snapshot. A separate
+        # mutable "last metadata" field can race the next frame's calibration.
+        encoding = {**payload, **data} if isinstance(data, dict) else payload
+        return arr, {
+            key: encoding[key]
+            for key in (
+                "output_mode",
+                "depth_scale",
+                "min_depth",
+                "max_depth",
+                "depth_map_metric",
+            )
+            if key in encoding
+        }
     return arr
+
+
+_decode_depth_with_encoding = partial(_decode_depth, with_encoding=True)
 
 
 class DepthSensorHandle(PointCloudCapableMixin, TwinCameraHandle):
@@ -89,15 +108,15 @@ class DepthSensorHandle(PointCloudCapableMixin, TwinCameraHandle):
         ``raw`` selects the value representation of ``format="numpy"`` frames:
 
         - ``raw=False`` (default): a ``float32 H×W`` array of **depth in metres**.
-          MQTT frames carry absolute depth (float metres, or ``uint16``
-          millimetres) and are converted to metres; the REST ``uint8`` grayscale
+          MQTT reads honor the frame's declared scale/window; explicitly relative
+          or unconfirmed normalized frames require ``raw=True``. Untagged
+          uint16 retains the legacy millimetre default. The REST ``uint8`` grayscale
           representation carries no absolute unit and is mapped linearly onto the
           sensor's depth range (``min_depth`` / ``max_depth`` from
           ``twin.capabilities``, defaulting to ``0.1``–``5.0`` m). See
           :meth:`_to_meters`.
         - ``raw=True``: the underlying single-channel depth image — the native
-          ``H×W`` array from MQTT (``float`` metres or ``uint16`` millimetres, per
-          the frame's declared dtype), or the ``uint8 H×W`` grayscale image from
+          ``H×W`` array from MQTT (in its declared storage units), or the ``uint8 H×W`` grayscale image from
           REST (the RGB channels, which encode the same value, are collapsed to
           one).
 
@@ -129,23 +148,41 @@ class DepthSensorHandle(PointCloudCapableMixin, TwinCameraHandle):
                     self._depth_using_rest = True
                     return self._rest_numpy(frame, raw=raw) if is_numpy else frame
                 self._depth_using_rest = False
-            frame = self._get_depth_mqtt(format, timeout=timeout)
-            return self._mqtt_numpy(frame, raw=raw) if is_numpy else frame
+            return self._get_depth_mqtt(format, timeout=timeout, raw=raw)
         if normalized == "mqtt":
-            frame = self._get_depth_mqtt(format, timeout=timeout)
-            return self._mqtt_numpy(frame, raw=raw) if is_numpy else frame
+            return self._get_depth_mqtt(format, timeout=timeout, raw=raw)
         # cloud / local / zenoh / remote_edge -> camera handle behavior
         frame = super().get_frame(format, source=source, sensor_id=sensor_id, **kwargs)
         if is_numpy and frame is not None:
             return self._rest_numpy(frame, raw=raw)
         return frame
 
-    def _mqtt_numpy(self, arr: Any, *, raw: bool) -> Any:
+    def _mqtt_numpy(self, arr: Any, *, raw: bool, encoding: dict[str, Any]) -> Any:
         """MQTT ``/depth`` numpy frame: raw ``uint16`` (``raw``) or ``float32`` metres."""
         import numpy as np
 
         a = np.asarray(arr)
-        return a if raw else self._to_meters(a)
+        if raw:
+            return a
+        metric = encoding.get("depth_map_metric")
+        if ("depth_map_metric" in encoding and metric is not True) or (
+            encoding.get("output_mode") == "normalized_uint16" and metric is not True
+        ):
+            raise CyberwaveError(
+                "Depth frame has no confirmed metric scale. Use raw=True for its "
+                "display values, or select a metric depth source."
+            )
+        try:
+            return depth_array_to_meters(
+                a,
+                **{
+                    key: value
+                    for key, value in encoding.items()
+                    if key != "depth_map_metric"
+                },
+            )
+        except (TypeError, ValueError) as exc:
+            raise CyberwaveError(f"Invalid depth encoding: {exc}") from exc
 
     def _rest_numpy(self, frame: Any, *, raw: bool) -> Any:
         """REST numpy frame collapsed to grayscale: ``uint8`` (``raw``) or metres."""
@@ -216,10 +253,12 @@ class DepthSensorHandle(PointCloudCapableMixin, TwinCameraHandle):
                 return entry
         return first_depth or {}
 
-    def _get_depth_mqtt(self, format: str, *, timeout: float) -> Any:
-        arr = self._get_latest(DEPTH_STREAM, _decode_depth, timeout=timeout)
+    def _get_depth_mqtt(self, format: str, *, timeout: float, raw: bool = True) -> Any:
+        arr, encoding = self._get_latest(
+            DEPTH_STREAM, _decode_depth_with_encoding, timeout=timeout
+        )
         if format == "numpy":
-            return arr
+            return self._mqtt_numpy(arr, raw=raw, encoding=encoding)
         if format == "bytes":
             return arr.tobytes()
         raise CyberwaveError(
@@ -246,7 +285,9 @@ class DepthSensorHandle(PointCloudCapableMixin, TwinCameraHandle):
                 "        process(frame)\n"
                 "        time.sleep(interval)"
             )
-        return self._register_callback(DEPTH_STREAM, _decode_depth, callback)
+        return self._register_callback(
+            DEPTH_STREAM, _decode_depth_with_encoding, lambda frame: callback(frame[0])
+        )
 
     def __dir__(self) -> list[str]:
         names = {n for n in object.__dir__(self) if not n.startswith("_")}

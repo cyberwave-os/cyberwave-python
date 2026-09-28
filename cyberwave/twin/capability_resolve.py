@@ -7,6 +7,14 @@ from typing import Any, Callable, Mapping, Optional
 
 _IMAGING_TYPES = frozenset({"rgb", "depth", "camera"})
 
+# Keep in sync with cyberwave.sensor.microphone.MICROPHONE_SENSOR_TYPES /
+# cyberwave.sensor.speaker.SPEAKER_SENSOR_TYPES. Inlined rather than imported:
+# those modules pull in aiortc/av unconditionally at module scope, and this
+# module is meant to stay a lightweight, dependency-free capability resolver
+# (mirrors _IMAGING_TYPES above, which does the same for camera types).
+_MICROPHONE_TYPES = frozenset({"mic", "microphone", "audio_in", "audio", "audio_mono", "audio_stereo"})
+_SPEAKER_TYPES = frozenset({"speaker", "loudspeaker", "speakerphone", "audio_out"})
+
 
 def _is_lidar_type(sensor_type: str) -> bool:
     return "lidar" in sensor_type.lower()
@@ -108,6 +116,8 @@ def resolve_handler_from_capabilities(
 
     Handles:
     - ``camera`` / ``imaging`` — RGB, depth, or camera sensors
+    - ``microphone`` / ``mic`` — any of ``MICROPHONE_SENSOR_TYPES``
+    - ``speaker`` — any of ``SPEAKER_SENSOR_TYPES``
     - ``lidar`` — any sensor type string containing ``lidar``
     - ``gps``, ``compass``, ``imu``, ``flashlight`` — exact sensor type match
     - ``sensor`` — any entry in ``capabilities.sensors``
@@ -120,6 +130,18 @@ def resolve_handler_from_capabilities(
         return _resolve_sensor_family(
             caps,
             predicate=lambda e: str(e.get("type") or "") in _IMAGING_TYPES,
+        )
+    if key in ("microphone", "mic"):
+        return _resolve_sensor_family(
+            caps,
+            predicate=lambda e: str(e.get("type") or "").strip().lower()
+            in _MICROPHONE_TYPES,
+        )
+    if key == "speaker":
+        return _resolve_sensor_family(
+            caps,
+            predicate=lambda e: str(e.get("type") or "").strip().lower()
+            in _SPEAKER_TYPES,
         )
     if key == "lidar":
         return _resolve_sensor_family(

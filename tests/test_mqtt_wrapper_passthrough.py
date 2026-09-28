@@ -35,6 +35,13 @@ def _make_wrapper_with_mock_base():
     return wrapper, base_cls.return_value
 
 
+def test_wrapper_preserves_publish_acceptance_and_failure() -> None:
+    wrapper, base = _make_wrapper_with_mock_base()
+    for accepted in (True, False):
+        base.publish.return_value = accepted
+        assert wrapper.publish("topic", {"command": "grip"}, qos=1) is accepted
+
+
 def test_wrapper_forwards_as_targets_true_to_base() -> None:
     wrapper, base = _make_wrapper_with_mock_base()
 
@@ -89,9 +96,7 @@ def test_wrapper_forwards_subscriber_key_on_subscribe() -> None:
     wrapper.subscribe("twin/topic", handler, subscriber_key="video:cam:live:default")
 
     base.subscribe.assert_called_once()
-    assert (
-        base.subscribe.call_args.kwargs["subscriber_key"] == "video:cam:live:default"
-    )
+    assert base.subscribe.call_args.kwargs["subscriber_key"] == "video:cam:live:default"
 
 
 def test_wrapper_defaults_subscriber_key_none_on_subscribe() -> None:
@@ -130,6 +135,15 @@ def test_wrapper_forwards_publish_pointcloud() -> None:
     wrapper.publish_pointcloud("twin-uuid", cloud, 123.0)
 
     base.publish_pointcloud.assert_called_once_with("twin-uuid", cloud, 123.0, stride=6)
+
+
+def test_wrapper_forwards_pointcloud_sensor_when_provided() -> None:
+    wrapper, base = _make_wrapper_with_mock_base()
+    cloud = object()
+    wrapper.publish_pointcloud("twin-uuid", cloud, 123.0, sensor_id="front_camera")
+    base.publish_pointcloud.assert_called_once_with(
+        "twin-uuid", cloud, 123.0, stride=6, sensor_id="front_camera"
+    )
 
 
 # Methods on the base client that the wrapper deliberately does not re-export.

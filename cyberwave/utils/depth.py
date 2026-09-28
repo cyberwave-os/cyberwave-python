@@ -41,6 +41,68 @@ DEPTH_OUTPUT_MODE_NORMALIZED_UINT16 = "normalized_uint16"
 DEPTH_OUTPUT_MODE_METRIC_MM = "metric_mm"
 
 
+def depth_array_to_meters(
+    depth: Any,
+    *,
+    output_mode: str | None = None,
+    depth_scale: float = 0.001,
+    min_depth: float | None = None,
+    max_depth: float | None = None,
+) -> Any:
+    """Decode declared storage units; callers must establish metric provenance.
+
+    Untagged uint16 keeps the legacy millimetre default. Float arrays are
+    already metres. Zero, negative and non-finite samples remain no-return.
+    A normalized display window alone does not prove real-world distances.
+    """
+    import math
+
+    import numpy as np
+
+    arr = np.asarray(depth)
+    if output_mode not in (
+        None,
+        DEPTH_OUTPUT_MODE_METRIC_MM,
+        DEPTH_OUTPUT_MODE_NORMALIZED_UINT16,
+    ):
+        raise ValueError(f"Unsupported depth output_mode: {output_mode!r}")
+    if output_mode is not None and arr.dtype != np.uint16:
+        raise ValueError("Encoded depth output_mode requires uint16 storage")
+    raw = arr.astype(np.float64)
+    if arr.dtype == np.uint16:
+        if output_mode == DEPTH_OUTPUT_MODE_NORMALIZED_UINT16:
+            if (
+                isinstance(min_depth, bool)
+                or isinstance(max_depth, bool)
+                or min_depth is None
+                or max_depth is None
+                or not math.isfinite(float(min_depth))
+                or not math.isfinite(float(max_depth))
+                or not 0 <= float(min_depth) < float(max_depth)
+            ):
+                raise ValueError(
+                    "Normalized depth requires finite 0 <= min_depth < max_depth"
+                )
+            metres = float(min_depth) + raw / 65535.0 * (
+                float(max_depth) - float(min_depth)
+            )
+        else:
+            if (
+                isinstance(depth_scale, bool)
+                or not math.isfinite(float(depth_scale))
+                or float(depth_scale) <= 0
+            ):
+                raise ValueError("depth_scale must be finite and positive")
+            metres = raw * float(depth_scale)
+    elif np.issubdtype(arr.dtype, np.floating):
+        metres = raw
+    else:
+        raise ValueError("Depth storage must be uint16 or floating point")
+    return np.where(
+        np.isfinite(raw) & (raw > 0) & np.isfinite(metres) & (metres > 0), metres, 0.0
+    ).astype(np.float32)
+
+
 def depth_to_uint16(
     depth: Any,
     *,
@@ -240,6 +302,93 @@ def _grid_points(h: int, w: int, step: int) -> int:
     return (-(-h // step)) * (-(-w // step))
 
 
+def deproject_pixel(u: Any, v: Any, z_m: Any, fx: float, fy: float, cx: float, cy: float) -> tuple[Any, Any, Any]:
+    """Pinhole projection shared by Object Pose workers and depth consumers.
+
+    Inputs are pixels and metric optical depth; arrays are accepted for point
+    clouds. Calibration and capture association must be established by callers.
+    """
+    if fx == 0 or fy == 0:
+        raise ValueError(f"deproject: fx and fy must be non-zero (got fx={fx!r}, fy={fy!r})")
+    return (u - cx) * z_m / fx, (v - cy) * z_m / fy, z_m
+
+
+def _scaled_capture_intrinsics(intrinsics: dict[str, Any], width: int, height: int) -> tuple[float, float, float, float]:
+    import math
+
+    try:
+        capture = {key: float(intrinsics[key]) for key in ("fx", "fy", "cx", "cy", "width", "height")}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Capture intrinsics require fx/fy/cx/cy and width/height") from exc
+    if not all(math.isfinite(value) for value in capture.values()) or any(
+        capture[key] <= 0 for key in ("fx", "fy", "width", "height")
+    ):
+        raise ValueError("Capture intrinsics must be finite with positive focal lengths and dimensions")
+    sx, sy = width / capture["width"], height / capture["height"]
+    return capture["fx"] * sx, capture["fy"] * sy, capture["cx"] * sx, capture["cy"] * sy
+
+
+def ground_depth_pixel(
+    depth_m: Any, *, pixel_xy: tuple[float, float], intrinsics: dict[str, Any], camera_pose: dict[str, Any]
+) -> list[float]:
+    """Ground one visible surface point using paired metric depth and capture pose.
+
+    ``depth_m`` must be a floating-point H×W array in optical metres, registered
+    to the image containing ``pixel_xy``. The producer must establish metric
+    provenance and supply the pose at capture time. Callers must bind all inputs
+    to the same observation; this numerical helper cannot establish freshness.
+    Resizing calibration is supported; crops/rectification need new intrinsics.
+    Missing depth fails instead of guessing a surface or object centre.
+    """
+    import numpy as np
+
+    depth = np.asarray(depth_m)
+    if depth.ndim != 2 or not all(depth.shape) or not np.issubdtype(depth.dtype, np.floating):
+        raise ValueError("Grounding requires a floating-point metric depth image")
+    pixel = np.asarray(pixel_xy, dtype=float)
+    h, w = depth.shape
+    if pixel.shape != (2,) or not np.isfinite(pixel).all() or not (0 <= pixel[0] < w and 0 <= pixel[1] < h):
+        raise ValueError("Grounding pixel must be finite [x,y] inside the depth image")
+    # Use the same pixel centre for sampling and projection, including the edge.
+    u, v = min(w - 1, int(round(pixel[0]))), min(h - 1, int(round(pixel[1])))
+    z = float(depth[v, u])
+    if not np.isfinite(z) or z <= 0:
+        raise ValueError("No metric depth at the selected pixel")
+    fx, fy, cx, cy = _scaled_capture_intrinsics(intrinsics, w, h)
+    point = deproject_pixel(u, v, z, fx, fy, cx, cy)
+    return pointcloud_to_world(np.asarray([point]), camera_pose)[0].tolist()
+
+
+def pointcloud_to_world(points: Any, camera_pose: Any) -> Any:
+    """Project metric optical XYZ/RGB using the pose paired with its capture.
+
+    Accept an N×3 or N×6 array and the platform CameraPoseSchema convention:
+    position [x,y,z] in metres, quaternion [w,x,y,z], frame_id world/environment.
+    Callers must establish metric depth and preserve acquisition identity; this
+    operation cannot calibrate relative depth or repair a stale/mismatched pose.
+    Never substitute the current robot pose for missing capture information.
+    """
+    import numpy as np
+
+    from cyberwave.calibration.frames import make_transform, quat_wxyz_to_matrix
+
+    if not isinstance(camera_pose, dict) or camera_pose.get("frame_id") not in {"world", "environment"}:
+        raise ValueError("World projection requires an explicit world/environment camera pose")
+    position = np.asarray(camera_pose.get("position"), dtype=float)
+    quaternion = np.asarray(camera_pose.get("quaternion"), dtype=float)
+    if position.shape != (3,) or quaternion.shape != (4,) or not (
+        np.isfinite(position).all() and np.isfinite(quaternion).all()
+    ):
+        raise ValueError("Camera pose requires finite position [x,y,z] and quaternion [w,x,y,z]")
+    transform = make_transform(quat_wxyz_to_matrix(quaternion), position)
+    cloud = np.asarray(points)
+    if cloud.ndim != 2 or cloud.shape[1] not in (3, 6) or not np.isfinite(cloud).all():
+        raise ValueError("Point cloud must be a finite N×3 XYZ or N×6 XYZ/RGB array")
+    result = cloud.astype(np.float32, copy=True)
+    result[:, :3] = cloud[:, :3] @ transform[:3, :3].T + transform[:3, 3]
+    return result
+
+
 def depth_to_colored_pointcloud(
     depth_uint16: Any,
     *,
@@ -253,6 +402,7 @@ def depth_to_colored_pointcloud(
     fy_normalized: float | None = None,
     cx: float | None = None,
     cy: float | None = None,
+    intrinsics: dict[str, Any] | None = None,
     step: int = 4,
     max_points: int | None = None,
 ) -> Any:
@@ -292,6 +442,10 @@ def depth_to_colored_pointcloud(
                       ``fy`` is given.
         cx:           Principal point x.  Defaults to ``width / 2``.
         cy:           Principal point y.  Defaults to ``height / 2``.
+        intrinsics:   Capture calibration with fx/fy/cx/cy and its width/height.
+                      Scaled to the depth output resolution, overriding the
+                      fallback focal/principal-point arguments. Resize only;
+                      cropped or rectified images require updated calibration.
         step:         Pixel stride for subsampling.  ``step=4`` gives one point
                       per 4×4 block. At 640x480 that is 19 200 points ≈ 450 KiB
                       of float32 (≈600 KiB base64) per frame. Resolution
@@ -325,6 +479,8 @@ def depth_to_colored_pointcloud(
         return None
 
     # --- camera intrinsics ---
+    if intrinsics is not None:
+        fx, fy, cx, cy = _scaled_capture_intrinsics(intrinsics, w, h)
     # Precedence: explicit pixel focals > resolution-independent normalized
     # focals (scaled by this frame) > 69° HFOV guess.
     _cx = float(cx) if cx is not None else w * 0.5
@@ -363,7 +519,7 @@ def depth_to_colored_pointcloud(
     uu, vv = np.meshgrid(us, vs)
     rows = vv.astype(np.int32)
     cols = uu.astype(np.int32)
-    raw = arr[rows, cols].astype(np.float32)
+    raw = arr[rows, cols]
 
     # --- decode uint16 → metric depth (metres) ---
     # Deliberately after the subsample. Decoding the full frame first and then
@@ -372,10 +528,13 @@ def depth_to_colored_pointcloud(
     # to produce ~17 000 points. Decoding only the sampled values makes this
     # flat in frame size (~0.12 ms at any resolution), which is the invariant
     # ``max_points`` is meant to buy.
-    if output_mode == DEPTH_OUTPUT_MODE_METRIC_MM:
-        d = raw * float(depth_scale)
-    else:
-        d = float(min_depth) + raw / 65535.0 * (float(max_depth) - float(min_depth))
+    d = depth_array_to_meters(
+        raw,
+        output_mode=output_mode,
+        depth_scale=depth_scale,
+        min_depth=min_depth,
+        max_depth=max_depth,
+    )
 
     # u16 == 0 is the "no reading" sentinel in both encodings, so test the raw
     # sample rather than the decoded metres. Under normalized_uint16 the affine
@@ -390,9 +549,7 @@ def depth_to_colored_pointcloud(
     v = vv[valid]
 
     # --- 3-D back-projection (optical frame: X-right, Y-down, Z-forward) ---
-    x = (u - _cx) * d / _fx
-    y = (v - _cy) * d / _fy
-    z = d
+    x, y, z = deproject_pixel(u, v, d, _fx, _fy, _cx, _cy)
 
     # --- jet-colourmap colouring based on depth ---
     t = np.clip(

@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.model_task_contract_schema import ModelTaskContractSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -38,7 +39,8 @@ class AgentControlModelOptionSchema(BaseModel):
     is_default: Optional[StrictBool] = False
     slug: Optional[StrictStr] = None
     supported_task_ids: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "display_name", "model_provider_name", "model_external_id", "mapped_model_id", "reasoning_effort", "metadata", "is_default", "slug", "supported_task_ids"]
+    task_contracts: Optional[List[ModelTaskContractSchema]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "display_name", "model_provider_name", "model_external_id", "mapped_model_id", "reasoning_effort", "metadata", "is_default", "slug", "supported_task_ids", "task_contracts"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -79,6 +81,13 @@ class AgentControlModelOptionSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in task_contracts (list)
+        _items = []
+        if self.task_contracts:
+            for _item_task_contracts in self.task_contracts:
+                if _item_task_contracts:
+                    _items.append(_item_task_contracts.to_dict())
+            _dict['task_contracts'] = _items
         # set to None if mapped_model_id (nullable) is None
         # and model_fields_set contains the field
         if self.mapped_model_id is None and "mapped_model_id" in self.model_fields_set:
@@ -116,7 +125,8 @@ class AgentControlModelOptionSchema(BaseModel):
             "metadata": obj.get("metadata"),
             "is_default": obj.get("is_default") if obj.get("is_default") is not None else False,
             "slug": obj.get("slug"),
-            "supported_task_ids": obj.get("supported_task_ids")
+            "supported_task_ids": obj.get("supported_task_ids"),
+            "task_contracts": [ModelTaskContractSchema.from_dict(_item) for _item in obj["task_contracts"]] if obj.get("task_contracts") is not None else None
         })
         return _obj
 

@@ -8,6 +8,9 @@ Environment variables consumed:
   CYBERWAVE_WORKER_LOG_LEVEL  Worker logging verbosity (default: INFO).
                               Takes precedence over ``CYBERWAVE_EDGE_LOG_LEVEL``.
   CYBERWAVE_EDGE_LOG_LEVEL    Fallback log level (kept for backwards compat).
+  CYBERWAVE_WORKER_STATUS_PATH Where to write startup milestones for the
+                              supervisor (default: /run/cyberwave/worker-status.json).
+                              Inert when the directory is not mounted.
 
 Workers and edge drivers live in different containers; tuning them
 independently is the common case (e.g. raising the driver to DEBUG to
@@ -66,6 +69,13 @@ def main() -> None:
         level_name,
         level_source,
     )
+
+    # First milestone, published before anything that can block: the
+    # supervisor watches this file to tell "container running" apart from
+    # "worker usable", and the gap between them starts here.
+    from cyberwave.workers.status import PHASE_BOOTING, get_status_reporter
+
+    get_status_reporter().publish(PHASE_BOOTING)
 
     api_key = os.environ.get("CYBERWAVE_API_KEY")
     if not api_key:

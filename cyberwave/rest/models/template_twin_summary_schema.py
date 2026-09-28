@@ -27,6 +27,9 @@ class TemplateTwinSummarySchema(BaseModel):
     """
     TemplateTwinSummarySchema
     """ # noqa: E501
+    uuid: Optional[StrictStr] = None
+    position_x: Optional[Union[StrictFloat, StrictInt]] = None
+    position_y: Optional[Union[StrictFloat, StrictInt]] = None
     name: StrictStr
     asset_name: StrictStr
     asset_uuid: Optional[StrictStr] = None
@@ -34,7 +37,7 @@ class TemplateTwinSummarySchema(BaseModel):
     purchase_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["name", "asset_name", "asset_uuid", "monthly_price", "purchase_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["uuid", "position_x", "position_y", "name", "asset_name", "asset_uuid", "monthly_price", "purchase_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -75,6 +78,21 @@ class TemplateTwinSummarySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.uuid is None and "uuid" in self.model_fields_set:
+            _dict['uuid'] = None
+
+        # set to None if position_x (nullable) is None
+        # and model_fields_set contains the field
+        if self.position_x is None and "position_x" in self.model_fields_set:
+            _dict['position_x'] = None
+
+        # set to None if position_y (nullable) is None
+        # and model_fields_set contains the field
+        if self.position_y is None and "position_y" in self.model_fields_set:
+            _dict['position_y'] = None
+
         # set to None if asset_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.asset_uuid is None and "asset_uuid" in self.model_fields_set:
@@ -102,6 +120,9 @@ class TemplateTwinSummarySchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "uuid": obj.get("uuid"),
+            "position_x": obj.get("position_x"),
+            "position_y": obj.get("position_y"),
             "name": obj.get("name"),
             "asset_name": obj.get("asset_name"),
             "asset_uuid": obj.get("asset_uuid"),

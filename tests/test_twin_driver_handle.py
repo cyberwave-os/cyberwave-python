@@ -93,3 +93,108 @@ def test_driver_set_schema_persists_mqtt_and_rebinds_commands() -> None:
     assert "custom_ping" in call_metadata["mqtt"]["commands"]["supported"]
     assert "custom_ping" in schemas["mqtt"]["commands"]["supported"]
     assert hasattr(twin.commands, "custom_ping")
+
+
+def test_reviewed_schema_write_forwards_revision_and_retains_state_on_conflict():
+    from datetime import datetime, timezone
+
+    import pytest
+
+    from cyberwave.exceptions import CyberwaveError
+
+    twin = _make_twin()
+    twin._data.updated_at = datetime(2026, 9, 10, tzinfo=timezone.utc)
+    before = twin._data
+    schemas = twin.driver.get_schemas()
+    twin.client.twins = MagicMock()
+    twin.client.twins.set_driver_schema.side_effect = RuntimeError(
+        "409 configuration changed"
+    )
+    root = {"mqtt": {"twin": {"command": {"description": "Commands"}}}}
+    with pytest.raises(CyberwaveError, match="409 configuration changed"):
+        twin.driver.set_schema(root, expected_revision=twin.driver.get_revision())
+    twin.client.twins.set_driver_schema.assert_called_once_with(
+        twin.uuid,
+        driver_config=root,
+        merge=True,
+        expected_revision="2026-09-10T00:00:00+00:00",
+    )
+    assert twin._data is before
+    assert twin.driver.get_schemas() == schemas
+    assert twin.driver.get_supported_commands() == ["move_forward", "stop"]
+
+
+def test_driver_revision_legacy_absence_and_refreshed_value():
+    twin = _make_twin()
+    assert twin.driver.get_revision() is None
+    twin.client.twins = MagicMock()
+    twin.client.twins.get_raw.return_value = SimpleNamespace(
+        uuid=twin.uuid,
+        metadata=twin._data.metadata,
+        updated_at="2026-09-11T00:00:00Z",
+    )
+    twin.refresh()
+    assert twin.driver.get_revision() == "2026-09-11T00:00:00Z"
+
+
+def test_driver_revision_resource_serialization_preserves_legacy_wire_shape():
+    from cyberwave.resources import TwinManager
+
+    api = MagicMock()
+    manager = TwinManager(api)
+    root = {"mqtt": {"commands": {"supported": ["stop"]}}}
+    manager.set_driver_schema("twin-id", driver_config=root, merge=False)
+    assert api.api_client.param_serialize.call_args.kwargs["body"] == {
+        "driver_config": root,
+        "merge": False,
+    }
+    manager.set_driver_schema(
+        "twin-id", driver_config=root, expected_revision="reviewed-token"
+    )
+    assert api.api_client.param_serialize.call_args.kwargs["body"] == {
+        "driver_config": root,
+        "merge": True,
+        "expected_revision": "reviewed-token",
+    }
+
+
+def test_driver_uses_backend_projection_and_refresh_rebinds_command_methods():
+    twin = _make_twin()
+    commands = twin.commands
+    assert hasattr(commands, "move_forward")
+    resolved = {
+        "topics": {TWIN_COMMAND_TOPIC_SLUG: {}},
+        "commands": {
+            "supported": ["custom_ping"],
+            "specs": {
+                "custom_ping": {
+                    "args": [{"name": "count", "type": "integer", "default": 0}]
+                }
+            },
+        },
+    }
+    twin.client.twins = MagicMock()
+    twin.client.twins.get_raw.return_value = SimpleNamespace(
+        uuid=twin.uuid,
+        metadata={},
+        mqtt_command_schema=resolved,
+    )
+    twin.refresh()
+    assert twin.commands is commands
+    assert hasattr(commands, "custom_ping")
+    assert not hasattr(commands, "move_forward")
+    assert twin.driver.get_supported_commands() == ["custom_ping"]
+    assert twin.driver.get_supported_transports() == ["mqtt"]
+    assert twin.driver.get_command_specs()["custom_ping"]["args"][0]["default"] == 0
+    view = twin.driver.get_mqtt_schema()
+    view["commands"]["supported"].clear()
+    assert twin.driver.get_supported_commands() == ["custom_ping"]
+    twin.client.mqtt.publish.assert_not_called()
+
+
+def test_authoritative_empty_projection_does_not_revive_stale_metadata():
+    twin = _make_twin()
+    twin._data.mqtt_command_schema = {"topics": {}, "commands": {"supported": []}}
+    assert twin.driver.get_supported_commands() == []
+    assert twin.driver.get_supported_transports() == []
+    assert twin.driver.get_mqtt_schema()["topics"] == {}

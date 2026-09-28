@@ -41,3 +41,13 @@ def test_none_fields_stay_none():
     assert pa.source_types is None
     assert pa.units is None
     assert pa.related_topics is None
+
+
+def test_command_input_is_explicit_boolean_and_preserves_positional_arguments():
+    assert (
+        ProtocolArgs(["tele"], None, "legacy", None, command_input=True).command_input
+        is True
+    )
+    assert ProtocolArgs().command_input is None
+    with pytest.raises(ValueError):
+        ProtocolArgs(command_input="false")

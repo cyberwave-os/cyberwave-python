@@ -31,6 +31,7 @@ def client():
     c = CyberwaveMQTTClient(mqtt_password="test-pw", auto_connect=False)
     c.connected = True
     c.client = MagicMock()
+    c.client.publish.return_value.rc = 0
     return c
 
 
@@ -77,3 +78,21 @@ def test_replace_non_finite_pure_helper():
         {"a": float("nan"), "b": [float("inf"), 3.0], "c": {"d": 1.0}}
     )
     assert out == {"a": None, "b": [None, 3.0], "c": {"d": 1.0}}
+
+
+def test_publish_reports_local_acceptance_without_claiming_execution(client):
+    assert client.publish("t", {"command": "grip"}) is True
+
+
+@pytest.mark.parametrize("failure", ["disconnected", "queue_error", "exception", "encoding"])
+def test_publish_reports_failure_to_callers_without_raising(client, failure):
+    payload = {"command": "grip"}
+    if failure == "disconnected":
+        client.connected = False
+    elif failure == "queue_error":
+        client.client.publish.return_value.rc = 4
+    elif failure == "exception":
+        client.client.publish.side_effect = OSError("connection lost")
+    else:
+        payload["data"] = object()
+    assert client.publish("t", payload) is False

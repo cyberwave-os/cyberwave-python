@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.io_schema_port_schema import IOSchemaPortSchema
 from typing import Optional, Set
@@ -30,7 +30,9 @@ class IOSchemaSchema(BaseModel):
     """ # noqa: E501
     inputs: Optional[List[IOSchemaPortSchema]] = None
     outputs: Optional[List[IOSchemaPortSchema]] = None
-    __properties: ClassVar[List[str]] = ["inputs", "outputs"]
+    semantics_version: Optional[StrictInt] = None
+    semantic_issues: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["inputs", "outputs", "semantics_version", "semantic_issues"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -85,6 +87,11 @@ class IOSchemaSchema(BaseModel):
                 if _item_outputs:
                     _items.append(_item_outputs.to_dict())
             _dict['outputs'] = _items
+        # set to None if semantics_version (nullable) is None
+        # and model_fields_set contains the field
+        if self.semantics_version is None and "semantics_version" in self.model_fields_set:
+            _dict['semantics_version'] = None
+
         return _dict
 
     @classmethod
@@ -98,7 +105,9 @@ class IOSchemaSchema(BaseModel):
 
         _obj = cls.model_validate({
             "inputs": [IOSchemaPortSchema.from_dict(_item) for _item in obj["inputs"]] if obj.get("inputs") is not None else None,
-            "outputs": [IOSchemaPortSchema.from_dict(_item) for _item in obj["outputs"]] if obj.get("outputs") is not None else None
+            "outputs": [IOSchemaPortSchema.from_dict(_item) for _item in obj["outputs"]] if obj.get("outputs") is not None else None,
+            "semantics_version": obj.get("semantics_version"),
+            "semantic_issues": obj.get("semantic_issues")
         })
         return _obj
 

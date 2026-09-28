@@ -17,9 +17,10 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.asset_basic_simulation_capability_schema import AssetBasicSimulationCapabilitySchema
+from cyberwave.rest.models.asset_control_capability_schema import AssetControlCapabilitySchema
 from cyberwave.rest.models.asset_control_option_schema import AssetControlOptionSchema
 from cyberwave.rest.models.asset_control_recommendation_schema import AssetControlRecommendationSchema
 from cyberwave.rest.models.asset_control_runtime_route_schema import AssetControlRuntimeRouteSchema
@@ -33,6 +34,8 @@ class AssetControlProfileSchema(BaseModel):
     AssetControlProfileSchema
     """ # noqa: E501
     asset_uuid: StrictStr
+    revision: Optional[StrictStr] = None
+    can_write: Optional[StrictBool] = False
     manual_controller_ref: Optional[ControllerRefSchema] = None
     manual_option_id: Optional[StrictStr] = None
     default_runtime_routes: Optional[Dict[str, Dict[str, ControllerRefSchema]]] = None
@@ -45,11 +48,12 @@ class AssetControlProfileSchema(BaseModel):
     controller_settings: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
     controller_options: Optional[List[AssetControlOptionSchema]] = None
     basic_simulation_capabilities: Optional[List[AssetBasicSimulationCapabilitySchema]] = None
+    control_capabilities: Optional[List[AssetControlCapabilitySchema]] = None
     runtime_routes: Optional[List[AssetControlRuntimeRouteSchema]] = None
     recommendation: AssetControlRecommendationSchema
     preview_controller_ref: Optional[ControllerRefSchema] = None
     preview_option_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["asset_uuid", "manual_controller_ref", "manual_option_id", "default_runtime_routes", "default_runtime_option_ids", "compatible_controllers", "operator_controller_ref", "operator_option_id", "runtime_defaults", "runtime_default_option_ids", "controller_settings", "controller_options", "basic_simulation_capabilities", "runtime_routes", "recommendation", "preview_controller_ref", "preview_option_id"]
+    __properties: ClassVar[List[str]] = ["asset_uuid", "revision", "can_write", "manual_controller_ref", "manual_option_id", "default_runtime_routes", "default_runtime_option_ids", "compatible_controllers", "operator_controller_ref", "operator_option_id", "runtime_defaults", "runtime_default_option_ids", "controller_settings", "controller_options", "basic_simulation_capabilities", "control_capabilities", "runtime_routes", "recommendation", "preview_controller_ref", "preview_option_id"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -135,6 +139,13 @@ class AssetControlProfileSchema(BaseModel):
                 if _item_basic_simulation_capabilities:
                     _items.append(_item_basic_simulation_capabilities.to_dict())
             _dict['basic_simulation_capabilities'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in control_capabilities (list)
+        _items = []
+        if self.control_capabilities:
+            for _item_control_capabilities in self.control_capabilities:
+                if _item_control_capabilities:
+                    _items.append(_item_control_capabilities.to_dict())
+            _dict['control_capabilities'] = _items
         # override the default output from pydantic by calling `to_dict()` of each item in runtime_routes (list)
         _items = []
         if self.runtime_routes:
@@ -148,6 +159,11 @@ class AssetControlProfileSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of preview_controller_ref
         if self.preview_controller_ref:
             _dict['preview_controller_ref'] = self.preview_controller_ref.to_dict()
+        # set to None if revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.revision is None and "revision" in self.model_fields_set:
+            _dict['revision'] = None
+
         # set to None if manual_controller_ref (nullable) is None
         # and model_fields_set contains the field
         if self.manual_controller_ref is None and "manual_controller_ref" in self.model_fields_set:
@@ -191,6 +207,8 @@ class AssetControlProfileSchema(BaseModel):
 
         _obj = cls.model_validate({
             "asset_uuid": obj.get("asset_uuid"),
+            "revision": obj.get("revision"),
+            "can_write": obj.get("can_write") if obj.get("can_write") is not None else False,
             "manual_controller_ref": ControllerRefSchema.from_dict(obj["manual_controller_ref"]) if obj.get("manual_controller_ref") is not None else None,
             "manual_option_id": obj.get("manual_option_id"),
             "default_runtime_routes": dict(
@@ -225,6 +243,7 @@ class AssetControlProfileSchema(BaseModel):
             "controller_settings": obj.get("controller_settings"),
             "controller_options": [AssetControlOptionSchema.from_dict(_item) for _item in obj["controller_options"]] if obj.get("controller_options") is not None else None,
             "basic_simulation_capabilities": [AssetBasicSimulationCapabilitySchema.from_dict(_item) for _item in obj["basic_simulation_capabilities"]] if obj.get("basic_simulation_capabilities") is not None else None,
+            "control_capabilities": [AssetControlCapabilitySchema.from_dict(_item) for _item in obj["control_capabilities"]] if obj.get("control_capabilities") is not None else None,
             "runtime_routes": [AssetControlRuntimeRouteSchema.from_dict(_item) for _item in obj["runtime_routes"]] if obj.get("runtime_routes") is not None else None,
             "recommendation": AssetControlRecommendationSchema.from_dict(obj["recommendation"]) if obj.get("recommendation") is not None else None,
             "preview_controller_ref": ControllerRefSchema.from_dict(obj["preview_controller_ref"]) if obj.get("preview_controller_ref") is not None else None,

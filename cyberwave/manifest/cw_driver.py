@@ -1,7 +1,9 @@
-"""Compile ``cw-driver.yml`` into ``metadata[\"mqtt\"]`` MQTT interface catalogs.
+"""Legacy local driver compilation retained for compatibility.
 
-Logic mirrors ``cyberwave-backend/src/lib/cw_driver_catalog.py`` (compile path only).
-Used by :meth:`cyberwave.twin.commands.TwinCommandsHandle.set_schema`.
+Deprecated for new authoring: use ``cyberwave.driver.interface.cw_driver``
+with ``twin.driver.set_schema`` so the backend compiles one canonical contract.
+This module preserves the older local compiler behavior and does not implement
+new typed argument declarations. Do not add another compiler or new callers here.
 """
 
 from __future__ import annotations

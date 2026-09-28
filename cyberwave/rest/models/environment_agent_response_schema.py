@@ -31,7 +31,8 @@ class EnvironmentAgentResponseSchema(BaseModel):
     assistant_session_id: StrictStr
     tool_calls: Optional[List[StrictStr]] = None
     structured_results: Optional[List[Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["answer", "assistant_session_id", "tool_calls", "structured_results"]
+    scene_changes: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["answer", "assistant_session_id", "tool_calls", "structured_results", "scene_changes"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -72,6 +73,11 @@ class EnvironmentAgentResponseSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if scene_changes (nullable) is None
+        # and model_fields_set contains the field
+        if self.scene_changes is None and "scene_changes" in self.model_fields_set:
+            _dict['scene_changes'] = None
+
         return _dict
 
     @classmethod
@@ -87,7 +93,8 @@ class EnvironmentAgentResponseSchema(BaseModel):
             "answer": obj.get("answer"),
             "assistant_session_id": obj.get("assistant_session_id"),
             "tool_calls": obj.get("tool_calls"),
-            "structured_results": obj.get("structured_results")
+            "structured_results": obj.get("structured_results"),
+            "scene_changes": obj.get("scene_changes")
         })
         return _obj
 

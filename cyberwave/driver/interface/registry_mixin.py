@@ -437,7 +437,7 @@ class InterfaceRegistryMixin:
                 continue
             path = resolve_topic_path(m, twin_uuid, prefix=prefix)
             allowed = entry.protocol.source_types if entry.protocol else None
-            cb = filtered_listener(entry.callbacks.callback, allowed)
+            cb = filtered_listener(entry.callbacks.callback, allowed, topic=path)
 
             async def topic_handler(
                 envelope: dict[str, Any], _cb: Any = cb

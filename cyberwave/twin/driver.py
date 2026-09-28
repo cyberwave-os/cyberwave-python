@@ -39,7 +39,10 @@ class TwinDriverHandle:
 
     def get_schemas(self, *, force_refresh: bool = False) -> dict[str, Any]:
         """Return compiled catalogs: ``mqtt`` (with ``joint_control`` when applicable) and ``zenoh``."""
-        if not force_refresh and getattr(self._twin, "_driver_catalog_cache", None) is not None:
+        if (
+            not force_refresh
+            and getattr(self._twin, "_driver_catalog_cache", None) is not None
+        ):
             return copy.deepcopy(self._twin._driver_catalog_cache)
 
         mqtt_bundle = self._load_mqtt_bundle()
@@ -80,17 +83,39 @@ class TwinDriverHandle:
 
     def get_supported_transports(self) -> list[str]:
         """Transports with non-empty catalogs on this twin (``mqtt``, ``zenoh``)."""
-        return supported_transports_from_metadata(_get_twin_metadata(self._twin._data))
+        return supported_transports_from_metadata(
+            {
+                "mqtt": self._load_mqtt_bundle(),
+                "zenoh": self._load_zenoh_bundle(),
+            }
+        )
 
     def get_command_specs(self) -> dict[str, dict[str, Any]]:
         """Per-command MQTT specs (``continuous``, ``rate_hz``, …)."""
         return command_specs(self._load_mqtt_bundle())
+
+    def get_revision(self) -> str | None:
+        """Revision of the loaded twin, for a reviewed driver configuration change.
+
+        Call ``twin.refresh()`` before reviewing. This token covers the whole
+        twin, including other setup edits; it is not an immutable driver version.
+        """
+        data = self._twin._data
+        value = (
+            data.get("updated_at")
+            if isinstance(data, dict)
+            else getattr(data, "updated_at", None)
+        )
+        if value is None:
+            return None
+        return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
     def set_schema(
         self,
         driver_config: Union[str, Path, dict[str, Any], type, Any],
         *,
         merge: bool = True,
+        expected_revision: str | None = None,
     ) -> dict[str, Any]:
         """Persist driver catalogs from ``cw-driver.yml`` root dict or a driver class.
 
@@ -103,6 +128,9 @@ class TwinDriverHandle:
                 :class:`~cyberwave.driver.BaseDriver` subclass / instance.
             merge: Deep-merge into existing metadata blocks when ``True``; replace
                 each present block when ``False``.
+            expected_revision: Token from :meth:`get_revision` after reviewing
+                the loaded configuration. Required to change existing typed
+                command contracts. Conflicts are not retried automatically.
 
         Returns:
             :meth:`get_schemas` after persistence.
@@ -121,10 +149,12 @@ class TwinDriverHandle:
             )
 
         try:
+            options: dict[str, Any] = {"driver_config": driver_root, "merge": merge}
+            if expected_revision is not None:
+                options["expected_revision"] = expected_revision
             updated = twins_api.set_driver_schema(
                 self._twin.uuid,
-                driver_config=driver_root,
-                merge=merge,
+                **options,
             )
         except Exception as exc:
             raise CyberwaveError(
@@ -141,6 +171,16 @@ class TwinDriverHandle:
         self._twin._mqtt_catalog_cache = None
 
     def _load_mqtt_bundle(self) -> dict[str, Any] | None:
+        # Match Workbench's backend-resolved projection, including asset defaults.
+        # Old REST models without this additive field keep the metadata path.
+        data = self._twin._data
+        resolved = (
+            data.get("mqtt_command_schema")
+            if isinstance(data, dict)
+            else getattr(data, "mqtt_command_schema", None)
+        )
+        if isinstance(resolved, dict) and isinstance(resolved.get("topics"), dict):
+            return copy.deepcopy(resolved)
         return extract_mqtt_bundle_from_metadata(_get_twin_metadata(self._twin._data))
 
     def _load_zenoh_bundle(self) -> dict[str, Any] | None:
@@ -195,6 +235,7 @@ class TwinDriverHandle:
                 "get_supported_channels",
                 "get_supported_transports",
                 "get_command_specs",
+                "get_revision",
                 "set_schema",
             ],
             "transports": self.get_supported_transports(),
@@ -210,6 +251,4 @@ class TwinDriverHandle:
 
     def __repr__(self) -> str:
         transports = ",".join(self.get_supported_transports()) or "none"
-        return (
-            f"TwinDriverHandle(twin={self._twin.uuid!r}, transports=[{transports}])"
-        )
+        return f"TwinDriverHandle(twin={self._twin.uuid!r}, transports=[{transports}])"

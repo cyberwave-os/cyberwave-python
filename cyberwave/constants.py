@@ -21,6 +21,10 @@ SOURCE_TYPES = (
 )
 
 # Physical edge feedback — not teleop commands (drivers publish, UI/teleop consumes).
+# The self-echo guard: "is this my own feedback echoing back?" ``edge_leader`` counts,
+# because a leader arm's stream is still state. The controller's
+# ``MEASURED_PLANT_SOURCES`` asks "is this the plant I observe?" and drops it — a
+# leader is an input device. Both are right; don't normalise them together.
 EDGE_STATE_SOURCE_TYPES = frozenset(
     {
         SOURCE_TYPE_EDGE,

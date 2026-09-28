@@ -30,7 +30,8 @@ class IOSchemaPortSchema(BaseModel):
     name: StrictStr
     type: StrictStr
     required: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["name", "type", "required"]
+    semantics: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["name", "type", "required", "semantics"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -71,6 +72,11 @@ class IOSchemaPortSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if semantics (nullable) is None
+        # and model_fields_set contains the field
+        if self.semantics is None and "semantics" in self.model_fields_set:
+            _dict['semantics'] = None
+
         return _dict
 
     @classmethod
@@ -85,7 +91,8 @@ class IOSchemaPortSchema(BaseModel):
         _obj = cls.model_validate({
             "name": obj.get("name"),
             "type": obj.get("type"),
-            "required": obj.get("required") if obj.get("required") is not None else False
+            "required": obj.get("required") if obj.get("required") is not None else False,
+            "semantics": obj.get("semantics")
         })
         return _obj
 

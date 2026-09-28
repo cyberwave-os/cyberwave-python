@@ -11,6 +11,19 @@ from typing import Any
 
 from cyberwave.manifest.driver_config import TWIN_COMMAND_TOPIC_SLUG
 
+from .args import (
+    CallbackGroup,
+    CommandArgs,
+    DriverOperationMode,
+    ProtocolArgs,
+    PublisherArgs,
+    TopicSpec,
+    default_operation_modes,
+    effective_publish_mode,
+    mqtt_spec,
+    zenoh_spec,
+)
+
 MQTT_BUNDLE_SCHEMA_VERSION = 1
 ZENOH_BUNDLE_SCHEMA_VERSION = 1
 
@@ -40,18 +53,6 @@ def _leaf_to_slug(namespace: str, leaf: str) -> str:
         return f"{prefix}/+"
     return f"{prefix}/{leaf}"
 
-from .args import (
-    CallbackGroup,
-    CommandArgs,
-    DriverOperationMode,
-    ProtocolArgs,
-    PublisherArgs,
-    TopicSpec,
-    default_operation_modes,
-    effective_publish_mode,
-    mqtt_spec,
-    zenoh_spec,
-)
 
 _TOPIC_SLUG_BY_NS_LEAF: dict[tuple[str, str], str] = {}
 
@@ -276,6 +277,11 @@ class DriverInterfaceRegistry:
                 meta.setdefault("units", {}).update(dict(protocol.units))
             if protocol.direction_notes:
                 meta["direction_notes"] = protocol.direction_notes
+        if protocol and protocol.command_input is not None:
+            # A shared state/command topic accepts commands if any registration does.
+            meta["command_input"] = bool(
+                meta.get("command_input") or protocol.command_input
+            )
         _merge_direction(meta, subscribe=subscribe, publish=publish)
 
     def _merge_zenoh_meta(
@@ -309,35 +315,23 @@ class DriverInterfaceRegistry:
                 meta["direction_notes"] = protocol.direction_notes
         _merge_direction(meta, subscribe=subscribe, publish=publish)
 
-    def listeners_for_mode(
-        self, mode: DriverOperationMode
-    ) -> list[_ListenerEntry]:
+    def listeners_for_mode(self, mode: DriverOperationMode) -> list[_ListenerEntry]:
         return [e for e in self._listeners if mode in e.operation_modes]
 
-    def publishers_for_mode(
-        self, mode: DriverOperationMode
-    ) -> list[_PublisherEntry]:
+    def publishers_for_mode(self, mode: DriverOperationMode) -> list[_PublisherEntry]:
         return [e for e in self._publishers if mode in e.operation_modes]
 
     def ros_forward_publishers_for_mode(
         self, mode: DriverOperationMode
     ) -> list[_PublisherEntry]:
         """Publishers that read from ROS and forward to Cyber (``from_ros`` set)."""
-        return [
-            e
-            for e in self.publishers_for_mode(mode)
-            if e.from_ros is not None
-        ]
+        return [e for e in self.publishers_for_mode(mode) if e.from_ros is not None]
 
     def tick_publishers_for_mode(
         self, mode: DriverOperationMode
     ) -> list[_PublisherEntry]:
         """Publishers driven by the driver tick loop (no ``from_ros``)."""
-        return [
-            e
-            for e in self.publishers_for_mode(mode)
-            if e.from_ros is None
-        ]
+        return [e for e in self.publishers_for_mode(mode) if e.from_ros is None]
 
     def command_dispatch_table(
         self, mode: DriverOperationMode
@@ -371,7 +365,11 @@ class DriverInterfaceRegistry:
         result: list[_ListenerEntry] = []
         for entry in self.listeners_for_mode(mode):
             z = zenoh_spec(entry.topic)
-            if z is None or entry.command is not None or z.channel.startswith("commands/"):
+            if (
+                z is None
+                or entry.command is not None
+                or z.channel.startswith("commands/")
+            ):
                 continue
             result.append(entry)
         return result
@@ -437,6 +435,7 @@ class DriverInterfaceRegistry:
                 or cmd.default_duration_s is not None
                 or cmd.args
                 or cmd.description
+                or cmd.required_any_of is not None
             ):
                 item: dict[str, Any] = {"name": cmd.name}
                 if cmd.continuous:
@@ -446,10 +445,9 @@ class DriverInterfaceRegistry:
                 if cmd.default_duration_s is not None:
                     item["default_duration_s"] = cmd.default_duration_s
                 if cmd.args:
-                    item["args"] = [
-                        {"name": a.name, "default": a.default, "unit": a.unit}
-                        for a in cmd.args
-                    ]
+                    item["args"] = [a.to_catalog_dict() for a in cmd.args]
+                if cmd.required_any_of is not None:
+                    item["required_any_of"] = list(cmd.required_any_of)
                 if cmd.description:
                     item["description"] = cmd.description
                 commands_supported.append(item)
@@ -523,7 +521,9 @@ def default_management_commands(
     registry.add_listener(
         cmd_topic,
         on_controller_changed,
-        command=CommandArgs(name="controller-changed", event_only=True, catalog_hidden=True),
+        command=CommandArgs(
+            name="controller-changed", event_only=True, catalog_hidden=True
+        ),
         operation_modes=all_modes,
     )
     if on_teleoperate is not None:

@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.asset_control_profile_patch_schema_default_runtime_option_ids_value_value import AssetControlProfilePatchSchemaDefaultRuntimeOptionIdsValueValue
 from cyberwave.rest.models.asset_control_profile_patch_schema_default_runtime_routes_value_value import AssetControlProfilePatchSchemaDefaultRuntimeRoutesValueValue
+from cyberwave.rest.models.capability_control_setup import CapabilityControlSetup
 from cyberwave.rest.models.controller_ref_schema import ControllerRefSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,6 +31,8 @@ class AssetControlProfilePatchSchema(BaseModel):
     """
     AssetControlProfilePatchSchema
     """ # noqa: E501
+    expected_revision: Optional[StrictStr] = None
+    control_setups: Optional[Dict[str, CapabilityControlSetup]] = None
     manual_controller_ref: Optional[ControllerRefSchema] = None
     manual_option_id: Optional[StrictStr] = None
     default_runtime_routes: Optional[Dict[str, Dict[str, Optional[AssetControlProfilePatchSchemaDefaultRuntimeRoutesValueValue]]]] = None
@@ -39,7 +42,7 @@ class AssetControlProfilePatchSchema(BaseModel):
     runtime_defaults: Optional[Dict[str, Dict[str, Optional[AssetControlProfilePatchSchemaDefaultRuntimeRoutesValueValue]]]] = None
     runtime_default_option_ids: Optional[Dict[str, Dict[str, Optional[AssetControlProfilePatchSchemaDefaultRuntimeOptionIdsValueValue]]]] = None
     controller_settings: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["manual_controller_ref", "manual_option_id", "default_runtime_routes", "default_runtime_option_ids", "operator_controller_ref", "operator_option_id", "runtime_defaults", "runtime_default_option_ids", "controller_settings"]
+    __properties: ClassVar[List[str]] = ["expected_revision", "control_setups", "manual_controller_ref", "manual_option_id", "default_runtime_routes", "default_runtime_option_ids", "operator_controller_ref", "operator_option_id", "runtime_defaults", "runtime_default_option_ids", "controller_settings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -80,6 +83,13 @@ class AssetControlProfilePatchSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each value in control_setups (dict)
+        _field_dict = {}
+        if self.control_setups:
+            for _key_control_setups in self.control_setups:
+                if self.control_setups[_key_control_setups]:
+                    _field_dict[_key_control_setups] = self.control_setups[_key_control_setups].to_dict()
+            _dict['control_setups'] = _field_dict
         # override the default output from pydantic by calling `to_dict()` of manual_controller_ref
         if self.manual_controller_ref:
             _dict['manual_controller_ref'] = self.manual_controller_ref.to_dict()
@@ -122,6 +132,16 @@ class AssetControlProfilePatchSchema(BaseModel):
                         _key: _value.to_dict() for _key, _value in _value_runtime_default_option_ids.items()
                     }
             _dict['runtime_default_option_ids'] = _field_dict_of_dict
+        # set to None if expected_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_revision is None and "expected_revision" in self.model_fields_set:
+            _dict['expected_revision'] = None
+
+        # set to None if control_setups (nullable) is None
+        # and model_fields_set contains the field
+        if self.control_setups is None and "control_setups" in self.model_fields_set:
+            _dict['control_setups'] = None
+
         # set to None if manual_controller_ref (nullable) is None
         # and model_fields_set contains the field
         if self.manual_controller_ref is None and "manual_controller_ref" in self.model_fields_set:
@@ -179,6 +199,13 @@ class AssetControlProfilePatchSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "expected_revision": obj.get("expected_revision"),
+            "control_setups": dict(
+                (_k, CapabilityControlSetup.from_dict(_v))
+                for _k, _v in obj["control_setups"].items()
+            )
+            if obj.get("control_setups") is not None
+            else None,
             "manual_controller_ref": ControllerRefSchema.from_dict(obj["manual_controller_ref"]) if obj.get("manual_controller_ref") is not None else None,
             "manual_option_id": obj.get("manual_option_id"),
             "default_runtime_routes": dict(

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,7 +29,8 @@ class TwinDriverSchemaSetSchema(BaseModel):
     """ # noqa: E501
     driver_config: Dict[str, Any]
     merge: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["driver_config", "merge"]
+    expected_revision: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["driver_config", "merge", "expected_revision"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -70,6 +71,11 @@ class TwinDriverSchemaSetSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if expected_revision (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_revision is None and "expected_revision" in self.model_fields_set:
+            _dict['expected_revision'] = None
+
         return _dict
 
     @classmethod
@@ -83,7 +89,8 @@ class TwinDriverSchemaSetSchema(BaseModel):
 
         _obj = cls.model_validate({
             "driver_config": obj.get("driver_config"),
-            "merge": obj.get("merge") if obj.get("merge") is not None else True
+            "merge": obj.get("merge") if obj.get("merge") is not None else True,
+            "expected_revision": obj.get("expected_revision")
         })
         return _obj
 
