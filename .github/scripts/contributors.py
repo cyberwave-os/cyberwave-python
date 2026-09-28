@@ -19,6 +19,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 WELCOME = "<!-- cyberwave-contributors:welcome:v1 -->"
 REVIEW = "<!-- cyberwave-contributors:review:v1 -->"
 MERGE = "<!-- cyberwave-contributors:merge:v1 -->"
+SLACK = "<!-- cyberwave-contributors:slack:v1 -->"
 DISCORD = "https://discord.gg/dfGhNrawyF"
 BOT = "github-actions[bot]"
 DEFAULT_MAINTAINERS = "khushisharma22"
@@ -35,7 +36,8 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def request_json(url, *, method="GET", data=None, token=None, anthropic_key=None):
+def request_json(url, *, method="GET", data=None, token=None, anthropic_key=None, text_response=False):
+    """Send a JSON payload; Slack incoming webhooks acknowledge with plain text."""
     headers = {"Accept": "application/json", "User-Agent": "cyberwave-contributors"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -56,6 +58,8 @@ def request_json(url, *, method="GET", data=None, token=None, anthropic_key=None
         try:
             with build_opener(NoRedirect).open(req, timeout=60) as response:
                 raw = response.read(2_000_000)
+                if text_response:
+                    return raw.decode("utf-8")
                 return json.loads(raw) if raw else None
         except HTTPError as exc:
             if method == "GET" and exc.code in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
@@ -238,6 +242,89 @@ def celebrate(github, pr, webhook):
     summary("Discord celebration delivered and recorded.")
 
 
+def validate_slack_webhook(webhook):
+    url = urlsplit(webhook)
+    if (url.scheme != "https" or url.netloc not in ("hooks.slack.com", "hooks.slack-gov.com")
+            or url.query or url.fragment or
+            not re.fullmatch(r"/services/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+", url.path)):
+        raise ValueError("SDK_SLACK_WEBHOOK_URL must be a Slack incoming webhook URL under /services/.")
+
+
+def slack_payload(github, pr, stage):
+    titles = {"draft": "Draft Python SDK PR opened", "opened": "Python SDK PR ready for review",
+              "merged": "Python SDK PR merged"}
+    title = titles[stage]
+    # All user-controlled content uses plain_text blocks. The fallback contains
+    # no user strings, so crafted titles cannot ping Slack users or channels.
+    details = (f"#{pr['number']}: {pr['title'][:250]}\n"
+               f"GitHub author: {pr['user']['login']}\n"
+               f"Target branch: {pr['base']['ref']}")
+    action = {"draft": "Draft — review will be requested when ready.",
+              "opened": "Reviewers: please take a look at this PR.",
+              "merged": "This contribution has been merged into the SDK."}[stage]
+    url = f"https://github.com/{github.repository}/pull/{pr['number']}"
+    return {
+        "text": f"{title} · {github.repository} #{pr['number']}",
+        "blocks": [
+            {"type": "header", "text": {"type": "plain_text", "text": title}},
+            {"type": "section", "text": {"type": "plain_text", "text": details}},
+            {"type": "section", "text": {"type": "plain_text", "text": action}},
+            {"type": "actions", "elements": [{"type": "button",
+                "text": {"type": "plain_text", "text": "View merged PR" if stage == "merged" else "Review PR"},
+                "url": url}]},
+        ],
+        "unfurl_links": False, "unfurl_media": False,
+    }
+
+
+def slack_record(states):
+    return "Slack team notifications\n\n" + "\n".join(
+        f"- {stage}: {states[stage]}\n<!-- slack:{stage}:{states[stage]} -->"
+        for stage in ("draft", "opened", "merged") if stage in states
+    )
+
+
+def notify_slack(github, pr, webhook, action):
+    # No push spam; closed/unmerged PRs do not look like successful merges.
+    if action not in ("opened", "reopened", "ready_for_review", "closed", "workflow_dispatch"):
+        return
+    if pr.get("merged"):
+        stage = "merged"
+    elif pr["state"] != "open" or action == "closed":
+        return
+    elif pr.get("draft"):
+        if action == "ready_for_review":
+            return  # A queued event is stale: the PR is now a draft again.
+        stage = "draft"
+    else:
+        stage = "opened"
+    if not webhook:
+        summary("Slack notifications unavailable: configure SDK_SLACK_WEBHOOK_URL, then dispatch this PR again.")
+        return
+    validate_slack_webhook(webhook)
+    existing = github.comment(pr["number"], SLACK)
+    states = dict(re.findall(r"<!-- slack:(draft|opened|merged):(pending|sent) -->",
+                             existing["body"] if existing else ""))
+    if stage in states:
+        if states[stage] == "pending":
+            # Never blindly retry a write: a timeout may hide a successful send.
+            summary(f"Slack {stage} delivery is uncertain. Check the Slack channel for this PR. "
+                    f"If delivered, change `slack:{stage}:pending` to `slack:{stage}:sent` in the bot's "
+                    "Slack record comment. Only if absence is confirmed and earlier runs have stopped, "
+                    f"remove the `slack:{stage}:pending` marker and dispatch this PR again.")
+        return
+    if stage == "draft" and "opened" in states:
+        return  # Do not announce a previously ready PR as a new draft.
+    states[stage] = "pending"
+    record = github.put_comment(pr["number"], SLACK, slack_record(states), existing=existing)
+    response = request_json(webhook, method="POST", data=slack_payload(github, pr, stage), text_response=True)
+    if response.strip() != "ok":
+        raise ServiceError("Slack did not acknowledge delivery; reconcile the pending record before retrying.")
+    states[stage] = "sent"
+    github.put_comment(pr["number"], SLACK, slack_record(states), existing=record)
+    summary(f"Slack {stage} notification delivered and recorded.")
+
+
 def review_files(files):
     selected, skipped, size = [], [], 0
     for item in files:
@@ -388,8 +475,11 @@ def main():
     elif sys.argv[1] == "review":
         advisory_review(github, pr, os.getenv("ANTHROPIC_API_KEY", ""),
                         os.getenv("SDK_REVIEW_MODEL") or "claude-sonnet-4-6")
+    elif sys.argv[1] == "slack":
+        notify_slack(github, pr, os.getenv("SLACK_WEBHOOK_URL", ""),
+                     event.get("action") or "workflow_dispatch")
     else:
-        raise ValueError("Expected community or review.")
+        raise ValueError("Expected community, review, or slack.")
 
 
 if __name__ == "__main__":

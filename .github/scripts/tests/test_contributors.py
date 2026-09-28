@@ -197,6 +197,135 @@ class CelebrationTests(unittest.TestCase):
                 app.validate_webhook(url)
 
 
+class SlackTests(unittest.TestCase):
+    webhook = "https://hooks.slack.com/services/T123/B456/test-token"
+
+    def test_open_update_merge_and_replay_send_only_two_messages(self):
+        github = FakeGitHub()
+        with patch.object(app, "request_json", return_value="ok") as send:
+            for action in ("opened", "synchronize", "reopened", "workflow_dispatch"):
+                app.notify_slack(github, github.pr, self.webhook, action)
+            self.assertEqual(send.call_count, 1)
+            self.assertIn("ready for review", send.call_args.kwargs["data"]["text"])
+            github.pr.update(state="closed", merged=True)
+            app.notify_slack(github, github.pr, self.webhook, "closed")
+            app.notify_slack(github, github.pr, self.webhook, "workflow_dispatch")
+            self.assertEqual(send.call_count, 2)
+            self.assertIn("PR merged", send.call_args.kwargs["data"]["text"])
+        self.assertEqual(len(github.records), 1)
+        self.assertIn("slack:opened:sent", github.records[0]["body"])
+        self.assertIn("slack:merged:sent", github.records[0]["body"])
+
+    def test_draft_gets_one_ready_notification(self):
+        github = FakeGitHub(pull(draft=True))
+        with patch.object(app, "request_json", return_value="ok") as send:
+            app.notify_slack(github, github.pr, self.webhook, "opened")
+            self.assertIn("Draft", send.call_args.kwargs["data"]["text"])
+            github.pr["draft"] = False
+            app.notify_slack(github, github.pr, self.webhook, "ready_for_review")
+            app.notify_slack(github, github.pr, self.webhook, "ready_for_review")
+            github.pr["draft"] = True
+            app.notify_slack(github, github.pr, self.webhook, "reopened")
+            self.assertEqual(send.call_count, 2)
+        self.assertEqual(len(github.records), 1)
+
+    def test_closed_unmerged_and_stale_ready_events_do_not_notify(self):
+        with patch.object(app, "request_json") as send:
+            github = FakeGitHub(pull(state="closed"))
+            app.notify_slack(github, github.pr, self.webhook, "closed")
+            app.notify_slack(github, github.pr, self.webhook, "opened")
+            github.pr.update(state="open", draft=True)
+            app.notify_slack(github, github.pr, self.webhook, "ready_for_review")
+            send.assert_not_called()
+        self.assertFalse(github.records)
+
+    def test_delayed_open_event_never_requests_review_of_merged_pr(self):
+        github = FakeGitHub(pull(state="closed", merged=True))
+        with patch.object(app, "request_json", return_value="ok") as send:
+            app.notify_slack(github, github.pr, self.webhook, "opened")
+            self.assertIn("PR merged", send.call_args.kwargs["data"]["text"])
+
+    def test_missing_secret_leaves_no_marker_and_can_be_retried(self):
+        github = FakeGitHub()
+        with patch.object(app, "request_json", return_value="ok") as send:
+            app.notify_slack(github, github.pr, "", "opened")
+            self.assertFalse(github.records)
+            send.assert_not_called()
+            app.notify_slack(github, github.pr, self.webhook, "workflow_dispatch")
+            send.assert_called_once()
+
+    def test_uncertain_send_is_not_repeated_but_later_merge_can_notify(self):
+        github = FakeGitHub()
+        with patch.object(app, "request_json", side_effect=app.ServiceError("uncertain")) as send:
+            with self.assertRaises(app.ServiceError):
+                app.notify_slack(github, github.pr, self.webhook, "opened")
+            app.notify_slack(github, github.pr, self.webhook, "workflow_dispatch")
+            send.assert_called_once()
+        self.assertIn("slack:opened:pending", github.records[0]["body"])
+        github.pr.update(state="closed", merged=True)
+        with patch.object(app, "request_json", return_value="ok") as send:
+            app.notify_slack(github, github.pr, self.webhook, "closed")
+            send.assert_called_once()
+        self.assertIn("slack:opened:pending", github.records[0]["body"])
+        self.assertIn("slack:merged:sent", github.records[0]["body"])
+
+    def test_unexpected_response_is_not_recorded_as_sent(self):
+        github = FakeGitHub()
+        with patch.object(app, "request_json", return_value="invalid_payload"), self.assertRaises(app.ServiceError):
+            app.notify_slack(github, github.pr, self.webhook, "opened")
+        self.assertIn("slack:opened:pending", github.records[0]["body"])
+        self.assertNotIn("slack:opened:sent", github.records[0]["body"])
+
+    def test_discord_opt_out_does_not_hide_team_review_notifications(self):
+        github = FakeGitHub(pull(body="<!-- cyberwave:no-celebration -->"))
+        with patch.object(app, "request_json", return_value="ok") as send:
+            app.notify_slack(github, github.pr, self.webhook, "opened")
+            send.assert_called_once()
+
+    def test_bot_prs_are_included_in_team_review_notifications(self):
+        github = FakeGitHub(pull(user={"login": "dependabot[bot]", "type": "Bot"}))
+        with patch.object(app, "request_json", return_value="ok") as send:
+            app.notify_slack(github, github.pr, self.webhook, "opened")
+            send.assert_called_once()
+
+    def test_untrusted_title_is_only_plain_text_and_cannot_override_url(self):
+        github = FakeGitHub(pull(title="<!channel> <@U123> <https://evil.test|review>"))
+        payload = app.slack_payload(github, github.pr, "opened")
+        self.assertNotIn("<!channel>", payload["text"])
+        sections = [block for block in payload["blocks"] if block["type"] == "section"]
+        self.assertTrue(all(block["text"]["type"] == "plain_text" for block in sections))
+        self.assertEqual(payload["blocks"][-1]["elements"][0]["url"],
+                         "https://github.com/cyberwave-os/cyberwave-python/pull/42")
+
+    def test_contributor_cannot_spoof_slack_delivery_record(self):
+        github = FakeGitHub()
+        github.records = [{"id": 1, "body": app.SLACK + "\n<!-- slack:opened:sent -->", "user": github.pr["user"]}]
+        with patch.object(app, "request_json", return_value="ok") as send:
+            app.notify_slack(github, github.pr, self.webhook, "opened")
+            send.assert_called_once()
+        self.assertEqual(len(github.records), 2)
+
+    def test_slack_and_discord_use_independent_delivery_records(self):
+        github = FakeGitHub(pull(merged=True, state="closed"))
+        with patch.object(app, "request_json", side_effect=[{"id": "987"}, "ok"]) as send:
+            app.celebrate(github, github.pr, CelebrationTests.webhook)
+            app.notify_slack(github, github.pr, self.webhook, "closed")
+            self.assertEqual(send.call_count, 2)
+        self.assertEqual(len(github.records), 2)
+        self.assertIn("discord:sent:987", github.comment(42, app.MERGE)["body"])
+        self.assertIn("slack:merged:sent", github.comment(42, app.SLACK)["body"])
+
+    def test_invalid_webhook_rejected_before_writing_any_state(self):
+        github = FakeGitHub()
+        for url in ("http://hooks.slack.com/services/T/B/secret", "https://evil.test/services/T/B/secret",
+                    "https://hooks.slack.com@evil.test/services/T/B/secret", self.webhook + "?secret=1",
+                    "https://hooks.slack.com/anything", self.webhook + "#secret"):
+            with self.assertRaises(ValueError):
+                app.notify_slack(github, github.pr, url, "opened")
+        self.assertFalse(github.writes)
+        app.validate_slack_webhook("https://hooks.slack-gov.com/services/T1/B2/secret")
+
+
 class ReviewTests(unittest.TestCase):
     def setUp(self):
         self.github = FakeGitHub()
@@ -310,6 +439,15 @@ class ReviewTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_slack_acknowledgment_is_plain_text_and_has_no_auth_header(self):
+        with patch.object(app, "build_opener") as factory:
+            factory.return_value.open.return_value.__enter__.return_value.read.return_value = b'ok'
+            response = app.request_json(SlackTests.webhook, method="POST", data={"text": "test"}, text_response=True)
+        self.assertEqual(response, "ok")
+        headers = dict(factory.return_value.open.call_args.args[0].header_items())
+        self.assertNotIn("Authorization", headers)
+        self.assertNotIn("X-api-key", headers)
+
     def test_anthropic_auth_headers_are_not_github_bearer_headers(self):
         with patch.object(app, "build_opener") as factory:
             factory.return_value.open.return_value.__enter__.return_value.read.return_value = b'{}'

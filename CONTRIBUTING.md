@@ -27,6 +27,11 @@ the PR title/link. To opt out, check the PR template's Discord opt-out box or
 add `<!-- cyberwave:no-celebration -->` to the PR description before merge.
 Joining Discord is optional, and no Discord account linking is required.
 
+The team also receives Slack notifications for new and merged PRs, with a link
+back to GitHub. Drafts are identified as drafts, and another notification is sent
+when they become ready for review. Follow-up commits do not send Slack reminders.
+The Discord celebration opt-out does not disable these team review notifications.
+
 ## Development setup
 
 The SDK requires **Python 3.10+** and uses [Poetry](https://python-poetry.org/) for
