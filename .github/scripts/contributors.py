@@ -264,10 +264,11 @@ def slack_payload(github, pr, stage):
               "merged": "This contribution has been merged into the SDK."}[stage]
     url = f"https://github.com/{github.repository}/pull/{pr['number']}"
     return {
-        "text": f"{title} · {github.repository} #{pr['number']}",
+        "text": f"{title} · {github.repository} #{pr['number']}\n{url}",
         "blocks": [
             {"type": "header", "text": {"type": "plain_text", "text": title}},
             {"type": "section", "text": {"type": "plain_text", "text": details}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"<{url}>"}},
             {"type": "section", "text": {"type": "plain_text", "text": action}},
             {"type": "actions", "elements": [{"type": "button",
                 "text": {"type": "plain_text", "text": "View merged PR" if stage == "merged" else "Review PR"},
