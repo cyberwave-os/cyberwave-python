@@ -62,6 +62,10 @@ def zenoh_to_mqtt(
         return None
 
     channel = parts[3]
+    # An empty channel segment (…/data/ or …/data//sensor) is not a canonical
+    # key: it would publish to `cyberwave/twin/{twin}/` with no channel name.
+    if not channel:
+        return None
     base = f"cyberwave/twin/{twin_uuid}/{channel}"
     if mqtt_prefix:
         base = f"{mqtt_prefix}{base}"
