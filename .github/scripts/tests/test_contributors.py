@@ -298,7 +298,8 @@ class SlackTests(unittest.TestCase):
                 self.assertIn(url, payload["text"])
                 sections = [block for block in payload["blocks"] if block["type"] == "section"]
                 self.assertEqual(sections[0]["text"]["type"], "plain_text")
-                self.assertIn(github.pr["title"], sections[0]["text"]["text"])
+                self.assertEqual(payload["blocks"][0]["text"],
+                                 {"type": "plain_text", "text": github.pr["title"]})
                 self.assertEqual(sections[1]["text"], {"type": "mrkdwn", "text": f"<{url}>"})
                 self.assertEqual(sections[2]["text"]["type"], "plain_text")
                 self.assertEqual(payload["blocks"][-1]["elements"][0]["url"], url)
