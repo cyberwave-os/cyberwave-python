@@ -3,6 +3,10 @@
 We take the security of the Cyberwave Python SDK seriously. Thank you for helping
 keep our users safe.
 
+This page covers the SDK. The
+[Cyberwave security policy](https://github.com/cyberwave-os/.github/blob/main/SECURITY.md)
+covers every Cyberwave product and applies wherever this page says nothing.
+
 ## Supported versions
 
 Security fixes are provided for the latest released version on
@@ -18,7 +22,7 @@ Instead, report them privately through one of these channels:
 - **GitHub Security Advisories** — use the
   ["Report a vulnerability"](https://github.com/cyberwave-os/cyberwave-python/security/advisories/new)
   button on the repository's Security tab (preferred).
-- **Email** — [info@cyberwave.com](mailto:info@cyberwave.com).
+- **Email** — [security@cyberwave.com](mailto:security@cyberwave.com).
 
 Please include:
 
@@ -33,5 +37,6 @@ Please include:
 - We will coordinate a disclosure timeline with you and credit you (if you wish)
   once a fix is released.
 
-We appreciate responsible disclosure and will not pursue or support legal action
-against researchers who report vulnerabilities in good faith.
+We appreciate responsible disclosure. Good-faith research is covered by the safe
+harbor in the
+[Cyberwave security policy](https://github.com/cyberwave-os/.github/blob/main/SECURITY.md#safe-harbor).
