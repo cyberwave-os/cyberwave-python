@@ -46,8 +46,9 @@ async def test_stop_drains_sync_waiter_before_reconnect(monkeypatch):
         await streamer.start()
         await sleep(0)
         waiters = asyncio.all_tasks() - before
-        assert len(waiters) == 1
-        assert not next(iter(waiters)).done()
+        sync_task = streamer._sync_frame_task
+        assert sync_task in waiters
+        assert not sync_task.done()
         await streamer.stop()
         assert all(task.done() for task in waiters)
         assert streamer.streamer is None
