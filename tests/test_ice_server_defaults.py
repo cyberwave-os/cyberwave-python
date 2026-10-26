@@ -75,3 +75,83 @@ def test_aiortc_resolves_defaults_to_tls() -> None:
     assert kwargs["turn_ssl"] is True
     assert kwargs["turn_transport"] == "tcp"
     assert kwargs["turn_server"][1] == 443
+
+
+# -- LAN-only ICE profile (CYBERWAVE_WEBRTC_ICE_MODE=lan) ---------------------------
+
+
+def test_ice_mode_defaults_and_lan_aliases() -> None:
+    from cyberwave.sensor.ice import ICE_MODE_DEFAULT, ICE_MODE_LAN, ice_mode
+
+    assert ice_mode({}) == ICE_MODE_DEFAULT
+    assert ice_mode({"CYBERWAVE_WEBRTC_ICE_MODE": ""}) == ICE_MODE_DEFAULT
+    assert ice_mode({"CYBERWAVE_WEBRTC_ICE_MODE": "default"}) == ICE_MODE_DEFAULT
+    for value in ("lan", "LAN", " lan ", "lan-only", "host"):
+        assert ice_mode({"CYBERWAVE_WEBRTC_ICE_MODE": value}) == ICE_MODE_LAN
+
+
+def test_unknown_ice_mode_keeps_the_relay(caplog: pytest.LogCaptureFixture) -> None:
+    from cyberwave.sensor.ice import effective_ice_servers, ice_mode
+
+    env = {"CYBERWAVE_WEBRTC_ICE_MODE": "offline-ish"}
+    assert ice_mode(env) == "default"
+    assert effective_ice_servers(None, environ=env) == DEFAULT_TURN_SERVERS
+    assert "Unknown CYBERWAVE_WEBRTC_ICE_MODE" in caplog.text
+
+
+def test_default_mode_uses_defaults_or_explicit_servers() -> None:
+    from cyberwave.sensor.ice import effective_ice_servers
+
+    assert effective_ice_servers(None, environ={}) == DEFAULT_TURN_SERVERS
+    explicit = [{"urls": "turn:edge.local:3478"}]
+    assert effective_ice_servers(explicit, environ={}) == explicit
+    assert effective_ice_servers([], environ={}) == []
+
+
+def test_lan_mode_drops_stun_and_turn_even_when_configured() -> None:
+    from cyberwave.sensor.ice import effective_ice_servers
+
+    env = {"CYBERWAVE_WEBRTC_ICE_MODE": "lan"}
+    assert effective_ice_servers(None, environ=env) == []
+    assert effective_ice_servers([{"urls": "turn:edge.local:3478"}], environ=env) == []
+
+
+def test_lan_mode_reads_the_process_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cyberwave.sensor.ice import effective_ice_servers, is_lan_ice_mode
+
+    monkeypatch.setenv("CYBERWAVE_WEBRTC_ICE_MODE", "lan")
+    assert is_lan_ice_mode()
+    assert effective_ice_servers(DEFAULT_TURN_SERVERS) == []
+    monkeypatch.delenv("CYBERWAVE_WEBRTC_ICE_MODE")
+    assert effective_ice_servers(None) == DEFAULT_TURN_SERVERS
+
+
+def test_lan_mode_gathers_host_candidates_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty list must reach aiortc: ``None`` would make it add Google STUN."""
+    aiortc = pytest.importorskip("aiortc")
+    from aiortc.rtcicetransport import RTCIceGatherer, connection_kwargs
+
+    from cyberwave.sensor.ice import effective_ice_servers
+
+    monkeypatch.setenv("CYBERWAVE_WEBRTC_ICE_MODE", "lan")
+    servers = [aiortc.RTCIceServer(**s) for s in effective_ice_servers(DEFAULT_TURN_SERVERS)]
+    assert servers == []
+    kwargs = connection_kwargs(servers)
+    assert kwargs.get("stun_server") is None
+    assert kwargs.get("turn_server") is None
+    gatherer = RTCIceGatherer(iceServers=servers)
+    assert gatherer.getDefaultIceServers()  # aiortc's fallback exists...
+    assert gatherer._connection.stun_server is None  # ...but is not used
+    assert gatherer._connection.turn_server is None
+
+
+def test_video_consumer_has_no_ice_servers_in_lan_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("aiortc")
+    from cyberwave.consumers.video import IncomingVideoStream
+
+    consumer = IncomingVideoStream.__new__(IncomingVideoStream)
+    consumer._turn_servers = None
+    monkeypatch.setenv("CYBERWAVE_WEBRTC_ICE_MODE", "lan")
+    assert consumer._ice_servers() == []
+    monkeypatch.delenv("CYBERWAVE_WEBRTC_ICE_MODE")
+    assert len(consumer._ice_servers()) == len(DEFAULT_TURN_SERVERS)

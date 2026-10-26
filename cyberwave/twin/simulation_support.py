@@ -18,14 +18,21 @@ class SimLevel(IntEnum):
 
     UNSUPPORTED = -1  # not produced by any simulation backend (live/driver-only)
     PLAYGROUND = 0  # default; no running-simulation requirement at all
-    MUJOCO = 1  # requires a running MuJoCo simulation specifically (physics + rendering)
-    BOTH = 2  # requires *some* running simulation, either playground or MuJoCo
+    PHYSICS = 1  # requires a physics-backed simulation (MuJoCo or Isaac Sim)
+    BOTH = 2  # requires *some* running simulation: playground or a physics-backed one
+
+    # Deprecated alias of PHYSICS (same value), kept so existing ``SimLevel.MUJOCO``
+    # code keeps working. Use ``SimLevel.PHYSICS`` instead.
+    MUJOCO = 1
 
 
 #: Backend name -> level available while that backend is the running simulation.
 _BACKEND_LEVEL: dict[str, SimLevel] = {
     "playground": SimLevel.PLAYGROUND,
-    "mujoco": SimLevel.MUJOCO,
+    "mujoco": SimLevel.PHYSICS,
+    "mujoco_warp": SimLevel.PHYSICS,
+    "mjwarp": SimLevel.PHYSICS,  # alias of mujoco_warp accepted at start
+    "isaac": SimLevel.PHYSICS,
 }
 
 
@@ -43,9 +50,10 @@ def simulation_level(level: SimLevel = SimLevel.PLAYGROUND) -> Callable[..., Any
 
     Use ``SimLevel.BOTH`` for methods that need a running simulation but don't
     care which backend — e.g. ``twin.joints`` reads/writes joint state over
-    MQTT, which both ``playground`` and ``mujoco`` publish. Use ``SimLevel.MUJOCO``
-    only for methods that need physics/rendering that ``playground`` doesn't
-    produce (camera frames, depth, point clouds).
+    MQTT, which ``playground`` and the physics backends all publish. Use
+    ``SimLevel.PHYSICS`` only for methods that need physics/rendering that
+    ``playground`` doesn't produce (camera frames, depth, point clouds), served
+    by a physics-backed simulation (MuJoCo or Isaac Sim).
     """
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:

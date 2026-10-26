@@ -2922,6 +2922,41 @@ class SappenguinPlushTwin(Twin):
     """
     pass
 
+class VectorRoboticsguardianTwin(Twin):
+    """
+    Digital twin for Guardian
+    Registry ID: vector-robotics/guardian
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+
+class CyberwaveserverRack42uTwin(Twin):
+    """
+    Digital twin for Server Rack 42U
+    Registry ID: cyberwave/server-rack-42u
+    """
+    pass
+
+class DeepRoboticslynxM20Twin(Twin):
+    """
+    Digital twin for LYNX M20
+    Registry ID: deep-robotics/lynx-m20
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
 # Asset registry mapping registry_id to Twin class
 ASSET_REGISTRY: dict[str, type[Twin]] = {
     "the-robot-studio/so101": TheRobotStudioso101Twin,
@@ -3185,4 +3220,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave-drone-kits/rain-shelter-dock-for-parrot-anafi-ai-prototype": CyberwaveDroneKitsrainShelterDockForParrotAnafiAiPrototypeTwin,
     "cyberwave/open-carton-box": CyberwaveopenCartonBoxTwin,
     "sap/penguin-plush": SappenguinPlushTwin,
+    "vector-robotics/guardian": VectorRoboticsguardianTwin,
+    "cyberwave/server-rack-42u": CyberwaveserverRack42uTwin,
+    "deep-robotics/lynx-m20": DeepRoboticslynxM20Twin,
 }

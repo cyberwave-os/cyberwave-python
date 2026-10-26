@@ -37,6 +37,12 @@ without giving the decoder a correct resync point for the live P-frames that
 follow. A receiver that joins mid-GOP or loses packets therefore waits for the
 upstream's next natural keyframe; the right lever for faster recovery is a
 shorter keyframe interval at the encoder, not stale re-injection here.
+
+That is not the SPS/PPS caching done by the RTP ingest
+(:mod:`cyberwave.sensor.rtp_h264`) and :class:`~cyberwave.sensor.hw_encoder.HardwareH264Encoder`
+(:class:`~cyberwave.sensor.h264_bitstream.ParameterSetCache`): those insert
+cached *parameter sets* (decoder configuration, no picture data) into the
+*live* IDR that lacks them, when it is produced. No old picture is ever re-sent.
 """
 
 from __future__ import annotations
@@ -50,17 +56,17 @@ from typing import TYPE_CHECKING, Callable, Optional, Tuple
 from av import Packet
 
 from . import BaseVideoStreamer, BaseVideoTrack
+from .h264_bitstream import ANNEXB_START_CODE, nal_type
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
     from ..utils import TimeReference
+    from .rtp_h264 import UdpRtpReceiver
 
 logger = logging.getLogger(__name__)
 
 # Matches VirtualVideoTrack's own fallback so an unset fps behaves the same way.
 DEFAULT_FPS = 15
-
-_ANNEXB_START = b"\x00\x00\x00\x01"
 
 #: Accepted values for the ``framing`` argument of :func:`to_annex_b` and the
 #: ``framing`` constructor argument of :class:`H264PacketVideoTrack`.
@@ -87,11 +93,11 @@ def _avcc_to_annex_b(data: bytes) -> Optional[bytes]:
         i += 4
         if length == 0 or i + length > n:
             return None
-        header = data[i]
-        if header & 0x80 or not header & 0x1F:
+        nal = data[i : i + length]
+        if nal[0] & 0x80 or not nal_type(nal):
             return None  # forbidden_zero_bit set, or nal_unit_type 0
-        out += _ANNEXB_START
-        out += data[i : i + length]
+        out += ANNEXB_START_CODE
+        out += nal
         i += length
     if i != n or not out:
         return None  # trailing bytes, or nothing framed at all
@@ -297,3 +303,124 @@ class H264PacketCameraStreamer(BaseVideoStreamer):
             framing=self.framing,
             time_reference=self.time_reference,
         )
+
+
+class RtpH264CameraStreamer(H264PacketCameraStreamer):
+    """Forward an H.264/RTP/UDP push to Cyberwave over WebRTC, no re-encode.
+
+    A :class:`~cyberwave.sensor.rtp_h264.UdpRtpReceiver` listens for the push
+    (an IP camera, a payload or ground station, ``ffmpeg -f rtp``, GStreamer
+    ``rtph264pay``) and hands whole access units to the passthrough track::
+
+        streamer = RtpH264CameraStreamer(
+            client.mqtt,
+            bind="0.0.0.0:5600",
+            twin_uuid=twin.uuid,
+            camera_name="main",
+        )
+        await streamer.run_with_auto_reconnect(subscribe_to_commands=False)
+
+    :meth:`run_with_auto_reconnect` starts the receiver, waits for the first
+    keyframe (so the offer never advertises a stream that cannot show a
+    picture, and carries the real resolution from the SPS), streams, and stops
+    the receiver when it returns. Pass ``receiver=`` to manage an existing
+    receiver yourself; it is then neither started nor stopped here.
+
+    Args:
+        client: The SDK MQTT client used for signalling.
+        bind: ``host:port`` / ``:port`` to listen on (default ``0.0.0.0:5600``).
+        allowed_source: Only accept datagrams from this IP.
+        payload_type: Only accept this RTP payload type (default: any dynamic).
+        sprop_parameter_sets: SDP ``sprop-parameter-sets`` for senders that
+            never repeat SPS/PPS in-band.
+        queue_size: Access units buffered between receiver and track.
+        width, height: Fallback resolution when the SPS cannot be parsed.
+        fps: Track polling rate; set at or above the sender's frame rate.
+        receiver: Use this receiver instead of creating one.
+        **kwargs: Passed to :class:`H264PacketCameraStreamer` (``twin_uuid``,
+            ``camera_name``, ``turn_servers``, ...).
+    """
+
+    def __init__(
+        self,
+        client: "CyberwaveMQTTClient",
+        *,
+        bind: str = "0.0.0.0:5600",  # noqa: S104 - the sender pushes to this host
+        allowed_source: Optional[str] = None,
+        payload_type: Optional[int] = None,
+        sprop_parameter_sets: Optional[str] = None,
+        queue_size: int = 30,
+        width: int = 1920,
+        height: int = 1080,
+        fps: int = 60,
+        receiver: Optional["UdpRtpReceiver"] = None,
+        **kwargs,
+    ) -> None:
+        from .rtp_h264 import UdpRtpReceiver, parse_bind
+
+        self._owns_receiver = receiver is None
+        if receiver is None:
+            host, port = parse_bind(bind)
+            receiver = UdpRtpReceiver(
+                host,
+                port,
+                allowed_source=allowed_source,
+                payload_type=payload_type,
+                sprop_parameter_sets=sprop_parameter_sets,
+                queue_size=queue_size,
+            )
+        self.receiver = receiver
+        kwargs.setdefault("framing", FRAMING_ANNEXB)
+        super().__init__(
+            client=client,
+            get_packet=receiver.get_packet,
+            width=width,
+            height=height,
+            fps=fps,
+            **kwargs,
+        )
+
+    def initialize_track(self) -> H264PacketVideoTrack:
+        """Create the track, advertising the resolution the SPS reports."""
+        depayloader = self.receiver.depayloader
+        if depayloader.width and depayloader.height:
+            self.width, self.height = depayloader.width, depayloader.height
+        return super().initialize_track()
+
+    async def wait_for_keyframe(
+        self, stop_event: Optional[asyncio.Event] = None, poll_s: float = 0.2
+    ) -> bool:
+        """Wait for the receiver's first keyframe; ``False`` if stopped first."""
+        while not self.receiver.keyframe_seen:
+            if stop_event is not None and stop_event.is_set():
+                return False
+            await asyncio.sleep(poll_s)
+        return True
+
+    async def run_with_auto_reconnect(
+        self,
+        stop_event: Optional[asyncio.Event] = None,
+        command_callback: Optional[Callable] = None,
+        subscribe_to_commands: bool = True,
+    ):
+        """Receive, wait for a keyframe, then stream until ``stop_event``."""
+        stop = stop_event or asyncio.Event()
+        if self._owns_receiver:
+            self.receiver.start()
+        try:
+            if not await self.wait_for_keyframe(stop):
+                return
+            depayloader = self.receiver.depayloader
+            logger.info(
+                "first H.264 keyframe received (%sx%s); starting WebRTC stream",
+                depayloader.width or self.width,
+                depayloader.height or self.height,
+            )
+            await super().run_with_auto_reconnect(
+                stop_event=stop,
+                command_callback=command_callback,
+                subscribe_to_commands=subscribe_to_commands,
+            )
+        finally:
+            if self._owns_receiver:
+                self.receiver.stop()

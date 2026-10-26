@@ -95,6 +95,49 @@ class ZenohSubscription(Subscription):
             self._on_close()
 
 
+class ZenohMatchingListener(Subscription):
+    """Handle for :meth:`ZenohBackend.on_subscribers_changed`."""
+
+    def __init__(
+        self,
+        backend: "ZenohBackend",
+        channel: str,
+        callback: Callable[[bool], None],
+        local_only: bool,
+    ) -> None:
+        self._backend = backend
+        self.channel = channel
+        self.callback = callback
+        self.local_only = local_only
+        self._listener: Any = None
+        self._closed = False
+
+    def _fire(self, matching: bool) -> None:
+        # Runs on a Zenoh thread: never let a user callback error escape.
+        if self._closed:
+            return
+        try:
+            self.callback(bool(matching))
+        except Exception:
+            logger.warning(
+                "Subscriber-presence callback error on channel '%s'",
+                self.channel,
+                exc_info=True,
+            )
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._backend._forget_matching_listener(self)
+        listener, self._listener = self._listener, None
+        if listener is not None:
+            try:
+                listener.undeclare()
+            except Exception:
+                pass
+
+
 _WATCHDOG_INTERVAL_S = 5.0
 
 _ZERO_PEER_PROBES_BEFORE_WARN = 3
@@ -250,6 +293,13 @@ class ZenohBackend(DataBackend):
         self._store_lock = threading.Lock()
         self._queryables: dict[str, Any] = {}
         self._queryable_threads: dict[str, threading.Thread] = {}
+
+        # Subscriber-presence tracking.  One Zenoh Publisher per
+        # (channel, local_only), declared lazily and used ONLY for its
+        # matching status -- data still goes out through ``session.put``.
+        self._matching_lock = threading.Lock()
+        self._matching_pubs: dict[tuple[str, bool], Any] = {}
+        self._matching_listeners: list[ZenohMatchingListener] = []
 
         # Per-channel message counters for monitoring.  We use defaultdict
         # and skip locking on the hot path — the GIL makes individual dict
@@ -476,6 +526,7 @@ class ZenohBackend(DataBackend):
                 logger.info("Zenoh session reconnected (attempt %d)", attempt)
 
                 self._resubscribe_all()
+                self._redeclare_matching()
                 return
             except Exception as exc:
                 logger.warning(
@@ -776,6 +827,96 @@ class ZenohBackend(DataBackend):
             self._subscriptions.append(handle)
         return handle
 
+    # -- subscriber presence ---------------------------------------------------
+
+    def _matching_publisher(self, channel: str, local_only: bool) -> Any:
+        with self._matching_lock:
+            if self._closed:
+                raise SubscriptionError("ZenohBackend is closed")
+            key = (channel, local_only)
+            pub = self._matching_pubs.get(key)
+            if pub is None:
+                kwargs: dict[str, Any] = {}
+                if local_only:
+                    kwargs["allowed_destination"] = zenoh.Locality.SESSION_LOCAL
+                pub = self._session.declare_publisher(channel, **kwargs)
+                self._matching_pubs[key] = pub
+            return pub
+
+    def has_subscribers(self, channel: str, *, local_only: bool = False) -> bool | None:
+        """Whether a Zenoh subscriber currently matches *channel*.
+
+        Backed by a lazily declared Zenoh Publisher's matching status.  A
+        queryable (what :meth:`latest` talks to) does not count.  Returns
+        ``None`` if the installed Zenoh cannot report matching or the backend
+        is closed.
+
+        ``local_only=True`` maps to ``Locality.SESSION_LOCAL``: only
+        subscribers declared on *this* backend's session count.  Zenoh
+        locality is per session, not per host, so another process on the same
+        machine is *remote*; ``local_only`` cannot mean "same host".
+        """
+        try:
+            pub = self._matching_publisher(channel, local_only)
+            return bool(pub.matching_status.matching)
+        except Exception:
+            logger.debug(
+                "Zenoh matching status unavailable for '%s'", channel, exc_info=True
+            )
+            return None
+
+    def on_subscribers_changed(
+        self,
+        channel: str,
+        callback: Callable[[bool], None],
+        *,
+        local_only: bool = False,
+    ) -> Subscription:
+        handle = ZenohMatchingListener(self, channel, callback, local_only)
+        try:
+            self._declare_matching_listener(handle)
+        except AttributeError as exc:
+            raise NotImplementedError(
+                "The installed eclipse-zenoh does not support matching listeners"
+            ) from exc
+        except Exception as exc:
+            raise SubscriptionError(
+                f"Zenoh subscriber-presence listener on '{channel}' failed: {exc}"
+            ) from exc
+        with self._matching_lock:
+            self._matching_listeners.append(handle)
+        return handle
+
+    def _declare_matching_listener(self, handle: ZenohMatchingListener) -> None:
+        pub = self._matching_publisher(handle.channel, handle.local_only)
+        handle._listener = pub.declare_matching_listener(
+            lambda status: handle._fire(status.matching)
+        )
+
+    def _forget_matching_listener(self, handle: ZenohMatchingListener) -> None:
+        with self._matching_lock:
+            try:
+                self._matching_listeners.remove(handle)
+            except ValueError:
+                pass
+
+    def _redeclare_matching(self) -> None:
+        """Re-create matching publishers/listeners on a fresh session."""
+        with self._matching_lock:
+            self._matching_pubs.clear()  # bound to the dead session
+            handles = list(self._matching_listeners)
+        for handle in handles:
+            try:
+                self._declare_matching_listener(handle)
+                # State may have flipped while the session was down.
+                pub = self._matching_publisher(handle.channel, handle.local_only)
+                handle._fire(pub.matching_status.matching)
+            except Exception:
+                logger.exception(
+                    "Failed to restore subscriber-presence listener on '%s'",
+                    handle.channel,
+                )
+
     def stats(self) -> dict[str, Any]:
         """Return a snapshot of publish/receive counters per channel.
 
@@ -893,6 +1034,18 @@ class ZenohBackend(DataBackend):
             except Exception:
                 pass
         self._queryables.clear()
+        with self._matching_lock:
+            handles = list(self._matching_listeners)
+        for handle in handles:
+            handle.close()
+        with self._matching_lock:
+            pubs = list(self._matching_pubs.values())
+            self._matching_pubs.clear()
+        for pub in pubs:
+            try:
+                pub.undeclare()
+            except Exception:
+                pass
         _join_thread(self._watchdog_thread)
         try:
             self._session.close()

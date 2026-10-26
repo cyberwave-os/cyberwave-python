@@ -45,7 +45,7 @@ def _make_handle(monkeypatch, *, runtime_mode, active_sim, stream_cls=_FakeStrea
         _ensure_mqtt_connected=lambda: None,
         _resolve_sensor_id=lambda sid: sid or "default",
     )
-    # Bind the real preflight so the @simulation_level(MUJOCO) decorator runs.
+    # Bind the real preflight so the @simulation_level(PHYSICS) decorator runs.
     twin._ensure_simulation_support = Twin._ensure_simulation_support.__get__(twin)
     return TwinCameraHandle(twin, sensor_id="wrist")
 

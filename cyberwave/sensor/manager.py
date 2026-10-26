@@ -15,6 +15,8 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
+from .peer_close import PEER_CONNECTION_CLOSE_TIMEOUT_S, PEER_CONNECTION_SETTLE_S
+
 if TYPE_CHECKING:
     from ..client import Cyberwave
     from ..twin import CameraTwin, DepthCameraTwin
@@ -22,6 +24,12 @@ if TYPE_CHECKING:
     from .base_video import BaseVideoStreamer
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on a forced ``streamer.stop()`` after the runner was cancelled:
+# one bounded peer-connection close plus its settle, with a little slack.
+STREAMER_STOP_TIMEOUT_S = (
+    PEER_CONNECTION_CLOSE_TIMEOUT_S + PEER_CONNECTION_SETTLE_S + 1.0
+)
 
 
 # =============================================================================
@@ -76,8 +84,14 @@ def run_streamer_in_background(
         if not streamer.client.connected:
             streamer.client.connect()
         deadline = time.time() + 10.0
-        while not streamer.client.connected and time.time() < deadline:
+        while (
+            not streamer.client.connected
+            and time.time() < deadline
+            and not stop_event.is_set()
+        ):
             await asyncio.sleep(0.2)
+        if stop_event.is_set():
+            return
         if not streamer.client.connected:
             logger.error(
                 "MQTT connection timeout for streamer %r — aborting", thread_name
@@ -114,7 +128,18 @@ def run_streamer_in_background(
                     await asyncio.gather(runner, return_exceptions=True)
                     # Startup can be cancelled before the reconnect loop's
                     # finally block is entered. Public stop closes a partial PC.
-                    await streamer.stop()
+                    # Bounded so a wedged teardown cannot pin this thread past
+                    # the owner's own stop deadline (it joins us with one).
+                    try:
+                        await asyncio.wait_for(
+                            streamer.stop(), timeout=STREAMER_STOP_TIMEOUT_S
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "Streamer %r did not stop within %.1fs; abandoning it",
+                            thread_name,
+                            STREAMER_STOP_TIMEOUT_S,
+                        )
             else:
                 await runner
         except Exception:

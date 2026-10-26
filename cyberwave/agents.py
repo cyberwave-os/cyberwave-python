@@ -2,26 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Literal
 
+from cyberwave._rest import request
 from cyberwave.exceptions import CyberwaveAPIError
 
 ControlMode = Literal["simulation", "live", "preview"]
-
-
-def _decode_json_response(response_data: Any) -> Any:
-    response_data.read()
-    payload = getattr(response_data, "data", None)
-    if isinstance(payload, bytes):
-        return json.loads(payload.decode("utf-8"))
-    if isinstance(payload, str):
-        return json.loads(payload)
-    if isinstance(payload, dict):
-        return payload
-    if isinstance(payload, list):
-        return payload
-    return {}
 
 
 class AgentClientBase:
@@ -39,18 +25,15 @@ class AgentClientBase:
         body: Any = None,
         query_params: list[tuple[str, str]] | None = None,
     ) -> Any:
-        _param = self._api_client.param_serialize(
-            method=method,
-            resource_path=path,
-            path_params=path_params or {},
-            query_params=query_params,
+        _, payload = request(
+            self._api_client,
+            method,
+            path,
+            path_params=path_params,
+            query=query_params,
             body=body,
-            header_params={"Content-Type": "application/json"}
-            if body is not None
-            else None,
-            auth_settings=["CustomTokenAuthentication"],
         )
-        return _decode_json_response(self._api_client.call_api(*_param))
+        return payload
 
     def _environment_call(
         self,

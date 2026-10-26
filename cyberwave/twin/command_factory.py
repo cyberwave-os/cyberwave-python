@@ -30,8 +30,16 @@ _RESERVED_COMMAND_HANDLE_ATTRS = frozenset(
         "_twin",
         "_bound_catalog_commands",
         "_command_routing",
+        "_gateway_handle",
         "get_schema",
         "get_supported_commands",
+        # Command gateway + MQTT v5 request/response (not catalog commands).
+        "send",
+        "request",
+        "audit",
+        "control_policy",
+        "grants",
+        "gateway",
     }
 )
 

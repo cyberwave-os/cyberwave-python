@@ -5,10 +5,12 @@ This module provides a high-level MQTT client for real-time communication with t
 It uses paho-mqtt (2.1.0+) for reliable MQTT connectivity.
 """
 
+import functools
 import json
 import logging
 import math
 import os
+import queue
 import threading
 import time
 import uuid
@@ -18,11 +20,30 @@ from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion  # type: ignore
-# Try to import CallbackAPIVersion for paho-mqtt 2.x, fallback for older versions
+from paho.mqtt.packettypes import PacketTypes
+from paho.mqtt.properties import Properties
 
-from ..config import DEFAULT_MQTT_USERNAME
-from ..constants import SOURCE_TYPE_EDGE, SOURCE_TYPES
-from ..mqtt_identity import is_api_token, mqtt_username_for_token
+from .. import _paho_compat  # also installs a paho fix on import
+from .. import _payload_limit
+from ..config import DEFAULT_MQTT_USERNAME, resolve_mqtt_credentials
+from ..constants import (
+    SOURCE_TYPE_EDGE,
+    SOURCE_TYPE_SIM,
+    SOURCE_TYPE_SIM_TELE,
+    SOURCE_TYPE_TELE,
+    SOURCE_TYPES,
+)
+from ..exceptions import (
+    CommandResponseTimeoutError,
+    CyberwaveMQTTError,
+    RequestTimeoutError,
+)
+from .command_response import command_topic, reply_inbox_topic
+from .request_response import (
+    message_property,
+    new_correlation_id,
+    request_properties,
+)
 
 logger = logging.getLogger(__name__)
 SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
@@ -30,6 +51,55 @@ SOURCE_TYPES_DISPLAY = ", ".join(SOURCE_TYPES)
 # Sentinel distinguishing "remove every handler for the topic" (default) from
 # an explicit ``subscriber_key=None`` (remove only the default slot).
 _UNSET = object()
+
+# The payload limit lives in one module that the raw paho paths (the Zenoh
+# bridge, request_response.reply_to) share; these names stay importable here.
+DEFAULT_MAX_PAYLOAD_BYTES = _payload_limit.DEFAULT_MAX_PAYLOAD_BYTES
+MAX_PAYLOAD_BYTES_ENV = _payload_limit.MAX_PAYLOAD_BYTES_ENV
+_max_payload_bytes = _payload_limit.resolve_max_payload_bytes
+_payload_bytes = _payload_limit.payload_bytes
+
+# Marks a handler that wants the paho message alongside the decoded payload.
+_PASS_MESSAGE_ATTR = "__cyberwave_pass_message__"
+
+# Subscriber key of the reply-inbox handler ``request`` owns.
+_REPLY_INBOX_SUBSCRIBER = "cyberwave.request"
+# How long ``request`` waits for the inbox SUBACK before publishing.
+_REPLY_INBOX_SUBACK_TIMEOUT_S = 2.0
+
+
+def pass_message(handler: Callable) -> Callable:
+    """Mark ``handler`` to be called as ``handler(data, message)``.
+
+    ``message`` is the paho ``MQTTMessage``: its ``topic`` and, on an MQTT v5
+    connection, its ``properties`` (Response Topic, Correlation Data, user
+    properties). Unmarked handlers keep their ``(data)`` / ``(topic, data)``
+    call shapes, so existing subscribers are unaffected::
+
+        @pass_message
+        def on_command(data, message):
+            reply_to = message.properties.ResponseTopic  # v5 only
+
+        client.subscribe(topic, on_command)
+
+    Returns ``handler`` itself (the flag is set on it). Bound methods cannot
+    take attributes, so they are wrapped instead.
+    """
+    try:
+        setattr(handler, _PASS_MESSAGE_ATTR, True)
+        return handler
+    except (AttributeError, TypeError):
+
+        def wrapper(data: Any, message: Any) -> Any:
+            return handler(data, message)
+
+        setattr(wrapper, _PASS_MESSAGE_ATTR, True)
+        return wrapper
+
+
+def wants_message(handler: Callable) -> bool:
+    """Whether ``handler`` was marked with :func:`pass_message`."""
+    return bool(getattr(handler, _PASS_MESSAGE_ATTR, False))
 
 # ---------------------------------------------------------------------------
 # Recording-boundary marker for ``telemetry_end`` / ``telemetry_start``
@@ -50,6 +120,20 @@ _UNSET = object()
 RECORDING_BOUNDARY_KEY = "recording_boundary"
 TELEMETRY_CUT_SENDER = "workflow"
 TELEMETRY_CUT_SOURCE_SUBTYPE = "node_recorder"
+
+
+def build_client_id(producer: str, runtime_mode: Optional[str]) -> str:
+    """Build a self-describing MQTT client id: ``{producer}_{mode}_{uuid4hex}``.
+
+    ``mode`` is the short runtime-mode token (``live``/``sim``). The id is a
+    single MQTT topic level and, because ``producer`` uses a dash rather than
+    an underscore, never splits on ``_`` into exactly two segments — the shape
+    the backend's recording mirror reserves for ``{start_us}_{end_us}``
+    windows. Every payload published by this client carries this id as its
+    default ``session_id``.
+    """
+    mode = "sim" if (runtime_mode or "").startswith("sim") else "live"
+    return f"{producer}_{mode}_{uuid.uuid4().hex}"
 
 
 def _replace_non_finite(value: Any) -> Any:
@@ -88,16 +172,42 @@ class CyberwaveMQTTClient:
         api_key: Cyberwave API key used for MQTT authN/authZ
         mqtt_password: Explicit MQTT password (overrides api_key when provided)
         client_id: Custom MQTT client ID (auto-generated if not provided)
-        client_id_prefix: Prefix for auto-generated MQTT client IDs. Keep it to 11
-            characters or fewer: the generated suffix is 12, and 23 bytes is the
-            client id length every MQTT 3.1.1 broker must accept. Nothing
-            validates this — a longer prefix is only as portable as your broker.
+        client_id_prefix: Legacy prefix for auto-generated MQTT client IDs, honored
+            verbatim when passed (e.g. by the nav bridge). Prefer ``producer``/
+            ``runtime_mode`` for new callers. Keep it to 11 characters or fewer:
+            the generated suffix is 12, and 23 bytes is the client id length
+            every MQTT 3.1.1 broker must accept. Nothing validates this — a
+            longer prefix is only as portable as your broker.
+        producer: Short producer name embedded in the self-describing default
+            client id (``{producer}_{live|sim}_{uuid4hex}``)
+        runtime_mode: Runtime mode used to pick the ``live``/``sim`` token in the
+            self-describing default client id
         use_tls: Enable TLS transport for MQTT
         tls_ca_cert: Path to CA certificate bundle for broker verification
         topic_prefix: Prefix for MQTT topics (default: "")
         auto_connect: Automatically connect on initialization (default: True)
-        protocol: MQTT protocol version (default: ``mqtt.MQTTv311``).
-            Pass ``mqtt.MQTTv5`` to use MQTT v5 features when your broker supports it.
+        protocol: MQTT protocol version (default: ``mqtt.MQTTv5``).
+            Pass ``mqtt.MQTTv311`` for a broker that does not support MQTT v5.
+        announce_twin_sessions: Whether publishing state for a twin implicitly
+            opens its telemetry session (``connected`` + ``telemetry_start``)
+            and :meth:`disconnect` closes it (``disconnected`` +
+            ``telemetry_end``). Default ``True``. Pass ``False`` for a client
+            that only relays state for a twin whose robot driver or simulator
+            owns the session, such as a navigation bridge: its twin-wide
+            ``telemetry_end`` would make the media service finalize every
+            stream and recording the owner still has open. Sessions started
+            explicitly with :meth:`publish_telemetry_start` are still
+            announced, and still ended on disconnect.
+        max_payload_bytes: Largest payload :meth:`publish` sends, in bytes.
+            Anything larger is refused locally and logged, because the broker
+            would drop it without telling this client. Defaults to
+            ``CYBERWAVE_MQTT_MAX_PAYLOAD_BYTES``, else 32 MiB -- the limit on
+            Cyberwave's brokers. Raise it only for a broker configured to
+            accept more; 0 turns the check off. Over MQTT 5 a smaller Maximum
+            Packet Size announced by the broker applies as well.
+        topic_aliases: Use MQTT 5 topic aliases for QoS 0 publishes when the
+            broker offers them. Defaults to the ``CYBERWAVE_MQTT_TOPIC_ALIASES``
+            environment variable (``1``/``true``/``yes``/``on``), else off.
     """
 
     def __init__(
@@ -108,7 +218,9 @@ class CyberwaveMQTTClient:
         api_key: Optional[str] = None,
         mqtt_password: Optional[str] = None,
         client_id: Optional[str] = None,
-        client_id_prefix: str = "sdk_",
+        client_id_prefix: Optional[str] = None,
+        producer: str = "python-sdk",
+        runtime_mode: Optional[str] = None,
         use_tls: bool = False,
         tls_ca_cert: Optional[str] = None,
         topic_prefix: str = "",
@@ -116,8 +228,18 @@ class CyberwaveMQTTClient:
         twin_uuids: Optional[List[str]] = None,
         source_type: Optional[str] = SOURCE_TYPE_EDGE,
         protocol: Optional[int] = None,
+        announce_twin_sessions: bool = True,
+        max_payload_bytes: Optional[int] = None,
+        topic_aliases: Optional[bool] = None,
     ):
         self.mqtt_broker = mqtt_broker
+        self.max_payload_bytes = _max_payload_bytes(max_payload_bytes)
+        # The Maximum Packet Size from the broker's last MQTT 5 CONNACK, or 0
+        # when it announced none. paho does not enforce it: a packet over it is
+        # a protocol error the broker answers by disconnecting, and at QoS 1
+        # paho resends the same packet after every reconnect.
+        self._broker_max_packet_size = 0
+        self._dropped_publish_reports = _payload_limit.ReportThrottle()
         self.mqtt_port = mqtt_port
 
         self.api_key = api_key
@@ -130,38 +252,59 @@ class CyberwaveMQTTClient:
                 "Set CYBERWAVE_API_KEY or pass mqtt_password explicitly"
             )
 
-        # "mqttcyb" is a placeholder, not a name: authorization checks arrive
-        # without the password, and a username every client shares leaves the
-        # backend guessing which of them is asking. Derived from the API key it
-        # names one token. A legacy broker password is a static account whose
-        # username must reach the broker unchanged -- but an API token under
-        # mqtt_password is the very credential the derivation expects, and the
-        # cloud node sets both names to it when it scopes a workload token.
-        legacy_broker_credentials = bool(self.mqtt_password) and not is_api_token(
-            self.mqtt_password
+        self.mqtt_username, _ = resolve_mqtt_credentials(
+            mqtt_username, self.mqtt_password, self.api_key
         )
-        if mqtt_username == DEFAULT_MQTT_USERNAME and not legacy_broker_credentials:
-            self.mqtt_username = mqtt_username_for_token(auth_password)
-        else:
-            self.mqtt_username = mqtt_username
 
         # Topic prefix (empty by default, can be set for custom deployments)
         self.topic_prefix = topic_prefix
 
-        # Generate unique client ID.
+        # Client identity. Precedence: explicit id > legacy prefix (honored
+        # verbatim for callers like the nav bridge) > self-describing default.
         #
-        # 48 bits, not 32. ``publish`` stamps this onto every payload as
-        # ``session_id``, and the backend now derives a durable clock-domain name
-        # from it, so a birthday collision no longer merely re-uses a broker
-        # session: two unrelated machines get filed as one clock and their
-        # measurements blend. 32 bits reaches an even chance around 77k process
-        # starts, which a fleet restarting drivers daily passes inside a year;
-        # 48 bits puts it past 20M. Held to 12 hex chars so the longest prefix in
-        # use ("sdk_sim_") still fits the 23-byte client id every MQTT 3.1.1
-        # broker is required to accept.
-        self.client_id = client_id or f"{client_id_prefix}{uuid.uuid4().hex[:12]}"
+        # The legacy suffix is 48 bits, not 32. ``publish`` stamps this onto
+        # every payload as ``session_id``, and the backend derives a durable
+        # clock-domain name from it, so a birthday collision files two unrelated
+        # machines as one clock. 32 bits reaches an even chance around 77k
+        # process starts; 48 bits puts it past 20M. Held to 12 hex chars so the
+        # longest prefix in use ("sdk_sim_") still fits the 23-byte client id
+        # every MQTT 3.1.1 broker is required to accept.
+        if client_id:
+            self.client_id = client_id
+        elif client_id_prefix is not None:
+            self.client_id = f"{client_id_prefix}{uuid.uuid4().hex[:12]}"
+        else:
+            self.client_id = build_client_id(producer, runtime_mode)
 
-        self._protocol = protocol if protocol is not None else mqtt.MQTTv311
+        self._protocol = protocol if protocol is not None else mqtt.MQTTv5
+        # MQTT 5 topic aliases. A telemetry topic is ~65 bytes on the wire and a
+        # pose payload is ~150, so repeating the topic on every message spends
+        # roughly a quarter of the packet restating a constant. An alias replaces
+        # it with a two-byte integer after the first publish.
+        #
+        # Per *connection* and per *direction*: the broker re-expands the topic
+        # before delivering to subscribers, so this shortens the robot's uplink
+        # -- the constrained leg -- and changes nothing Vector or the backend
+        # sees. The map must therefore be cleared on every reconnect, because the
+        # new session has no memory of the old one's numbering.
+        #
+        # Opt-in for now: the cloud NanoMQ (active on dev and staging) checks
+        # its HTTP ACL before resolving an alias and drops alias-only
+        # publishes, and only stops offering aliases once its config ships.
+        if topic_aliases is None:
+            topic_aliases = os.getenv(
+                "CYBERWAVE_MQTT_TOPIC_ALIASES", ""
+            ).strip().lower() in ("1", "true", "yes", "on")
+        self._topic_aliases_enabled = topic_aliases
+        self._topic_aliases: dict[str, int] = {}
+        self._topic_alias_maximum = 0
+        # Bumped by every reset, so a publish that a reset overtook does not
+        # record its alias in the new connection's map.
+        self._alias_epoch = 0
+        # Reentrant: with the network loop stopped, paho writes on the
+        # publishing thread, and a write failure calls _on_disconnect -- and
+        # so _reset_topic_aliases -- from inside client.publish.
+        self._alias_lock = threading.RLock()
         self.client = mqtt.Client(
             callback_api_version=CallbackAPIVersion.VERSION2,
             client_id=self.client_id,  # type: ignore
@@ -214,16 +357,34 @@ class CyberwaveMQTTClient:
         # Setup MQTT callbacks
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
+        # paho calls this at the start of every connect() and reconnect(),
+        # including a reconnect() after a drop that never reached
+        # on_disconnect (a caller's watchdog, the retry loop in connect()).
+        self.client.on_pre_connect = lambda _client, _userdata: (
+            self._reset_topic_aliases()
+        )
         self.client.on_message = self._on_message
         self.client.on_subscribe = self._on_subscribe
+        self.client.on_publish = self._on_publish
+        _paho_compat.report_refused_pubrecs(self.client, self._report_refused_publish)
 
         self.twin_uuids = twin_uuids or []
         self.twin_uuids_with_telemetry_start: List[str] = []
+        # See ``announce_twin_sessions`` in the class docstring.
+        self.announce_twin_sessions = announce_twin_sessions
         self._telemetry_lock = threading.Lock()  # Thread safety for telemetry tracking
         self._subscription_lock = threading.Lock()
         self._pending_subscriptions: Dict[int, str] = {}
+        # Topics whose latest SUBACK on this connection refused them.
+        self._rejected_subscriptions: set[str] = set()
         self._subscribe_options: Dict[str, Any] = {}
         self.source_type = source_type
+
+        # MQTT v5 request/response: replies are routed to the waiting request
+        # by Correlation Data.
+        self._request_lock = threading.Lock()
+        self._pending_requests: Dict[bytes, "queue.Queue[Dict[str, Any]]"] = {}
+        self._reply_inboxes: set = set()
 
         # Auto-connect if requested (must happen after all state is initialized)
         if auto_connect:
@@ -243,6 +404,110 @@ class CyberwaveMQTTClient:
     def is_mqtt_v5(self) -> bool:
         """True when the client negotiates MQTT v5 with the broker."""
         return self._protocol == mqtt.MQTTv5
+
+    def _reset_topic_aliases(self, properties: Any = None) -> None:
+        """Forget this connection's aliases and adopt the broker's budget.
+
+        Called on every CONNACK, and with no properties on every disconnect
+        and at the start of every connect()/reconnect(). An alias is
+        meaningless to a broker that did not issue it, so carrying the map
+        across a reconnect would publish to whatever topic the *new* session
+        happens to have numbered that way. Clearing it before the new socket
+        opens covers the time until the next CONNACK, during which a publish
+        that passed the ``connected`` check just before the drop would
+        otherwise reach the new session with an alias from the old one. The
+        pre-connect reset matters because paho's reconnect() does not call
+        on_disconnect.
+
+        ``TopicAliasMaximum`` is absent from CONNACK when the broker allows
+        none, which the spec defines as zero -- so the default disables the
+        feature rather than guessing a budget. The budget also stays zero
+        unless aliases were opted into.
+        """
+        with self._alias_lock:
+            self._topic_aliases.clear()
+            self._alias_epoch += 1
+            maximum = 0
+            if (
+                self._topic_aliases_enabled
+                and self.is_mqtt_v5
+                and properties is not None
+            ):
+                maximum = getattr(properties, "TopicAliasMaximum", 0)
+            self._topic_alias_maximum = maximum
+            if self._topic_alias_maximum:
+                logger.debug(
+                    "MQTT 5 topic aliases enabled; broker allows %d",
+                    self._topic_alias_maximum,
+                )
+
+    def _publish_aliased(self, topic: str, payload: Any, qos: int) -> Any:
+        """Hand one message to paho, replacing the topic by its alias when safe.
+
+        First use has to carry the full topic *and* the alias, which is how the
+        mapping is established; only later publishes may send an empty topic.
+        Three things make that safe, and each was a way to publish an alias
+        the broker had never been told about -- a protocol error it answers by
+        dropping the connection:
+
+        * **QoS 0 only.** paho keeps QoS 1/2 messages until they are acked and
+          resends them after a reconnect with the topic and properties they
+          were first published with. An empty topic plus the old session's
+          alias is meaningless to the new session, so the broker disconnects,
+          paho reconnects and resends the same message, and the client never
+          gets past it. QoS 0 is never resent: paho drops what is still queued
+          when it reconnects.
+        * **One lock around choosing and enqueueing.** Otherwise a second
+          thread can see the mapping a first thread just made and enqueue its
+          empty-topic publish ahead of the publish that carries the topic.
+        * **Only an accepted publish establishes a mapping.** A first use that
+          paho refused never reached the broker, so the next publish of that
+          topic has to be a first use again.
+
+        ``_alias_lock`` is held across paho's ``publish``. paho takes no lock
+        its network thread holds while calling back into this client, so this
+        cannot deadlock with a reset on that thread. With the loop stopped,
+        paho writes on this thread instead, and a failed write calls
+        ``_on_disconnect`` from inside ``publish``. The lock is reentrant for
+        that case, and the epoch check keeps the reset that happened there
+        from being undone by recording the alias afterwards.
+        """
+        # Unlocked fast path when aliasing is off (opt-out, MQTT 3.1.1, NanoMQ,
+        # a budget of 0); a stale read only means the locked check decides.
+        if qos != 0 or not self._topic_alias_maximum:
+            return self.client.publish(topic, payload, qos=qos)
+        with self._alias_lock:
+            if not self._topic_alias_maximum:
+                return self.client.publish(topic, payload, qos=qos)
+            existing = self._topic_aliases.get(topic)
+            if existing is not None:
+                return self.client.publish(
+                    "", payload, qos=qos, properties=self._alias_properties(existing)
+                )
+            if len(self._topic_aliases) >= self._topic_alias_maximum:
+                # Budget spent. Deliberately not evicting: the topics a driver
+                # publishes are a small fixed set, so churn here would mean
+                # re-establishing a mapping on nearly every message -- strictly
+                # worse than sending the topic.
+                return self.client.publish(topic, payload, qos=qos)
+            alias = len(self._topic_aliases) + 1
+            epoch = self._alias_epoch
+            result = self.client.publish(
+                topic, payload, qos=qos, properties=self._alias_properties(alias)
+            )
+            if result.rc == mqtt.MQTT_ERR_SUCCESS and epoch == self._alias_epoch:
+                self._topic_aliases[topic] = alias
+            return result
+
+    @staticmethod
+    @functools.lru_cache(maxsize=None)
+    def _alias_properties(alias: int) -> Any:
+        # Cached: paho only reads the properties when packing the PUBLISH, so
+        # one object per alias can be shared by every publish that uses it.
+        # Bounded by the broker's budget, at most 65535.
+        properties = Properties(PacketTypes.PUBLISH)
+        properties.TopicAlias = alias
+        return properties
 
     def _build_subscribe_options(self, *, qos: int, no_local: bool) -> Any | None:
         if not no_local:
@@ -350,6 +615,31 @@ class CyberwaveMQTTClient:
         if self.connected:
             self.client.unsubscribe(topic)
 
+    def _subscription_pending(self, topic: str) -> bool:
+        """Whether a SUBSCRIBE for *topic* is still waiting for its SUBACK."""
+        with self._subscription_lock:
+            return topic in self._pending_subscriptions.values()
+
+    def is_subscribed(self, topic: str) -> bool:
+        """Whether the broker has accepted (SUBACK) this client's subscription to *topic*.
+
+        A SUBSCRIBE is not in effect until its SUBACK: a broker that handles
+        one client's packets in parallel (NanoMQ) may route a message
+        published right after :meth:`subscribe` before the subscription
+        exists. Request/response flows (a WebRTC offer and its answer) check
+        this before publishing the request, or the response goes to nobody.
+
+        ``True`` once the topic has a handler on the current connection, no
+        SUBSCRIBE for it awaits its SUBACK, and the broker did not refuse it.
+        """
+        if not self.connected or topic not in self._handlers:
+            return False
+        with self._subscription_lock:
+            return (
+                topic not in self._pending_subscriptions.values()
+                and topic not in self._rejected_subscriptions
+            )
+
     def _match_mqtt_pattern(self, pattern: str, topic: str) -> bool:
         """Match MQTT topic against MQTT pattern (supports + and # wildcards)."""
         # Convert MQTT pattern to regex
@@ -370,13 +660,21 @@ class CyberwaveMQTTClient:
         # Match the pattern
         return bool(re.match(f"^{pattern_escaped}$", topic))
 
-    def _trigger_handlers(self, topic: str, data: Any):
-        """Trigger all handlers for a specific topic."""
+    def _trigger_handlers(self, topic: str, data: Any, message: Any = None):
+        """Trigger all handlers for a specific topic.
+
+        Handlers marked with :func:`pass_message` get ``(data, message)``;
+        others keep ``(data)`` (exact topic) or ``(topic, data)`` (wildcard
+        pattern, when the handler takes two arguments).
+        """
         # First, try exact match
         if topic in self._handlers:
             for handler in list(self._handlers[topic].values()):
                 try:
-                    handler(data)
+                    if wants_message(handler):
+                        handler(data, message)
+                    else:
+                        handler(data)
                 except Exception as e:
                     logger.error(f"Error in handler for {topic}: {e}")
 
@@ -386,6 +684,9 @@ class CyberwaveMQTTClient:
                 if self._match_mqtt_pattern(pattern, topic):
                     for handler in list(handlers.values()):
                         try:
+                            if wants_message(handler):
+                                handler(data, message)
+                                continue
                             # Pass both topic and data to handler if it accepts 2 args
                             import inspect
 
@@ -403,38 +704,115 @@ class CyberwaveMQTTClient:
             logger.info(
                 f"Connected to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}"
             )
-            self.connected = True
+            properties = kwargs.get("properties") or (args[0] if args else None)
+            # Before ``connected``, so no publish can go out unchecked against it.
+            self._adopt_broker_max_packet_size(properties)
+            self._reset_topic_aliases(properties)
             self._reconnect_attempts = 0
 
-            # Resubscribe to all topics
-            for topic in self._handlers.keys():
-                options = self._subscribe_options.get(topic)
-                if options is not None:
-                    result = client.subscribe(topic, options=options)
-                else:
-                    result = client.subscribe(topic)
-                if result[0] == mqtt.MQTT_ERR_SUCCESS:
-                    with self._subscription_lock:
+            # SUBSCRIBEs of the previous connection will never be acked; the
+            # resubscribes below register their own mids. ``connected`` flips
+            # inside the same lock span as the clear and every resubscribe:
+            # ``is_subscribed`` on another thread then either sees the old
+            # connection (False) or waits for the span and sees the new
+            # SUBSCRIBEs pending. Flipped any earlier, a topic not resubscribed
+            # yet reads as acked, and a WebRTC offer sent then loses its answer.
+            # Still before the handler snapshot, so a concurrent subscribe()
+            # that saw ``connected`` False is covered by the resubscribes.
+            with self._subscription_lock:
+                self.connected = True
+                self._pending_subscriptions.clear()
+                self._rejected_subscriptions.clear()
+                for topic in list(self._handlers.keys()):
+                    options = self._subscribe_options.get(topic)
+                    if options is not None:
+                        result = client.subscribe(topic, options=options)
+                    else:
+                        result = client.subscribe(topic)
+                    if result[0] == mqtt.MQTT_ERR_SUCCESS:
                         self._pending_subscriptions[result[1]] = topic
-                    logger.debug(
-                        "Resubscribe request sent for topic %s (mid=%s)",
-                        topic,
-                        result[1],
-                    )
-                else:
-                    logger.error("Failed to resubscribe to %s: %s", topic, result[0])
+                        logger.debug(
+                            "Resubscribe request sent for topic %s (mid=%s)",
+                            topic,
+                            result[1],
+                        )
+                    else:
+                        logger.error(
+                            "Failed to resubscribe to %s: %s", topic, result[0]
+                        )
         else:
             logger.error(
                 f"Failed to connect to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}, return code: {rc}"
             )
             self.connected = False
 
+    def _adopt_broker_max_packet_size(self, properties: Any = None) -> None:
+        """Take the Maximum Packet Size from an MQTT 5 CONNACK, if it has one.
+
+        Absent means the broker sets no limit beyond the protocol's own, so the
+        default is 0 (no check) rather than a guess.
+        """
+        maximum = 0
+        if self.is_mqtt_v5 and properties is not None:
+            try:
+                maximum = int(getattr(properties, "MaximumPacketSize", 0) or 0)
+            except (TypeError, ValueError):
+                maximum = 0
+        self._broker_max_packet_size = max(maximum, 0)
+
+    def _on_publish(self, client, userdata, mid, reason_code=None, properties=None):
+        """Report a publish the broker acknowledged with a failure reason code.
+
+        Only MQTT 5 carries one -- over 3.1.1 a refused QoS 1 publish is acked
+        as a success -- and only QoS 1 and 2 are acknowledged at all. Before
+        this, a refusal reached nothing, so "not authorized" or "quota
+        exceeded" on a publish was as silent as a success. A QoS 2 refusal
+        arrives in the PUBREC, which paho never passes here; it reaches
+        ``_report_refused_publish`` through ``_paho_compat`` instead.
+        """
+        del client, userdata, properties
+        self._report_refused_publish(mid, reason_code)
+
+    def _report_refused_publish(self, mid: int, reason_code: Any) -> None:
+        """Log ``reason_code`` for publish ``mid`` if it is a failure (128+)."""
+        value = getattr(reason_code, "value", reason_code)
+        if not isinstance(value, int) or value < 128:
+            return
+        # paho still holds the message while acking it, topic included.
+        messages = getattr(self.client, "_out_messages", None)
+        message = messages.get(mid) if isinstance(messages, dict) else None
+        topic = getattr(message, "topic", None)
+        if not isinstance(topic, str):
+            topic = ""
+        target = f" to {topic}" if topic else ""
+        self._report_dropped_publish(
+            f"reason:{value}:{topic}",
+            f"MQTT broker refused a publish{target} (mid={mid}): {reason_code} ({value})",
+        )
+
+    def _report_dropped_publish(self, key: str, text: str) -> None:
+        """Log a dropped publish, at most once per interval for each ``key``."""
+        self._dropped_publish_reports.report(key, text, logger.error)
+
+    def _oversize_reason(
+        self, topic: str, payload: Any, properties: Any = None
+    ) -> Optional[str]:
+        """Why the broker would drop this publish for its size, or None if it fits.
+
+        ``properties`` count towards the packet only when they will be sent,
+        which is on an MQTT 5 connection.
+        """
+        return _payload_limit.oversize_reason(
+            topic,
+            payload,
+            max_payload_bytes=self.max_payload_bytes,
+            broker_max_packet_size=self._broker_max_packet_size,
+            properties=properties if self.is_mqtt_v5 else None,
+        )
+
     def _on_subscribe(self, client, userdata, mid, reason_codes=None, properties=None):
         """Callback when the broker acknowledges a subscription."""
         del client, userdata, properties
-
-        with self._subscription_lock:
-            topic = self._pending_subscriptions.pop(mid, f"<unknown mid={mid}>")
 
         if reason_codes is None:
             codes = []
@@ -453,6 +831,16 @@ class CyberwaveMQTTClient:
                 failed = failed or value >= 128
 
         status_text = ", ".join(statuses) if statuses else "no reason codes"
+        # Pop and record the refusal in one lock span, so ``is_subscribed``
+        # never sees a refused topic as neither pending nor rejected.
+        with self._subscription_lock:
+            known_topic = self._pending_subscriptions.pop(mid, None)
+            if known_topic is not None:
+                if failed:
+                    self._rejected_subscriptions.add(known_topic)
+                else:
+                    self._rejected_subscriptions.discard(known_topic)
+        topic = known_topic or f"<unknown mid={mid}>"
         if failed:
             logger.error(
                 "SUBACK rejected subscription for %s (mid=%s): %s",
@@ -471,6 +859,9 @@ class CyberwaveMQTTClient:
     def _on_disconnect(self, client, userdata, rc, *args, **kwargs):
         """Callback when disconnected from MQTT broker."""
         self.connected = False
+        # Negotiated per connection; the next CONNACK sets it again.
+        self._adopt_broker_max_packet_size()
+        self._reset_topic_aliases()
 
         # In paho-mqtt 2.x with CallbackAPIVersion.VERSION2, rc is a DisconnectFlags object
         # Check if this is an unexpected disconnection
@@ -516,23 +907,31 @@ class CyberwaveMQTTClient:
             logger.debug(f"Received message on topic {topic}")
 
             # Trigger handlers for this topic
-            self._trigger_handlers(topic, data)
+            self._trigger_handlers(topic, data, msg)
 
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
 
     def _handle_twin_update_with_telemetry(
-        self, twin_uuid: str, metadata: Optional[Dict[str, Any]] = None
+        self,
+        twin_uuid: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        *,
+        explicit: bool = False,
     ):
         """
         Handle telemetry start for a twin, ensuring it's only sent once.
 
         Thread-safe: Uses a lock to prevent duplicate telemetry_start messages
         when called from multiple threads (e.g., main loop + camera worker).
+        ``explicit`` marks a caller that asked for the session to start, which
+        ``announce_twin_sessions=False`` does not suppress.
         """
         with self._telemetry_lock:
             if twin_uuid not in self.twin_uuids:
                 self.twin_uuids.append(twin_uuid)
+            if not (explicit or self.announce_twin_sessions):
+                return
 
             already_started = twin_uuid in self.twin_uuids_with_telemetry_start
             logger.debug(
@@ -594,6 +993,11 @@ class CyberwaveMQTTClient:
                 if attempt == 1:
                     self.client.connect(self.mqtt_broker, self.mqtt_port, keepalive=60)
                 else:
+                    if self.connected:
+                        # The previous attempt's CONNACK arrived during the
+                        # backoff; reconnect() would tear that session down.
+                        logger.debug("Successfully connected to MQTT broker")
+                        break
                     self.client.reconnect()
             except Exception as e:
                 # Socket-level failure (broker down, DNS, refused connection).
@@ -627,14 +1031,24 @@ class CyberwaveMQTTClient:
 
         if not self.connected:
             self.client.loop_stop()
-            logger.error("Failed to connect to MQTT broker: %s", last_error)
+            logger.error(
+                "Failed to connect to MQTT broker: %s%s",
+                last_error,
+                (
+                    " (this client uses MQTT v5; if the broker does not support "
+                    "it, set CYBERWAVE_MQTT_PROTOCOL=311)"
+                    if self.is_mqtt_v5
+                    else ""
+                ),
+            )
             raise last_error or Exception("Failed to connect to MQTT broker")
 
         # Send telemetry start message only for twins that haven't received one yet
         # This prevents duplicate telemetry_start messages on reconnection
         # Thread-safe: Uses lock to coordinate with _handle_twin_update_with_telemetry
+        # A relay client (announce_twin_sessions=False) leaves that to the owner.
         with self._telemetry_lock:
-            for twin_uuid in self.twin_uuids:
+            for twin_uuid in self.twin_uuids if self.announce_twin_sessions else ():
                 if twin_uuid not in self.twin_uuids_with_telemetry_start:
                     self.twin_uuids_with_telemetry_start.append(twin_uuid)
                     self._publish_connect_message(twin_uuid)
@@ -643,7 +1057,14 @@ class CyberwaveMQTTClient:
     def disconnect(self):
         """Disconnect from MQTT broker."""
 
-        for twin_uuid in self.twin_uuids:
+        # Without announce_twin_sessions, end only the sessions this client
+        # started explicitly; the rest belong to another publisher.
+        twin_uuids = (
+            list(self.twin_uuids)
+            if self.announce_twin_sessions
+            else list(self.twin_uuids_with_telemetry_start)
+        )
+        for twin_uuid in twin_uuids:
             self._publish_disconnect_message(twin_uuid)
             self.publish_telemetry_end(twin_uuid)
         if self.connected:
@@ -652,11 +1073,25 @@ class CyberwaveMQTTClient:
             self.client.disconnect()
             self.connected = False
 
-    def publish(self, topic: str, message: Dict[str, Any], qos: int = 0) -> bool:
+    def publish(
+        self,
+        topic: str,
+        message: Dict[str, Any],
+        qos: int = 0,
+        *,
+        properties: Any = None,
+    ) -> bool:
         """Return whether the local MQTT client accepted the message.
 
         This is not a broker acknowledgement or evidence of robot execution.
         Failures remain non-raising for best-effort telemetry callers.
+
+        A payload too large for the broker is refused here and False returned:
+        the broker would otherwise drop it, and over MQTT 3.1.1 without telling
+        this client. See ``max_payload_bytes`` in the constructor.
+
+        ``properties`` are paho MQTT v5 PUBLISH properties (e.g. Response
+        Topic, Correlation Data); they are only sent on a v5 connection.
         """
         if not self.connected:
             logger.warning(f"Cannot publish to {topic}: not connected to MQTT broker")
@@ -675,7 +1110,27 @@ class CyberwaveMQTTClient:
                     payload = json.dumps(_replace_non_finite(message), allow_nan=False)
             else:
                 payload = message
-            result = self.client.publish(topic, payload, qos=qos)
+            oversize = self._oversize_reason(topic, payload, properties)
+            if oversize is not None:
+                self._report_dropped_publish(
+                    f"topic:{topic}", f"Not publishing to {topic}: {oversize}"
+                )
+                return False
+            unrecorded = _payload_limit.unrecorded_reason(topic, payload)
+            if unrecorded is not None:
+                self._dropped_publish_reports.report(
+                    f"unrecorded:{topic}",
+                    f"Publishing to {topic}, but {unrecorded}",
+                    logger.warning,
+                )
+            if properties is not None and self.is_mqtt_v5:
+                # Caller-owned v5 properties (Response Topic, Correlation Data)
+                # go out as given, without a topic alias added to them.
+                result = self.client.publish(
+                    topic, payload, qos=qos, properties=properties
+                )
+            else:
+                result = self._publish_aliased(topic, payload, qos)
 
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
                 logger.error(f"Failed to publish to {topic}: {result.rc}")
@@ -730,13 +1185,17 @@ class CyberwaveMQTTClient:
             self._subscribe_options.pop(topic, None)
 
         if self.connected:
-            if options is not None:
-                result = self.client.subscribe(topic, qos=qos, options=options)
-            else:
-                result = self.client.subscribe(topic, qos=qos)
-            if result[0] == mqtt.MQTT_ERR_SUCCESS:
-                with self._subscription_lock:
+            # Held across the SUBSCRIBE: the SUBACK can arrive on the network
+            # thread before ``subscribe`` returns its mid, and an unregistered
+            # mid would leave the topic pending (``is_subscribed`` False) for good.
+            with self._subscription_lock:
+                if options is not None:
+                    result = self.client.subscribe(topic, qos=qos, options=options)
+                else:
+                    result = self.client.subscribe(topic, qos=qos)
+                if result[0] == mqtt.MQTT_ERR_SUCCESS:
                     self._pending_subscriptions[result[1]] = topic
+            if result[0] == mqtt.MQTT_ERR_SUCCESS:
                 logger.info(
                     "Subscribe request sent for topic: %s (mid=%s), awaiting SUBACK",
                     topic,
@@ -804,7 +1263,7 @@ class CyberwaveMQTTClient:
             twin_uuid: UUID of the twin
             metadata: Optional dict (e.g. {"fps": 100, "observations": {"edge_leader": {...}, "edge_follower": {...}}})
         """
-        self._handle_twin_update_with_telemetry(twin_uuid, metadata)
+        self._handle_twin_update_with_telemetry(twin_uuid, metadata, explicit=True)
 
     def publish_telemetry_end(
         self,
@@ -815,14 +1274,33 @@ class CyberwaveMQTTClient:
     ):
         """Publish telemetry end message via MQTT.
 
-        Also clears the telemetry tracking state for this twin, allowing
-        subsequent publish_telemetry_start calls to work properly when
-        a new operation (teleoperate/remoteoperate) is started.
-
-        This method is idempotent: if telemetry_end was already published for
+        A twin-wide end (no ``sensor``) also clears the telemetry tracking
+        state for this twin, allowing subsequent publish_telemetry_start calls
+        to work properly when a new operation (teleoperate/remoteoperate) is
+        started. It is idempotent: if telemetry_end was already published for
         this twin (i.e., twin is no longer in tracking list), this call is a
         no-op to avoid sending duplicate telemetry_end messages.
+
+        An end that names a ``sensor`` closes that one stream and is always
+        published: a twin streams several sensors (Spot's fisheye and depth),
+        and deduplicating by twin dropped every end after the first, leaving
+        the other streams' producers and recordings open in the media service.
+        It leaves the twin's session tracking alone, because the twin's session
+        is still open: otherwise the next state publish would announce
+        ``connected`` + ``telemetry_start`` again, and :meth:`disconnect` would
+        skip the twin-wide end as a duplicate.
         """
+        if sensor:
+            logger.info(
+                "publish_telemetry_end: twin %s sensor %s (twin session left open)",
+                twin_uuid,
+                sensor,
+            )
+            self._publish_telemetry_end_message(
+                twin_uuid, sensor, stream_source, stream_instance_id
+            )
+            return
+
         # Check and clear tracking state atomically to ensure idempotency.
         # Only publish if the twin was still being tracked (telemetry_start was sent).
         with self._telemetry_lock:
@@ -845,6 +1323,15 @@ class CyberwaveMQTTClient:
             )
             return
 
+        self._publish_telemetry_end_message(twin_uuid)
+
+    def _publish_telemetry_end_message(
+        self,
+        twin_uuid: str,
+        sensor: str | None = None,
+        stream_source: str | None = None,
+        stream_instance_id: str | None = None,
+    ) -> None:
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
         message = {
             "type": "telemetry_end",
@@ -1413,7 +1900,7 @@ class CyberwaveMQTTClient:
         twin_uuid: str,
         depth_data: Dict[str, Any],
         timestamp: Optional[float] = None,
-    ):
+    ) -> bool:
         """Publish depth frame data via MQTT.
 
         Publishes **only** the depth frame. Producers that also want a 3-D
@@ -1432,7 +1919,7 @@ class CyberwaveMQTTClient:
             "timestamp": ts,
             "source_type": self._get_effective_source_type(None),
         }
-        self.publish(topic, message)
+        return self.publish(topic, message)
 
     def publish_pointcloud(
         self,
@@ -1443,7 +1930,7 @@ class CyberwaveMQTTClient:
         stride: int = 6,
         sensor_id: str | None = None,
         camera_pose: dict[str, Any] | None = None,
-    ):
+    ) -> bool:
         """Publish a point-cloud frame via MQTT.
 
         ``point_cloud_data`` is a ``float32`` ``numpy.ndarray`` holding either
@@ -1458,7 +1945,13 @@ class CyberwaveMQTTClient:
 
         The array is base64-encoded and published to
         ``cyberwave/twin/{twin_uuid}/pointcloud`` in the wire format expected by
-        the frontend ``ColoredPointCloud`` component.
+        the frontend ``ColoredPointCloud`` component. Returns what
+        :meth:`publish` does: False for a cloud over ``max_payload_bytes``
+        (base64 adds a third, so about 25 MB of floats at the default), which
+        the caller can downsample and send again. A cloud over 8 MiB as
+        published (about 6 MB of floats) is still sent, for live subscribers,
+        with a warning: Cyberwave's telemetry pipeline does not record one that
+        large (``POINTCLOUD_INGEST_MAX_PAYLOAD_BYTES``).
 
         ``rows``/``cols``/``source_type``/``source_subtype`` mirror the backend
         producer's payload (``build_colored_pointcloud_payload``) so the Vector
@@ -1541,7 +2034,7 @@ class CyberwaveMQTTClient:
             # Acquisition pose accompanies optical XYZ; existing viewers/readers
             # retain their coordinate convention. Consumers choose world projection.
             message["camera_pose"] = camera_pose
-        self.publish(topic, message)
+        return self.publish(topic, message)
 
     def publish_webrtc_message(self, twin_uuid: str, webrtc_data: Dict[str, Any]):
         """Publish WebRTC signaling message via MQTT."""
@@ -1595,6 +2088,213 @@ class CyberwaveMQTTClient:
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/command"
         self.subscribe(topic, on_command)
 
+    # MQTT v5 request/response ------------------------------------------------
+    def request(
+        self,
+        topic: str,
+        payload: Any,
+        *,
+        response_topic: str,
+        timeout_s: float = 5.0,
+        qos: int = 1,
+    ) -> Any:
+        """Publish ``payload`` on ``topic`` and wait for the reply to it.
+
+        The generic MQTT v5 request/response pattern, for any topic pair: the
+        request carries ``response_topic`` as its Response Topic and a unique
+        Correlation Data, and the first message on ``response_topic`` that
+        echoes that Correlation Data is returned (JSON-decoded when it is JSON).
+
+        ``response_topic`` is the topic the responder answers on. A reply
+        topic normally embeds this client's id (``self.client_id``) so the broker
+        can let only that client read it, e.g.
+        ``f"{prefix}cyberwave/twin/{twin}/planner/{client.client_id}/response"``.
+        Whether a topic may carry replies is the broker ACL's decision: this
+        client must be allowed to subscribe to it, and the responder to publish
+        to it. Under a twin, joint or environment, any
+        ``cyberwave/{type}/{uuid}/.../{client_id}/response`` topic is a reply
+        inbox only that client may read (the twin command replies are one case,
+        see :meth:`request_command`).
+
+        Use one reply topic per requester, not one per request: each distinct
+        reply topic is a broker subscription this client keeps for its lifetime.
+        The Correlation Data, not the topic, tells concurrent requests apart.
+
+        Requests need MQTT v5: the Response Topic and Correlation Data fields do
+        not exist in 3.1.1. v5 is the default; a client set to 3.1.1
+        (``CYBERWAVE_MQTT_PROTOCOL=311``) raises :class:`CyberwaveMQTTError`.
+
+        Args:
+            topic: Where the request is published.
+            payload: The request body (a dict is sent as JSON).
+            response_topic: The topic the responder replies on.
+            timeout_s: How long to wait for the reply. Must be positive.
+            qos: QoS of the request.
+
+        Raises:
+            RequestTimeoutError: no reply within ``timeout_s``.
+            CyberwaveMQTTError: this client uses MQTT 3.1.1, or the request
+                could not be published.
+        """
+        return self._request(
+            topic,
+            payload,
+            response_topic=response_topic,
+            timeout_s=timeout_s,
+            qos=qos,
+            on_timeout=lambda: RequestTimeoutError(
+                f"no reply to the request on {topic} within {timeout_s:g}s"
+            ),
+        )
+
+    def _request(
+        self,
+        topic: str,
+        payload: Any,
+        *,
+        response_topic: str,
+        timeout_s: float,
+        qos: int,
+        on_timeout: Callable[[], Exception],
+    ) -> Any:
+        if timeout_s <= 0:
+            raise ValueError("timeout_s must be positive")
+        if not self.is_mqtt_v5:
+            raise CyberwaveMQTTError(
+                "request() needs MQTT v5: the Response Topic and Correlation Data "
+                "fields do not exist in 3.1.1. This client uses 3.1.1; remove the "
+                "CYBERWAVE_MQTT_PROTOCOL=311 override (v5 is the default)."
+            )
+        if not self.connected:
+            self.connect()
+        correlation = new_correlation_id()
+        replies: "queue.Queue[Any]" = queue.Queue(maxsize=1)
+        with self._request_lock:
+            self._pending_requests[correlation] = replies
+        try:
+            self._ensure_reply_inbox(response_topic)
+            accepted = self.publish(
+                topic,
+                payload,
+                qos=qos,
+                properties=request_properties(response_topic, correlation),
+            )
+            if not accepted:
+                raise CyberwaveMQTTError(f"could not publish the request to {topic}")
+            try:
+                return replies.get(timeout=timeout_s)
+            except queue.Empty:
+                raise on_timeout() from None
+        finally:
+            with self._request_lock:
+                self._pending_requests.pop(correlation, None)
+
+    def request_command(
+        self,
+        twin_uuid: str,
+        name: str,
+        data: Optional[Dict[str, Any]] = None,
+        *,
+        timeout_s: float = 5.0,
+        source_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send a twin command and wait for its ``twin.command_response.v1`` reply.
+
+        :meth:`request` for the twin command contract: publishes
+        ``{source_type, command, data, timestamp}`` on
+        ``{prefix}cyberwave/twin/{twin_uuid}/command`` with Response Topic
+        ``{prefix}cyberwave/twin/{twin_uuid}/command/{client_id}/response`` and
+        returns the driver's reply payload (``status`` is ``accepted``,
+        ``rejected``, ``denied`` or ``timeout``; see
+        :mod:`cyberwave.mqtt.command_response`).
+
+        Governed twins (a control policy with ``governed=true``) refuse direct
+        publishes on their command topic at the broker, so a request to one
+        times out. Send those through the command gateway instead
+        (``twin.commands.send`` / ``client.commands.send``), which applies the
+        policy, writes the audit record and awaits the same reply.
+
+        Args:
+            twin_uuid: Target twin.
+            name: Command name (e.g. ``"arm"``, ``"takeoff"``).
+            data: Command arguments (``{}`` when omitted).
+            timeout_s: How long to wait for the reply. Must be positive.
+            source_type: Envelope ``source_type``. Defaults to ``tele``, or
+                ``sim_tele`` when this client publishes as ``sim``/``sim_tele``.
+
+        Raises:
+            CommandResponseTimeoutError: no reply within ``timeout_s``.
+            CyberwaveMQTTError: the request could not be published.
+        """
+        if not name:
+            raise ValueError("command name is required")
+        envelope_source = self._get_effective_source_type(
+            source_type or self._default_command_source_type()
+        )
+        envelope = {
+            "source_type": envelope_source,
+            "command": name,
+            "data": dict(data or {}),
+            "timestamp": time.time(),
+        }
+        return self._request(
+            command_topic(twin_uuid, topic_prefix=self.topic_prefix),
+            envelope,
+            response_topic=reply_inbox_topic(
+                twin_uuid, self.client_id, topic_prefix=self.topic_prefix
+            ),
+            timeout_s=timeout_s,
+            qos=1,
+            on_timeout=lambda: CommandResponseTimeoutError(
+                f"no reply to command {name!r} on twin {twin_uuid} within "
+                f"{timeout_s:g}s. The driver may predate "
+                "twin.command_response.v1, or the twin may be governed "
+                "(direct publishes refused): use twin.commands.send(...) "
+                "to go through the command gateway."
+            ),
+        )
+
+    def _default_command_source_type(self) -> str:
+        if self.source_type in {SOURCE_TYPE_SIM, SOURCE_TYPE_SIM_TELE}:
+            return SOURCE_TYPE_SIM_TELE
+        return SOURCE_TYPE_TELE
+
+    def _ensure_reply_inbox(self, inbox: str) -> None:
+        """Subscribe once to ``inbox`` and wait (bounded) for the SUBACK."""
+        with self._request_lock:
+            if inbox in self._reply_inboxes:
+                return
+            self._reply_inboxes.add(inbox)
+        self.subscribe(
+            inbox,
+            pass_message(self._on_reply),
+            qos=1,
+            subscriber_key=_REPLY_INBOX_SUBSCRIBER,
+        )
+        deadline = time.monotonic() + _REPLY_INBOX_SUBACK_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if not self._subscription_pending(inbox):
+                return
+            time.sleep(0.01)
+        logger.warning("No SUBACK for reply inbox %s; publishing anyway", inbox)
+
+    def _on_reply(self, data: Any, message: Any) -> None:
+        correlation = message_property(message, "CorrelationData")
+        if correlation is None:
+            logger.debug(
+                "Ignoring reply without correlation data on %s",
+                getattr(message, "topic", "?"),
+            )
+            return
+        with self._request_lock:
+            waiter = self._pending_requests.get(bytes(correlation))
+        if waiter is None:
+            return  # a late reply to a request that already timed out
+        try:
+            waiter.put_nowait(data)
+        except queue.Full:
+            pass  # exactly one reply counts
+
     # Utility methods
     def ping(self, resource_uuid: str):
         """Send ping message to test connectivity."""
@@ -1609,4 +2309,4 @@ class CyberwaveMQTTClient:
 
 
 # Export the main client class
-__all__ = ["CyberwaveMQTTClient"]
+__all__ = ["CyberwaveMQTTClient", "pass_message", "wants_message"]

@@ -42,7 +42,13 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from .exceptions import CyberwaveAPIError, CyberwaveError, CyberwaveTimeoutError
+from ._rest import api_error, decode_json
+from .exceptions import (
+    ApiException,
+    CyberwaveAPIError,
+    CyberwaveError,
+    CyberwaveTimeoutError,
+)
 
 if TYPE_CHECKING:
     from .client import Cyberwave
@@ -133,16 +139,25 @@ class Workflow:
     # Convenience methods
     # ------------------------------------------------------------------
 
-    def trigger(self, inputs: Optional[Dict[str, Any]] = None) -> "WorkflowRun":
+    def trigger(
+        self,
+        inputs: Optional[Dict[str, Any]] = None,
+        *,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> "WorkflowRun":
         """Trigger a new run of this workflow.
 
         Args:
             inputs: Payload passed to the workflow trigger.
+            params: Arbitrary JSON (nested objects/arrays allowed) for this
+                run. Nodes read it as ``{{params.x}}``.
 
         Returns:
             A :class:`WorkflowRun` representing the started execution.
         """
-        return self._client.workflows.trigger(self.uuid, inputs=inputs)
+        if params is None:
+            return self._client.workflows.trigger(self.uuid, inputs=inputs)
+        return self._client.workflows.trigger(self.uuid, inputs=inputs, params=params)
 
     def runs(
         self, *, status: Optional[str] = None
@@ -450,6 +465,8 @@ class WorkflowManager:
         self,
         workflow_id: str,
         inputs: Optional[Dict[str, Any]] = None,
+        *,
+        params: Optional[Dict[str, Any]] = None,
     ) -> WorkflowRun:
         """Trigger a workflow run.
 
@@ -459,6 +476,9 @@ class WorkflowManager:
                 ``"acme/workflows/pick-and-place"``), the method first
                 resolves the workflow UUID via the ``/by-slug`` endpoint.
             inputs: Payload passed to the workflow.
+            params: Arbitrary JSON for this run, read in the workflow as
+                ``{{params.x}}``. Validated against the params the workflow
+                declares (if any); the backend answers 400 on a mismatch.
 
         Returns:
             A :class:`WorkflowRun` representing the started execution.
@@ -467,7 +487,12 @@ class WorkflowManager:
         if not _is_uuid(workflow_id) and "/" in workflow_id:
             wf = self.get(workflow_id)
             resolved_id = wf.uuid
-        data = _trigger_workflow(self._client, resolved_id, inputs)
+        if params is None:
+            data = _trigger_workflow(self._client, resolved_id, inputs)
+        else:
+            data = _trigger_workflow(
+                self._client, resolved_id, inputs, params=params
+            )
         return WorkflowRun(self._client, data)
 
     def is_running(self, workflow_id: str) -> bool:
@@ -632,11 +657,14 @@ def _trigger_workflow(
     client: "Cyberwave",
     workflow_id: str,
     inputs: Optional[Dict[str, Any]],
+    params: Optional[Dict[str, Any]] = None,
 ) -> Any:
     try:
         body: Dict[str, Any] = {}
         if inputs is not None:
             body["inputs"] = inputs
+        if params is not None:
+            body["params"] = params
         _param = _api(client).param_serialize(
             method="POST",
             resource_path="/api/v1/workflows/{uuid}/trigger",
@@ -652,6 +680,14 @@ def _trigger_workflow(
         ).data
     except CyberwaveAPIError:
         raise
+    except ApiException as exc:
+        # Keep the status: triggering needs write access, so callers have to
+        # tell "not allowed to run this one" apart from a failed run.
+        raise api_error(
+            f"Trigger workflow {workflow_id}",
+            exc.status,
+            decode_json(exc.body or exc.data),
+        ) from exc
     except Exception as e:
         raise CyberwaveError(f"Failed to trigger workflow {workflow_id}: {e}") from e
 

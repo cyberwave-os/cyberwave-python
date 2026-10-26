@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List
-from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,16 +28,9 @@ class CreditTopUpResponseSchema(BaseModel):
     CreditTopUpResponseSchema
     """ # noqa: E501
     transaction_uuid: StrictStr
-    balance_credits: Annotated[str, Field(strict=True)]
+    balance_credits: StrictStr
     status: StrictStr
     __properties: ClassVar[List[str]] = ["transaction_uuid", "balance_credits", "status"]
-
-    @field_validator('balance_credits')
-    def balance_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,

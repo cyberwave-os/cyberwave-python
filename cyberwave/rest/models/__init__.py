@@ -121,6 +121,7 @@ from cyberwave.rest.models.capability_skill import CapabilitySkill
 from cyberwave.rest.models.capture_setup import CaptureSetup
 from cyberwave.rest.models.charge_saved_card_request_schema import ChargeSavedCardRequestSchema
 from cyberwave.rest.models.charge_saved_card_response_schema import ChargeSavedCardResponseSchema
+from cyberwave.rest.models.claim_amazon_request import ClaimAmazonRequest
 from cyberwave.rest.models.claim_google_marketplace_request import ClaimGoogleMarketplaceRequest
 from cyberwave.rest.models.claim_microsoft_marketplace_request import ClaimMicrosoftMarketplaceRequest
 from cyberwave.rest.models.claimed_google_marketplace_subscription_schema import ClaimedGoogleMarketplaceSubscriptionSchema
@@ -234,6 +235,7 @@ from cyberwave.rest.models.docker_tag_schema import DockerTagSchema
 from cyberwave.rest.models.edge_core_restart_response_schema import EdgeCoreRestartResponseSchema
 from cyberwave.rest.models.edge_create_schema import EdgeCreateSchema
 from cyberwave.rest.models.edge_register_schema import EdgeRegisterSchema
+from cyberwave.rest.models.edge_registered_elsewhere_schema import EdgeRegisteredElsewhereSchema
 from cyberwave.rest.models.edge_schema import EdgeSchema
 from cyberwave.rest.models.enable_org_feature_request import EnableOrgFeatureRequest
 from cyberwave.rest.models.end_session_response_schema import EndSessionResponseSchema
@@ -264,6 +266,8 @@ from cyberwave.rest.models.environment_visual_observation_schema import Environm
 from cyberwave.rest.models.environment_waypoint_bulk_create_schema import EnvironmentWaypointBulkCreateSchema
 from cyberwave.rest.models.environment_waypoint_create_schema import EnvironmentWaypointCreateSchema
 from cyberwave.rest.models.environment_waypoint_frame_schema import EnvironmentWaypointFrameSchema
+from cyberwave.rest.models.environment_waypoint_pose_schema import EnvironmentWaypointPoseSchema
+from cyberwave.rest.models.environment_waypoint_poses_request_schema import EnvironmentWaypointPosesRequestSchema
 from cyberwave.rest.models.environment_waypoint_position_update_schema import EnvironmentWaypointPositionUpdateSchema
 from cyberwave.rest.models.environment_waypoint_schema import EnvironmentWaypointSchema
 from cyberwave.rest.models.environment_workflow_replay_event_schema import EnvironmentWorkflowReplayEventSchema
@@ -297,6 +301,7 @@ from cyberwave.rest.models.input_mappings_value import InputMappingsValue
 from cyberwave.rest.models.input_mappings_value1 import InputMappingsValue1
 from cyberwave.rest.models.input_mappings_value2 import InputMappingsValue2
 from cyberwave.rest.models.invitation_response_schema import InvitationResponseSchema
+from cyberwave.rest.models.invite_workspace_member import InviteWorkspaceMember
 from cyberwave.rest.models.invoice_request import InvoiceRequest
 from cyberwave.rest.models.item_input import ItemInput
 from cyberwave.rest.models.items_inner import ItemsInner
@@ -491,7 +496,6 @@ from cyberwave.rest.models.rl_task_update_schema import RLTaskUpdateSchema
 from cyberwave.rest.models.rl_training_job_create_schema import RLTrainingJobCreateSchema
 from cyberwave.rest.models.rl_training_job_schema import RLTrainingJobSchema
 from cyberwave.rest.models.rl_training_job_update_schema import RLTrainingJobUpdateSchema
-from cyberwave.rest.models.rates_value_value import RatesValueValue
 from cyberwave.rest.models.readiness_input import ReadinessInput
 from cyberwave.rest.models.recording_availability_day import RecordingAvailabilityDay
 from cyberwave.rest.models.recording_availability_response import RecordingAvailabilityResponse
@@ -520,6 +524,7 @@ from cyberwave.rest.models.required_quaternion_schema import RequiredQuaternionS
 from cyberwave.rest.models.required_vector3_schema import RequiredVector3Schema
 from cyberwave.rest.models.requirement_input import RequirementInput
 from cyberwave.rest.models.reset_joint_homes_schema import ResetJointHomesSchema
+from cyberwave.rest.models.resolve_amazon_request import ResolveAmazonRequest
 from cyberwave.rest.models.resolve_google_marketplace_request import ResolveGoogleMarketplaceRequest
 from cyberwave.rest.models.resolve_microsoft_marketplace_request import ResolveMicrosoftMarketplaceRequest
 from cyberwave.rest.models.resolved_google_marketplace_purchase_schema import ResolvedGoogleMarketplacePurchaseSchema
@@ -605,6 +610,7 @@ from cyberwave.rest.models.twin_action_request_schema import TwinActionRequestSc
 from cyberwave.rest.models.twin_action_response_schema import TwinActionResponseSchema
 from cyberwave.rest.models.twin_action_status_schema import TwinActionStatusSchema
 from cyberwave.rest.models.twin_binding_schema import TwinBindingSchema
+from cyberwave.rest.models.twin_camera_info_report_schema import TwinCameraInfoReportSchema
 from cyberwave.rest.models.twin_connection_event_schema import TwinConnectionEventSchema
 from cyberwave.rest.models.twin_controller_binding_patch import TwinControllerBindingPatch
 from cyberwave.rest.models.twin_create_result_schema import TwinCreateResultSchema
@@ -642,6 +648,8 @@ from cyberwave.rest.models.twin_waypoint_reachability_response_schema import Twi
 from cyberwave.rest.models.twin_waypoint_reachability_schema import TwinWaypointReachabilitySchema
 from cyberwave.rest.models.urdf_project_create_schema import URDFProjectCreateSchema
 from cyberwave.rest.models.urdf_project_schema import URDFProjectSchema
+from cyberwave.rest.models.usd_scene_from_attachment_schema import USDSceneFromAttachmentSchema
+from cyberwave.rest.models.usd_scene_import_result_schema import USDSceneImportResultSchema
 from cyberwave.rest.models.universal_schema_batch_patch_schema import UniversalSchemaBatchPatchSchema
 from cyberwave.rest.models.universal_schema_patch_schema import UniversalSchemaPatchSchema
 from cyberwave.rest.models.update_alert_schema import UpdateAlertSchema

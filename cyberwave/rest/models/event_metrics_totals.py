@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List
-from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,15 +28,8 @@ class EventMetricsTotals(BaseModel):
     Platform event row totals and server-side credit estimate.
     """ # noqa: E501
     event_rows: StrictInt
-    cost_credits: Annotated[str, Field(strict=True)]
+    cost_credits: StrictStr
     __properties: ClassVar[List[str]] = ["event_rows", "cost_credits"]
-
-    @field_validator('cost_credits')
-    def cost_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,

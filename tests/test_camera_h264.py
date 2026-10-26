@@ -20,11 +20,11 @@ pytest.importorskip(
 )
 
 from cyberwave.sensor.camera_h264 import (
-    _ANNEXB_START,
     FRAMING_ANNEXB,
     FRAMING_AVCC,
     to_annex_b,
 )
+from cyberwave.sensor.h264_bitstream import ANNEXB_START_CODE
 
 # Small, realistic NAL bodies (valid headers: forbidden_zero_bit clear,
 # nal_unit_type non-zero).
@@ -34,7 +34,7 @@ _SLICE = b"\x65\x88\x84\x21"
 
 def _slice_of(length: int) -> bytes:
     """A non-IDR slice NAL (header 0x41) of exactly `length` bytes."""
-    return b"\x41" + b"\xAA" * (length - 1)
+    return b"\x41" + b"\xaa" * (length - 1)
 
 
 def _avcc(*nals: bytes) -> bytes:
@@ -47,7 +47,7 @@ def test_empty_buffer_returned_unchanged():
 
 
 def test_already_annexb_4byte_start_code_passthrough():
-    data = _ANNEXB_START + _SLICE
+    data = ANNEXB_START_CODE + _SLICE
     # Returned identical (identity), not re-framed.
     assert to_annex_b(data) is data
 
@@ -58,12 +58,13 @@ def test_already_annexb_3byte_start_code_passthrough():
 
 
 def test_avcc_single_nal_converted_to_annexb():
-    assert to_annex_b(_avcc(_SLICE)) == _ANNEXB_START + _SLICE
+    assert to_annex_b(_avcc(_SLICE)) == ANNEXB_START_CODE + _SLICE
 
 
 def test_avcc_multiple_nals_each_get_start_code():
     assert (
-        to_annex_b(_avcc(_SPS, _SLICE)) == _ANNEXB_START + _SPS + _ANNEXB_START + _SLICE
+        to_annex_b(_avcc(_SPS, _SLICE))
+        == ANNEXB_START_CODE + _SPS + ANNEXB_START_CODE + _SLICE
     )
 
 
@@ -97,27 +98,27 @@ def test_trailing_bytes_after_valid_nal_left_untouched():
 def test_avcc_length_prefix_that_looks_like_3byte_start_code_is_converted(length):
     nal = _slice_of(length)
     assert _avcc(nal)[:3] == b"\x00\x00\x01", "fixture must reproduce the collision"
-    assert to_annex_b(_avcc(nal)) == _ANNEXB_START + nal
+    assert to_annex_b(_avcc(nal)) == ANNEXB_START_CODE + nal
 
 
 def test_avcc_single_byte_nal_looks_like_4byte_start_code_is_converted():
     nal = b"\x41"  # length 1 -> prefix is exactly b"\x00\x00\x00\x01"
-    assert _avcc(nal)[:4] == _ANNEXB_START
-    assert to_annex_b(_avcc(nal)) == _ANNEXB_START + nal
+    assert _avcc(nal)[:4] == ANNEXB_START_CODE
+    assert to_annex_b(_avcc(nal)) == ANNEXB_START_CODE + nal
 
 
 def test_avcc_multi_nal_with_colliding_first_nal_is_converted():
     # The collision is on the *first* prefix, so multi-NAL AUs hit it too.
     first, second = _slice_of(300), _slice_of(5000)
     assert to_annex_b(_avcc(first, second)) == (
-        _ANNEXB_START + first + _ANNEXB_START + second
+        ANNEXB_START_CODE + first + ANNEXB_START_CODE + second
     )
 
 
 def test_annexb_buffer_starting_with_4byte_start_code_not_misread_as_avcc():
     # AVCC-first must not corrupt real Annex-B: this parses as a 1-byte AVCC
     # NAL, then fails to chain, so it falls back to passthrough.
-    data = _ANNEXB_START + _SLICE
+    data = ANNEXB_START_CODE + _SLICE
     assert to_annex_b(data) is data
 
 
@@ -138,11 +139,11 @@ def test_framing_annexb_skips_conversion_entirely():
 
 def test_framing_avcc_converts():
     nal = _slice_of(300)
-    assert to_annex_b(_avcc(nal), FRAMING_AVCC) == _ANNEXB_START + nal
+    assert to_annex_b(_avcc(nal), FRAMING_AVCC) == ANNEXB_START_CODE + nal
 
 
 def test_framing_avcc_warns_when_input_is_not_avcc(caplog):
-    data = _ANNEXB_START + _SLICE
+    data = ANNEXB_START_CODE + _SLICE
     with caplog.at_level("WARNING"):
         assert to_annex_b(data, FRAMING_AVCC) is data
     assert "not cleanly framed 4-byte AVCC" in caplog.text

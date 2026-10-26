@@ -860,11 +860,11 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
 
         No-op in live runtime mode. In simulation mode: raises
         ``NotSimulatedError`` for ``UNSUPPORTED``; no further check for
-        ``PLAYGROUND``. For ``BOTH`` and ``MUJOCO`` raises
+        ``PLAYGROUND``. For ``BOTH`` and ``PHYSICS`` raises
         ``SimulationNotRunningError`` when nothing is running (or the running
-        instance hasn't finished starting yet); ``MUJOCO`` additionally raises
-        ``SimulationLevelError`` when the running backend isn't MuJoCo. ``BOTH``
-        accepts any running backend.
+        instance hasn't finished starting yet); ``PHYSICS`` additionally raises
+        ``SimulationLevelError`` when the running backend isn't physics-backed
+        (MuJoCo or Isaac Sim). ``BOTH`` accepts any running backend.
         """
         from .runtime_state import RUNTIME_MODE_SIMULATION, active_runtime_mode
         from .simulation_support import SimLevel, backend_sim_level
@@ -901,10 +901,10 @@ class Twin(TwinEditorMixin, TwinTransportMixin):
                 "pass environment_id= so it knows which environment\n\n"
                 "Stop it when finished with sim.stop()."
             )
-        if level == SimLevel.MUJOCO and backend_sim_level(sim.backend) < SimLevel.MUJOCO:
+        if level == SimLevel.PHYSICS and backend_sim_level(sim.backend) < SimLevel.PHYSICS:
             raise SimulationLevelError(
-                f"{method} requires a MuJoCo simulation; the running backend "
-                f"is {sim.backend!r}."
+                f"{method} requires a physics simulation (MuJoCo or Isaac Sim); "
+                f"the running backend is {sim.backend!r}."
             )
 
     def _data_get(self, field: str, default: Any = None) -> Any:

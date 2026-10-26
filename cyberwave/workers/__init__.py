@@ -10,8 +10,15 @@ from .context import HookContext
 from .hooks import HookRegistration, HookRegistry, ScheduleRegistration, SynchronizedGroup
 from .loader import load_workers
 from .runtime import WorkerRuntime
+from .workflow_context import (
+    EdgeWorkflowContext,
+    WorkflowCanceled,
+    WorkflowContext,
+    WorkflowSuspend,
+)
 
 __all__ = [
+    "EdgeWorkflowContext",
     "HookContext",
     "HookRegistration",
     "HookRegistry",
@@ -19,6 +26,9 @@ __all__ = [
     "ScheduleRegistration",
     "SynchronizedGroup",
     "WorkerRuntime",
+    "WorkflowCanceled",
+    "WorkflowContext",
+    "WorkflowSuspend",
     "build_monitor_stats_key",
     "load_workers",
 ]

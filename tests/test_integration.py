@@ -359,8 +359,17 @@ class TestIntegrationWorkflows:
         workflows = client.workflows.list()
         print(f"✓ Listed {len(workflows)} workflow(s)")
 
-        # Find an active workflow
-        active = [wf for wf in workflows if wf.is_active]
+        # Find an active workflow this account can trigger. Listing is
+        # visibility-scoped — it also returns public and org-visible workflows
+        # from other tenants — while /trigger requires write access, so a
+        # foreign workflow at the head of the list fails with a 403. Keep to the
+        # account's own workspaces, as the credits test below does.
+        own_workspaces = {ws.uuid for ws in client.workspaces.list()}
+        active = [
+            wf
+            for wf in workflows
+            if wf.is_active and wf.workspace_uuid in own_workspaces
+        ]
         if not active:
             pytest.skip("No active workflows found — skipping trigger test")
 
@@ -673,6 +682,204 @@ class TestIntegrationCredits:
             f"(balance={err.balance}, manual_block={err.manual_block})"
         )
         print("=" * 70 + "\n")
+
+
+# -- MQTT v5 request/response through the live broker --------------------------------
+#
+# The unit tests mock paho, so none of them can tell whether the broker forwards a
+# request's Response Topic and Correlation Data, or whether the ACL lets a reply
+# through to its requester and to nobody else. These run the exchange against the
+# local backend's real broker with the real Django auth and ACL in the path.
+#
+# Not covered here: that a client is *refused* another requester's reply topic. CI's
+# ``test-api-key`` is the shared admin token, and the ACL lets staff principals
+# through before any topic rule, so a denial cannot be provoked with it. The
+# deny cases run in the backend's ACL tests (``test_mqtt_broker_auth_acl_security``),
+# which use ordinary principals.
+#
+# Broker: ``CYBERWAVE_E2E_MQTT_HOST`` / ``_PORT`` (default localhost:1883, where
+# the local compose stack publishes it) and ``CYBERWAVE_E2E_MQTT_TOPIC_PREFIX``
+# (default none). Unreachable broker: skipped locally, a failure in CI.
+
+
+@pytest.fixture(scope="module")
+def mqtt_endpoint():
+    import socket
+
+    host = os.getenv("CYBERWAVE_E2E_MQTT_HOST", "localhost")
+    port = int(os.getenv("CYBERWAVE_E2E_MQTT_PORT", "1883"))
+    try:
+        socket.create_connection((host, port), timeout=3).close()
+    except OSError as exc:
+        message = f"MQTT broker {host}:{port} is not reachable: {exc}"
+        if os.getenv("CI"):
+            pytest.fail(message)
+        pytest.skip(message)
+    return host, port, os.getenv("CYBERWAVE_E2E_MQTT_TOPIC_PREFIX", "")
+
+
+@pytest.fixture(scope="module")
+def scratch_twin_uuid(cyberwave_client):
+    """A twin the API key owns, so its MQTT principal may read and write it."""
+    client = cyberwave_client
+    workspaces = client.workspaces.list()
+    slug = getattr(workspaces[0], "slug", None) if workspaces else None
+    if not slug:
+        pytest.skip("No workspace with a slug to register a scratch asset under")
+    stamp = int(time.time())
+    created: dict = {}
+    try:
+        created["project"] = client.projects.create(
+            name=f"SDK request/response {stamp}",
+            workspace_id=None,
+            description="scratch",
+        )
+        created["environment"] = client.environments.create(
+            name=f"SDK request/response env {stamp}",
+            project_id=created["project"].uuid,
+        )
+        created["asset"] = client.assets.create(
+            name=f"SDK request/response asset {stamp}",
+            description="scratch",
+            asset_type="generic",
+            registry_id=f"{slug}/rr-robot-{stamp}",
+        )
+        twin = client.twin(
+            f"{slug}/rr-robot-{stamp}", environment_id=created["environment"].uuid
+        )
+        yield str(twin.uuid)
+    finally:
+        if "asset" in created:
+            _delete_resource_best_effort(
+                "asset",
+                created["asset"].uuid,
+                lambda: client.assets.delete(created["asset"].uuid),
+            )
+        if "environment" in created and "project" in created:
+            _delete_resource_best_effort(
+                "environment",
+                created["environment"].uuid,
+                lambda: client.environments.delete(
+                    created["environment"].uuid, created["project"].uuid
+                ),
+            )
+        if "project" in created:
+            _delete_resource_best_effort(
+                "project",
+                created["project"].uuid,
+                lambda: client.projects.delete(created["project"].uuid),
+            )
+
+
+def _v5_client(endpoint, tag):
+    import paho.mqtt.client as paho
+
+    from cyberwave.mqtt import CyberwaveMQTTClient
+
+    host, port, prefix = endpoint
+    client = CyberwaveMQTTClient(
+        mqtt_broker=host,
+        mqtt_port=port,
+        api_key=os.environ["CYBERWAVE_API_KEY"],
+        protocol=paho.MQTTv5,
+        topic_prefix=prefix,
+        client_id_prefix=f"sdk_e2e_{tag}_",
+    )
+    client.connect()
+    assert client.connected, f"{tag} client did not connect"
+    return client
+
+
+def _wait_subscribed(client, timeout=10.0):
+    """Wait for every SUBACK, then give the broker a moment to route."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with client._subscription_lock:
+            if not client._pending_subscriptions:
+                break
+        time.sleep(0.05)
+    time.sleep(0.5)
+
+
+class TestIntegrationRequestResponse:
+    """``request`` / ``request_command`` through a real broker and ACL."""
+
+    def test_request_on_a_topic_pair_that_is_not_a_command(
+        self, cyberwave_client, mqtt_endpoint, scratch_twin_uuid
+    ):
+        from cyberwave.mqtt import pass_message
+        from cyberwave.mqtt.request_response import reply_to
+
+        prefix = mqtt_endpoint[2]
+        request_topic = f"{prefix}cyberwave/twin/{scratch_twin_uuid}/planner/request"
+        requester = _v5_client(mqtt_endpoint, "req")
+        responder = _v5_client(mqtt_endpoint, "resp")
+        try:
+
+            def answer(data, message):
+                reply_to(
+                    responder.client,
+                    message,
+                    {"route": ["a", "b"], "goal": data.get("goal")},
+                )
+
+            responder.subscribe(request_topic, pass_message(answer), qos=1)
+            _wait_subscribed(responder)
+
+            reply = requester.request(
+                request_topic,
+                {"goal": "b"},
+                response_topic=(
+                    f"{prefix}cyberwave/twin/{scratch_twin_uuid}/planner/"
+                    f"{requester.client_id}/response"
+                ),
+                timeout_s=20,
+            )
+
+            assert reply == {"route": ["a", "b"], "goal": "b"}
+        finally:
+            requester.disconnect()
+            responder.disconnect()
+
+    def test_request_command_is_answered_with_the_command_contract(
+        self, cyberwave_client, mqtt_endpoint, scratch_twin_uuid
+    ):
+        from cyberwave.mqtt import pass_message
+        from cyberwave.mqtt.command_response import (
+            CommandOutcome,
+            command_topic,
+            publish_command_response,
+        )
+
+        prefix = mqtt_endpoint[2]
+        requester = _v5_client(mqtt_endpoint, "cmdreq")
+        driver = _v5_client(mqtt_endpoint, "driver")
+        try:
+
+            def answer(data, message):
+                publish_command_response(
+                    driver.client,
+                    message,
+                    CommandOutcome.accept(),
+                    twin_uuid=scratch_twin_uuid,
+                    command=data["command"],
+                    topic_prefix=prefix,
+                )
+
+            driver.subscribe(
+                command_topic(scratch_twin_uuid, topic_prefix=prefix),
+                pass_message(answer),
+                qos=1,
+            )
+            _wait_subscribed(driver)
+
+            reply = requester.request_command(scratch_twin_uuid, "arm", timeout_s=20)
+
+            assert reply["status"] == "accepted"
+            assert reply["command"] == "arm"
+        finally:
+            requester.disconnect()
+            driver.disconnect()
 
 
 if __name__ == "__main__":

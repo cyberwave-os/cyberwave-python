@@ -31,6 +31,7 @@ import tempfile
 import time
 import uuid as uuid_lib
 from datetime import datetime, timezone
+from urllib.parse import quote
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -87,7 +88,10 @@ from cyberwave.rest.models.twin_joint_calibration_schema import (
     TwinJointCalibrationSchema,
 )
 
-from .exceptions import CyberwaveAPIError
+from .exceptions import CyberwaveAPIError, CyberwaveError
+
+#: Times ``export_usd_scene`` requests a bundle build before giving up.
+USD_SCENE_BUNDLE_MAX_REQUESTS = 3
 
 EDGE_CONFIGS_KEY = "edge_configs"
 EDGE_CONFIG_INTERNAL_KEYS = {
@@ -382,6 +386,225 @@ class BaseResourceManager:
         except Exception as e:
             self._handle_error(e, f"check slug availability for '{slug}'")
             raise
+
+
+# Hand-written routes (replay-feed README §13) go through the generated client's
+# HTTP layer: ``param_serialize`` applies the session's auth header and the
+# client's ``call_api`` wrapper adds the SDK identity headers and the workspace
+# query parameter, exactly as for the generated operations.
+_JSON_HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
+
+DATA_SOURCES_KEY = "data_sources"
+OPERATING_RANGES_KEY = "operating_ranges"
+SENSOR_STATUS_KEY = "sensor_status"
+
+
+def _error_body(exc: Exception) -> Any:
+    """The parsed JSON body of a transport error, or None when there is none."""
+    data = getattr(exc, "data", None)
+    if isinstance(data, dict):
+        return data
+    body = getattr(exc, "body", None)
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    if not isinstance(body, str) or not body:
+        return None
+    try:
+        return json.loads(body)
+    except ValueError:
+        return None
+
+
+def _api_error(
+    exc: Exception, body: Dict[str, Any], operation: str
+) -> CyberwaveAPIError:
+    """``CyberwaveAPIError`` carrying the backend's ``detail`` and the parsed body."""
+    status = getattr(exc, "status", None)
+    detail = body.get("detail")
+    if not isinstance(detail, str) or not detail:
+        detail = json.dumps(detail) if detail is not None else f"HTTP {status}"
+    error = CyberwaveAPIError(
+        f"Failed to {operation}: {detail}",
+        status_code=int(status) if isinstance(status, int) else None,
+        response_data=body,
+        request_headers=getattr(exc, "request_headers", None),
+    )
+    # Same stash as ``BaseResourceManager._handle_error``, so an outer manager
+    # does not prefix the prefix.
+    error._untranslated_message = detail
+    error.operation = operation
+    return error
+
+
+def _json_request(
+    manager: BaseResourceManager,
+    method: str,
+    resource_path: str,
+    *,
+    operation: str,
+    path_params: Optional[Dict[str, str]] = None,
+    query_params: Optional[List[Tuple[str, Any]]] = None,
+    body: Optional[Dict[str, Any]] = None,
+) -> Any:
+    """Call a hand-written JSON route and return the decoded body.
+
+    Errors raise ``CyberwaveAPIError`` with the backend's ``detail`` as the
+    message and the parsed body as ``response_data``; errors without a JSON
+    body go through ``_handle_error`` like every other manager call.
+    """
+    try:
+        params = manager.api.api_client.param_serialize(
+            method=method,
+            resource_path=resource_path,
+            path_params=path_params,
+            query_params=query_params,
+            header_params=dict(_JSON_HEADERS),
+            body=body,
+            auth_settings=["CustomTokenAuthentication"],
+        )
+        response = manager.api.api_client.call_api(*params)
+        response.read()
+        return manager.api.api_client.response_deserialize(
+            response_data=response,
+            response_types_map={"200": "object", "201": "object"},
+        ).data
+    except Exception as exc:
+        error_body = None if isinstance(exc, CyberwaveAPIError) else _error_body(exc)
+        if isinstance(error_body, dict):
+            raise _api_error(exc, error_body, operation) from exc
+        manager._handle_error(exc, operation)
+        raise  # For type checker
+
+
+def _iso_utc(value: Union[str, datetime]) -> str:
+    """ISO-8601 UTC text with ``Z``; naive datetimes are UTC, strings pass through."""
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return str(value)
+
+
+def _uuid_of(value: Any) -> str:
+    """The uuid of a twin/asset/feed (object or dict), or the given id as text."""
+    if isinstance(value, dict):
+        value = value.get("uuid", value)
+    return str(getattr(value, "uuid", None) or value)
+
+
+def _twin_metadata(twin: Any) -> Dict[str, Any]:
+    """``metadata`` of a twin schema or dict, as a dict."""
+    if isinstance(twin, dict):
+        metadata = twin.get("metadata")
+    else:
+        metadata = getattr(twin, "metadata", None)
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _range_bound(value: Any, name: str) -> Optional[float]:
+    """A finite number or None; anything else is a caller error."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a number or None, got {value!r}")
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"{name} must be finite, got {value!r}")
+    return number
+
+
+OPERATING_RANGE_OFF: Dict[str, bool] = {"enabled": False}
+"""The override entry that switches a slot's range off for one twin (README §16.1)."""
+
+ALERT_ACTION_KEY = "alert_action"
+ALERT_ACTION_KINDS = ("none", "color", "marker")
+"""``metadata.alert_action.kind`` (replay-feed README §16.5): what the scene
+shows while the twin, or a docked descendant, has a sensor out of range."""
+
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _alert_color(value: Any) -> str:
+    """A ``#rrggbb`` colour, lower-cased; anything else is a caller error."""
+    if not isinstance(value, str) or not _HEX_COLOR.match(value):
+        raise ValueError(f"color must be '#rrggbb', got {value!r}")
+    return value.lower()
+
+
+def _normalize_alert_action(raw: Any) -> Dict[str, Any]:
+    """``metadata.alert_action`` as ``{"kind", "color"?}``; junk reads as none."""
+    if not isinstance(raw, dict) or raw.get("kind") not in ALERT_ACTION_KINDS:
+        return {"kind": "none"}
+    action: Dict[str, Any] = {"kind": raw["kind"]}
+    color = raw.get("color")
+    if isinstance(color, str) and _HEX_COLOR.match(color):
+        action["color"] = color.lower()
+    return action
+
+
+def _normalize_operating_ranges(raw: Any) -> Dict[str, Dict[str, Any]]:
+    """``metadata.operating_ranges`` as ``{slot: {"min", "max"}}`` or
+    ``{slot: {"enabled": False}}``; junk entries dropped.
+
+    An entry whose bounds are both null, not numbers or inverted carries no
+    range (the backend resolver ignores it too), so it is left out.
+    """
+    normalized: Dict[str, Dict[str, Any]] = {}
+    if not isinstance(raw, dict):
+        return normalized
+    for slot, entry in raw.items():
+        if not isinstance(slot, str) or not slot or not isinstance(entry, dict):
+            continue
+        if entry.get("enabled") is False:
+            normalized[slot] = dict(OPERATING_RANGE_OFF)
+            continue
+        try:
+            low = _range_bound(entry.get("min"), "min")
+            high = _range_bound(entry.get("max"), "max")
+        except ValueError:
+            continue
+        if low is None and high is None:
+            continue
+        if low is not None and high is not None and low > high:
+            continue
+        normalized[slot] = {"min": low, "max": high}
+    return normalized
+
+
+def _normalize_data_sources(raw: Any) -> Dict[str, Dict[str, Any]]:
+    """Bindings in the v2 shape of replay-feed README §1, legacy entries converted.
+
+    ``{"source": "replay"}`` reads as ``use_recorded: true``; entries without a
+    dataset and a channel are dropped; ``allow_type_mismatch`` (§11) is kept.
+    """
+    normalized: Dict[str, Dict[str, Any]] = {}
+    if not isinstance(raw, dict):
+        return normalized
+    for slot, entry in raw.items():
+        if not isinstance(slot, str) or not slot or not isinstance(entry, dict):
+            continue
+        dataset_uuid = entry.get("dataset_uuid")
+        channel_id = entry.get("channel_id")
+        if not (isinstance(dataset_uuid, str) and dataset_uuid):
+            continue
+        if not (isinstance(channel_id, str) and channel_id):
+            continue
+        use_recorded = entry.get("use_recorded")
+        if not isinstance(use_recorded, bool):
+            use_recorded = entry.get("source") == "replay"
+        binding: Dict[str, Any] = {
+            "dataset_uuid": dataset_uuid,
+            "channel_id": channel_id,
+            "use_recorded": use_recorded,
+        }
+        for key in ("label", "unit", "type"):
+            value = entry.get(key)
+            if isinstance(value, str) and value:
+                binding[key] = value
+        if entry.get("allow_type_mismatch") is True:
+            binding["allow_type_mismatch"] = True
+        normalized[slot] = binding
+    return normalized
 
 
 class WorkspaceManager(BaseResourceManager):
@@ -870,6 +1093,8 @@ class EnvironmentManager(BaseResourceManager):
         *,
         position: Optional[Dict[str, Any]] = None,
         rotation: Optional[Dict[str, Any]] = None,
+        reference_frame: Optional[Dict[str, Any]] = None,
+        joint_state_source: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update a waypoint's stored position/rotation offset.
 
@@ -878,6 +1103,21 @@ class EnvironmentManager(BaseResourceManager):
         waypoint's reference frame. Fields left as ``None`` are untouched
         server-side (a true partial update), so e.g. passing only
         ``position`` leaves the current rotation as-is.
+
+        ``reference_frame`` names the frame ``position``/``rotation`` are
+        expressed in, and the server converts them into the frame the
+        waypoint was defined in: ``{"type": "environment"}``,
+        ``{"type": "twin_link", "twin_uuid": ..., "link": ...}`` (``link``
+        omitted = the twin root) or ``{"type": "waypoint", "waypoint_id":
+        ...}``. Leave it as ``None`` when the pose is already relative to the
+        waypoint's own frame.
+
+        ``joint_state_source`` (``"live"`` or ``"simulation"``) is needed when
+        the conversion passes through a link the robot's joints move, such as a
+        wrist camera: the server places that link from the robot's measured
+        joint positions at the time of the call, read from the real robot or
+        the simulation. Keep the arm still between capturing the pose and
+        calling this.
 
         A pose that is passed must carry every axis. The generated model
         substitutes the OpenAPI default of ``0.0`` for a missing one, and the
@@ -908,6 +1148,25 @@ class EnvironmentManager(BaseResourceManager):
             update_fields[name] = value
         if not update_fields:
             raise ValueError("update_waypoint requires position and/or rotation")
+        if reference_frame is not None:
+            frame_type = (
+                reference_frame.get("type")
+                if isinstance(reference_frame, dict)
+                else None
+            )
+            if frame_type not in ("environment", "twin_link", "waypoint"):
+                raise ValueError(
+                    "update_waypoint reference_frame must be a dict with a "
+                    "'type' of 'environment', 'twin_link' or 'waypoint'"
+                )
+            update_fields["reference_frame"] = reference_frame
+        if joint_state_source is not None:
+            if joint_state_source not in ("live", "simulation"):
+                raise ValueError(
+                    "update_waypoint joint_state_source must be 'live' or "
+                    f"'simulation', got {joint_state_source!r}"
+                )
+            update_fields["joint_state_source"] = joint_state_source
 
         try:
             # Lazy import: schema may be absent from a generated rest client that
@@ -915,6 +1174,19 @@ class EnvironmentManager(BaseResourceManager):
             # import would break the whole SDK.
             from cyberwave.rest import EnvironmentWaypointPositionUpdateSchema
 
+            # A generated model that predates ``reference_frame`` would drop the
+            # key and the server would store the pose unconverted — in the wrong
+            # place, reported as success. Refuse instead.
+            model_fields = getattr(
+                EnvironmentWaypointPositionUpdateSchema, "model_fields", {}
+            )
+            for field in ("reference_frame", "joint_state_source"):
+                if field in update_fields and field not in model_fields:
+                    raise RuntimeError(
+                        "This SDK's REST client predates waypoint reference "
+                        f"frames; upgrade cyberwave to pass {field} to "
+                        "update_waypoint"
+                    )
             payload = EnvironmentWaypointPositionUpdateSchema.from_dict(update_fields)
             return (
                 self.api.src_app_api_environments_update_environment_waypoint_position(
@@ -926,6 +1198,70 @@ class EnvironmentManager(BaseResourceManager):
                 e, f"update waypoint {waypoint_id} in environment {environment_id}"
             )
             raise
+
+    def resolve_waypoint_poses(
+        self,
+        environment_id: str,
+        waypoint_ids: List[str],
+        *,
+        mode: str,
+        twin_uuid: Optional[str] = None,
+        link: Optional[str] = None,
+        root_link: Optional[str] = None,
+        tool_offset_position: Optional[Dict[str, float]] = None,
+        tool_offset_rotation: Optional[Dict[str, float]] = None,
+    ) -> List[Dict[str, Any]]:
+        """The current poses of the waypoints a Move Twin node drives to.
+
+        Calls ``POST /api/v1/environments/{uuid}/waypoint-poses``. Compiled edge
+        workflows call this when a Move Twin node runs, so a waypoint moved since
+        the workflow was compiled (e.g. by a Move Waypoint node earlier in the
+        run) is driven to where it is now.
+
+        ``mode`` is ``"environment"`` (environment poses), ``"root"`` (rebased
+        into a fixed arm's ``root_link``) or ``"twin_link"`` (offsets from
+        ``link`` of ``twin_uuid``, with the tool offset applied). Returns one
+        ``{"id", "position": {x, y, z}, "rotation": {w, x, y, z} | None}`` per
+        id, in order.
+        """
+        if mode not in ("environment", "root", "twin_link"):
+            raise ValueError(
+                "resolve_waypoint_poses mode must be 'environment', 'root' or "
+                f"'twin_link', got {mode!r}"
+            )
+        request = {
+            key: value
+            for key, value in {
+                "waypoint_ids": list(waypoint_ids),
+                "mode": mode,
+                "twin_uuid": twin_uuid,
+                "link": link,
+                "root_link": root_link,
+                "tool_offset_position": tool_offset_position,
+                "tool_offset_rotation": tool_offset_rotation,
+            }.items()
+            if value is not None
+        }
+        try:
+            # Lazy import: a generated rest client that predates the endpoint
+            # lacks the schema, and a top-level import would break the SDK.
+            from cyberwave.rest import EnvironmentWaypointPosesRequestSchema
+
+            payload = EnvironmentWaypointPosesRequestSchema.from_dict(request)
+            poses = self.api.src_app_api_environments_resolve_waypoint_poses(
+                environment_id, payload
+            )
+        except Exception as e:
+            self._handle_error(
+                e, f"resolve waypoint poses in environment {environment_id}"
+            )
+            raise
+        resolved: List[Dict[str, Any]] = []
+        for pose in poses or []:
+            entry = pose.to_dict() if hasattr(pose, "to_dict") else dict(pose)
+            entry.setdefault("rotation", None)
+            resolved.append(entry)
+        return resolved
 
     def delete_waypoint(
         self, environment_id: str, waypoint_id: str
@@ -1135,6 +1471,180 @@ class EnvironmentManager(BaseResourceManager):
                 e, f"export MuJoCo scene for environment {environment_id}"
             )
             raise
+
+    def sensor_sources(self, environment_id: str) -> Dict[str, Any]:
+        """Twin slots bound to recorded channels and their datasets.
+
+        ``GET /api/v1/environments/{uuid}/sensor-sources`` (replay-feed README
+        §2 and §11): ``{"twins": [{"twin_uuid", "twin_name", "thing_id",
+        "slots": [{"slot", "dataset_uuid", "channel_id", "label", "unit",
+        "type", "use_recorded", "dataset_missing", "type_mismatch",
+        "unit_mismatch", "allow_type_mismatch"}]}], "datasets": [{"uuid",
+        "name", "time_range"}]}``. Twins without a binding are omitted.
+        """
+        return _json_request(
+            self,
+            "GET",
+            "/api/v1/environments/{uuid}/sensor-sources",
+            path_params={"uuid": str(environment_id)},
+            operation=f"get sensor sources of environment {environment_id}",
+        )
+
+    def auto_bind(
+        self,
+        environment_id: str,
+        dataset_id: str,
+        twin_ids: Optional[List[Any]] = None,
+        include_docked_children: bool = False,
+        template: Optional[Dict[str, str]] = None,
+        use_recorded: bool = True,
+        overwrite: bool = False,
+    ) -> Dict[str, Any]:
+        """Bind sensor slots to a dataset's channels by ``thing_id``.
+
+        ``POST /api/v1/environments/{uuid}/sensor-bindings/auto`` (replay-feed
+        README §12). For every twin (default: each twin of the environment with
+        a ``thing_id``; ``include_docked_children`` adds the docked children of
+        the listed twins) and every scalar slot named in ``template`` (slot id
+        to signal, default: the dataset's ``slot_template``) the channel
+        ``<signal>/<thing_id>`` is attached when the catalog has it. Slots
+        already bound are skipped unless ``overwrite``; ``use_recorded`` is
+        written on every new binding.
+
+        Returns the report ``{"twins": [{"twin_uuid", "twin_name",
+        "thing_id", "bound": [{"slot", "channel_id"}], "skipped": [{"slot",
+        "reason"}]}], "bound": n, "skipped": m}``. 422 (no template anywhere,
+        dataset without time-series data) raises ``CyberwaveAPIError``.
+        """
+        body: Dict[str, Any] = {
+            "dataset_uuid": str(dataset_id),
+            "include_docked_children": bool(include_docked_children),
+            "use_recorded": bool(use_recorded),
+            "overwrite": bool(overwrite),
+        }
+        if twin_ids is not None:
+            body["twin_uuids"] = [_uuid_of(twin) for twin in twin_ids]
+        if template is not None:
+            body["template"] = dict(template)
+        return _json_request(
+            self,
+            "POST",
+            "/api/v1/environments/{uuid}/sensor-bindings/auto",
+            path_params={"uuid": str(environment_id)},
+            body=body,
+            operation=f"auto-bind sensors of environment {environment_id}",
+        )
+
+    def export_usd_scene(
+        self,
+        environment_id: str,
+        output_path: Optional[str] = None,
+        *,
+        timeout: float = 300.0,
+        poll_interval: float = 3.0,
+    ) -> bytes:
+        """
+        Export environment as a USD scene (the Isaac Sim scene bundle).
+
+        Downloads a tar archive containing:
+        - manifest.json: The bundle manifest (digest, files, physics settings)
+        - the USD stage and every file it references
+
+        The bundle is the one Isaac Sim simulations load. It is built by a
+        background worker once per environment revision, so the first export of
+        a revision waits for the build and later exports download it straight
+        away. Requires the Isaac Sim feature for the organization.
+
+        Args:
+            environment_id: UUID of the environment
+            output_path: Optional path to save the tar file. If None, returns bytes.
+            timeout: Seconds to wait for the background build before giving up.
+            poll_interval: Seconds between checks while the build is running.
+
+        Returns:
+            Tar archive contents as bytes
+
+        Raises:
+            SimulationBackendError: the server refused the export, either because
+                Isaac Sim is not enabled for the organization
+                (``simulation_backend_not_enabled``) or because the scene cannot
+                be converted (``simulation_backend_incompatible``); ``reasons``
+                and ``blocking_assets`` say what to fix.
+            CyberwaveAPIError: if the build fails or does not finish in time.
+
+        Example:
+            cw.environments.export_usd_scene(env_id, "scene_usd.tar")
+        """
+        try:
+            deadline = time.monotonic() + timeout
+            requests = 0
+            preflight = self.simulations.preflight(environment_id, backend="isaac")
+            bundle = preflight.get("bundle") or {}
+            while True:
+                status = bundle.get("status")
+                digest = bundle.get("digest")
+                if status == "ready" and digest:
+                    break
+                # A failure that predates this call may be stale (the bundle is
+                # rebuilt on request); one that follows our own request is not.
+                if status == "failed" and requests > 0:
+                    raise _scene_bundle_build_failed(bundle)
+                if status != "pending":
+                    if requests >= USD_SCENE_BUNDLE_MAX_REQUESTS:
+                        raise CyberwaveAPIError("the scene bundle could not be requested")
+                    requests += 1
+                    requested = self.simulations.request_scene_bundle(environment_id)
+                    if requested.get("status") == "ready" and requested.get("digest"):
+                        digest = requested["digest"]
+                        break
+                    # The server answers a request with a recent failure as is
+                    # rather than rebuilding it, so polling would only re-read
+                    # it. The reply carries no error; the preflight read has it.
+                    if requested.get("status") == "failed":
+                        raise _scene_bundle_build_failed(bundle, recent=True)
+
+                if time.monotonic() >= deadline:
+                    raise CyberwaveAPIError(
+                        f"Timed out after {timeout:g}s waiting for the scene bundle build"
+                    )
+                time.sleep(poll_interval)
+                preflight = self.simulations.preflight(environment_id, backend="isaac")
+                bundle = preflight.get("bundle") or {}
+
+            tar_bytes = self._fetch_export_url(
+                f"/api/v1/environments/{quote(str(environment_id), safe='')}"
+                f"/simulation/scene-bundles/{quote(str(digest), safe='')}/archive"
+            )
+
+            if output_path:
+                with open(output_path, "wb") as f:
+                    f.write(tar_bytes)
+            return tar_bytes
+        except Exception as e:
+            # SimulationBackendError (and the other refusals the simulation
+            # manager raises) already name the cause; keep their type and code.
+            if isinstance(e, CyberwaveError) and not isinstance(e, CyberwaveAPIError):
+                raise
+            self._handle_error(e, f"export USD scene for environment {environment_id}")
+            raise
+
+
+def _scene_bundle_build_failed(
+    bundle: Dict[str, Any], *, recent: bool = False
+) -> CyberwaveAPIError:
+    """The error for a failed scene bundle build, worded for ``_handle_error``.
+
+    ``_handle_error`` prefixes "Failed to export USD scene for environment X:",
+    so the message carries only the cause.
+    """
+    error = bundle.get("error") or {}
+    detail = error.get("detail") or "the scene bundle build failed"
+    if recent:
+        detail = (
+            f"{detail} (a recent build failed; the server rebuilds it once that "
+            "failure is a few minutes old, or sooner after the scene changes)"
+        )
+    return CyberwaveAPIError(detail, response_data=error or None)
 
 
 class AttachmentManager(BaseResourceManager):
@@ -2655,6 +3165,198 @@ class TwinManager(BaseResourceManager):
             self._handle_error(e, f"update twin {twin_id}")
             raise  # For type checker
 
+    def data_sources(self, twin_id: str) -> Dict[str, Dict[str, Any]]:
+        """The twin's sensor bindings, slot id to v2 entry (replay-feed README §1).
+
+        ``{"inlet_temperature": {"dataset_uuid", "channel_id", "use_recorded",
+        "label"?, "unit"?, "type"?, "allow_type_mismatch"?}}``. Legacy entries
+        come back in the v2 shape; a slot without an entry is fed by the
+        environment.
+        """
+        metadata = _twin_metadata(self.get_raw(twin_id))
+        return _normalize_data_sources(metadata.get(DATA_SOURCES_KEY))
+
+    def _write_data_sources(
+        self, twin_id: str, sources: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """PUT the whole map (top-level metadata keys merge) and return the stored one."""
+        updated = self.update(twin_id, metadata={DATA_SOURCES_KEY: sources})
+        stored = _twin_metadata(updated).get(DATA_SOURCES_KEY)
+        if isinstance(stored, dict):
+            return _normalize_data_sources(stored)
+        return sources
+
+    def bind_sensor(
+        self,
+        twin_id: str,
+        slot: str,
+        dataset_id: str,
+        channel_id: str,
+        use_recorded: bool = True,
+        allow_type_mismatch: bool = False,
+        label: Optional[str] = None,
+        unit: Optional[str] = None,
+        type: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Attach a recorded channel to a sensor slot; returns the twin's bindings.
+
+        Reads the map, replaces the slot's entry and writes the whole map back
+        with ``PUT /api/v1/twins/{uuid}``, where the backend checks the dataset,
+        the channel and the type gate (replay-feed README §11): a refusal raises
+        ``CyberwaveAPIError`` with its reason, ``allow_type_mismatch`` overrides
+        the gate. ``use_recorded`` switches "Use recorded data" on, so the
+        channel replaces the slot's live input in Live and Simulate; off, the
+        binding is used by Replay mode only.
+        """
+        entry: Dict[str, Any] = {
+            "dataset_uuid": str(dataset_id),
+            "channel_id": channel_id,
+            "use_recorded": bool(use_recorded),
+        }
+        for key, value in (("label", label), ("unit", unit), ("type", type)):
+            if value:
+                entry[key] = value
+        if allow_type_mismatch:
+            entry["allow_type_mismatch"] = True
+        sources = self.data_sources(twin_id)
+        sources[slot] = entry
+        return self._write_data_sources(twin_id, sources)
+
+    def unbind_sensor(self, twin_id: str, slot: str) -> Dict[str, Dict[str, Any]]:
+        """Detach the slot's channel (the environment feeds it again); returns the bindings."""
+        sources = self.data_sources(twin_id)
+        if slot not in sources:
+            return sources
+        del sources[slot]
+        return self._write_data_sources(twin_id, sources)
+
+    def set_thing_id(self, twin_id: str, thing_id: str) -> TwinSchema:
+        """Set ``metadata.thing_id``, the twin's identity inside datasets.
+
+        The value matches the thing part of channel ids (replay-feed README
+        §12), e.g. ``node=960`` for ``ipmi/ambient/node=960``; ``auto_bind``
+        uses it to pick the twin's channels.
+        """
+        return self.update(twin_id, metadata={"thing_id": thing_id})
+
+    def operating_ranges(self, twin_id: str) -> Dict[str, Dict[str, Any]]:
+        """The twin's operating-range overrides, slot id to ``{"min", "max"}``
+        or ``{"enabled": False}`` for a switched-off slot.
+
+        ``metadata.operating_ranges`` (replay-feed README §16): a slot without
+        an entry takes the range its asset declares, if any.
+        """
+        metadata = _twin_metadata(self.get_raw(twin_id))
+        return _normalize_operating_ranges(metadata.get(OPERATING_RANGES_KEY))
+
+    def _write_operating_ranges(
+        self, twin_id: str, ranges: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """PUT the whole map (top-level metadata keys merge) and return the stored one."""
+        updated = self.update(twin_id, metadata={OPERATING_RANGES_KEY: ranges})
+        stored = _twin_metadata(updated).get(OPERATING_RANGES_KEY)
+        if isinstance(stored, dict):
+            return _normalize_operating_ranges(stored)
+        return ranges
+
+    def set_operating_range(
+        self,
+        twin_id: str,
+        slot: str,
+        min: Optional[float] = None,
+        max: Optional[float] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Override the expected values of a slot; returns the twin's overrides.
+
+        A reading below ``min`` or above ``max`` is flagged ``out_of_range``
+        by the backend (replay-feed README §16); a ``None`` bound leaves that
+        side open. The override replaces the asset default for this twin;
+        ``clear_operating_range`` restores it. Reads the map, replaces the
+        slot's entry and writes the whole map back with
+        ``PUT /api/v1/twins/{uuid}``.
+        """
+        low = _range_bound(min, "min")
+        high = _range_bound(max, "max")
+        if low is None and high is None:
+            raise ValueError(
+                "give at least one bound; use clear_operating_range to remove "
+                "the override"
+            )
+        if low is not None and high is not None and low > high:
+            raise ValueError(f"min ({low}) must not exceed max ({high})")
+        ranges = self.operating_ranges(twin_id)
+        ranges[slot] = {"min": low, "max": high}
+        return self._write_operating_ranges(twin_id, ranges)
+
+    def clear_operating_range(
+        self, twin_id: str, slot: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """Remove the slot's override or off switch (the asset default applies
+        again); returns the overrides."""
+        ranges = self.operating_ranges(twin_id)
+        if slot not in ranges:
+            return ranges
+        del ranges[slot]
+        return self._write_operating_ranges(twin_id, ranges)
+
+    def disable_operating_range(
+        self, twin_id: str, slot: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """Switch the slot's range off for this twin: the asset default is
+        ignored and readings are never flagged (README §16.1). Stores
+        ``{"enabled": false}``; ``clear_operating_range`` switches it back on.
+        """
+        ranges = self.operating_ranges(twin_id)
+        if ranges.get(slot) == OPERATING_RANGE_OFF:
+            return ranges
+        ranges[slot] = dict(OPERATING_RANGE_OFF)
+        return self._write_operating_ranges(twin_id, ranges)
+
+    def sensor_status(self, twin_id: str) -> Optional[Dict[str, Any]]:
+        """``metadata.sensor_status`` as the backend last wrote it, or None.
+
+        ``{"out_of_range": [<slot ids, sorted>], "checked_at": iso}``,
+        recomputed over all stored readings whenever readings are stored
+        (replay-feed README §16).
+        """
+        status = _twin_metadata(self.get_raw(twin_id)).get(SENSOR_STATUS_KEY)
+        return status if isinstance(status, dict) else None
+
+    def alert_action(self, twin_id: str) -> Dict[str, Any]:
+        """``metadata.alert_action`` (replay-feed README §16.5): what the scene
+        shows while a sensor of the twin, or of a docked descendant, is out of
+        range. ``{"kind": "none" | "color" | "marker", "color": "#rrggbb"}``;
+        absent or unusable reads as ``{"kind": "none"}``.
+        """
+        metadata = _twin_metadata(self.get_raw(twin_id))
+        return _normalize_alert_action(metadata.get(ALERT_ACTION_KEY))
+
+    def set_alert_action(
+        self, twin_id: str, kind: str, color: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Set what the scene shows while the twin alerts; returns the stored action.
+
+        ``kind`` is ``"none"`` (nothing), ``"color"`` (tint the twin's meshes
+        with ``color``) or ``"marker"`` (a pulsing "!" above the twin). The
+        backend stores the value and the frontend interprets it; a parent such
+        as a rack alerts when a docked child does. Writes the top-level
+        ``alert_action`` key with ``PUT /api/v1/twins/{uuid}``.
+        """
+        if kind not in ALERT_ACTION_KINDS:
+            raise ValueError(
+                f"kind must be one of {', '.join(ALERT_ACTION_KINDS)}, got {kind!r}"
+            )
+        action: Dict[str, Any] = {"kind": kind}
+        if kind == "color":
+            if color is None:
+                raise ValueError("kind 'color' needs a color ('#rrggbb')")
+            action["color"] = _alert_color(color)
+        elif color is not None:
+            action["color"] = _alert_color(color)
+        updated = self.update(twin_id, metadata={ALERT_ACTION_KEY: action})
+        stored = _twin_metadata(updated).get(ALERT_ACTION_KEY)
+        return _normalize_alert_action(stored) if isinstance(stored, dict) else action
+
     def set_flight_request(
         self,
         twin_id: str,
@@ -2902,6 +3604,78 @@ class TwinManager(BaseResourceManager):
             operations=operations,
             description=f"batch patch universal schema for twin {twin_id}",
         )
+
+    def report_camera_info(
+        self,
+        twin_id: str,
+        sensor_name: str,
+        *,
+        width: int,
+        height: int,
+        fx: float,
+        fy: float,
+        cx: float,
+        cy: float,
+    ) -> Dict[str, Any]:
+        """
+        Report a camera's measured resolution and intrinsics (ROS ``camera_info``).
+
+        Drivers call this with the calibration of the stream they publish, so the
+        twin's sensor declares what the camera really uses, and Object Pose and
+        the simulated camera read the same values. Idempotent: a report matching
+        the sensor changes nothing.
+
+        Args:
+            twin_id: UUID of the twin
+            sensor_name: The camera's sensor name, e.g. ``"wrist_color_camera"``
+            width: Stream width in pixels
+            height: Stream height in pixels
+            fx: Focal length along x in pixels (``camera_info.k[0]``)
+            fy: Focal length along y in pixels (``camera_info.k[4]``)
+            cx: Principal point x in pixels (``camera_info.k[2]``)
+            cy: Principal point y in pixels (``camera_info.k[5]``)
+
+        Returns:
+            Dict with keys ``changed``, ``sensor`` and ``parameters``.
+
+        Example:
+            cw.twins.report_camera_info(
+                twin_id, "wrist_color_camera",
+                width=640, height=480, fx=653.68, fy=651.86, cx=311.75, cy=232.40,
+            )
+        """
+        body = {
+            "width": int(width),
+            "height": int(height),
+            "fx": float(fx),
+            "fy": float(fy),
+            "cx": float(cx),
+            "cy": float(cy),
+        }
+        try:
+            # By raw path, for the reason ``_patch_universal_schema_batch`` gives.
+            _param = self.api.api_client.param_serialize(
+                method="POST",
+                resource_path="/api/v1/twins/{uuid}/sensors/{name}/camera-info",
+                path_params={"uuid": twin_id, "name": sensor_name},
+                body=body,
+                header_params={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                auth_settings=["CustomTokenAuthentication"],
+            )
+            response_data = self.api.api_client.call_api(*_param)
+            response_data.read()
+            return self.api.api_client.response_deserialize(
+                response_data=response_data,
+                response_types_map={"200": "object"},
+            ).data
+        except Exception as e:
+            self._handle_error(
+                e, f"report camera_info for twin {twin_id} sensor {sensor_name}"
+            )
+            raise
 
     # =========================================================================
     # Edge Device Pairing
@@ -3621,6 +4395,85 @@ class DatasetManager(BaseResourceManager):
             self._handle_error(e, f"delete dataset {dataset_id}")
             raise  # For type checker
 
+    def channels(
+        self,
+        dataset_id: str,
+        q: Optional[str] = None,
+        type: Optional[str] = None,
+        signal: Optional[str] = None,
+        thing: Optional[str] = None,
+        include_hidden: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Search the channels of a time-series dataset (timeseries README §5).
+
+        ``GET /api/v1/datasets/{uuid}/timeseries/channels``. Every token of
+        ``q`` must appear in ``channel_id label unit type``; ``type``,
+        ``signal`` and ``thing`` match exactly. Returns the page
+        ``{"items": [{"channel_id", "signal", "thing", "type", "unit", "label",
+        "hidden", "first_time", "last_time", "count"}], "total", "limit",
+        "offset"}``; the backend caps ``limit`` at 200. 409 raises
+        ``CyberwaveAPIError`` when the dataset has no time-series data.
+        """
+        query: List[Tuple[str, Any]] = [
+            ("include_hidden", bool(include_hidden)),
+            ("limit", int(limit)),
+            ("offset", int(offset)),
+        ]
+        for key, value in (
+            ("q", q),
+            ("type", type),
+            ("signal", signal),
+            ("thing", thing),
+        ):
+            if value is not None:
+                query.append((key, value))
+        return _json_request(
+            self,
+            "GET",
+            "/api/v1/datasets/{uuid}/timeseries/channels",
+            path_params={"uuid": str(dataset_id)},
+            query_params=query,
+            operation=f"list channels of dataset {dataset_id}",
+        )
+
+    def rows(
+        self,
+        dataset_id: str,
+        channels: Union[str, List[str]],
+        start: Union[str, datetime],
+        end: Union[str, datetime],
+        limit: int = 100000,
+    ) -> Dict[str, Any]:
+        """Readings of up to 200 channels with ``start <= time < end`` (timeseries README §5).
+
+        ``GET /api/v1/datasets/{uuid}/timeseries/rows``. ``start`` and ``end``
+        are ISO-8601 strings or datetimes (naive values are UTC). Returns
+        ``{"rows": [{"time", "channel", "value"}], "count", "truncated"}``
+        sorted by ``(time, channel)``; ``truncated`` means ``limit`` was hit,
+        so narrow the window. Unknown channels are ignored.
+        """
+        channel_ids = (
+            [channels] if isinstance(channels, str) else [str(c) for c in channels]
+        )
+        if not 1 <= len(channel_ids) <= 200:
+            raise ValueError("rows() takes 1 to 200 channels per request")
+        query: List[Tuple[str, Any]] = [("channel", c) for c in channel_ids]
+        query += [
+            ("start", _iso_utc(start)),
+            ("end", _iso_utc(end)),
+            ("limit", int(limit)),
+        ]
+        return _json_request(
+            self,
+            "GET",
+            "/api/v1/datasets/{uuid}/timeseries/rows",
+            path_params={"uuid": str(dataset_id)},
+            query_params=query,
+            operation=f"read rows of dataset {dataset_id}",
+        )
+
     def visualize(self, dataset: "DatasetSchema | str") -> str:
         """Return the frontend URL to visualize this dataset in a browser.
 
@@ -4159,3 +5012,266 @@ class DatasetManager(BaseResourceManager):
                 f"Signed dataset upload failed with status code {status}",
                 status_code=status,
             )
+
+
+class ReplayFeedManager(BaseResourceManager):
+    """Recorded data feeds of an environment (replay-feed README §3.2).
+
+    A feed is the backend task that plays the channels bound with
+    ``use_recorded`` into the environment's twins as live metrics. Every
+    method returns the feed as a dict (``ReplayFeedSchema``: ``uuid``,
+    ``status`` queued|playing|paused|stopped|finished|failed, ``run_id``,
+    ``start``, ``end``, ``speed``, ``loop``, ``data_time``, ``source_type``,
+    ``stop_reason``, ``messages_sent``, ``bindings``, ...). ``feed_id`` takes
+    such a dict or the feed's uuid.
+    """
+
+    _FEEDS = "/api/v1/environments/{uuid}/replay-feeds"
+    _FEED = "/api/v1/environments/{uuid}/replay-feeds/{feed_uuid}"
+
+    def _request(
+        self,
+        method: str,
+        resource_path: str,
+        environment_id: str,
+        operation: str,
+        feed_id: Optional[str] = None,
+        body: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        path_params = {"uuid": str(environment_id)}
+        if feed_id is not None:
+            path_params["feed_uuid"] = _uuid_of(feed_id)
+        return _json_request(
+            self,
+            method,
+            resource_path,
+            path_params=path_params,
+            body=body,
+            operation=operation,
+        )
+
+    def start(
+        self,
+        environment_id: str,
+        start: Union[str, datetime],
+        end: Optional[Union[str, datetime]] = None,
+        speed: float = 1.0,
+        loop: bool = False,
+        run_id: Optional[str] = None,
+        source_type: str = "auto",
+        **options: Any,
+    ) -> Dict[str, Any]:
+        """Start a feed at data time ``start``, replacing the environment's active one.
+
+        ``start``/``end`` are ISO-8601 strings or datetimes (naive = UTC);
+        ``end`` defaults to the end of coverage. ``speed`` is the playback
+        factor, ``loop`` restarts at ``start`` instead of finishing,
+        ``source_type`` is ``"auto"`` (``sim`` while a simulation runs, else
+        ``edge``), ``"edge"`` or ``"sim"``. Extra keywords (``max_duration_s``,
+        ``tick_seconds``) go into the body as they are. 422 (no slot uses
+        recorded data, a dataset missing, ``end <= start``) raises
+        ``CyberwaveAPIError`` with the backend's reason.
+        """
+        body: Dict[str, Any] = {
+            "start": _iso_utc(start),
+            "speed": float(speed),
+            "loop": bool(loop),
+            "source_type": source_type,
+        }
+        if end is not None:
+            body["end"] = _iso_utc(end)
+        if run_id:
+            body["run_id"] = run_id
+        body.update(options)
+        return self._request(
+            "POST",
+            self._FEEDS,
+            environment_id,
+            f"start replay feed in environment {environment_id}",
+            body=body,
+        )
+
+    def current(self, environment_id: str) -> Dict[str, Any]:
+        """The non-terminal feed, else the most recent one; 404 raises when there is none."""
+        return self._request(
+            "GET",
+            self._FEEDS + "/current",
+            environment_id,
+            f"get current replay feed of environment {environment_id}",
+        )
+
+    def get(self, environment_id: str, feed_id: str) -> Dict[str, Any]:
+        """One feed of the environment by uuid."""
+        return self._request(
+            "GET",
+            self._FEED,
+            environment_id,
+            f"get replay feed {feed_id}",
+            feed_id=feed_id,
+        )
+
+    def pause(self, environment_id: str, feed_id: str) -> Dict[str, Any]:
+        """Pause a playing feed (409 when it is not playing)."""
+        return self._request(
+            "POST",
+            self._FEED + "/pause",
+            environment_id,
+            f"pause replay feed {feed_id}",
+            feed_id=feed_id,
+        )
+
+    def resume(self, environment_id: str, feed_id: str) -> Dict[str, Any]:
+        """Resume a paused feed (409 when it is not paused)."""
+        return self._request(
+            "POST",
+            self._FEED + "/resume",
+            environment_id,
+            f"resume replay feed {feed_id}",
+            feed_id=feed_id,
+        )
+
+    def stop(self, environment_id: str, feed_id: str) -> Dict[str, Any]:
+        """Stop a feed; its injected readings are cleared (409 when already ended)."""
+        return self._request(
+            "POST",
+            self._FEED + "/stop",
+            environment_id,
+            f"stop replay feed {feed_id}",
+            feed_id=feed_id,
+        )
+
+
+class AssetKitManager(BaseResourceManager):
+    """Catalog kits (``/api/v1/asset-kits``): a root asset with docked component
+    assets, so an assembly can be dropped into an environment in one step.
+    """
+
+    def __init__(self, api_client: DefaultApi, client: Any = None):
+        super().__init__(api_client)
+        self._client = client
+
+    @property
+    def _assets(self) -> AssetManager:
+        assets = getattr(self._client, "assets", None)
+        return assets if assets is not None else AssetManager(self.api)
+
+    def _resolve_asset_uuid(self, registry_id: str, kind: str) -> str:
+        asset = self._assets.get_by_registry_id(registry_id)
+        if asset is None:
+            raise CyberwaveError(f"{kind} '{registry_id}' not found")
+        return str(asset.uuid)
+
+    def _component_payload(
+        self, component: Dict[str, Any], resolved: Dict[str, str]
+    ) -> Dict[str, Any]:
+        key = component.get("key")
+        if not key:
+            raise ValueError("kit component needs a key")
+        asset_uuid = component.get("asset_uuid")
+        if not asset_uuid:
+            registry_id = component.get("asset_registry_id")
+            if not registry_id:
+                raise ValueError(
+                    f"kit component {key!r} needs asset_uuid or asset_registry_id"
+                )
+            if registry_id not in resolved:
+                resolved[registry_id] = self._resolve_asset_uuid(registry_id, "Asset")
+            asset_uuid = resolved[registry_id]
+        payload: Dict[str, Any] = {"key": key, "asset_uuid": str(asset_uuid)}
+        for field in ("name", "parent_key", "attach_to_link"):
+            if component.get(field):
+                payload[field] = component[field]
+        position = component.get("position")
+        if position is not None:
+            if len(position) != 3:
+                raise ValueError(f"kit component {key!r}: position must be [x, y, z]")
+            payload["position"] = [float(v) for v in position]
+        rotation = component.get("rotation")
+        if rotation is not None:
+            if len(rotation) != 4:
+                raise ValueError(
+                    f"kit component {key!r}: rotation must be [w, x, y, z]"
+                )
+            payload["rotation"] = [float(v) for v in rotation]
+        return payload
+
+    def create(
+        self,
+        name: str,
+        registry_id: str,
+        components: List[Dict[str, Any]],
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Register a kit and give its asset ``registry_id`` (e.g. ``cyberwave/server-rack-42u-20x2u``).
+
+        ``components`` are ordered parent before child, exactly one without a
+        ``parent_key`` (the root): ``{"key", "asset_registry_id" | "asset_uuid",
+        "parent_key", "attach_to_link", "position": [x, y, z] (metres, relative
+        to the parent link), "rotation": [w, x, y, z], "name"}``. Registry ids
+        are resolved to asset uuids once each. The kit is created with
+        ``POST /api/v1/asset-kits`` and its asset then renamed with the
+        registry id through ``PUT /api/v1/assets/{uuid}``. Returns the kit
+        ``{"asset": {...}, "components": [...]}``.
+        """
+        resolved: Dict[str, str] = {}
+        body: Dict[str, Any] = {
+            "name": name,
+            "description": description or "",
+            "components": [
+                self._component_payload(component, resolved) for component in components
+            ],
+        }
+        workspace_id = getattr(
+            getattr(self._client, "config", None), "workspace_id", None
+        )
+        if workspace_id:
+            body["workspace_uuid"] = str(workspace_id)
+        kit = _json_request(
+            self,
+            "POST",
+            "/api/v1/asset-kits",
+            body=body,
+            operation=f"create asset kit {registry_id}",
+        )
+        asset = kit.get("asset") if isinstance(kit, dict) else None
+        if not isinstance(asset, dict) or not asset.get("uuid"):
+            raise CyberwaveAPIError(
+                f"Failed to create asset kit {registry_id}: unexpected response {kit!r}"
+            )
+        self._assets.update(str(asset["uuid"]), {"registry_id": registry_id})
+        asset["registry_id"] = registry_id
+        return kit
+
+    def instantiate(
+        self,
+        kit_id: str,
+        environment_id: str,
+        position: Optional[List[float]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Add the kit's twins to an environment with their docking layout.
+
+        ``kit_id`` is the kit asset's uuid or registry id; ``position`` places
+        the root twin (``[x, y, z]``, default the origin). Returns the created
+        twins, root first.
+        """
+        kit_uuid = str(kit_id)
+        if not _is_uuid(kit_uuid):
+            kit_uuid = self._resolve_asset_uuid(kit_uuid, "Asset kit")
+        body: Dict[str, Any] = {"environment_uuid": str(environment_id)}
+        if position is not None:
+            if len(position) != 3:
+                raise ValueError("position must contain x, y, z")
+            body.update(
+                zip(
+                    ("position_x", "position_y", "position_z"),
+                    (float(v) for v in position),
+                )
+            )
+        return _json_request(
+            self,
+            "POST",
+            "/api/v1/asset-kits/{uuid}/instantiate",
+            path_params={"uuid": kit_uuid},
+            body=body,
+            operation=f"instantiate asset kit {kit_id}",
+        )

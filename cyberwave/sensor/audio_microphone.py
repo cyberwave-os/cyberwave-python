@@ -33,7 +33,10 @@ from aiortc import (
 from aiortc.mediastreams import AudioStreamTrack, MediaStreamError
 from av import AudioFrame
 
-from .ice import DEFAULT_TURN_SERVERS
+from .answer_subscription import answer_topics, wait_for_subscriptions
+from .ice import DEFAULT_TURN_SERVERS, effective_ice_servers
+from . import peer_close
+from .peer_close import close_peer_connection
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
@@ -237,6 +240,13 @@ class BaseAudioStreamer:
         self._answer_received = False
         self._answer_data: dict[str, Any] | None = None
         self._should_reconnect = False
+        # Set when a monitor reconnect attempt failed and left pc None, so the
+        # monitor keeps retrying instead of waiting for a pc that never comes.
+        self._reconnect_pending = False
+        # Set once the stream has connected (or a start/stop command has taken
+        # over). Until then the run loop retries the first connect; afterwards
+        # every retry belongs to the monitor.
+        self._initial_connect_done = False
         self._is_running = False
         self._monitor_task: asyncio.Task | None = None
         self._event_loop: asyncio.AbstractEventLoop | None = None
@@ -284,11 +294,11 @@ class BaseAudioStreamer:
         except Exception:
             if self.pc is not None:
                 try:
-                    await self.pc.close()
-                    await asyncio.sleep(0.5)
-                except Exception:
-                    pass
-                self.pc = None
+                    await close_peer_connection(
+                        self.pc, settle=0.5, error_log_level=logging.DEBUG
+                    )
+                finally:
+                    self.pc = None
             if self.streamer is not None:
                 try:
                     self.streamer.close()
@@ -320,8 +330,13 @@ class BaseAudioStreamer:
         if self._run_stop_event is not None:
             self._run_stop_event.set()
         if self._run_task is not None:
+            # The run task's own cleanup (its finally block) notices the stop
+            # within 0.5 s, then does one bounded close plus its settle and
+            # the audio track's 0.5 s pause. Outlast it, or this wait cancels
+            # it partway.
+            budget = peer_close.close_budget_s(extra=1.0)
             try:
-                await asyncio.wait_for(self._run_task, timeout=5.0)
+                await asyncio.wait_for(self._run_task, timeout=budget)
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 if not self._run_task.done():
                     self._run_task.cancel()
@@ -335,10 +350,7 @@ class BaseAudioStreamer:
         # Close the WebRTC peer connection and audio track
         if self.pc:
             try:
-                await self.pc.close()
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                logger.error("Error closing peer connection: %s", e)
+                await close_peer_connection(self.pc)
             finally:
                 self.pc = None
         if self.streamer:
@@ -369,11 +381,13 @@ class BaseAudioStreamer:
             self._subscribe_to_answer()
             self._subscribed_to_answer = True
 
+        self._initial_connect_done = self.pc is not None
         if self.pc is None:
             try:
                 _notify(command_callback, "connecting", "Starting audio stream")
                 await self._start_webrtc()
                 self._should_reconnect = self.auto_reconnect
+                self._initial_connect_done = True
                 _notify(command_callback, "ok", "Audio streaming started")
             except Exception as e:
                 logger.error("Auto-start audio stream failed: %s", e, exc_info=True)
@@ -382,23 +396,27 @@ class BaseAudioStreamer:
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
 
+        # Backoff retry only when the *initial* connect failed. Ongoing drops are
+        # handled exclusively by _monitor_connection: its reconnect leaves pc None
+        # for a few seconds, and a second offer here would overwrite (and leak)
+        # the peer connection it is building.
         _next_retry_at = time.monotonic() + 15.0
         _retry_backoff = 30.0
-        _initial_connected = False
 
         try:
             while not stop.is_set() and self._is_running:
                 if (
                     self.pc is None
                     and self.auto_reconnect
-                    and not _initial_connected
+                    and not self._initial_connect_done
+                    and not self._reconnect_pending
                 ):
                     if time.monotonic() >= _next_retry_at:
                         try:
                             logger.info("No active audio stream — retrying offer...")
                             await self._start_webrtc()
                             self._should_reconnect = self.auto_reconnect
-                            _initial_connected = True
+                            self._initial_connect_done = True
                         except Exception as exc:
                             logger.info(
                                 "Audio stream retry failed (%s). Will retry in %.0fs.",
@@ -417,7 +435,9 @@ class BaseAudioStreamer:
 
     async def _setup_webrtc(self) -> None:
         self.streamer = self.initialize_track()
-        ice_servers = [RTCIceServer(**s) for s in self.turn_servers]
+        ice_servers = [
+            RTCIceServer(**s) for s in effective_ice_servers(self.turn_servers)
+        ]
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
         self._setup_pc_handlers()
         self.pc.addTrack(self.streamer)
@@ -445,6 +465,9 @@ class BaseAudioStreamer:
             await asyncio.sleep(0.1)
         sdp = self.pc.localDescription.sdp
         sdp = _strip_non_opus_audio(sdp)
+        await wait_for_subscriptions(
+            self.client, answer_topics(self.client, self.twin_uuid)
+        )
         self._send_offer(sdp)
         await self._wait_for_answer()
 
@@ -575,6 +598,8 @@ class BaseAudioStreamer:
                 return
             await self._start_webrtc()
             self._should_reconnect = self.auto_reconnect
+            self._reconnect_pending = False
+            self._initial_connect_done = True
             _notify(callback, "ok", "Audio streaming started")
         except Exception as e:
             logger.error("Error starting audio stream: %s", e, exc_info=True)
@@ -582,10 +607,15 @@ class BaseAudioStreamer:
 
     async def _handle_stop_command(self, callback: Callable[..., None] | None = None) -> None:
         try:
+            # Before the pc check: between reconnect attempts, and while the
+            # first connect is being retried, pc is None but a retry would
+            # still start the stream the operator just stopped.
+            self._should_reconnect = False
+            self._reconnect_pending = False
+            self._initial_connect_done = True
             if self.pc is None:
                 _notify(callback, "ok", "Audio stream not running")
                 return
-            self._should_reconnect = False
             await self.stop()
             _notify(callback, "ok", "Audio stream stopped")
         except Exception as e:
@@ -601,19 +631,28 @@ class BaseAudioStreamer:
     # -------------------------------------------------------------------------
 
     async def _monitor_connection(self, stop_event: asyncio.Event) -> None:
+        """Reconnect a dropped stream; owns every retry after the first connect.
+
+        A failed attempt leaves pc None, so it is tracked in _reconnect_pending:
+        otherwise the next pass would wait forever for a pc and never reach the
+        backoff and attempt cap. A cancelled reconnect or the cap parks the
+        monitor rather than ending it, so a later start command is watched.
+        """
         reconnect_delay = 2.0
         max_attempts = 10
         attempt = 0
         while not stop_event.is_set() and self._is_running:
-            if not self._should_reconnect or self.pc is None:
+            if not self._should_reconnect or (
+                self.pc is None and not self._reconnect_pending
+            ):
                 await asyncio.sleep(1.0)
                 continue
-            if self._is_connection_lost():
+            if self._reconnect_pending or self._is_connection_lost():
                 attempt = await self._attempt_reconnect(
                     stop_event, attempt, reconnect_delay, max_attempts
                 )
                 if attempt < 0:
-                    break
+                    attempt = 0
             await asyncio.sleep(1.0)
 
     def _is_connection_lost(self) -> bool:
@@ -643,10 +682,7 @@ class BaseAudioStreamer:
         """
         if self.pc is not None:
             try:
-                await self.pc.close()
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                logger.error("Error closing peer connection: %s", e)
+                await close_peer_connection(self.pc)
             finally:
                 self.pc = None
         if self.streamer is not None:
@@ -676,16 +712,20 @@ class BaseAudioStreamer:
                 logger.warning("Error closing connection during reconnect: %s", e)
             await asyncio.sleep(base_delay)
             if not self._should_reconnect or stop_event.is_set():
+                self._reconnect_pending = False
                 return -1
             logger.info("Reconnecting audio stream (attempt %s)...", attempt + 1)
             await self._start_webrtc()
+            self._reconnect_pending = False
             return 0
         except Exception as e:
             attempt += 1
             logger.error("Reconnect attempt failed: %s", e, exc_info=True)
             if attempt >= max_attempts:
                 self._should_reconnect = False
+                self._reconnect_pending = False
                 return -1
+            self._reconnect_pending = True
             await asyncio.sleep(min(base_delay * (2 ** attempt), 30.0))
             return attempt
 

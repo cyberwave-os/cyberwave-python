@@ -36,6 +36,8 @@ from cyberwave.resources import (
     DatasetManager,
     EdgeManager,
     TwinManager,
+    ReplayFeedManager,
+    AssetKitManager,
 )
 from cyberwave.managers.simulations import Simulation, SimulationManager
 from cyberwave.managers.recordings import (
@@ -56,6 +58,8 @@ __all__ = [
     "DatasetManager",
     "EdgeManager",
     "TwinManager",
+    "ReplayFeedManager",
+    "AssetKitManager",
     "SimulationManager",
     "Simulation",
     "RecordingManager",

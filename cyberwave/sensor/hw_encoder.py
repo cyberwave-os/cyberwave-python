@@ -23,6 +23,8 @@ from typing import Dict, Optional, cast
 import av
 from aiortc.codecs.h264 import H264Encoder
 
+from .h264_bitstream import NAL_IDR, ParameterSetCache, nal_type
+
 logger = logging.getLogger(__name__)
 
 ENV_VAR = "CYBERWAVE_VIDEO_ENCODER"
@@ -207,8 +209,7 @@ class HardwareH264Encoder(H264Encoder):
         # them before later IDRs, so WebRTC consumers that join mid-stream get
         # no decoder config and render black. libx264 repeats them in-band, so
         # this is a no-op there. See CYB-2835.
-        self._sps: Optional[bytes] = None
-        self._pps: Optional[bytes] = None
+        self._parameter_sets = ParameterSetCache()
 
     def _fall_back_to_software(self, why: str) -> None:
         logger.error(
@@ -271,48 +272,23 @@ class HardwareH264Encoder(H264Encoder):
 
         data_to_send = b"".join(bytes(p) for p in packages)
         if data_to_send:
-            nals = list(self._split_bitstream(data_to_send))
+            nals = [nal for nal in self._split_bitstream(data_to_send) if nal]
             yield from self._maybe_inject_parameter_sets(nals)
 
     def _maybe_inject_parameter_sets(self, nals: "list[bytes]") -> "list[bytes]":
-        """Cache SPS/PPS and re-inject them before any bare IDR.
+        """Cache SPS/PPS and complete any IDR access unit that lacks them.
 
         ``nals`` are the access unit's NAL units (no start codes), as produced
-        by :meth:`_split_bitstream`. The first byte's low 5 bits are the NAL
-        type: 7=SPS, 8=PPS, 5=IDR. When an IDR arrives without both parameter
-        sets in the same access unit, we prepend the last-seen SPS/PPS so the
+        by :meth:`_split_bitstream`. Missing parameter sets go after a leading
+        AUD, before SEI and slices (see
+        :class:`~cyberwave.sensor.h264_bitstream.ParameterSetCache`), so the
         keyframe is self-contained for mid-stream consumers.
         """
-        has_idr = has_sps = has_pps = False
         for nal in nals:
-            if not nal:
-                continue
-            nal_type = nal[0] & 0x1F
-            if nal_type == 7:
-                self._sps = bytes(nal)
-                has_sps = True
-            elif nal_type == 8:
-                self._pps = bytes(nal)
-                has_pps = True
-            elif nal_type == 5:
-                has_idr = True
-
-        if not has_idr or (has_sps and has_pps):
-            return nals
-        if self._sps is None or self._pps is None:
-            # Never saw parameter sets yet — nothing to inject. Emit as-is.
-            return nals
-
-        out: "list[bytes]" = []
-        injected = False
-        for nal in nals:
-            nal_type = nal[0] & 0x1F if nal else -1
-            if nal_type == 5 and not injected:
-                out.append(self._sps)
-                out.append(self._pps)
-                injected = True
-            out.append(nal)
-        return out
+            self._parameter_sets.remember(nal)
+        if any(nal_type(nal) == NAL_IDR for nal in nals):
+            return self._parameter_sets.complete(nals)
+        return nals
 
 
 _patch_lock = threading.Lock()

@@ -9,6 +9,7 @@ Public API::
     bus.publish("frames", frame_array)
     latest = bus.latest("depth", max_age_ms=50)
     sub = bus.subscribe("joint_states", on_joints)
+    bus.has_subscribers("frames/default")  # True / False / None (unknown)
 
 Or via the high-level client::
 

@@ -292,13 +292,17 @@ def test_default_codec_name_comes_from_selection(
 # Hardware encoders (v4l2m2m on Pi, nvmpi on Jetson) emit SPS/PPS once at
 # stream start and don't repeat them before later IDRs, so WebRTC consumers
 # that join mid-stream never get decoder config and render black. The encoder
-# must cache SPS/PPS and re-inject them before any bare IDR.
+# must cache SPS/PPS and re-inject them into any IDR access unit lacking them,
+# at the same point as the RTP ingest (h264_bitstream.ParameterSetCache): after
+# a leading AUD, before SEI and slices.
 
 # Minimal NAL units: first byte's low 5 bits carry the type.
 _SPS = bytes([0x67, 0x42, 0x00, 0x1F])  # type 7
 _PPS = bytes([0x68, 0xCE, 0x3C, 0x80])  # type 8
 _IDR = bytes([0x65, 0x88, 0x84, 0x00])  # type 5
 _NON_IDR = bytes([0x41, 0x9A, 0x00])  # type 1
+_AUD = bytes([0x09, 0xF0])  # type 9
+_SEI = bytes([0x06, 0x05, 0x01, 0x00, 0x80])  # type 6
 
 
 def _fresh_encoder() -> "hw_encoder.HardwareH264Encoder":
@@ -309,7 +313,8 @@ def test_first_keyframe_with_params_is_cached_not_modified() -> None:
     enc = _fresh_encoder()
     out = enc._maybe_inject_parameter_sets([_SPS, _PPS, _IDR])
     assert out == [_SPS, _PPS, _IDR]
-    assert enc._sps == _SPS and enc._pps == _PPS
+    cache = enc._parameter_sets
+    assert cache.sps == _SPS and cache.pps == _PPS
 
 
 def test_bare_idr_gets_params_prepended_after_caching() -> None:
@@ -333,12 +338,19 @@ def test_bare_idr_without_cached_params_passes_through() -> None:
     assert out == [_IDR]
 
 
-def test_idr_with_only_sps_still_gets_both_reinjected() -> None:
+def test_idr_with_only_sps_gets_the_missing_pps_after_it() -> None:
     enc = _fresh_encoder()
     enc._maybe_inject_parameter_sets([_SPS, _PPS, _IDR])  # cache both
     # A later AU that somehow carries SPS but not PPS is still incomplete.
     out = enc._maybe_inject_parameter_sets([_SPS, _IDR])
-    assert out[-3:] == [_SPS, _PPS, _IDR]
+    assert out == [_SPS, _PPS, _IDR]
+
+
+def test_params_are_injected_after_aud_and_before_sei() -> None:
+    enc = _fresh_encoder()
+    enc._maybe_inject_parameter_sets([_SPS, _PPS, _IDR])  # cache
+    out = enc._maybe_inject_parameter_sets([_AUD, _SEI, _IDR])
+    assert out == [_AUD, _SPS, _PPS, _SEI, _IDR]
 
 
 def test_encode_frame_reinjects_params_on_bare_idr(

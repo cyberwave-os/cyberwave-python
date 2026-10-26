@@ -92,7 +92,7 @@ class DepthSensorHandle(PointCloudCapableMixin, TwinCameraHandle):
         MqttSensorStreamHandle.__init__(self, twin, sensor_id)
         self._depth_using_rest: bool | None = None
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     def get_frame(  # type: ignore[override]
         self,
         format: str = "numpy",

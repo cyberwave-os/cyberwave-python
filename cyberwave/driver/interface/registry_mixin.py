@@ -19,7 +19,10 @@ from typing import Any
 
 from typing_extensions import Self
 
+from cyberwave.mqtt import pass_message, wants_message
 from cyberwave.telemetry.base import BaseTelemetry
+
+from ..command_response import CommandRequest, invoke_command_listener
 
 from .args import (
     CallbackGroup,
@@ -417,8 +420,16 @@ class InterfaceRegistryMixin:
                 payload_schema_ref="TwinCommandPayload",
             )
             path = resolve_topic_path(cmd_topic, twin_uuid, prefix=prefix)
+            reply_source = getattr(getattr(cw, "config", None), "source_type", None)
 
-            async def command_dispatch(envelope: dict[str, Any]) -> None:
+            # Takes the paho message too, so a listener can answer an MQTT v5
+            # request (twin.command_response.v1) through its CommandRequest.
+            @pass_message
+            async def command_dispatch(
+                envelope: dict[str, Any], message: Any = None
+            ) -> None:
+                if not isinstance(envelope, dict):
+                    return
                 if envelope.get("command") == "status":
                     return
                 name = envelope.get("command")
@@ -427,7 +438,14 @@ class InterfaceRegistryMixin:
                 group = cmd_table.get(name)
                 if group is None:
                     return
-                await self._invoke_listener(group.callback, envelope)
+                ctx = CommandRequest.from_message(
+                    cw.mqtt,
+                    message,
+                    envelope,
+                    twin_uuid=twin_uuid,
+                    source_type=reply_source,
+                )
+                await invoke_command_listener(group.callback, envelope, ctx)
 
             self._subscribe_mqtt(path, command_dispatch)
 
@@ -526,17 +544,35 @@ class InterfaceRegistryMixin:
         loop: asyncio.AbstractEventLoop,
         path: str,
     ) -> Callable[[dict[str, Any]], None]:
-        """Bridge Paho's sync callback thread to the driver's asyncio loop."""
+        """Bridge Paho's sync callback thread to the driver's asyncio loop.
+
+        A handler marked with :func:`cyberwave.mqtt.pass_message` keeps getting
+        the paho message as its second argument.
+        """
+        with_message = wants_message(handler)
+
+        def _log_failure(done: asyncio.Future[None]) -> None:
+            try:
+                done.result()
+            except Exception:
+                logger.exception("MQTT async handler failed on %s", path)
+
+        if with_message:
+
+            @pass_message
+            def sync_message_wrapper(
+                envelope: dict[str, Any], message: Any = None
+            ) -> None:
+                future = asyncio.run_coroutine_threadsafe(
+                    handler(envelope, message),  # type: ignore[call-arg]
+                    loop,
+                )
+                future.add_done_callback(_log_failure)
+
+            return sync_message_wrapper
 
         def sync_wrapper(envelope: dict[str, Any]) -> None:
             future = asyncio.run_coroutine_threadsafe(handler(envelope), loop)
-
-            def _log_failure(done: asyncio.Future[None]) -> None:
-                try:
-                    done.result()
-                except Exception:
-                    logger.exception("MQTT async handler failed on %s", path)
-
             future.add_done_callback(_log_failure)
 
         return sync_wrapper
@@ -719,8 +755,10 @@ class InterfaceRegistryMixin:
                     return
                 if self._registry_zenoh_teleop_blocks_commands():
                     return
+                # Zenoh has no reply path: a context-taking listener gets a
+                # detached CommandRequest whose reply() is a no-op.
                 asyncio.run_coroutine_threadsafe(
-                    self._invoke_listener(_cb, decoded), loop
+                    invoke_command_listener(_cb, decoded), loop
                 )
 
             sub = self._registry_zenoh_bus.subscribe(channel, _on_command)

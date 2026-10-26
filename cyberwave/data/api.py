@@ -254,6 +254,68 @@ class DataBus:
         return self._backend.subscribe(key, _on_sample, policy=policy)
 
     # ------------------------------------------------------------------
+    # subscriber presence
+    # ------------------------------------------------------------------
+
+    def has_subscribers(
+        self,
+        channel: str,
+        *,
+        twin_uuid: str | None = None,
+        local_only: bool = False,
+    ) -> bool | None:
+        """Whether a subscriber currently matches *channel* (``None`` = unknown).
+
+        Lets a producer skip expensive work (decoding, encoding) while nobody
+        listens.  ``None`` means the backend cannot tell; treat it as unknown
+        and fail closed rather than as "no subscribers".  A reader that only
+        calls :meth:`latest` (a query) is **not** a subscriber.
+
+        Args:
+            twin_uuid: Check a different twin than the bus is scoped to.
+            local_only: Count only subscribers in this backend's own transport
+                session (for Zenoh: the same ``ZenohBackend``, i.e. in-process;
+                other processes on the same host are *remote*).
+        """
+        return self._backend.has_subscribers(
+            self._channel_key(channel, twin_uuid), local_only=local_only
+        )
+
+    def on_subscribers_changed(
+        self,
+        channel: str,
+        callback: Callable[[bool], None],
+        *,
+        twin_uuid: str | None = None,
+        local_only: bool = False,
+    ) -> Subscription:
+        """Call ``callback(has_subscribers)`` when presence on *channel* flips.
+
+        The callback runs on a transport thread, so only set a flag or event
+        in it.  It is not called for the state at registration time; call
+        :meth:`has_subscribers` afterwards for the initial state.
+
+        Raises:
+            NotImplementedError: The backend cannot report subscriber presence.
+
+        Returns:
+            A :class:`~.backend.Subscription` handle; ``.close()`` stops it.
+        """
+        return self._backend.on_subscribers_changed(
+            self._channel_key(channel, twin_uuid),
+            callback,
+            local_only=local_only,
+        )
+
+    def _channel_key(self, channel: str, twin_uuid: str | None) -> str:
+        return build_key(
+            twin_uuid if twin_uuid is not None else self._twin_uuid,
+            channel,
+            self._sensor_name,
+            prefix=self._key_prefix,
+        )
+
+    # ------------------------------------------------------------------
     # latest
     # ------------------------------------------------------------------
 

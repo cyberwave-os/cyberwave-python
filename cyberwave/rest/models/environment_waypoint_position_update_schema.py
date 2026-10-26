@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.environment_waypoint_frame_schema import EnvironmentWaypointFrameSchema
 from cyberwave.rest.models.required_quaternion_schema import RequiredQuaternionSchema
 from cyberwave.rest.models.required_vector3_schema import RequiredVector3Schema
 from typing import Optional, Set
@@ -27,11 +28,23 @@ from pydantic_core import to_jsonable_python
 
 class EnvironmentWaypointPositionUpdateSchema(BaseModel):
     """
-    Partial update for a single waypoint's position/rotation.  Deliberately excludes ``frame`` — see ``update_environment_waypoint_position`` in ``src.app.api.environments``. Fields not sent are left untouched (the endpoint reads this via ``.dict(exclude_unset=True)``).  Either pose may be omitted, but a pose that *is* sent must carry every axis: the ``Required*`` variants exist so the generated client cannot zero-fill one on its way out (CYB-3809).
+    Partial update for a single waypoint's position/rotation.  Deliberately excludes ``frame`` — see ``update_environment_waypoint_position`` in ``src.app.api.environments``. Fields not sent are left untouched (the endpoint reads this via ``.dict(exclude_unset=True)``).  Either pose may be omitted, but a pose that *is* sent must carry every axis: the ``Required*`` variants exist so the generated client cannot zero-fill one on its way out (CYB-3809).  ``reference_frame`` names the frame the sent pose is expressed in; the server converts it into the waypoint's own frame before storing it. Omitted means the pose is already relative to that frame. It is never written to the waypoint — see ``src.lib.environment_objects.waypoint_input_frames``.  ``joint_state_source`` says where to read the robot's measured joint positions (the live robot or the simulation) when the conversion runs through a link the robot's joints move, such as a wrist camera. Such a conversion is refused without it.
     """ # noqa: E501
     position: Optional[RequiredVector3Schema] = None
     rotation: Optional[RequiredQuaternionSchema] = None
-    __properties: ClassVar[List[str]] = ["position", "rotation"]
+    reference_frame: Optional[EnvironmentWaypointFrameSchema] = None
+    joint_state_source: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["position", "rotation", "reference_frame", "joint_state_source"]
+
+    @field_validator('joint_state_source')
+    def joint_state_source_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['live', 'simulation']):
+            raise ValueError("must be one of enum values ('live', 'simulation')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -78,6 +91,9 @@ class EnvironmentWaypointPositionUpdateSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of rotation
         if self.rotation:
             _dict['rotation'] = self.rotation.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of reference_frame
+        if self.reference_frame:
+            _dict['reference_frame'] = self.reference_frame.to_dict()
         # set to None if position (nullable) is None
         # and model_fields_set contains the field
         if self.position is None and "position" in self.model_fields_set:
@@ -87,6 +103,16 @@ class EnvironmentWaypointPositionUpdateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.rotation is None and "rotation" in self.model_fields_set:
             _dict['rotation'] = None
+
+        # set to None if reference_frame (nullable) is None
+        # and model_fields_set contains the field
+        if self.reference_frame is None and "reference_frame" in self.model_fields_set:
+            _dict['reference_frame'] = None
+
+        # set to None if joint_state_source (nullable) is None
+        # and model_fields_set contains the field
+        if self.joint_state_source is None and "joint_state_source" in self.model_fields_set:
+            _dict['joint_state_source'] = None
 
         return _dict
 
@@ -101,7 +127,9 @@ class EnvironmentWaypointPositionUpdateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "position": RequiredVector3Schema.from_dict(obj["position"]) if obj.get("position") is not None else None,
-            "rotation": RequiredQuaternionSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None
+            "rotation": RequiredQuaternionSchema.from_dict(obj["rotation"]) if obj.get("rotation") is not None else None,
+            "reference_frame": EnvironmentWaypointFrameSchema.from_dict(obj["reference_frame"]) if obj.get("reference_frame") is not None else None,
+            "joint_state_source": obj.get("joint_state_source")
         })
         return _obj
 

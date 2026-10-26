@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List
-from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,24 +27,10 @@ class AIUsageCostSourceBreakdown(BaseModel):
     """
     How much of the spend was authoritative vs. rate-card estimated.
     """ # noqa: E501
-    provider_reported_cost_credits: Annotated[str, Field(strict=True)]
-    rate_card_cost_credits: Annotated[str, Field(strict=True)]
+    provider_reported_cost_credits: StrictStr
+    rate_card_cost_credits: StrictStr
     unknown_model_calls: StrictInt
     __properties: ClassVar[List[str]] = ["provider_reported_cost_credits", "rate_card_cost_credits", "unknown_model_calls"]
-
-    @field_validator('provider_reported_cost_credits')
-    def provider_reported_cost_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
-
-    @field_validator('rate_card_cost_credits')
-    def rate_card_cost_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,

@@ -175,9 +175,15 @@ class VideoDepthAnythingRuntime(ModelRuntime):
         *,
         confidence: float = 0.5,
         classes: list[str] | None = None,
+        native_resolution: bool = False,
         **kwargs: Any,
     ) -> PredictionResult:
-        """Run per-frame VDA inference. ``confidence``/``classes`` are ignored."""
+        """Run per-frame VDA inference. ``confidence``/``classes`` are ignored.
+
+        ``native_resolution=True`` returns depth on VDA's working grid instead
+        of resampling it to the camera frame, whenever that grid has fewer
+        pixels. See :class:`~cyberwave.models.types.DepthResult`.
+        """
         del confidence, classes, kwargs
 
         handle: _VdaHandle = model_handle
@@ -191,6 +197,12 @@ class VideoDepthAnythingRuntime(ModelRuntime):
 
         # BGR -> RGB (VDA vendored library is trained on RGB inputs).
         frame_rgb = frame_bgr[:, :, :3][:, :, ::-1]
+        if native_resolution:
+            working = _resize_to_working_grid(frame_rgb, handle.input_size)
+            if working is not None:
+                frame_rgb = working
+        # The temporal state below is keyed on what VDA actually receives.
+        input_h, input_w = frame_rgb.shape[:2]
         with handle.lock:
             # VDA is a stateful video model: it initialises its temporal cache
             # (frame_height, frame_width, transform, frame_cache_list, …) on
@@ -201,14 +213,14 @@ class VideoDepthAnythingRuntime(ModelRuntime):
             model = handle.model
             stored_h = getattr(model, "frame_height", None)
             if stored_h is not None and (
-                stored_h != frame_h or getattr(model, "frame_width", None) != frame_w
+                stored_h != input_h or getattr(model, "frame_width", None) != input_w
             ):
                 logger.debug(
                     "VDA frame size changed (%dx%d → %dx%d); resetting temporal state",
                     getattr(model, "frame_width", "?"),
                     stored_h,
-                    frame_w,
-                    frame_h,
+                    input_w,
+                    input_h,
                 )
                 model.transform = None
                 model.frame_id_list = []
@@ -264,6 +276,64 @@ def _resolve_input_size(input_size: int) -> int:
             f"Common values: 518 (default), 392, 322, 266."
         )
     return size
+
+
+def _working_grid(width: int, height: int, input_size: int) -> tuple[int, int]:
+    """``(w, h)`` that VDA's streaming transform resizes a frame to.
+
+    Mirrors ``VideoDepthAnything.infer_video_depth_one`` and its ``Resize``
+    (``keep_aspect_ratio``, ``lower_bound``, multiple of 14) at the ``VDA_REF``
+    pinned in the edge-ml-worker Dockerfile: the short side lands on
+    ``input_size``, shrunk first for frames wider than 16:9. Bump alongside it.
+    """
+    ratio = max(height, width) / min(height, width)
+    if ratio > 1.78:
+        input_size = int(input_size * 1.777 / ratio)
+        input_size = round(input_size / DINOV2_PATCH_SIZE) * DINOV2_PATCH_SIZE
+    scale = max(input_size / height, input_size / width)
+    return (
+        _to_patch_multiple(scale * width, input_size),
+        _to_patch_multiple(scale * height, input_size),
+    )
+
+
+def _to_patch_multiple(x: float, min_val: int) -> int:
+    y = int(np.round(x / DINOV2_PATCH_SIZE) * DINOV2_PATCH_SIZE)
+    if y < min_val:
+        y = int(np.ceil(x / DINOV2_PATCH_SIZE) * DINOV2_PATCH_SIZE)
+    return y
+
+
+def _resize_to_working_grid(frame_rgb: Any, input_size: int) -> Any | None:
+    """Pre-resize *frame_rgb* to VDA's working grid, or ``None`` to leave it.
+
+    VDA resizes each frame to its working grid, infers there, then bilinearly
+    upsamples the depth back to the frame size. Handing it a frame already on
+    that grid makes both resizes identities — cv2 copies on an equal-size
+    resize, and ``F.interpolate`` with ``align_corners=True`` is exact at equal
+    size — so the network sees the same tensor and the depth stays on its own
+    grid. Resized in float32 with VDA's INTER_CUBIC to match the library's own
+    resize, not approximate it.
+
+    ``None`` when the grid is not smaller than the frame (nothing to skip), or
+    when it is not a fixed point of VDA's rule and would be resized again.
+    """
+    height, width = frame_rgb.shape[:2]
+    if height <= 0 or width <= 0:
+        return None
+    grid_w, grid_h = _working_grid(width, height, input_size)
+    if grid_w * grid_h >= width * height:
+        return None
+    if _working_grid(grid_w, grid_h, input_size) != (grid_w, grid_h):
+        return None
+
+    import cv2
+
+    return cv2.resize(
+        frame_rgb.astype(np.float32),
+        (grid_w, grid_h),
+        interpolation=cv2.INTER_CUBIC,
+    )
 
 
 def _download_checkpoint(target_path: str, *, encoder: str, metric: bool) -> None:

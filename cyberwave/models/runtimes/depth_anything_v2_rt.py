@@ -174,9 +174,15 @@ class DepthAnythingV2Runtime(ModelRuntime):
         *,
         confidence: float = 0.5,
         classes: list[str] | None = None,
+        native_resolution: bool = False,
         **kwargs: Any,
     ) -> PredictionResult:
-        """Run DA2 depth estimation. ``confidence``/``classes`` are ignored."""
+        """Run DA2 depth estimation. ``confidence``/``classes`` are ignored.
+
+        ``native_resolution=True`` returns the network's ``input_size`` grid
+        instead of resampling it to the camera frame, whenever that grid has
+        fewer pixels. See :class:`~cyberwave.models.types.DepthResult`.
+        """
         del confidence, classes, kwargs
 
         handle: _Dav2Handle = model_handle
@@ -199,9 +205,12 @@ class DepthAnythingV2Runtime(ModelRuntime):
         depth_np = depth.squeeze().cpu().float().numpy()
 
         # Resize depth back to the original camera resolution so that depth
-        # pixel (u, v) corresponds to camera pixel (u, v) — required for
-        # correct 3-D point-cloud reconstruction downstream.
-        if depth_np.shape != (frame_h, frame_w):
+        # pixel (u, v) corresponds to camera pixel (u, v). ``native_resolution``
+        # skips that when the network grid is the smaller one: upsampling adds
+        # no information, and consumers that rescale intrinsics per axis from
+        # ``DepthResult.w``/``h`` reconstruct the same geometry from it.
+        keep_native = native_resolution and depth_np.size < frame_h * frame_w
+        if depth_np.shape != (frame_h, frame_w) and not keep_native:
             try:
                 import cv2
 

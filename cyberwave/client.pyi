@@ -1270,6 +1270,15 @@ class Cyberwave:
     @overload
     def twin(
         self,
+        asset_key: Literal["deep-robotics/lynx-m20"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> LocomoteJointCameraTwin: ...
+    
+    @overload
+    def twin(
+        self,
         asset_key: Literal["arx/arx-roboticsx"],
         environment_id: str | None = None,
         twin_id: str | None = None,
@@ -1451,6 +1460,15 @@ class Cyberwave:
     def twin(
         self,
         asset_key: Literal["nasa_jpl/ingenuity"],
+        environment_id: str | None = None,
+        twin_id: str | None = None,
+        **kwargs,
+    ) -> FlyingTwin: ...
+    
+    @overload
+    def twin(
+        self,
+        asset_key: Literal["vector-robotics/guardian"],
         environment_id: str | None = None,
         twin_id: str | None = None,
         **kwargs,

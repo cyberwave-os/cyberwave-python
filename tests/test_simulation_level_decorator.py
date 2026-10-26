@@ -13,7 +13,7 @@ class _Handle:
     def __init__(self, twin):
         self._twin = twin
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     def get_frame(self):
         return "frame"
 
@@ -34,15 +34,15 @@ def test_default_level_is_playground() -> None:
     assert _Handle.get_state.__cw_sim_level__ == SimLevel.PLAYGROUND
 
 
-def test_mujoco_level_tag() -> None:
-    assert _Handle.get_frame.__cw_sim_level__ == SimLevel.MUJOCO
+def test_physics_level_tag() -> None:
+    assert _Handle.get_frame.__cw_sim_level__ == SimLevel.PHYSICS
 
 
 def test_decorator_calls_ensure_with_level_and_method() -> None:
     twin = _twin()
     handle = _Handle(twin)
     assert handle.get_frame() == "frame"
-    assert twin._calls == [(SimLevel.MUJOCO, "_Handle.get_frame")]
+    assert twin._calls == [(SimLevel.PHYSICS, "_Handle.get_frame")]
 
 
 def test_decorator_resolves_self_when_no_twin_attr() -> None:
@@ -53,16 +53,27 @@ def test_decorator_resolves_self_when_no_twin_attr() -> None:
         def _ensure_simulation_support(self, level, *, method):
             calls.append((level, method))
 
-        @simulation_level(SimLevel.MUJOCO)
+        @simulation_level(SimLevel.PHYSICS)
         def op(self):
             return "ok"
 
     assert _TwinLike().op() == "ok"
     assert len(calls) == 1
     level, method = calls[0]
-    assert level == SimLevel.MUJOCO
+    assert level == SimLevel.PHYSICS
     assert method.endswith("_TwinLike.op")
 
 
 def test_level_ordering() -> None:
-    assert SimLevel.UNSUPPORTED < SimLevel.PLAYGROUND < SimLevel.MUJOCO
+    assert SimLevel.UNSUPPORTED < SimLevel.PLAYGROUND < SimLevel.PHYSICS
+
+
+def test_mujoco_is_deprecated_alias_of_physics() -> None:
+    # Existing user code written against ``SimLevel.MUJOCO`` keeps working.
+    assert SimLevel.MUJOCO is SimLevel.PHYSICS
+    assert SimLevel.PHYSICS == 1
+    assert SimLevel(1) is SimLevel.PHYSICS
+    assert SimLevel["MUJOCO"] is SimLevel.PHYSICS
+    assert SimLevel.PHYSICS.name == "PHYSICS"
+    # Aliases are not listed as distinct members.
+    assert [m.name for m in SimLevel] == ["UNSUPPORTED", "PLAYGROUND", "PHYSICS", "BOTH"]

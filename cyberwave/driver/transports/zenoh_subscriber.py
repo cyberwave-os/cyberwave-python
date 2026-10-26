@@ -69,7 +69,12 @@ CommandHandler = Callable[["dict[str, Any]", "CommandContext"], Awaitable[None]]
 
 @dataclass(frozen=True)
 class CommandContext:
-    """Metadata passed alongside every command payload to the handler."""
+    """Metadata passed alongside every command payload to the handler.
+
+    The Zenoh counterpart of :class:`cyberwave.driver.command_response.CommandRequest`
+    (MQTT twin commands), which carries the same ``twin_uuid`` and
+    ``received_at`` plus the MQTT v5 reply.
+    """
 
     channel: str
     """The channel name, e.g. ``"commands/velocity"``."""

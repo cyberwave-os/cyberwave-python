@@ -88,6 +88,30 @@ def test_gripper_reports_failed_publish_and_retains_legacy_clients(command, acce
     assert twin.client.mqtt.publish.call_args.args[1]["command"] == command
 
 
+@pytest.mark.parametrize(
+    ("connected", "advice"),
+    [(True, "its log says why"), (False, "Check the MQTT connection")],
+)
+def test_a_refused_publish_blames_the_connection_only_when_it_is_down(
+    connected, advice
+):
+    twin = _make_locomote_twin(
+        metadata={
+            "mqtt": {
+                "topics": {TWIN_COMMAND_TOPIC_SLUG: {}},
+                "commands": {"supported": ["grip"]},
+            }
+        }
+    )
+    twin.client.mqtt.publish.return_value = False
+    twin.client.mqtt.connected = connected
+    with (
+        patch.object(twin, "_prepare_outbound_command"),
+        pytest.raises(CyberwaveMQTTError, match=advice),
+    ):
+        GripperHandle(twin).grip()
+
+
 def test_driver_set_schema_persists_metadata_and_rebinds_commands() -> None:
     twin = _make_locomote_twin()
     updated_metadata = {

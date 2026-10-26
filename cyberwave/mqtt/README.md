@@ -121,6 +121,8 @@ client.disconnect()
 | `client_id`     | `str`  | Auto-generated | Custom MQTT client ID                     |
 | `topic_prefix`  | `str`  | `""`           | Prefix for all MQTT topics                |
 | `auto_connect`  | `bool` | `True`         | Automatically connect on initialization   |
+| `announce_twin_sessions` | `bool` | `True` | Whether publishing state for a twin opens its telemetry session (`connected` + `telemetry_start`) and `disconnect()` ends it. Pass `False` for a client that relays state for a twin whose robot driver or simulator owns the session, such as a navigation bridge. Sessions started with `publish_telemetry_start()` are still announced and ended |
+| `max_payload_bytes` | `int` | `33554432` (32 MiB) | Largest payload `publish()` sends. A larger one is not sent: it is logged and `publish()` returns `False`. `0` turns the check off. Defaults to `CYBERWAVE_MQTT_MAX_PAYLOAD_BYTES` when set |
 
 ## Advanced Features
 

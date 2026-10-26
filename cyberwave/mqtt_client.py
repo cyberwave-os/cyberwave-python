@@ -57,7 +57,6 @@ class CyberwaveMQTTClient:
 
         # Determine topic prefix from config (which handles env vars)
         topic_prefix = config.topic_prefix or ""
-        client_id_prefix = "sdk_sim_" if config.runtime_mode == "simulation" else "sdk_"
 
         self._topic_prefix = topic_prefix
 
@@ -71,7 +70,7 @@ class CyberwaveMQTTClient:
             use_tls=config.mqtt_use_tls,
             tls_ca_cert=config.mqtt_tls_ca_cert,
             topic_prefix=topic_prefix,
-            client_id_prefix=client_id_prefix,
+            runtime_mode=config.runtime_mode,
             source_type=config.source_type,
             protocol=config.mqtt_protocol,
         )
@@ -246,7 +245,9 @@ class CyberwaveMQTTClient:
         stream_instance_id: Optional[str] = None,
     ) -> None:
         """
-        Publish telemetry_end and clear SDK telemetry-start tracking for this twin.
+        Publish telemetry_end. A twin-wide end (no ``sensor``) also clears SDK
+        telemetry-start tracking for this twin; an end that names a ``sensor``
+        closes only that stream and leaves the twin's session open.
 
         Match edge teleop cleanup so recordings/sessions end cleanly.
         """
@@ -452,7 +453,7 @@ class CyberwaveMQTTClient:
         twin_uuid: str,
         depth_data: Dict[str, Any],
         timestamp: Optional[float] = None,
-    ):
+    ) -> bool:
         """Publish depth frame data via MQTT."""
         return self._client.publish_depth_frame(twin_uuid, depth_data, timestamp)
 
@@ -465,7 +466,7 @@ class CyberwaveMQTTClient:
         stride: int = 6,
         sensor_id: str | None = None,
         camera_pose: dict[str, Any] | None = None,
-    ):
+    ) -> bool:
         """Publish a point cloud frame via MQTT."""
         return self._client.publish_pointcloud(
             twin_uuid,
@@ -553,7 +554,22 @@ class CyberwaveMQTTClient:
         """
         return self._client.unsubscribe(topic, subscriber_key)
 
-    def publish(self, topic: str, message: Dict[str, Any], qos: int = 0) -> bool:
+    def is_subscribed(self, topic: str) -> bool:
+        """Whether the broker has acknowledged (SUBACK) the subscription to *topic*.
+
+        Request/response flows such as a WebRTC offer check this before
+        publishing the request, so the response cannot arrive first.
+        """
+        return self._client.is_subscribed(topic)
+
+    def publish(
+        self,
+        topic: str,
+        message: Dict[str, Any],
+        qos: int = 0,
+        *,
+        properties: Any = None,
+    ) -> bool:
         """
         Publish a message to any MQTT topic.
 
@@ -563,5 +579,50 @@ class CyberwaveMQTTClient:
             topic: MQTT topic
             message: Message payload as dictionary
             qos: Quality of service level (0, 1, or 2)
+            properties: paho MQTT v5 PUBLISH properties (v5 connections only)
         """
-        return self._client.publish(topic, message, qos)
+        if properties is None:
+            return self._client.publish(topic, message, qos)
+        return self._client.publish(topic, message, qos, properties=properties)
+
+    def request(
+        self,
+        topic: str,
+        payload: Any,
+        *,
+        response_topic: str,
+        timeout_s: float = 5.0,
+        qos: int = 1,
+    ) -> Any:
+        """Publish a request over MQTT v5 and return the reply to it.
+
+        The generic request/response pattern for any topic pair; see
+        :meth:`cyberwave.mqtt.CyberwaveMQTTClient.request`. Raises
+        :class:`~cyberwave.exceptions.RequestTimeoutError` when nothing answers.
+        """
+        return self._client.request(
+            topic,
+            payload,
+            response_topic=response_topic,
+            timeout_s=timeout_s,
+            qos=qos,
+        )
+
+    def request_command(
+        self,
+        twin_uuid: str,
+        name: str,
+        data: Optional[Dict[str, Any]] = None,
+        *,
+        timeout_s: float = 5.0,
+        source_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send a twin command over MQTT v5 and return its reply.
+
+        See :meth:`cyberwave.mqtt.CyberwaveMQTTClient.request_command`. Governed
+        twins refuse direct publishes; use ``twin.commands.send`` (the command
+        gateway) for those.
+        """
+        return self._client.request_command(
+            twin_uuid, name, data, timeout_s=timeout_s, source_type=source_type
+        )

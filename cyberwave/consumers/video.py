@@ -22,7 +22,9 @@ from aiortc import (
 )
 
 from ..exceptions import NoOngoingVideoStreamAvailable
-from ..sensor.base_video import DEFAULT_TURN_SERVERS
+from ..sensor.ice import effective_ice_servers
+from ..sensor import peer_close
+from ..sensor.peer_close import close_peer_connection
 
 logger = logging.getLogger(__name__)
 
@@ -163,17 +165,10 @@ class IncomingVideoStream:
             self._loop.close()
 
     def _ice_servers(self) -> list:
-        turn = self._turn_servers if self._turn_servers is not None else DEFAULT_TURN_SERVERS
-        servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
-        for entry in turn:
-            servers.append(
-                RTCIceServer(
-                    urls=entry["urls"],
-                    username=entry.get("username"),
-                    credential=entry.get("credential"),
-                )
-            )
-        return servers
+        # Same profile as the streamers: the SDK STUN/TURN defaults (or the
+        # caller's ``turn_servers``), nothing at all under
+        # CYBERWAVE_WEBRTC_ICE_MODE=lan.
+        return [RTCIceServer(**s) for s in effective_ice_servers(self._turn_servers)]
 
     async def _connect(self) -> None:
         self._pc = RTCPeerConnection(RTCConfiguration(iceServers=self._ice_servers()))
@@ -372,7 +367,12 @@ class IncomingVideoStream:
         loop = self._loop
         if loop is not None and loop.is_running():
             try:
-                asyncio.run_coroutine_threadsafe(self._teardown(), loop).result(timeout=5)
+                # Outlast the bounded close in _teardown (which has no settle)
+                # so the pending-task drain after it still runs.
+                budget = peer_close.close_budget_s(settle=0)
+                asyncio.run_coroutine_threadsafe(self._teardown(), loop).result(
+                    timeout=budget
+                )
             except Exception:
                 logger.debug("teardown error (ignored)", exc_info=True)
             loop.call_soon_threadsafe(loop.stop)
@@ -387,10 +387,10 @@ class IncomingVideoStream:
         if self._decode_task is not None:
             self._decode_task.cancel()
         if self._pc is not None:
-            try:
-                await self._pc.close()
-            except Exception:
-                logger.debug("pc.close error (ignored)", exc_info=True)
+            # No settle: the pending-task drain below does that job here.
+            await close_peer_connection(
+                self._pc, settle=0, error_log_level=logging.DEBUG
+            )
         # Let aiortc/aioice process the cancellations they just scheduled so we
         # don't stop the loop out from under pending internal tasks ("Task was
         # destroyed but it is pending").

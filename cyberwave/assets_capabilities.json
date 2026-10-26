@@ -5749,7 +5749,10 @@
           "parameters": {
             "update_rate": null,
             "audio_channels": 1,
-            "audio_sample_rate": 48000
+            "audio_sample_rate": 48000,
+            "enable_audio": "true",
+            "enable_recording": "true",
+            "auto_recording_audio": "false"
           }
         }
       ]
@@ -5801,7 +5804,8 @@
             "update_rate": null,
             "audio_channels": 1,
             "audio_sample_rate": 48000,
-            "audio_bit_depth": 16
+            "audio_bit_depth": 16,
+            "audio_device": "default"
           }
         }
       ]
@@ -5840,7 +5844,7 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69.0,
+          "fov_degrees": 40.43,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
@@ -5856,10 +5860,12 @@
             }
           },
           "parameters": {
-            "width": 1920,
-            "height": 1080,
+            "width": 640,
+            "height": 480,
             "update_rate": 30.0,
-            "vfov_rad": 1.2042771838760873
+            "vfov_rad": 0.7056366165813074,
+            "cx": 311.75,
+            "cy": 232.4
           }
         },
         {
@@ -5928,7 +5934,7 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69.0,
+          "fov_degrees": 40.43,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
@@ -5944,10 +5950,12 @@
             }
           },
           "parameters": {
-            "width": 1920,
-            "height": 1080,
+            "width": 640,
+            "height": 480,
             "update_rate": 30.0,
-            "vfov_rad": 1.2042771838760873
+            "vfov_rad": 0.7056366165813074,
+            "cx": 311.75,
+            "cy": 232.4
           }
         },
         {
@@ -6016,7 +6024,7 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69.0,
+          "fov_degrees": 40.43,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
@@ -6032,10 +6040,12 @@
             }
           },
           "parameters": {
-            "width": 1920,
-            "height": 1080,
+            "width": 640,
+            "height": 480,
             "update_rate": 30.0,
-            "vfov_rad": 1.2042771838760873
+            "vfov_rad": 0.7056366165813074,
+            "cx": 311.75,
+            "cy": 232.4
           }
         },
         {
@@ -6104,7 +6114,7 @@
           "name": "wrist_color_camera",
           "type": "rgb",
           "model": null,
-          "fov_degrees": 69.0,
+          "fov_degrees": 40.43,
           "parent_link": "camera_color_frame",
           "offset": {
             "position": {
@@ -6120,10 +6130,12 @@
             }
           },
           "parameters": {
-            "width": 1920,
-            "height": 1080,
+            "width": 640,
+            "height": 480,
             "update_rate": 30.0,
-            "vfov_rad": 1.2042771838760873
+            "vfov_rad": 0.7056366165813074,
+            "cx": 311.75,
+            "cy": 232.4
           }
         },
         {
@@ -12287,6 +12299,198 @@
       "sensors": []
     },
     "registry_id": "sap/penguin-plush",
+    "registry_id_alias": null
+  },
+  "vector-robotics/guardian": {
+    "uuid": "10ad8219-b731-4cb3-b866-6233c78a810a",
+    "name": "Guardian",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": true,
+      "can_fly": true,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "aerial",
+      "locomotion_config": {
+        "dof": 0,
+        "max_linear_velocity": 0.0,
+        "max_angular_velocity": 0.0
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": "solar",
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "vector-robotics/guardian",
+    "registry_id_alias": null
+  },
+  "cyberwave/server-rack-42u": {
+    "uuid": "c70f7f8b-2042-4228-84ea-4f05a032eb11",
+    "name": "Server Rack 42U",
+    "capabilities": {
+      "has_joints": false,
+      "can_actuate": false,
+      "can_locomote": false,
+      "can_fly": false,
+      "has_legs": false,
+      "has_wheels": false,
+      "locomotion_mode": "stationary",
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 0,
+      "power_source": null,
+      "power_capacity_wh": -1,
+      "navigation_autonomy_level": null,
+      "navigation_obstacle_avoidance": false,
+      "maximum_frequency_hz": 30,
+      "minimum_frequency_hz": 0,
+      "sensors": []
+    },
+    "registry_id": "cyberwave/server-rack-42u",
+    "registry_id_alias": null
+  },
+  "deep-robotics/lynx-m20": {
+    "uuid": "8bc97e35-5049-4808-8206-5ce87f536fe0",
+    "name": "LYNX M20",
+    "capabilities": {
+      "has_joints": true,
+      "can_actuate": true,
+      "can_locomote": true,
+      "can_fly": false,
+      "has_legs": true,
+      "has_wheels": true,
+      "locomotion_mode": "hybrid",
+      "locomotion_config": {
+        "dof": 16,
+        "max_linear_velocity": 2,
+        "max_angular_velocity": 0.7
+      },
+      "can_grip": false,
+      "manipulator_count": 0,
+      "payload_capacity_kg": 15,
+      "power_source": "battery",
+      "power_capacity_wh": 648,
+      "navigation_autonomy_level": "waypoint",
+      "navigation_obstacle_avoidance": true,
+      "maximum_frequency_hz": 200,
+      "minimum_frequency_hz": 0,
+      "sensors": [
+        {
+          "id": "front_lidar",
+          "name": "front_lidar",
+          "type": "lidar_3d",
+          "model": null,
+          "fov_degrees": 90.0,
+          "parent_link": "front_lidar_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": null,
+            "fov_horizontal": 179.99996255206332,
+            "fov_vertical": 89.99998127603166,
+            "vfov_rad": 1.5707963267948966,
+            "hfov_rad": 3.141592653589793
+          }
+        },
+        {
+          "id": "rear_lidar",
+          "name": "rear_lidar",
+          "type": "lidar_3d",
+          "model": null,
+          "fov_degrees": 90.0,
+          "parent_link": "rear_lidar_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "parameters": {
+            "update_rate": null,
+            "fov_horizontal": 179.99996255206332,
+            "fov_vertical": 89.99998127603166,
+            "vfov_rad": 1.5707963267948966,
+            "hfov_rad": 3.141592653589793
+          }
+        },
+        {
+          "id": "front_camera",
+          "name": "front_camera",
+          "type": "rgb",
+          "model": null,
+          "parent_link": "front_camera_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": 0.5,
+              "y": -0.5,
+              "z": -0.5
+            }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
+          }
+        },
+        {
+          "id": "rear_camera",
+          "name": "rear_camera",
+          "type": "rgb",
+          "model": null,
+          "parent_link": "rear_camera_link",
+          "offset": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "rotation": {
+              "w": 0.5,
+              "x": 0.5,
+              "y": 0.5,
+              "z": 0.5
+            }
+          },
+          "parameters": {
+            "width": null,
+            "height": null,
+            "update_rate": null
+          }
+        }
+      ]
+    },
+    "registry_id": "deep-robotics/lynx-m20",
     "registry_id_alias": null
   }
 }

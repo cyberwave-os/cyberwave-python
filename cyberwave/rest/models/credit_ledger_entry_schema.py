@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,7 +30,7 @@ class CreditLedgerEntrySchema(BaseModel):
     transaction_uuid: StrictStr
     kind: StrictStr
     direction: StrictStr
-    amount_credits: Annotated[str, Field(strict=True)]
+    amount_credits: StrictStr
     category: Optional[StrictStr] = None
     billable: Optional[StrictBool] = True
     usage_class: Optional[StrictStr] = None
@@ -39,13 +38,6 @@ class CreditLedgerEntrySchema(BaseModel):
     source: Optional[StrictStr] = None
     has_invoice: Optional[StrictBool] = False
     __properties: ClassVar[List[str]] = ["transaction_uuid", "kind", "direction", "amount_credits", "category", "billable", "usage_class", "created_at", "source", "has_invoice"]
-
-    @field_validator('amount_credits')
-    def amount_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,

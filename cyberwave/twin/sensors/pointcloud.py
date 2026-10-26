@@ -107,7 +107,7 @@ def _decode_pointcloud(payload: dict[str, Any]) -> Any:
 class PointCloudCapableMixin(MqttSensorStreamHandle):
     """Adds ``get_pointcloud`` / ``on_pointcloud`` over the twin ``/pointcloud`` topic."""
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     def get_pointcloud(self, *, timeout: float = FIRST_READ_TIMEOUT_S) -> Any:
         """A fresh point cloud snapshot as a numpy ``N×3`` float32 array (XYZ).
 

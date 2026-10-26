@@ -94,7 +94,7 @@ class CameraTwin(CameraCapableMixin, Twin):
             finally:
                 self._active_simulation = None
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     async def stream_video_background(
         self,
         fps: int = 30,
@@ -105,8 +105,8 @@ class CameraTwin(CameraCapableMixin, Twin):
     ) -> "CameraStreamer | Simulation":
         """Start streaming in the background. Non-blocking.
 
-        In simulation mode consumes the environment's already-running MuJoCo
-        simulation (start one with ``cw.affect("sim")`` or
+        In simulation mode consumes the environment's already-running
+        physics-backed simulation (MuJoCo or Isaac Sim; start one with ``cw.affect("sim")`` or
         ``cw.environments.simulations.start(...)``) and returns its
         :class:`~cyberwave.managers.simulations.Simulation` handle. In live mode
         returns the ``CameraStreamer`` as before.
@@ -152,11 +152,12 @@ class CameraTwin(CameraCapableMixin, Twin):
             self._camera_streamer = None
 
     def _resolve_simulation_stream(self) -> "Simulation":
-        """Resolve the environment's running MuJoCo simulation for streaming.
+        """Resolve the environment's running physics simulation for streaming.
 
-        The ``@simulation_level(SimLevel.MUJOCO)`` gate on the streaming
-        entrypoints guarantees a MuJoCo simulation is already running (started
-        via ``cw.affect("sim")`` or ``cw.environments.simulations.start(...)``);
+        The ``@simulation_level(SimLevel.PHYSICS)`` gate on the streaming
+        entrypoints guarantees a physics-backed simulation (MuJoCo or Isaac Sim)
+        is already running (started via ``cw.affect("sim")`` or
+        ``cw.environments.simulations.start(...)``);
         this consumes it as the camera-frame producer and stores the handle on
         ``self._active_simulation`` so :meth:`stop_streaming` can stop it. The SDK
         never starts a simulation from a streaming call.
@@ -169,7 +170,7 @@ class CameraTwin(CameraCapableMixin, Twin):
         self._active_simulation = sim
         return sim
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     def start_streaming(
         self,
         fps: int = 30,
@@ -262,7 +263,7 @@ class DepthCameraTwin(CameraTwin):
             await self._camera_streamer.stop()
             self._camera_streamer = None
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     async def stream_video_background(
         self,
         fps: int = 30,
@@ -275,8 +276,8 @@ class DepthCameraTwin(CameraTwin):
     ) -> "CameraStreamer | Simulation":
         """Start video streaming in the background. Non-blocking.
 
-        In simulation mode consumes the environment's already-running MuJoCo
-        simulation (start one with ``cw.affect("sim")`` or
+        In simulation mode consumes the environment's already-running
+        physics-backed simulation (MuJoCo or Isaac Sim; start one with ``cw.affect("sim")`` or
         ``cw.environments.simulations.start(...)``) and returns its
         :class:`~cyberwave.managers.simulations.Simulation` handle. In live mode
         returns the ``CameraStreamer`` as before.
@@ -317,7 +318,7 @@ class DepthCameraTwin(CameraTwin):
         await self._camera_streamer.start()
         return self._camera_streamer
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     def start_streaming(
         self,
         fps: int = 30,

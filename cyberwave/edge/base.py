@@ -37,7 +37,21 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 
+from cyberwave.constants import (
+    EDGE_STATE_SOURCE_TYPES,
+    SOURCE_TYPE_EDGE,
+    SOURCE_TYPE_EDIT,
+    SOURCE_TYPE_TELE,
+)
 from cyberwave.edge.config import EdgeNodeConfig
+from cyberwave.edge.health import heartbeat_source_type
+
+# Command origins, not runtime states: the backend refuses either one on a
+# physical navigation action and accepts no source at all, which is what a
+# node configured this way sent before navigation status carried one. So its
+# status goes out without a source rather than being dropped, and it still
+# cannot move a simulated action, which needs ``sim``/``sim_tele``.
+_NAV_STATUS_UNSTAMPED_SOURCE_TYPES = frozenset({SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT})
 
 logger = logging.getLogger(__name__)
 
@@ -290,11 +304,24 @@ class BaseEdgeNode(ABC):
             return
 
         prefix = self.client.mqtt.topic_prefix
+        # The backend lets only ``edge`` (or no source at all) move a physical
+        # navigation action, and only ``sim``/``sim_tele`` move a simulated one.
+        # So the leader/follower hardware roles report as ``edge``, and an
+        # unknown value falls back to ``edge`` the way the heartbeat's does,
+        # rather than getting this node's status silently dropped.
+        source_type = heartbeat_source_type(self.config.source_type)
+        if source_type in EDGE_STATE_SOURCE_TYPES:
+            source_type = SOURCE_TYPE_EDGE
         payload: Dict[str, Any] = {
             "action_id": action_id,
             "status": status,
             "timestamp": time.time(),
         }
+        if source_type not in _NAV_STATUS_UNSTAMPED_SOURCE_TYPES:
+            # Provenance, as on this node's pose and joint publishes:
+            # ``NavigationStatusPayload`` declares it, and without it a
+            # consumer has to guess the origin from the topic.
+            payload["source_type"] = source_type
         if message:
             payload["message"] = message
         if progress is not None:
@@ -317,11 +344,22 @@ class BaseEdgeNode(ABC):
             return
 
         prefix = self.client.mqtt.topic_prefix
+        now = time.time()
+        # The field names ``EdgeHealthCheck.build_payload`` uses and the
+        # backend's ``TwinEdgeHealthPayload`` declares. ``type`` above all: the
+        # frontend's edge_health hooks drop a message without it.
         payload = {
             **health_data,
-            "edge_uuid": self.config.edge_uuid,
-            "timestamp": time.time(),
-            "uptime": time.time() - self._start_time,
+            "type": "edge_health",
+            # Provenance of the heartbeat. The payload is stored as-is, so
+            # without this a stored edge_health row cannot tell a simulated
+            # node from hardware. After ``**health_data`` so the configured
+            # value wins (same rule as EdgeHealthCheck.build_payload).
+            "source_type": heartbeat_source_type(self.config.source_type),
+            "edge_id": self.config.edge_uuid,
+            "twin_uuid": twin_uuid,
+            "timestamp": now,
+            "uptime_seconds": round(now - self._start_time, 1),
         }
 
         self.client.mqtt.publish(

@@ -565,3 +565,68 @@ class TestWebRtcReconnectDedup:
                         stop.set()
                         await task
         assert negotiate.await_count == 1
+
+
+class TestOfferWaitsForAnswerSubscription:
+    """The offer must not reach the SFU before the answer topic is subscribed.
+
+    NanoMQ applies one client's SUBSCRIBE and its next PUBLISH in parallel, so
+    an offer sent right after subscribing could be answered before the answer
+    subscription existed: the answer was lost and the stream waited out the
+    60 s answer timeout (seen live on a simulated UMA-16 microphone).
+    """
+
+    ANSWER_TOPIC = "cyberwave/twin/twin-123/webrtc-answer"
+    CANDIDATE_TOPIC = "cyberwave/twin/twin-123/webrtc-candidate"
+
+    def _make_streamer(self, client) -> MicrophoneAudioStreamer:
+        streamer = MicrophoneAudioStreamer(
+            client, get_audio=_silent_get_audio, twin_uuid="twin-123", mic_name="mic"
+        )
+        pc = MagicMock()
+        pc.createOffer = AsyncMock(return_value=MagicMock())
+        pc.setLocalDescription = AsyncMock()
+        pc.iceGatheringState = "complete"
+        pc.localDescription.type = "offer"
+        pc.localDescription.sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
+        streamer.pc = pc
+        streamer.streamer = MicrophoneAudioTrack(_silent_get_audio)
+        return streamer
+
+    @pytest.mark.asyncio
+    async def test_the_offer_goes_out_only_after_the_suback(self):
+        client = _make_mqtt_client()
+        acked: set[str] = set()
+        client.is_subscribed = lambda topic: topic in acked
+        streamer = self._make_streamer(client)
+
+        with patch.object(streamer, "_wait_for_answer", new=AsyncMock()):
+            signaling = asyncio.create_task(streamer._perform_signaling())
+            await asyncio.sleep(0.1)
+            assert client.publish.call_count == 0
+
+            acked.add(self.ANSWER_TOPIC)
+            await asyncio.sleep(0.1)
+            # Candidates arrive on their own topic; it must be acked too.
+            assert client.publish.call_count == 0
+
+            acked.add(self.CANDIDATE_TOPIC)
+            await asyncio.wait_for(signaling, timeout=1.0)
+
+        assert client.publish.call_count == 1
+        assert client.publish.call_args.args[0].endswith("/webrtc-offer")
+
+    @pytest.mark.asyncio
+    async def test_a_broker_that_never_acks_still_gets_the_offer(self):
+        client = _make_mqtt_client()
+        client.is_subscribed = lambda _topic: False
+        streamer = self._make_streamer(client)
+
+        with patch.object(streamer, "_wait_for_answer", new=AsyncMock()):
+            with patch(
+                "cyberwave.sensor.answer_subscription.ANSWER_SUBSCRIPTION_TIMEOUT_S",
+                0.05,
+            ):
+                await asyncio.wait_for(streamer._perform_signaling(), timeout=1.0)
+
+        assert client.publish.call_count == 1

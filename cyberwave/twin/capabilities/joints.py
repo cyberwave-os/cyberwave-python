@@ -75,7 +75,12 @@ def _local_universal_schema(twin: Twin) -> dict[str, Any] | None:
 
 
 def controllable_joint_names(twin: Twin) -> List[str]:
-    """Joint names from the twin universal schema (revolute, prismatic, continuous)."""
+    """Joint names from the twin universal schema (revolute, prismatic, continuous).
+
+    Sorted by name on purpose: recordings store joint state and actions in sorted
+    order, and trained policies expect it. To find a specific joint, match by name
+    rather than by position in this list.
+    """
     schema = _local_universal_schema(twin)
     if not schema:
         return []

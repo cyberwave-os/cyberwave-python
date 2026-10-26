@@ -131,11 +131,11 @@ class TwinCameraHandle:
                     "mode; use source='cloud'."
                 )
 
-        # Camera frames require a running MuJoCo simulation in sim mode (no-op in
-        # live mode). Checked after source validation so an invalid source still
+        # Camera frames require a running physics-backed simulation (MuJoCo or
+        # Isaac Sim) in sim mode (no-op in live mode). Checked after source validation so an invalid source still
         # raises the clearer ValueError above.
         self._twin._ensure_simulation_support(
-            SimLevel.MUJOCO, method="TwinCameraHandle.get_frame"
+            SimLevel.PHYSICS, method="TwinCameraHandle.get_frame"
         )
 
         resolved_sensor = self._twin._resolve_sensor_id(
@@ -167,7 +167,7 @@ class TwinCameraHandle:
             return frame
         return self._resolve_frame_path(frame, path)
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     def get_frames(
         self,
         count: int,
@@ -241,7 +241,7 @@ class TwinCameraHandle:
                 time.sleep(interval_ms / 1000.0)
         return frames
 
-    @simulation_level(SimLevel.MUJOCO)
+    @simulation_level(SimLevel.PHYSICS)
     def get_video(
         self,
         *,
@@ -279,7 +279,7 @@ class TwinCameraHandle:
         stream_instance_id: str | None = None
         client = self._twin.client
         runtime_mode = getattr(getattr(client, "config", None), "runtime_mode", "live")
-        # The decorator guarantees a running MuJoCo sim in sim mode; read it
+        # The decorator guarantees a running physics sim in sim mode; read it
         # passively to label the stream. No-op (None) in live mode.
         from ...managers.simulations import running_simulation
 

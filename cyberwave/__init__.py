@@ -38,6 +38,8 @@ from .constants import (
     SOURCE_TYPES,
 )
 from .exceptions import (
+    CommandResponseTimeoutError,
+    RequestTimeoutError,
     CyberwaveError,
     CyberwaveAPIError,
     CyberwaveConnectionError,
@@ -47,6 +49,7 @@ from .exceptions import (
     DepthTransportNotMQTTError,
     NoOngoingVideoStreamAvailable,
     RecordingPayloadTooLargeError,
+    SimulationBackendError,
 )
 from ._version import get_version
 
@@ -90,6 +93,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Alerts
     "Alert": (".alerts", "Alert"),
     "TwinAlertManager": (".alerts", "TwinAlertManager"),
+    # Governed commands (command gateway, audit, control policy, grants)
+    "CommandGateway": (".commands", "CommandGateway"),
+    "CommandResult": (".commands", "CommandResult"),
+    "TwinCommandGateway": (".commands", "TwinCommandGateway"),
     # Agent/action API helpers
     "ActionsClient": (".actions", "ActionsClient"),
     "AgentManager": (".agents", "AgentManager"),
@@ -178,6 +185,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "PolicyRefPayload": (".resources", "PolicyRefPayload"),
     "EdgeManager": (".resources", "EdgeManager"),
     "TwinManager": (".resources", "TwinManager"),
+    "ReplayFeedManager": (".resources", "ReplayFeedManager"),
+    "AssetKitManager": (".resources", "AssetKitManager"),
     # Workflow management (also pulls in REST layer)
     "Workflow": (".workflows", "Workflow"),
     "WorkflowRun": (".workflows", "WorkflowRun"),
@@ -319,6 +328,10 @@ __all__ = [
     # Alerts
     "Alert",
     "TwinAlertManager",
+    # Governed commands
+    "CommandGateway",
+    "CommandResult",
+    "TwinCommandGateway",
     # Agent/action API helpers
     "ActionsClient",
     "AgentManager",
@@ -348,12 +361,15 @@ __all__ = [
     "KeyboardBindings",
     "KeyboardTeleop",
     # Exceptions
+    "CommandResponseTimeoutError",
+    "RequestTimeoutError",
     "CyberwaveError",
     "CyberwaveAPIError",
     "CyberwaveConnectionError",
     "CyberwaveInsufficientCreditsError",
     "CyberwaveTimeoutError",
     "CyberwaveValidationError",
+    "SimulationBackendError",
     "DepthTransportNotMQTTError",
     "RecordingPayloadTooLargeError",
     # Compact API
@@ -373,6 +389,8 @@ __all__ = [
     "PolicyRefPayload",
     "EdgeManager",
     "TwinManager",
+    "ReplayFeedManager",
+    "AssetKitManager",
     # Workflow management
     "Workflow",
     "WorkflowRun",

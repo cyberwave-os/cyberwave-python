@@ -36,25 +36,12 @@ def _drain_one_publish_cycle(
 ) -> List[Tuple[str, Dict[str, Any]]]:
     """Run a single publish cycle in-thread, bypassing the background loop.
 
-    Reaching directly into the inner helpers keeps the test deterministic
-    (no sleep races) while still exercising the merge logic.
+    Calls the *real* publish path (``_publish_once`` → ``build_payload``) rather
+    than restating the payload here, so a field the publisher drops (or never
+    sends, like ``source_type`` did) shows up as a test failure.
     """
-    base_payload = {
-        "type": "edge_health",
-        "timestamp": 1700000000.0,
-        "edge_id": checker.edge_id,
-        "uptime_seconds": 0.0,
-        **checker.get_health_data(),
-        **checker._collect_host_metrics(),
-    }
-    mqtt = checker.mqtt_client
-    out: List[Tuple[str, Dict[str, Any]]] = []
-    for twin_uuid in checker.twin_uuids:
-        payload = dict(base_payload, twin_uuid=twin_uuid)
-        topic = f"cyberwave/twin/{twin_uuid}/edge_health"
-        mqtt.publish(topic, payload)
-        out.append((topic, payload))
-    return out
+    checker._publish_once()
+    return list(checker.mqtt_client.calls)
 
 
 class TestHostMetricsProvider:
@@ -1135,3 +1122,74 @@ class TestStreamConfigProvider:
         cfg = payload["streams"]["stream"]["stream_config"]
         assert cfg["resolution"] == "640x480"
         assert cfg["fps"] == 30
+
+
+class TestSourceTypeProvenance:
+    """Every heartbeat must say where it came from.
+
+    Vector stores the heartbeat as-is, and the platform treats a missing
+    ``source_type`` as ``edge``. Without the field a simulated heartbeat (the
+    MuJoCo camera's, say) is indistinguishable from a live edge device.
+    """
+
+    def test_heartbeat_declares_edge_by_default(self) -> None:
+        mqtt = _FakeMQTT()
+        checker = EdgeHealthCheck(
+            mqtt_client=mqtt, twin_uuids=["twin-a"], edge_id="edge-1"
+        )
+
+        _drain_one_publish_cycle(checker)
+
+        _, payload = mqtt.calls[0]
+        assert payload["source_type"] == "edge"
+
+    def test_a_simulator_declares_sim(self) -> None:
+        """The sim camera streamer passes SOURCE_TYPE_SIM; it must reach the wire."""
+        mqtt = _FakeMQTT()
+        checker = EdgeHealthCheck(
+            mqtt_client=mqtt,
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+            source_type="sim",
+        )
+
+        _drain_one_publish_cycle(checker)
+
+        _, payload = mqtt.calls[0]
+        assert payload["source_type"] == "sim"
+
+    def test_every_configured_twin_gets_the_provenance(self) -> None:
+        mqtt = _FakeMQTT()
+        checker = EdgeHealthCheck(
+            mqtt_client=mqtt, twin_uuids=["twin-a", "twin-b"], edge_id="edge-1"
+        )
+
+        _drain_one_publish_cycle(checker)
+
+        assert len(mqtt.calls) == 2
+        assert {p["source_type"] for _, p in mqtt.calls} == {"edge"}
+        assert {p["twin_uuid"] for _, p in mqtt.calls} == {"twin-a", "twin-b"}
+
+    def test_constructor_source_type_wins_over_a_provider(self) -> None:
+        """A provider returning ``source_type`` must not rewrite provenance."""
+        mqtt = _FakeMQTT()
+        checker = EdgeHealthCheck(
+            mqtt_client=mqtt,
+            twin_uuids=["twin-a"],
+            edge_id="edge-1",
+            source_type="sim",
+            host_metrics_provider=lambda: {"source_type": "edge"},
+        )
+
+        _drain_one_publish_cycle(checker)
+
+        _, payload = mqtt.calls[0]
+        assert payload["source_type"] == "sim"
+
+    def test_unknown_source_type_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="source_type"):
+            EdgeHealthCheck(
+                mqtt_client=_FakeMQTT(),
+                twin_uuids=["twin-a"],
+                source_type="simulation",
+            )

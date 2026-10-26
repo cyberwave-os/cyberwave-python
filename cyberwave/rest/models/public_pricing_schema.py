@@ -17,10 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List
-from typing_extensions import Annotated
-from cyberwave.rest.models.rates_value_value import RatesValueValue
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,19 +27,12 @@ class PublicPricingSchema(BaseModel):
     """
     Public pricing snapshot for the marketing pricing page.  Sourced from the credit rate-card catalog and the monthly free-credit settings so the page never drifts from actual billing.
     """ # noqa: E501
-    eur_per_credit: Annotated[str, Field(strict=True)]
+    eur_per_credit: StrictStr
     free_credits_base: StrictInt
     free_credits_with_card: StrictInt
     free_credits_enabled: StrictBool
-    rates: Dict[str, Dict[str, RatesValueValue]]
+    rates: Dict[str, Dict[str, StrictStr]]
     __properties: ClassVar[List[str]] = ["eur_per_credit", "free_credits_base", "free_credits_with_card", "free_credits_enabled", "rates"]
-
-    @field_validator('eur_per_credit')
-    def eur_per_credit_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -82,15 +73,6 @@ class PublicPricingSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each value in rates (dict of dict)
-        _field_dict_of_dict = {}
-        if self.rates:
-            for _key_rates, _value_rates in self.rates.items():
-                if _value_rates is not None:
-                    _field_dict_of_dict[_key_rates] = {
-                        _key: _value.to_dict() for _key, _value in _value_rates.items()
-                    }
-            _dict['rates'] = _field_dict_of_dict
         return _dict
 
     @classmethod
@@ -107,18 +89,7 @@ class PublicPricingSchema(BaseModel):
             "free_credits_base": obj.get("free_credits_base"),
             "free_credits_with_card": obj.get("free_credits_with_card"),
             "free_credits_enabled": obj.get("free_credits_enabled"),
-            "rates": dict(
-                (_k, dict(
-                    (_ik, RatesValueValue.from_dict(_iv))
-                        for _ik, _iv in _v.items()
-                    )
-                    if _v is not None
-                    else None
-                )
-                for _k, _v in obj["rates"].items()
-            )
-            if obj.get("rates") is not None
-            else None
+            "rates": obj.get("rates")
         })
         return _obj
 

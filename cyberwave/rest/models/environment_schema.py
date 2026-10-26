@@ -35,7 +35,7 @@ class EnvironmentSchema(BaseModel):
     project_uuid: Optional[StrictStr]
     workspace_uuid: Optional[StrictStr] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: StrictStr
     settings: Optional[Dict[str, Any]] = None
     universal_schema: Optional[Dict[str, Any]] = None
     visibility: Optional[StrictStr] = None

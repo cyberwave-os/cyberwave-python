@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -32,25 +31,11 @@ class HardwareOrderLineItemSchema(BaseModel):
     asset_uuid: Optional[StrictStr] = None
     asset_name: StrictStr
     quantity: StrictInt
-    unit_price_credits: Annotated[str, Field(strict=True)]
-    line_total_credits: Annotated[str, Field(strict=True)]
+    unit_price_credits: StrictStr
+    line_total_credits: StrictStr
     tracking_number: StrictStr
     metadata: Dict[str, Any]
     __properties: ClassVar[List[str]] = ["uuid", "asset_uuid", "asset_name", "quantity", "unit_price_credits", "line_total_credits", "tracking_number", "metadata"]
-
-    @field_validator('unit_price_credits')
-    def unit_price_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
-
-    @field_validator('line_total_credits')
-    def line_total_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,

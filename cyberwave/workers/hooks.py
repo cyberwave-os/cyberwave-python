@@ -406,8 +406,9 @@ class HookRegistry:
         ``trigger/manual`` node of an edge workflow, so the compiled
         worker's manual entrypoint runs on the edge instead of the cloud.
         ``payload`` is the run *envelope*: ``{"request_id", "execution_uuid",
-        "inputs", "requested_at", "requested_by_uuid"}``. The caller-supplied
-        inputs live at ``payload["inputs"]``.
+        "inputs", "params", "requested_at", "requested_by_uuid"}``. The
+        caller-supplied inputs live at ``payload["inputs"]`` and the run's
+        params (arbitrary JSON) at ``payload["params"]``.
 
         ``twin_uuid`` is still required — a manual-trigger workflow always
         compiles for exactly one twin, and it's carried on the

@@ -353,3 +353,29 @@ class TestWorkflowRunPolling:
             run.wait(timeout=10, poll_interval=0.01)
 
         assert run.status == "success"
+
+
+class TestTriggerParams:
+    def test_params_are_forwarded_only_when_given(self):
+        client = _make_client()
+        manager = WorkflowManager(client)
+        raw = {"uuid": "run-1", "workflow_id": "wf-1", "status": "running", "inputs": {}}
+        params = {"route": {"waypoints": [[0, 0], [1, 2]]}, "speed": 2}
+
+        with patch(
+            "cyberwave.workflows._trigger_workflow", return_value=raw
+        ) as mock_trigger:
+            manager.trigger("wf-1", params=params)
+
+        mock_trigger.assert_called_once_with(client, "wf-1", None, params=params)
+
+    def test_workflow_trigger_forwards_params(self):
+        client = _make_client()
+        client.workflows = MagicMock()
+        wf = Workflow(client, {"uuid": "wf-1", "is_active": True})
+
+        wf.trigger(inputs={"x": 1}, params={"speed": 2})
+
+        client.workflows.trigger.assert_called_once_with(
+            "wf-1", inputs={"x": 1}, params={"speed": 2}
+        )

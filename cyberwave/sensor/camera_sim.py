@@ -879,7 +879,9 @@ class CyberwaveSimStreaming:
         # automatically — no need to re-parse them here.
         try:
             from cyberwave import Cyberwave  # type: ignore[import]
-            client_obj = Cyberwave()
+            # A simulated scene: everything this client publishes, the camera
+            # heartbeat included, is ``sim`` unless CYBERWAVE_SOURCE_TYPE says otherwise.
+            client_obj = Cyberwave(mode="simulation")
         except ValueError as exc:
             # Cyberwave() raises ValueError when CYBERWAVE_API_KEY is missing.
             logger.warning("Streaming disabled: %s", exc)
@@ -929,11 +931,17 @@ class CyberwaveSimStreaming:
         # Start EdgeHealthCheck first so the frontend sees the edge as connected
         # before the WebRTC offer arrives.
         try:
-            from ..edge.health import EdgeHealthCheck  # type: ignore[import]
+            from ..edge.health import (  # type: ignore[import]
+                EdgeHealthCheck,
+                client_source_type,
+            )
             self._health_check = EdgeHealthCheck(
                 mqtt_client=self._client,
                 twin_uuids=self._all_twin_uuids,
                 edge_id=self._twin_uuid,
+                # The client decides, as for every other message: ``sim`` in
+                # simulation mode, ``edge`` when the scene stands in for one.
+                source_type=client_source_type(self._client),
             )
             self._health_check.start()
             logger.info("EdgeHealthCheck started for twin_uuids=%s", self._all_twin_uuids)

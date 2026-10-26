@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.7.3"
+version = "0.7.4"
 description = "Python SDK for Cyberwave"
 authors = [
     "Simone Di Somma <sdisomma@cyberwave.com>",
@@ -29,6 +29,17 @@ python = "^3.10" # Required by av package (>=3.10)
 # `pip install cyberwave`. The minor version is the core's ABI/binding pin: an
 # incompatible surface change bumps it, which is why the ceiling is <0.3.0.
 cyberwave-geometry = ">=0.2.0,<0.3.0"
+# Payload contracts shared with the backend, edge nodes and simulator. Pure
+# Python (pydantic + pyyaml), published from the public mirror
+# cyberwave-os/cyberwave-contracts. Declared ahead of use: the SDK does not
+# import it yet, because drivers and CI use the SDK tree from source on top of a
+# base image built from the last *published* SDK, which must carry this
+# dependency first. The source_type constants in cyberwave/constants.py are
+# checked against it by tests and the conformance monitor until then. The
+# minor version is the contract line: a breaking schema change bumps it, hence
+# the ceiling. The dev/staging SDK prerelease rewrites this line to that train's
+# prerelease window (see sdk-python-test-and-release.yml).
+cyberwave-contracts = ">=0.1.0,<0.2.0"
 # Core dependencies for REST API client
 urllib3 = "^2.1.0"
 python-dateutil = "^2.8.2"
@@ -65,7 +76,22 @@ eclipse-zenoh = { version = ">=1.0.0", optional = true }
 # Upper-bounded: >=8.0.0 exposes 796 releases, each pinning its own torch /
 # opencv / numpy set, which is the bulk of the resolve. Only ``YOLO`` is
 # used, stable since 8.0.0, so the floor costs nothing.
-ultralytics = { version = ">=8.4,<9.0.0", optional = true }
+#
+# Capped below 8.4.171: with it in the graph, Poetry 2.4.3 crashes mid-solve
+# (KeyError: Package('nvidia-cufile', ...) in Solver._aggregate_solved_packages)
+# while merging the override branches torch's cuda-toolkit extras force. Poetry
+# solves every extra even for `poetry install --extras "camera speaker"`, so
+# this broke the SDK CI install outright. Raise once `poetry lock` resolves.
+ultralytics = { version = ">=8.4,<8.4.171", optional = true }
+# Not used directly -- pulled transitively by ultralytics/torchaudio/silero-vad.
+# Declared only to cap it: torch>=2.11.0 switched its Linux CUDA deps to a
+# single `cuda-toolkit[...]==13.0.x` meta-package whose per-release sub-pins
+# (nvidia-nvjitlink, nvidia-cusparse, ...) conflict across the override-
+# compatibility paths Poetry tries when solving it alongside everything else
+# here, crashing `poetry lock` with a KeyError in solver.py's
+# _aggregate_solved_packages rather than a normal version error. 2.10.0 is
+# the last release on the old, individually-pinned nvidia-*-cu12 scheme.
+torch = { version = "<2.11.0", optional = true }
 onnxruntime = { version = ">=1.16.0", optional = true }
 tflite-runtime = { version = ">=2.14.0", optional = true }
 pywhispercpp = { version = "1.4.1", optional = true }
@@ -96,7 +122,7 @@ speaker = ["aiortc", "av", "sounddevice", "pyudev"]
 realsense = ["aiortc", "av", "opencv-python-headless", "pyrealsense2"]
 zenoh = ["eclipse-zenoh"]
 data = ["eclipse-zenoh", "opencv-python-headless", "pyarrow"]
-ml = ["ultralytics"]
+ml = ["ultralytics", "torch"]
 ml-onnx = ["onnxruntime"]
 ml-opencv = ["opencv-python-headless"]
 ml-tflite = ["tflite-runtime"]
@@ -105,7 +131,7 @@ ml-stt-faster = ["faster-whisper"]
 ml-wakeword = ["openwakeword", "onnxruntime"]
 # Silero VAD only (Audio Assistant). Torch is pulled transitively by silero-vad;
 # do not add torchaudio here — it is unused by workflow codegen and bloats Pi images.
-ml-audio = ["silero-vad"]
+ml-audio = ["silero-vad", "torch"]
 fuzzy-match = ["rapidfuzz"]
 # 1D/2D barcode decoding (workflow ``barcode_reader`` node). Permissively
 # licensed (Apache-2.0); wheels are prebuilt for Pi-class hardware so this
@@ -126,6 +152,7 @@ ml-hailo = []
 # Vision / detection — unrelated to speech workflows.
 ml-all-vision = [
     "ultralytics",
+    "torch",
     "onnxruntime",
     "opencv-python-headless",
     "tflite-runtime",
@@ -137,6 +164,7 @@ ml-all-audio = [
     "pywhispercpp",
     "faster-whisper",
     "silero-vad",
+    "torch",
     "torchaudio",
     "rapidfuzz",
 ]
@@ -145,6 +173,7 @@ ml-all-audio = [
 # Per-model catalog entries still declare one minimal extra (ml-stt, ml-stt-faster, …).
 ml-all = [
     "ultralytics",
+    "torch",
     "onnxruntime",
     "opencv-python-headless",
     "tflite-runtime",
@@ -175,6 +204,12 @@ cyberwave-generate-stubs = "cyberwave.stubs_generator:main"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+filterwarnings = [
+    # pytest-asyncio 0.23 calls this on every fixture for every test it collects. On
+    # Python 3.14 that is millions of recorded warnings, which stalls collection
+    # under xdist. Drop once pytest-asyncio is >= 0.25 (needs pytest >= 8.2).
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:pytest_asyncio.plugin",
+]
 markers = [
     "hailo: requires a Hailo accelerator (/dev/hailo0) and hailo_platform; skipped by default on x86 CI",
 ]

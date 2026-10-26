@@ -2,25 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
+from cyberwave._rest import request
 from cyberwave.exceptions import CyberwaveAPIError
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled", "blocked"}
-
-
-def _decode_json_response(response_data: Any) -> dict[str, Any]:
-    response_data.read()
-    payload = getattr(response_data, "data", None)
-    if isinstance(payload, bytes):
-        return json.loads(payload.decode("utf-8"))
-    if isinstance(payload, str):
-        return json.loads(payload)
-    if isinstance(payload, dict):
-        return payload
-    return {}
 
 
 class ActionsClient:
@@ -43,37 +31,20 @@ class ActionsClient:
             raise ValueError("twin_uuid is required by the action status endpoint")
 
         try:
-            _param = self._api_client.param_serialize(
-                method="GET",
-                resource_path="/api/v1/twins/{uuid}/actions/{action_id}",
+            # Non-2xx raises: an error body would otherwise read as an action
+            # record with no ``status``, which every caller below reads as
+            # "not finished yet".
+            _, payload = request(
+                self._api_client,
+                "GET",
+                "/api/v1/twins/{uuid}/actions/{action_id}",
                 path_params={"uuid": twin_uuid, "action_id": action_id},
-                auth_settings=["CustomTokenAuthentication"],
             )
-            response_data = self._api_client.call_api(*_param)
-            # ``call_api`` only raises for connection-level failures: the
-            # generated client checks the HTTP status in ``response_deserialize``,
-            # which this path deliberately skips. Without this check an error
-            # body decodes into a dict with no ``status`` key, which every
-            # caller below reads as "not finished yet".
-            status_code = getattr(response_data, "status", None)
-            if status_code is not None and not 200 <= status_code <= 299:
-                detail = ""
-                try:
-                    detail = str(
-                        _decode_json_response(response_data).get("detail") or ""
-                    )
-                except Exception:
-                    # An unparseable body is fine — the status code is the signal.
-                    detail = ""
-                raise CyberwaveAPIError(
-                    f"Action status request failed with HTTP {status_code}"
-                    + (f": {detail}" if detail else "")
-                )
-            return _decode_json_response(response_data)
         except CyberwaveAPIError:
             raise
         except Exception as exc:
             raise CyberwaveAPIError(f"Failed to get action status: {exc}") from exc
+        return payload if isinstance(payload, dict) else {}
 
     def wait(
         self,

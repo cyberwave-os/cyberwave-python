@@ -5,6 +5,8 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
+from cyberwave.constants import SOURCE_TYPE_EDGE, SOURCE_TYPES
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,6 +93,47 @@ def _validate_stream_config(stream_id: str, config: Mapping[str, Any]) -> None:
         )
 
 
+_warned_source_types: set[str] = set()
+
+
+def heartbeat_source_type(value: Optional[str]) -> str:
+    """The source type to stamp on a heartbeat from a configured value.
+
+    An unknown value (say a typo in ``CYBERWAVE_SOURCE_TYPE``) logs a warning
+    once and falls back to ``edge``, which is how such a heartbeat was read
+    before it carried a source type. Provenance labelling must not keep a
+    node from starting or publishing.
+    """
+    if not value:
+        return SOURCE_TYPE_EDGE
+    if value in SOURCE_TYPES:
+        return value
+    if value not in _warned_source_types:
+        _warned_source_types.add(value)
+        logger.warning(
+            "Unknown source_type %r for edge_health; stamping %r. Must be one of: %s",
+            value,
+            SOURCE_TYPE_EDGE,
+            ", ".join(SOURCE_TYPES),
+        )
+    return SOURCE_TYPE_EDGE
+
+
+def client_source_type(client: Any) -> str:
+    """The source type to stamp on a heartbeat published through *client*.
+
+    A heartbeat carries the provenance of the process that sends it, so it
+    follows the MQTT client like every other message does: the base client
+    exposes ``source_type``, the :class:`~cyberwave.mqtt_client.CyberwaveMQTTClient`
+    wrapper its ``config.source_type``. Anything else (a test double, say)
+    falls back to ``edge``.
+    """
+    value = getattr(client, "source_type", None)
+    if not isinstance(value, str):
+        value = getattr(getattr(client, "config", None), "source_type", None)
+    return heartbeat_source_type(value if isinstance(value, str) else None)
+
+
 class EdgeHealthCheck:
     """Publishes edge health status on a background thread.
 
@@ -127,6 +170,7 @@ class EdgeHealthCheck:
         interval: int = 5,
         host_metrics_provider: Optional[HostMetricsProvider] = None,
         stream_config_provider: Optional[StreamConfigProvider] = None,
+        source_type: str = SOURCE_TYPE_EDGE,
     ):
         """Initialize health publisher.
 
@@ -150,7 +194,22 @@ class EdgeHealthCheck:
                 to wire via :meth:`register_stream_config`; the two
                 interoperate (provider keys override registered keys
                 on collision, so the dynamic value wins).
+            source_type: Provenance stamped on every heartbeat (one of
+                ``cyberwave.constants.SOURCE_TYPES``). Pass
+                ``SOURCE_TYPE_SIM`` from a simulator. The heartbeat is
+                stored as-is, and a heartbeat without a ``source_type`` is
+                read as coming from hardware, so a simulated one would be
+                indistinguishable from a live edge device. It always wins
+                over a ``source_type`` key returned by a provider.
+
+        Raises:
+            ValueError: If ``source_type`` is not a known source type.
         """
+        if source_type not in SOURCE_TYPES:
+            raise ValueError(
+                f"Invalid source_type: {source_type!r}. Must be one of: "
+                f"{', '.join(SOURCE_TYPES)}"
+            )
         self.mqtt_client = mqtt_client
         self.twin_uuids = twin_uuids
         self.edge_id = edge_id or twin_uuids[0]  # Default to first twin UUID
@@ -158,6 +217,7 @@ class EdgeHealthCheck:
         self.interval = interval
         self.host_metrics_provider = host_metrics_provider
         self.stream_config_provider = stream_config_provider
+        self.source_type = source_type
 
         self.start_time = time.time()
         self.frame_count = 0
@@ -545,40 +605,47 @@ class EdgeHealthCheck:
             return {}
         return metrics if isinstance(metrics, dict) else {}
 
+    def build_payload(self) -> Dict[str, Any]:
+        """The heartbeat body, minus the per-twin ``twin_uuid``.
+
+        Separated from :meth:`_publish_once` so tests assert the real wire
+        payload instead of restating it.
+        """
+        now = time.time()
+        return {
+            "type": "edge_health",
+            "timestamp": now,
+            "edge_id": self.edge_id,
+            "uptime_seconds": round(now - self.start_time, 1),
+            **self.get_health_data(),  # streams, stream_count, etc.
+            **self._collect_host_metrics(),  # host_memory_percent, cpu_temp_c, ...
+            # Last, so a provider cannot overwrite the provenance the
+            # constructor was given (same rule as BaseEdgeNode.publish_health).
+            "source_type": self.source_type,
+        }
+
+    def _publish_once(self) -> None:
+        """Publish one heartbeat to every configured twin."""
+        base_payload = self.build_payload()
+        prefix = getattr(self.mqtt_client, "topic_prefix", None) or ""
+        for twin_uuid in self.twin_uuids:
+            if not twin_uuid:
+                continue
+            twin_uuid_str = str(twin_uuid)
+            payload = dict(base_payload, twin_uuid=twin_uuid_str)
+            topic = f"{prefix}cyberwave/twin/{twin_uuid_str}/edge_health"
+
+            try:
+                # Pass dict so MQTT client can add session_id (matches other messages)
+                self.mqtt_client.publish(topic, payload, qos=0)
+            except Exception as e:
+                logger.debug("Edge health publish failed: %s", e)
+
     def _publish_loop(self):
         """Background thread loop for publishing health."""
         while not self._stop_event.is_set():
             try:
-                # Build health data
-                health_data = self.get_health_data()
-                host_metrics = self._collect_host_metrics()
-
-                # Build complete payload
-                now = time.time()
-                base_payload = {
-                    "type": "edge_health",
-                    "timestamp": now,
-                    "edge_id": self.edge_id,
-                    "uptime_seconds": round(now - self.start_time, 1),
-                    **health_data,  # Include streams, stream_count, etc.
-                    **host_metrics,  # Optional host_memory_percent, cpu_temp_c, ...
-                }
-
-                # Publish to each twin UUID
-                prefix = getattr(self.mqtt_client, "topic_prefix", None) or ""
-                for twin_uuid in self.twin_uuids:
-                    if not twin_uuid:
-                        continue
-                    twin_uuid_str = str(twin_uuid)
-                    payload = dict(base_payload, twin_uuid=twin_uuid_str)
-                    topic = f"{prefix}cyberwave/twin/{twin_uuid_str}/edge_health"
-
-                    try:
-                        # Pass dict so MQTT client can add session_id (matches other messages)
-                        self.mqtt_client.publish(topic, payload, qos=0)
-                    except Exception as e:
-                        logger.debug("Edge health publish failed: %s", e)
-
+                self._publish_once()
             except Exception as e:
                 logger.warning(f"⚠️ Health publish error: {e}")
 

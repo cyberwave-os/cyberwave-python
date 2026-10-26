@@ -144,6 +144,7 @@ def _inject_rest_stubs() -> None:
         "cyberwave.rest.models.twin_joint_calibration_schema",
         "cyberwave.rest.models.universal_schema_patch_schema",
         "cyberwave.rest.models.twin_universal_schema_patch_schema",
+        "cyberwave.rest.models.recording_materializing_schema",
     ]
 
     for name in _REST_MODULES:

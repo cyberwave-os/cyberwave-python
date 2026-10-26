@@ -1,4 +1,4 @@
-"""State getters: pose/joints are level 0 (ungated); pointcloud gates via MUJOCO."""
+"""State getters: pose/joints are level 0 (ungated); pointcloud gates via PHYSICS."""
 
 from __future__ import annotations
 

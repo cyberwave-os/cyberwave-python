@@ -3,7 +3,7 @@
 They previously raised ``NotSimulatedError`` in any simulation mode (live/driver
 -only). The browser playground now renders these commands directly (see the
 frontend's ``usePlaygroundLocomotionCommandFollower``), so they no longer
-require a running MuJoCo-style simulation instance — ``SimLevel.PLAYGROUND``
+require a running physics-backed simulation instance — ``SimLevel.PLAYGROUND``
 is a no-op preflight check, same as an undecorated method. They still work
 normally in live mode.
 """

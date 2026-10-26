@@ -18,6 +18,7 @@ import threading
 import time
 from typing import Any
 
+from .. import _payload_limit
 from .config import BridgeConfig
 from .queue import OfflineQueue, QueuedMessage
 from .topic_mapping import (
@@ -123,6 +124,13 @@ class ZenohMqttBridge:
         self._outbound_buffer: collections.deque[tuple[str, bytes]] = collections.deque()
         self._outbound_ready = threading.Event()
 
+        # Payloads over the broker's limit are dropped before they are buffered
+        # or queued: the broker would drop them without a word (MQTT 3.1.1), and
+        # the offline queue would hold them on disk for nothing.
+        self._max_payload_bytes = _payload_limit.resolve_max_payload_bytes(None)
+        self._oversize_reports = _payload_limit.ReportThrottle()
+        self._oversized_count = 0
+
         # Stats
         self._outbound_count = 0
         self._inbound_count = 0
@@ -217,6 +225,7 @@ class ZenohMqttBridge:
                 "inbound": self._inbound_count,
                 "queued": self._queued_count,
                 "drained": self._drained_count,
+                "oversized": self._oversized_count,
             }
 
     # ── Zenoh setup ──────────────────────────────────────────────────
@@ -367,8 +376,26 @@ class ZenohMqttBridge:
         never block on MQTT I/O.  The actual MQTT publish (including
         ACK waiting) happens in ``_outbound_publish_loop``.
         """
+        if self._refuse_oversized(mqtt_topic, payload):
+            return
         self._outbound_buffer.append((mqtt_topic, payload))
         self._outbound_ready.set()
+
+    def _refuse_oversized(self, mqtt_topic: str, payload: bytes) -> bool:
+        """Drop and report ``payload`` if the broker would refuse it for its size."""
+        oversize = _payload_limit.oversize_reason(
+            mqtt_topic, payload, max_payload_bytes=self._max_payload_bytes
+        )
+        if oversize is None:
+            return False
+        with self._stats_lock:
+            self._oversized_count += 1
+        self._oversize_reports.report(
+            f"topic:{mqtt_topic}",
+            f"Not bridging to MQTT {mqtt_topic}: {oversize}",
+            logger.error,
+        )
+        return True
 
     def _start_outbound_publish_thread(self) -> None:
         t = threading.Thread(
@@ -463,6 +490,10 @@ class ZenohMqttBridge:
             for msg in batch:
                 if self._stop_event.is_set():
                     break
+                # Queued by a bridge without the size check, or under a higher
+                # limit: re-queueing it would block the queue behind it forever.
+                if self._refuse_oversized(msg.mqtt_topic, msg.payload):
+                    continue
                 try:
                     result = self._mqtt_client.publish(
                         msg.mqtt_topic, msg.payload, qos=msg.qos

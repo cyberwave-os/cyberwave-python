@@ -89,6 +89,7 @@ from .support import (
     setup_colored_logging,
 )
 from .transports import CommandContext, ZenohPublisherMixin, ZenohSubscriberMixin
+from .command_response import CommandOutcome, CommandRequest, current_command
 
 __all__ = [
     # Driver base
@@ -140,6 +141,10 @@ __all__ = [
     "ZenohPublisherMixin",
     "ZenohSubscriberMixin",
     "CommandContext",
+    # MQTT v5 command replies (twin.command_response.v1)
+    "CommandOutcome",
+    "CommandRequest",
+    "current_command",
     # Shared utilities
     "check_device_reachable_async",
     "load_driver_manifest",

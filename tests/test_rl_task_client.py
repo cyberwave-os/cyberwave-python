@@ -1027,6 +1027,144 @@ def test_make_action_term_accepts_baseline_delta_on_position_delta() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "action_type",
+    ["smoothed_blocking_delta_position", "reanchored_blocking_delta_position"],
+)
+def test_make_action_term_accepts_baseline_delta_on_blocking_types(
+    action_type: str,
+) -> None:
+    """The blocking action types build on the smoothed delta, so the
+    backend accepts ``baseline_delta`` on them; the SDK must too."""
+
+    term = make_action_term(
+        "arm_control",
+        action_type=action_type,
+        entity="robot",
+        target_names_expr=["joint_1"],
+        baseline_delta=0.0,
+    )
+    assert term["baseline_delta"] == 0.0
+
+
+def test_make_action_term_rejects_baseline_delta_on_rate_limited_position() -> None:
+    """``rate_limited_position`` is an absolute-target type, not a delta."""
+
+    with pytest.raises(ValueError, match="baseline_delta"):
+        make_action_term(
+            "arm_control",
+            action_type="rate_limited_position",
+            entity="robot",
+            target_names_expr=["joint_1"],
+            baseline_delta=0.0,
+        )
+
+
+@pytest.mark.parametrize(
+    "action_type",
+    ["smoothed_blocking_delta_position", "reanchored_blocking_delta_position"],
+)
+def test_make_action_term_authors_blocking_fields(action_type: str) -> None:
+    term = make_action_term(
+        "arm",
+        action_type=action_type,
+        entity="kinova",
+        target_names_expr=["joint_1", "joint_2"],
+        locked_actuator_names=["joint_7"],
+        mode="hard",
+        continuous_span_rad=6,
+    )
+    assert term["locked_actuator_names"] == ["joint_7"]
+    assert term["mode"] == "hard"
+    assert term["continuous_span_rad"] == 6.0
+    assert isinstance(term["continuous_span_rad"], float)
+
+
+def test_make_action_term_omits_unset_blocking_fields() -> None:
+    term = make_action_term(
+        "arm",
+        action_type="smoothed_blocking_delta_position",
+        entity="kinova",
+        target_names_expr=["joint_1"],
+        locked_actuator_names=[],
+    )
+    for key in ("locked_actuator_names", "mode", "continuous_span_rad", "dim"):
+        assert key not in term
+
+
+def test_make_action_term_accepts_continuous_span_on_rate_limited_position() -> None:
+    term = make_action_term(
+        "arm",
+        action_type="rate_limited_position",
+        entity="kinova",
+        target_names_expr=["joint_1"],
+        continuous_span_rad=3.14,
+    )
+    assert term["continuous_span_rad"] == pytest.approx(3.14)
+
+
+@pytest.mark.parametrize(
+    ("action_type", "extra", "match"),
+    [
+        ("rate_limited_position", {"locked_actuator_names": ["joint_7"]}, "mode"),
+        ("position_delta", {"mode": "soft"}, "mode"),
+        ("position", {"continuous_span_rad": 1.0}, "continuous_span_rad"),
+        ("position_delta", {"dim": 3}, "dim is only supported"),
+        ("smoothed_blocking_delta_position", {"mode": "stop"}, "'hard' or 'soft'"),
+        (
+            "smoothed_blocking_delta_position",
+            {"locked_actuator_names": ["joint_1"]},
+            "repeats target joint",
+        ),
+        (
+            "smoothed_blocking_delta_position",
+            {"locked_actuator_names": "joint_7"},
+            "list of joint names",
+        ),
+        ("rate_limited_position", {"continuous_span_rad": 0}, "positive finite"),
+        (
+            "rate_limited_position",
+            {"continuous_span_rad": float("inf")},
+            "positive finite",
+        ),
+        ("rate_limited_position", {"continuous_span_rad": True}, "positive finite"),
+    ],
+)
+def test_make_action_term_rejects_invalid_new_action_fields(
+    action_type: str, extra: dict[str, Any], match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        make_action_term(
+            "arm",
+            action_type=action_type,
+            entity="kinova",
+            target_names_expr=["joint_1"],
+            **extra,
+        )
+
+
+def test_make_action_term_custom_dim() -> None:
+    term = make_action_term(
+        "gate",
+        action_type="custom",
+        entity="robot",
+        module="custom.actions.gate",
+        symbol="GateActionCfg",
+        dim=4,
+    )
+    assert term["dim"] == 4
+    for bad in (0, -1, True, 2.0):
+        with pytest.raises(ValueError, match="dim must be a positive integer"):
+            make_action_term(
+                "gate",
+                action_type="custom",
+                entity="robot",
+                module="custom.actions.gate",
+                symbol="GateActionCfg",
+                dim=bad,
+            )
+
+
 def test_make_action_term_rejects_invalid_scalar_or_map() -> None:
     """Bools and non-numeric mapping values must surface as
     ``ValueError`` instead of being silently coerced."""
@@ -1222,3 +1360,76 @@ def test_make_default_ppo_rlmodule_config_auto_intervals_omit_fields() -> None:
     assert "write_interval" not in spec["trainer"]
     assert "checkpoint_interval" not in spec["trainer"]
     assert "experiment" not in spec
+
+
+_TASK_PARAMS = {
+    "schema_version": 1,
+    "params": [
+        {"name": "ring_radius_m", "type": "float", "value": 0.15, "min": 0.05}
+    ],
+    "presets": {"play": {"values": {"ring_radius_m": 0.2}}},
+}
+
+
+def test_set_task_params_wraps_payload(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    rl = RLTaskClient(fake_client)
+    patched_requests["put"].return_value = patched_requests["_make_response"](
+        {"task_params": _TASK_PARAMS}
+    )
+
+    result = rl.set_task_params("task-uuid", _TASK_PARAMS)
+
+    call = patched_requests["put"].call_args
+    assert call.args[0].endswith("/rl-tasks/task-uuid/task-params")
+    assert call.kwargs["json"] == {"task_params": _TASK_PARAMS}
+    assert result == {"task_params": _TASK_PARAMS}
+
+
+def test_set_task_params_empty_clears(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    rl = RLTaskClient(fake_client)
+    patched_requests["put"].return_value = patched_requests["_make_response"](
+        {"task_params": {}}
+    )
+
+    rl.set_task_params("task-uuid", {})
+
+    assert patched_requests["put"].call_args.kwargs["json"] == {"task_params": {}}
+
+
+def test_get_task_params_targets_task_params_endpoint(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    rl = RLTaskClient(fake_client)
+    patched_requests["get"].return_value = patched_requests["_make_response"](
+        {"task_params": {}}
+    )
+
+    result = rl.get_task_params("task-uuid")
+
+    assert patched_requests["get"].call_args.args[0].endswith(
+        "/rl-tasks/task-uuid/task-params"
+    )
+    assert result == {"task_params": {}}
+
+
+def test_get_task_params_usage_targets_usage_endpoint(
+    fake_client: _FakeClient, patched_requests: dict[str, MagicMock]
+) -> None:
+    rl = RLTaskClient(fake_client)
+    usage = {
+        "usages": {"ring_radius_m": ["waypoints.py:12"]},
+        "unused": [],
+        "errors": [],
+    }
+    patched_requests["get"].return_value = patched_requests["_make_response"](usage)
+
+    result = rl.get_task_params_usage("task-uuid")
+
+    assert patched_requests["get"].call_args.args[0].endswith(
+        "/rl-tasks/task-uuid/task-params/usage"
+    )
+    assert result == usage

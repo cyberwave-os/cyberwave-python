@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from cyberwave.constants import SOURCE_TYPE_EDGE
+from cyberwave.mqtt_identity import is_api_token, mqtt_username_for_token
 
 # Production defaults values
 DEFAULT_BASE_URL = "https://api.cyberwave.com"
@@ -21,6 +22,32 @@ def _parse_bool_env(value: Optional[str], default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def resolve_mqtt_credentials(
+    username: str, password: Optional[str], api_key: Optional[str]
+) -> tuple[str, Optional[str]]:
+    """The ``(username, password)`` an MQTT client connects with.
+
+    The password is ``password`` (a broker password, or an API token Edge Core
+    pins for a scoped driver) else ``api_key``; ``None`` when there is neither.
+    ``"mqttcyb"`` is a placeholder, not a name: authorization checks arrive
+    without the password, and a username every client shares leaves the
+    backend guessing which of them is asking. Derived from the API token it
+    names one token. A legacy broker password is a static account whose
+    username must reach the broker unchanged -- but an API token under
+    ``password`` is the very credential the derivation expects, and the cloud
+    node sets both names to it when it scopes a workload token.
+    """
+    auth_password = password or api_key
+    legacy_broker_credentials = bool(password) and not is_api_token(password)
+    if (
+        auth_password
+        and username == DEFAULT_MQTT_USERNAME
+        and not legacy_broker_credentials
+    ):
+        return mqtt_username_for_token(auth_password), auth_password
+    return username, auth_password
 
 
 def _parse_mqtt_protocol_env(value: Optional[str]) -> Optional[int]:
@@ -57,7 +84,7 @@ class CyberwaveConfig:
         mqtt_use_tls: Whether to enable MQTT TLS transport
         mqtt_tls_ca_cert: Path to CA certificate bundle for MQTT TLS
         mqtt_protocol: MQTT protocol version (e.g. ``paho.mqtt.client.MQTTv311`` or
-            ``paho.mqtt.client.MQTTv5``).  Defaults to MQTTv311.
+            ``paho.mqtt.client.MQTTv5``).  Defaults to MQTTv5.
         environment_id: Default environment ID to use
         workspace_id: Default workspace ID to use
         timeout: Request timeout in seconds
@@ -139,8 +166,12 @@ class CyberwaveConfig:
             self.source_type = os.getenv("CYBERWAVE_SOURCE_TYPE", SOURCE_TYPE_EDGE)
 
         if not self.topic_prefix:
-            # Check for explicit prefix first
-            self.topic_prefix = os.getenv("CYBERWAVE_MQTT_TOPIC_PREFIX")
+            # Check for explicit prefix first. CYBERWAVE_TOPIC_PREFIX is the
+            # name simulation nodes export (and Edge Core forwards with every
+            # other CYBERWAVE_* variable into driver containers).
+            self.topic_prefix = os.getenv("CYBERWAVE_MQTT_TOPIC_PREFIX") or os.getenv(
+                "CYBERWAVE_TOPIC_PREFIX"
+            )
 
             # If not set, derive from environment (legacy behavior)
             if not self.topic_prefix:
@@ -155,6 +186,15 @@ class CyberwaveConfig:
 
         if not self.twin_uuid:
             self.twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
+
+    @property
+    def mqtt_credentials(self) -> tuple[str, Optional[str]]:
+        """``(username, password)`` for the broker; see :func:`resolve_mqtt_credentials`."""
+        return resolve_mqtt_credentials(
+            self.mqtt_username or DEFAULT_MQTT_USERNAME,
+            self.mqtt_password,
+            self.api_key,
+        )
 
     @property
     def auth_header(self) -> dict:

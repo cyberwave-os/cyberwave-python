@@ -45,7 +45,7 @@ from typing import Any
 
 from typing_extensions import Self
 
-from ..edge.health import EdgeHealthCheck
+from ..edge.health import EdgeHealthCheck, heartbeat_source_type
 from .cloud.alert_api import DriverAlertsMixin
 from .cloud.alerts import AlertManager
 from .cloud.connection import CloudConnectionMixin
@@ -363,13 +363,21 @@ class BaseDriver(
         if getattr(self, "_edge_health", None) is not None:
             return
         twin_uuid = self.twin_uuid
-        mqtt = self._require_client().mqtt
+        client = self._require_client()
+        mqtt = client.mqtt
+        # Take the provenance the client resolved (``sim`` in simulation mode)
+        # rather than letting EdgeHealthCheck fall back to its ``edge``
+        # default, which would label a simulated driver's heartbeat as a live
+        # edge device. ``getattr`` because a test double standing in for the
+        # client only has to provide ``mqtt``.
+        source_type = getattr(getattr(client, "config", None), "source_type", None)
         self._edge_health = EdgeHealthCheck(
             mqtt_client=mqtt,
             twin_uuids=[twin_uuid],
             edge_id=twin_uuid,
             interval=type(self).EDGE_HEALTH_INTERVAL_S,
             host_metrics_provider=self.edge_health_extras,
+            source_type=heartbeat_source_type(source_type),
         )
         for stream_id, config in self.edge_health_streams():
             self._edge_health.register_stream_config(stream_id, config)

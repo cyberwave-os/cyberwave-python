@@ -1,0 +1,5 @@
+{
+  "r48-s00-bottom": {"inlet_temperature": "ipmi/ambient/node=960", "power": "ipmi/total_power/node=960"},
+  "r48-s10-middle": {"inlet_temperature": "ipmi/ambient/node=970", "power": "ipmi/total_power/node=970"},
+  "r48-s19-top": {"inlet_temperature": "ipmi/ambient/node=979", "power": "ipmi/total_power/node=979"}
+}

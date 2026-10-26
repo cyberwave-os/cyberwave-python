@@ -1,0 +1,15 @@
+{
+  "inlet_temperature": "ipmi/ambient",
+  "total_power": "ipmi/total_power",
+  "cpu0_power": "ipmi/p0_power",
+  "cpu1_power": "ipmi/p1_power",
+  "cpu0_temperature": "ipmi/p0_vdd_temp",
+  "cpu1_temperature": "ipmi/p1_vdd_temp",
+  "gpu0_temperature": "ipmi/gpu0_core_temp",
+  "gpu1_temperature": "ipmi/gpu1_core_temp",
+  "gpu2_temperature": "ipmi/gpu3_core_temp",
+  "gpu3_temperature": "ipmi/gpu4_core_temp",
+  "fan_speed": "ipmi/fan0_0",
+  "psu0_input_power": "ipmi/ps0_input_power",
+  "psu1_input_power": "ipmi/ps1_input_power"
+}

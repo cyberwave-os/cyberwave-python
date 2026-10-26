@@ -44,8 +44,12 @@ from . import (
     SDK_EDGE_HEALTH_INTERVAL_SECONDS,
     SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
 )
+from .answer_subscription import answer_topics, wait_for_subscriptions
 from .base_video import _strip_vp8_video, read_liveness_counter
+from .ice import effective_ice_servers
 from .microphone import BaseAudioTrack, _strip_non_opus_audio
+from . import peer_close
+from .peer_close import close_peer_connection
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
@@ -122,6 +126,13 @@ class MultimediaStreamer:
 
         # Reconnect state
         self._should_reconnect = False
+        # Set when a monitor reconnect attempt failed and left pc None, so the
+        # monitor keeps retrying instead of waiting for a pc that never comes.
+        self._reconnect_pending = False
+        # Set once the stream has connected (or a start/stop command has taken
+        # over). Until then the run loop retries the first connect; afterwards
+        # every retry belongs to the monitor.
+        self._initial_connect_done = False
         self._is_running = False
         self._monitor_task: Optional[asyncio.Task] = None
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
@@ -160,8 +171,12 @@ class MultimediaStreamer:
         if self._run_stop_event is not None:
             self._run_stop_event.set()
         if self._run_task is not None:
+            # The run task's own cleanup (its finally block) notices the stop
+            # within 0.5 s, then does one bounded close plus its settle and
+            # a 0.5 s pause per track. Outlast it, or this wait cancels it partway.
+            budget = peer_close.close_budget_s(extra=1.5)
             try:
-                await asyncio.wait_for(self._run_task, timeout=5.0)
+                await asyncio.wait_for(self._run_task, timeout=budget)
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 if not self._run_task.done():
                     self._run_task.cancel()
@@ -215,10 +230,12 @@ class MultimediaStreamer:
             self._subscribe_to_answer()
             self._subscribed_to_answer = True
 
+        self._initial_connect_done = self.pc is not None
         if self.pc is None:
             try:
                 await self._start_webrtc()
                 self._should_reconnect = self.auto_reconnect
+                self._initial_connect_done = True
             except Exception as e:
                 logger.error(
                     "Auto-start multimedia stream failed: %s", e, exc_info=True
@@ -227,13 +244,22 @@ class MultimediaStreamer:
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
 
+        # Backoff retry only when the *initial* connect failed. Ongoing drops are
+        # handled exclusively by _monitor_connection: its reconnect leaves pc None
+        # for a few seconds, and a second offer here would overwrite (and leak)
+        # the peer connection it is building. A stop command also leaves pc
+        # None, and must not be undone.
         _next_retry_at = time.monotonic() + 15.0
         _retry_backoff = 30.0
-        _initial_connected = False
 
         try:
             while not stop.is_set() and self._is_running:
-                if self.pc is None and self.auto_reconnect and not _initial_connected:
+                if (
+                    self.pc is None
+                    and self.auto_reconnect
+                    and not self._initial_connect_done
+                    and not self._reconnect_pending
+                ):
                     if time.monotonic() >= _next_retry_at:
                         try:
                             logger.info(
@@ -241,7 +267,7 @@ class MultimediaStreamer:
                             )
                             await self._start_webrtc()
                             self._should_reconnect = self.auto_reconnect
-                            _initial_connected = True
+                            self._initial_connect_done = True
                         except Exception as exc:
                             logger.info(
                                 "Multimedia stream retry failed (%s). Will retry in %.0fs.",
@@ -262,7 +288,9 @@ class MultimediaStreamer:
         self.video_track = self._create_video_track()
         self.audio_track = self._create_audio_track()
 
-        ice_servers = [RTCIceServer(**s) for s in self.turn_servers]
+        ice_servers = [
+            RTCIceServer(**s) for s in effective_ice_servers(self.turn_servers)
+        ]
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
         self._setup_pc_handlers()
         self.pc.addTrack(self.video_track)
@@ -292,6 +320,9 @@ class MultimediaStreamer:
             await asyncio.sleep(0.1)
 
         sdp = _filter_multimedia_sdp(self.pc.localDescription.sdp)
+        await wait_for_subscriptions(
+            self.client, answer_topics(self.client, self.twin_uuid)
+        )
         self._send_offer(sdp)
         await self._wait_for_answer()
 
@@ -434,14 +465,21 @@ class MultimediaStreamer:
         try:
             await self._start_webrtc()
             self._should_reconnect = self.auto_reconnect
+            self._reconnect_pending = False
+            self._initial_connect_done = True
         except Exception as e:
             logger.error("Error starting multimedia stream: %s", e, exc_info=True)
 
     async def _handle_stop_command(self) -> None:
+        # Before the pc check: between reconnect attempts, and while the first
+        # connect is being retried, pc is None but a retry would still start
+        # the stream the operator just stopped.
+        self._should_reconnect = False
+        self._reconnect_pending = False
+        self._initial_connect_done = True
         if self.pc is None:
             return
         try:
-            self._should_reconnect = False
             # Only close the PC; don't call stop() which tears down _run_task
             await self._close_peer_connection()
         except Exception as e:
@@ -452,19 +490,28 @@ class MultimediaStreamer:
     # ------------------------------------------------------------------
 
     async def _monitor_connection(self, stop_event: asyncio.Event) -> None:
+        """Reconnect a dropped stream; owns every retry after the first connect.
+
+        A failed attempt leaves pc None, so it is tracked in _reconnect_pending:
+        otherwise the next pass would wait forever for a pc and never reach the
+        backoff and attempt cap. A cancelled reconnect or the cap parks the
+        monitor rather than ending it, so a later start command is watched.
+        """
         reconnect_delay = 2.0
         max_attempts = 10
         attempt = 0
         while not stop_event.is_set() and self._is_running:
-            if not self._should_reconnect or self.pc is None:
+            if not self._should_reconnect or (
+                self.pc is None and not self._reconnect_pending
+            ):
                 await asyncio.sleep(1.0)
                 continue
-            if self._is_connection_lost():
+            if self._reconnect_pending or self._is_connection_lost():
                 attempt = await self._attempt_reconnect(
                     stop_event, attempt, reconnect_delay, max_attempts
                 )
                 if attempt < 0:
-                    break
+                    attempt = 0
             await asyncio.sleep(1.0)
 
     def _is_connection_lost(self) -> bool:
@@ -496,16 +543,20 @@ class MultimediaStreamer:
             await self._close_peer_connection()
             await asyncio.sleep(base_delay)
             if not self._should_reconnect or stop_event.is_set():
+                self._reconnect_pending = False
                 return -1
             logger.info("Reconnecting multimedia stream (attempt %s)...", attempt + 1)
             await self._start_webrtc()
+            self._reconnect_pending = False
             return 0
         except Exception as e:
             attempt += 1
             logger.error("Reconnect attempt failed: %s", e, exc_info=True)
             if attempt >= max_attempts:
                 self._should_reconnect = False
+                self._reconnect_pending = False
                 return -1
+            self._reconnect_pending = True
             await asyncio.sleep(min(base_delay * (2**attempt), 30.0))
             return attempt
 
@@ -709,10 +760,7 @@ class MultimediaStreamer:
         self._stop_health_check()
         if self.pc is not None:
             try:
-                await self.pc.close()
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                logger.error("Error closing peer connection: %s", e)
+                await close_peer_connection(self.pc)
             finally:
                 self.pc = None
         if self.video_track is not None:
@@ -734,14 +782,14 @@ class MultimediaStreamer:
         self._reset_state()
 
     async def _teardown_tracks_and_pc(self) -> None:
-        """Quick cleanup after failed signaling (no sleeps)."""
+        """Quick cleanup after failed signaling: a bounded close, then a 0.5 s settle."""
         if self.pc is not None:
             try:
-                await self.pc.close()
-                await asyncio.sleep(0.5)
-            except Exception:
-                pass
-            self.pc = None
+                await close_peer_connection(
+                    self.pc, settle=0.5, error_log_level=logging.DEBUG
+                )
+            finally:
+                self.pc = None
         for track in (self.video_track, self.audio_track):
             if track is not None:
                 try:

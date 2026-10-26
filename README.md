@@ -141,6 +141,7 @@ Runnable scripts live in [examples/](examples) and see the [examples index](exam
 | [capture_frame.py](examples/capture_frame.py) | Grab a single camera frame from a twin |
 | [handeye_calibration.py](examples/handeye_calibration.py) | Measure where a wrist camera sits on an arm |
 | [notebooks/hand_eye_calibration.ipynb](examples/notebooks/hand_eye_calibration.ipynb) | The same, as a runnable notebook — works in Colab with no robot attached |
+| [notebooks/g1_voice_astra.ipynb](examples/notebooks/g1_voice_astra.ipynb) | Voice command + live G1 camera frame + GPT-6 Astra, with bounded motion tools and a preview mode |
 | [camera_stream.py](examples/camera_stream.py) | Stream a camera feed over WebRTC |
 | [drone_hovering.py](examples/drone_hovering.py) | Takeoff, hover, and land a flying twin |
 | [workflows.py](examples/workflows.py) | List, trigger, and monitor workflows |
@@ -251,8 +252,12 @@ retain their acquisition time when the stream sends the same image again:
 
 ```python
 from cyberwave.sensor import CapturedVideoFrame
+from cyberwave.utils import monotonic_seconds
 
-# In your acquisition callback, with the source's measured clocks:
+# In your acquisition callback, with the source's measured clocks. Where the
+# source has no clock of its own, read the monotonic half from
+# monotonic_seconds(): that is the clock the rest of the SDK stamps with, and
+# unlike time.monotonic() it keeps running while the host is suspended.
 latest = CapturedVideoFrame(rgb, capture_wall_time, capture_monotonic, acquisition_id)
 
 # Pass this callback as get_frame to VirtualCameraStreamer.
@@ -294,7 +299,166 @@ the tables and skips `.mp4` video, which is usually most of a camera recording's
 bytes. A reader whose artifact was filtered out raises rather than returning
 empty.
 
+## Governed commands: the command gateway
+
+`POST /api/v1/twins/{uuid}/commands` is the platform's one server-side ingress
+for twin commands: it checks the token scope, the caller's role, the twin's
+control policy, operator grants and the catalog's typed arguments, writes an
+audit record for every decision, and only then publishes the command. With
+`timeout_s > 0` it also waits for the driver's reply.
+
+```python
+result = twin.commands.send("takeoff", {"altitude_m": 30}, timeout_s=10)
+result.status      # "accepted", "rejected", "denied", "timeout", "sent", "no_response", ...
+result.reason      # why, for anything but accepted/sent
+result.audit_id    # the audit record written for this decision
+
+twin.commands.audit(limit=20, decision="denied")["items"]
+twin.commands.control_policy.get()            # or twin.commands.control_policy()
+twin.commands.control_policy.put("limited", allowed_commands=["arm", "takeoff"], governed=True)
+grant = twin.commands.grants.create(operator_uuid, duration_s=3600)
+twin.commands.grants.revoke(grant["uuid"])
+
+# The same, keyed by twin UUID:
+cw.commands.send(twin_uuid, "land", timeout_s=5)
+```
+
+Policy denials, publish failures and driver refusals come back as a
+`CommandResult`, not as exceptions; `CyberwaveAPIError` means the request itself
+failed. On a *governed* twin (`governed=True`) the broker refuses direct
+publishes on the twin's command topic, so `twin.commands.<name>()` and
+`request_command` no longer reach the driver there: use `twin.commands.send`.
+`send`, `request`, `audit`, `control_policy`, `grants` and `gateway` are
+reserved on `twin.commands`; a catalog command with one of those names is sent
+with `twin.publish_command(name, data)`.
+
+## MQTT v5 command request/response
+
+Over MQTT v5 a command can carry a Response Topic and Correlation Data, and the
+driver answers with one `twin.command_response.v1` payload
+(`accepted` / `rejected` / `denied` / `timeout`):
+
+```python
+reply = cw.mqtt.request_command(twin_uuid, "arm", {}, timeout_s=5)
+reply = twin.commands.request("arm", timeout_s=5)  # same thing
+```
+
+The reply inbox is `{prefix}cyberwave/twin/{twin_uuid}/command/{client_id}/response`;
+only this client can read it. Requests need MQTT v5, which is the default; a
+client set to 3.1.1 (`CYBERWAVE_MQTT_PROTOCOL=311`) raises `CyberwaveMQTTError`
+from `request_command` and `request`. No reply within
+`timeout_s` raises `CommandResponseTimeoutError` (a driver that predates the
+contract never replies; a governed twin refuses the publish). Raw subscribers
+that need the v5 properties can mark a handler with
+`cyberwave.mqtt.pass_message`; it is then called as `handler(data, message)`.
+
+### Request/response on any topic
+
+`request_command` is the twin-command case of a generic pattern. For any other
+topic pair, `cw.mqtt.request` publishes a request carrying a Response Topic and
+Correlation Data, and returns the first message on the reply topic that echoes
+that Correlation Data (JSON-decoded when it is JSON):
+
+```python
+prefix = cw.mqtt.topic_prefix
+reply = cw.mqtt.request(
+    f"{prefix}cyberwave/twin/{twin_uuid}/planner/request",
+    {"goal": "dock"},
+    # A reply topic names this client's id, so only this client can read it.
+    response_topic=(
+        f"{prefix}cyberwave/twin/{twin_uuid}/planner/{cw.mqtt.client_id}/response"
+    ),
+    timeout_s=5,
+)
+```
+
+No reply within `timeout_s` raises `RequestTimeoutError`
+(`CommandResponseTimeoutError` is a subclass). On the responder side,
+`cyberwave.mqtt.request_response.reply_to(paho_client, request_message, payload)`
+publishes to the request's Response Topic and echoes its Correlation Data. It
+publishes nothing when the request has none, so v3.1.1 publishers are
+unaffected. A responder that must not be steered by a requester validates the
+Response Topic itself and passes the result as `topic=`.
+
+Which topics may carry replies is the broker's ACL decision. Under a twin, joint
+or environment, any `cyberwave/{type}/{uuid}/.../{client_id}/response` topic is a
+reply inbox: only the client named in it may read it, and whoever may write to
+the resource may publish to it. Put the reply topic under the resource the
+request concerns and name the requester in it, as in the example above. Use one
+reply topic per requester, not one per request: each distinct one is a broker
+subscription the client keeps for its lifetime, and the Correlation Data already
+tells concurrent requests apart. A reply topic elsewhere needs an ACL rule of its
+own.
+
+### Replying from a driver
+
+`BaseDriver` builds a `CommandRequest` for every command it dispatches. A
+listener receives it by taking a second argument, or replies by returning a
+`CommandOutcome`; one-argument listeners are called exactly as before:
+
+```python
+from cyberwave.driver import CommandOutcome, CommandRequest
+
+async def _on_arm(self, envelope, ctx: CommandRequest):
+    if not self.link_up:
+        ctx.reject("vehicle link is down")          # before it reached the device
+        return
+    ok, text = await self.vehicle.arm()
+    ctx.reply("accepted" if ok else "denied", text)  # exactly one reply counts
+
+async def _on_disarm(self, envelope):
+    return CommandOutcome.accept()
+```
+
+A command without a Response Topic (v3.1.1, or fire-and-forget) gets no reply:
+`ctx.expects_reply` is `False` and `ctx.reply()` returns `False`. Replies are
+only sent to this twin's reply inbox. `cyberwave.driver.current_command()`
+returns the request being handled; `cyberwave.mqtt.command_response` has the
+payload builder and topic rules for drivers that do not use `BaseDriver`.
+
+## H.264 over RTP ingest
+
+`cyberwave.sensor.rtp_h264` receives an H.264/RTP/UDP push (IP cameras, payload
+or ground stations, `ffmpeg -f rtp`, GStreamer `rtph264pay`) and depayloads it
+(RFC 6184 single NAL, STAP-A, FU-A) into whole access units, with no re-encode.
+It is stdlib-only. Loss drops frames until the next IDR, cached SPS/PPS (in-band
+or from `sprop-parameter-sets`) are re-inserted before keyframes, and an SSRC
+change resynchronises. `RtpH264CameraStreamer` forwards the stream to the twin
+over WebRTC:
+
+```python
+from cyberwave.sensor import RtpH264CameraStreamer
+
+streamer = RtpH264CameraStreamer(
+    cw.mqtt, bind="0.0.0.0:5600", twin_uuid=twin.uuid, camera_name="main"
+)
+await streamer.run_with_auto_reconnect(subscribe_to_commands=False)
+```
+
+It waits for the first keyframe before offering the stream and advertises the
+resolution from the SPS. For custom pipelines, use `UdpRtpReceiver.get_packet`
+as the `get_packet` of `H264PacketCameraStreamer`.
+
+## LAN-only WebRTC (on-prem and offline sites)
+
+By default the SDK's peer connections use STUN and the Cyberwave TURN relay.
+Set `CYBERWAVE_WEBRTC_ICE_MODE=lan` on sites without internet access: every
+SDK peer connection (camera, microphone, multimedia streamers and video
+consumers) then gathers host candidates only, with no STUN or TURN server, even
+if `turn_servers` or an edge TURN override is configured. Both ends must be
+able to reach each other's LAN addresses directly. Unset (or `default`) keeps
+the current behaviour.
+
 ## Compatibility notes for the next release
+
+**The SDK now connects to the MQTT broker with protocol v5 by default** (it was
+3.1.1). Cyberwave's own brokers support v5, and it is what the platform's other
+components already use. It lets broker-side echo filtering (`no_local`) and
+request/response work without extra setup. A broker that does not support v5
+(for example an on-premises 3.1.1-only broker) now refuses the connection; set
+`CYBERWAVE_MQTT_PROTOCOL=311` (or pass `mqtt_protocol=paho.mqtt.client.MQTTv311`)
+to keep the old behaviour. `request()` and `request_command()` need v5 and raise
+`CyberwaveMQTTError` on a client set to 3.1.1. The C++ SDK's default is unchanged.
 
 `depth_to_colored_pointcloud` now checks its declared encoded-depth input: with
 `output_mode="normalized_uint16"` (the default) or `"metric_mm"`, the array must
@@ -307,6 +471,13 @@ The encoding alone does not establish metric calibration or a world-space pose.
 Host `ZENOH_MODE` settings are validated only when Zenoh is selected and enabled.
 An unused host value no longer prevents filesystem or MQTT-only drivers from
 starting. Active Zenoh sessions still require a supported `peer` or `client` mode.
+
+`twin.commands` now reserves `send`, `request`, `audit`, `control_policy`,
+`grants` and `gateway` for the command gateway, so a catalog command with one of
+those names is no longer bound as `twin.commands.<name>()`; publish it with
+`twin.publish_command(name, data)`. `BaseDriver` command listeners that declare
+two required positional parameters (or an optional second one named
+`ctx`/`context`/`request`) now receive a `CommandRequest` as the second argument.
 
 ## Contributing
 

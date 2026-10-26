@@ -43,6 +43,7 @@ class WorkflowSchema(BaseModel):
     allow_concurrent_executions: Optional[StrictBool] = False
     concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: StrictStr
+    simulation_backend: Optional[StrictStr] = None
     visibility: StrictStr
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = False
@@ -54,7 +55,7 @@ class WorkflowSchema(BaseModel):
     has_worker_source_override: Optional[StrictBool] = False
     nodes: Optional[List[WorkflowNodeSchema]] = None
     connections: Optional[List[WorkflowConnectionSchema]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "simulation_backend", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -124,6 +125,11 @@ class WorkflowSchema(BaseModel):
         if self.environment_name is None and "environment_name" in self.model_fields_set:
             _dict['environment_name'] = None
 
+        # set to None if simulation_backend (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_backend is None and "simulation_backend" in self.model_fields_set:
+            _dict['simulation_backend'] = None
+
         # set to None if created_by (nullable) is None
         # and model_fields_set contains the field
         if self.created_by is None and "created_by" in self.model_fields_set:
@@ -169,6 +175,7 @@ class WorkflowSchema(BaseModel):
             "allow_concurrent_executions": obj.get("allow_concurrent_executions") if obj.get("allow_concurrent_executions") is not None else False,
             "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
+            "simulation_backend": obj.get("simulation_backend"),
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),
             "is_template": obj.get("is_template") if obj.get("is_template") is not None else False,

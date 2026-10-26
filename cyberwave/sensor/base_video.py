@@ -23,8 +23,11 @@ from aiortc import (
     VideoStreamTrack,
 )
 
+from ..utils.time_reference import monotonic_seconds
+from .answer_subscription import answer_topics, wait_for_subscriptions
 from .hw_encoder import apply_h264_hw_patch
-from .ice import DEFAULT_TURN_SERVERS
+from .ice import DEFAULT_TURN_SERVERS, effective_ice_servers
+from .peer_close import close_peer_connection
 
 if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
@@ -41,6 +44,10 @@ CONNECTION_LOSS_CONFIRMATION_CHECKS = 3
 # 60 for drivers with a device-dependent liveness cadence.
 SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS = 30
 SDK_EDGE_HEALTH_INTERVAL_SECONDS = 5
+
+# What a client that cannot report SUBACKs waits for the answer subscriptions
+# instead (``answer_subscription.ANSWER_SUBSCRIPTION_TIMEOUT_S`` otherwise).
+ANSWER_SUBSCRIPTION_FALLBACK_S = 2.5
 
 
 # We strip these video codecs so the mediasoup SFU picks H264 in its router
@@ -237,14 +244,15 @@ class BaseVideoTrack(VideoStreamTrack, abc.ABC):
         """Timestamp at frame production: shared reference if provided, else OS clocks.
 
         When a ``TimeReference`` is supplied, returns its last ``update()`` snapshot
-        (``read()`` is lock-free). Otherwise uses ``time.time()`` and ``time.monotonic()``.
+        (``read()`` is lock-free). Otherwise samples the same pair directly, off the
+        same acquisition clock so both paths stamp in one domain.
 
         Returns:
             Tuple of (wall_clock_timestamp, monotonic_timestamp)
         """
         if time_reference is not None:
             return time_reference.read()
-        return time.time(), time.monotonic()
+        return time.time(), monotonic_seconds()
 
     def _capture_sync_frame(
         self,
@@ -372,6 +380,13 @@ class BaseVideoStreamer(abc.ABC):
 
         # Reconnection state
         self._should_reconnect = False
+        # Set when a monitor reconnect attempt failed and left pc None, so the
+        # monitor keeps retrying instead of waiting for a pc that never comes.
+        self._reconnect_pending = False
+        # Set once the stream has connected (or a start/stop_video command has
+        # taken over). Until then the run loop retries the first connect;
+        # afterwards every retry belongs to the monitor.
+        self._initial_connect_done = False
         self._is_running = False
         self._monitor_task: Optional[asyncio.Task] = None
         self._sync_frame_task: Optional[asyncio.Task] = None
@@ -440,6 +455,7 @@ class BaseVideoStreamer(abc.ABC):
             "track_id": self.streamer.id if self.streamer else None,
             "twin_uuid": self.twin_uuid,
             "sensor": self.camera_name,
+            "session_id": f"{self.client.client_id}_{self.camera_name}",
         }
         self._publish_message(topic, payload)
         logger.info(
@@ -534,19 +550,20 @@ class BaseVideoStreamer(abc.ABC):
             self._video_encoder_name = None
 
         self._subscribe_to_answer()
-        await asyncio.sleep(2.5)
+        await self._wait_for_answer_subscription()
         await self._setup_webrtc()
         try:
             await self._perform_signaling()
         except Exception:
             try:
                 if self.pc is not None:
-                    await self.pc.close()
-                    await asyncio.sleep(0.5)
-            except Exception:
-                pass
-            self.pc = None
-            self.sender = None
+                    await close_peer_connection(
+                        self.pc, settle=0.5, error_log_level=logging.DEBUG
+                    )
+            finally:
+                # Also when the close is cancelled, as the other close sites do.
+                self.pc = None
+                self.sender = None
             if self.streamer is not None:
                 try:
                     self.streamer.close()
@@ -585,11 +602,9 @@ class BaseVideoStreamer(abc.ABC):
 
         if self.pc:
             try:
-                await self.pc.close()
-                # Allow aioice STUN retry callbacks to settle before continuing
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                logger.error(f"Error closing peer connection: {e}")
+                # Bounded: a close stuck on an unreachable relay must not hold
+                # the caller's stop hostage (see ``peer_close``).
+                await close_peer_connection(self.pc)
             finally:
                 self.pc = None
                 self.sender = None
@@ -629,6 +644,7 @@ class BaseVideoStreamer(abc.ABC):
         if subscribe_to_commands:
             self._subscribe_to_commands(command_callback)
 
+        self._initial_connect_done = False
         if self.pc is None:
             try:
                 if command_callback:
@@ -638,6 +654,7 @@ class BaseVideoStreamer(abc.ABC):
                         pass
                 await self.start()
                 self._should_reconnect = self.auto_reconnect
+                self._initial_connect_done = True
                 if command_callback:
                     command_callback("ok", "Camera streaming started")
             except Exception as e:
@@ -647,20 +664,28 @@ class BaseVideoStreamer(abc.ABC):
                         command_callback("error", str(e))
                     except TypeError:
                         pass
+        else:
+            self._initial_connect_done = True
 
         if self.auto_reconnect:
             self._monitor_task = asyncio.create_task(self._monitor_connection(stop))
 
+        # Backoff retry only when the *initial* connect failed. Ongoing drops are
+        # handled exclusively by _monitor_connection: its reconnect leaves pc None
+        # for a few seconds, and a second start() here would overwrite (and leak)
+        # the peer connection it is building. A stop_video command also leaves pc
+        # None, and must not be undone. The flag is on the instance because a
+        # start_video command can make the first connect too.
         _next_retry_at: float = time.monotonic() + 15.0
         _retry_backoff: float = 30.0
-        _initial_stream_connected: bool = False
 
         try:
             while not stop.is_set() and self._is_running:
                 if (
                     self.pc is None
                     and self.auto_reconnect
-                    and not _initial_stream_connected
+                    and not self._initial_connect_done
+                    and not self._reconnect_pending
                 ):
                     if time.monotonic() >= _next_retry_at:
                         try:
@@ -670,7 +695,7 @@ class BaseVideoStreamer(abc.ABC):
                             await self.start()
                             self._should_reconnect = self.auto_reconnect
                             logger.info("Camera stream retry succeeded.")
-                            _initial_stream_connected = True
+                            self._initial_connect_done = True
                         except Exception as retry_exc:
                             logger.info(
                                 "Camera stream retry failed (%s). Will retry in %.0fs.",
@@ -699,7 +724,10 @@ class BaseVideoStreamer(abc.ABC):
         except ImportError:
             self.streamer = self.initialize_track()
 
-        ice_servers = [RTCIceServer(**server) for server in self.turn_servers]
+        ice_servers = [
+            RTCIceServer(**server)
+            for server in effective_ice_servers(self.turn_servers)
+        ]
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
 
         self._setup_pc_handlers()
@@ -931,6 +959,26 @@ class BaseVideoStreamer(abc.ABC):
             candidate_topic, self._on_answer_message, subscriber_key=subscriber_key
         )
 
+    async def _wait_for_answer_subscription(
+        self, timeout: Optional[float] = None
+    ) -> None:
+        """Hold the offer until the broker has acked the answer subscriptions.
+
+        The SFU answers within milliseconds; an answer published before the
+        broker applies this client's SUBSCRIBE goes to nobody, and the stream
+        waits out the answer timeout before it retries. A fixed 2.5 s pause
+        used to stand in for the SUBACK, delaying every camera start and still
+        losing the race on a loaded broker. A client that cannot report SUBACKs
+        keeps that pause; a broker that never acks gets the offer after
+        *timeout*.
+        """
+        await wait_for_subscriptions(
+            self.client,
+            answer_topics(self.client, self.twin_uuid),
+            timeout,
+            fallback_s=ANSWER_SUBSCRIPTION_FALLBACK_S,
+        )
+
     def _handle_candidate(self, payload: Dict[str, Any]):
         """Handle incoming ICE candidate."""
         if not self.pc or not payload.get("candidate"):
@@ -1016,6 +1064,8 @@ class BaseVideoStreamer(abc.ABC):
             logger.info(f"Starting video stream - Recording: {self._should_record}")
             await self.start()
             self._should_reconnect = self.auto_reconnect
+            self._reconnect_pending = False
+            self._initial_connect_done = True
             logger.info("Camera streaming started successfully!")
 
             if callback:
@@ -1029,6 +1079,12 @@ class BaseVideoStreamer(abc.ABC):
     async def _handle_stop_command(self, callback: Optional[Callable] = None):
         """Handle stop_video command."""
         try:
+            # Before the pc check: between reconnect attempts, and while the
+            # first connect is being retried, pc is None but a retry would
+            # still start the stream the operator just stopped.
+            self._should_reconnect = False
+            self._reconnect_pending = False
+            self._initial_connect_done = True
             if self.pc is None:
                 logger.info("Video stream not running")
                 if callback:
@@ -1036,7 +1092,6 @@ class BaseVideoStreamer(abc.ABC):
                 return
 
             logger.info("Stopping video stream")
-            self._should_reconnect = False
             await self.stop()
             logger.info("Camera stream stopped successfully")
 
@@ -1053,17 +1108,27 @@ class BaseVideoStreamer(abc.ABC):
     # -------------------------------------------------------------------------
 
     async def _monitor_connection(self, stop_event: asyncio.Event):
-        """Monitor WebRTC connection and automatically reconnect on disconnection."""
+        """Monitor WebRTC connection and automatically reconnect on disconnection.
+
+        The monitor owns every retry after the stream has connected once. A
+        failed attempt leaves pc None, so it is tracked in _reconnect_pending:
+        otherwise the next pass would see no pc, wait forever, and never reach
+        the backoff and attempt cap below. A cancelled reconnect or the cap
+        parks the monitor rather than ending it, so a later start_video is
+        watched again.
+        """
         reconnect_delay = 2.0
         max_reconnect_attempts = 10
         reconnect_attempt = 0
 
         while not stop_event.is_set() and self._is_running:
-            if not self._should_reconnect or self.pc is None:
+            if not self._should_reconnect or (
+                self.pc is None and not self._reconnect_pending
+            ):
                 await asyncio.sleep(1.0)
                 continue
 
-            if self._is_connection_lost():
+            if self._reconnect_pending or self._is_connection_lost():
                 reconnect_attempt = await self._attempt_reconnect(
                     stop_event,
                     reconnect_attempt,
@@ -1071,7 +1136,9 @@ class BaseVideoStreamer(abc.ABC):
                     max_reconnect_attempts,
                 )
                 if reconnect_attempt < 0:
-                    break
+                    # Stopped or capped: _should_reconnect is now False, so the
+                    # gate above parks until a start_video re-arms it.
+                    reconnect_attempt = 0
 
             await asyncio.sleep(1.0)
 
@@ -1135,10 +1202,12 @@ class BaseVideoStreamer(abc.ABC):
 
             if not self._should_reconnect or stop_event.is_set():
                 logger.info("Reconnect cancelled (stream was stopped)")
+                self._reconnect_pending = False
                 return -1
 
             logger.info(f"Reconnecting camera stream (attempt {attempt + 1})...")
             await self.start()
+            self._reconnect_pending = False
             logger.info("Camera stream reconnected successfully!")
             return 0
 
@@ -1152,7 +1221,10 @@ class BaseVideoStreamer(abc.ABC):
                     "Stopping reconnection attempts."
                 )
                 self._should_reconnect = False
+                self._reconnect_pending = False
                 return -1
+
+            self._reconnect_pending = True
 
             backoff_delay = min(base_delay * (2**attempt), 30.0)
             await asyncio.sleep(backoff_delay)
@@ -1198,6 +1270,7 @@ class BaseVideoStreamer(abc.ABC):
             global EdgeHealthCheck
             if EdgeHealthCheck is None:
                 from ..edge.health import EdgeHealthCheck
+            from ..edge.health import client_source_type
 
             self._health_check = EdgeHealthCheck(
                 mqtt_client=self.client,
@@ -1213,6 +1286,9 @@ class BaseVideoStreamer(abc.ABC):
                 # would have shipped the requested fps for the lifetime
                 # of the streamer instead of the runtime-negotiated value.
                 stream_config_provider=self._collect_stream_configs,
+                # The heartbeat follows the client, like every other message
+                # this process publishes: ``sim`` in simulation mode.
+                source_type=client_source_type(self.client),
             )
             self._health_check.start()
             self._last_frame_count = 0

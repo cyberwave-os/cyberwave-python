@@ -72,8 +72,8 @@ class ControllerPolicyExecuteSchema(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['simulation', 'live']):
-            raise ValueError("must be one of enum values ('simulation', 'live')")
+        if value not in set(['live', 'simulation']):
+            raise ValueError("must be one of enum values ('live', 'simulation')")
         return value
 
     @field_validator('transport')

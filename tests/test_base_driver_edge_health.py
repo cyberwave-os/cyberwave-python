@@ -117,3 +117,62 @@ def test_touch_edge_health_marks_alive_only_when_started(monkeypatch):
     d._start_edge_health()
     d._touch_edge_health()
     fake_instance.mark_alive.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Provenance on the heartbeat
+# ---------------------------------------------------------------------------
+#
+# BaseDriver never passed a source_type, so EdgeHealthCheck's ``edge`` default
+# applied to every driver and a simulated driver's heartbeat was labelled as a
+# live edge device. The client already resolves ``sim`` in simulation mode;
+# BaseDriver forwards it.
+
+
+def _probe_with_source_type(source_type, uuid="twin-st"):
+    client = SimpleNamespace(
+        mqtt=MagicMock(), config=SimpleNamespace(source_type=source_type)
+    )
+    return _Probe(
+        twin=SimpleNamespace(uuid=uuid), client=client, auto_register_interface=False
+    )
+
+
+def test_edge_health_takes_the_source_type_the_client_resolved(monkeypatch):
+    fake_cls = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(base_module, "EdgeHealthCheck", fake_cls)
+
+    _probe_with_source_type("sim")._start_edge_health()
+
+    assert fake_cls.call_args.kwargs["source_type"] == "sim"
+
+
+def test_a_live_client_still_stamps_edge(monkeypatch):
+    fake_cls = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(base_module, "EdgeHealthCheck", fake_cls)
+
+    _probe_with_source_type("edge")._start_edge_health()
+
+    assert fake_cls.call_args.kwargs["source_type"] == "edge"
+
+
+def test_a_client_without_a_config_stamps_edge(monkeypatch):
+    """Test doubles supply only ``mqtt``; forwarding must not require more."""
+    fake_cls = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(base_module, "EdgeHealthCheck", fake_cls)
+
+    _connected_probe()._start_edge_health()
+
+    assert fake_cls.call_args.kwargs["source_type"] == "edge"
+
+
+def test_an_unknown_source_type_falls_back_to_edge_instead_of_failing_start(
+    monkeypatch,
+):
+    """A typo in CYBERWAVE_SOURCE_TYPE must not keep the driver from starting."""
+    fake_cls = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(base_module, "EdgeHealthCheck", fake_cls)
+
+    _probe_with_source_type("simm")._start_edge_health()
+
+    assert fake_cls.call_args.kwargs["source_type"] == "edge"

@@ -273,9 +273,9 @@ class NotSimulatedError(CyberwaveError):
 
 
 class SimulationNotRunningError(CyberwaveError):
-    """Raised when a MuJoCo-level method is called in simulation runtime mode
-    with no simulation running (or one that hasn't finished starting yet) for
-    the twin's environment.
+    """Raised when a simulation-gated method (``SimLevel.PHYSICS`` or ``BOTH``)
+    is called in simulation runtime mode with no simulation running (or one
+    that hasn't finished starting yet) for the twin's environment.
 
     Getters never auto-start a simulation; start one explicitly with
     ``cw.environments.simulations.start(...)`` or select a MuJoCo profile via
@@ -283,8 +283,58 @@ class SimulationNotRunningError(CyberwaveError):
 
 
 class SimulationLevelError(CyberwaveError):
-    """Raised when a MuJoCo-level method is called against a running simulation
+    """Raised when a ``SimLevel.PHYSICS`` method (one that needs a physics-backed
+    simulation: MuJoCo or Isaac Sim) is called against a running simulation
     whose backend cannot serve it (e.g. a ``playground`` backend)."""
+
+
+class SimulationBackendError(CyberwaveError):
+    """The server refused the requested simulation backend or execution profile.
+
+    Raised by ``cw.environments.simulations.start(...)`` (and ``preflight``)
+    when the response carries one of the stable backend-selection codes:
+
+    - ``simulation_backend_unsupported`` (HTTP 400): not a backend the server knows.
+    - ``simulation_backend_not_enabled`` (HTTP 403): e.g. Isaac Sim is not enabled
+      for the organization.
+    - ``simulation_backend_incompatible`` (HTTP 409): the environment cannot run on
+      that backend; see ``blocking_assets`` and ``reasons``.
+    - ``simulation_backend_runtime_mismatch``: the runtime reported a different
+      backend/profile than requested, so the run was stopped.
+    - ``simulation_backend_capacity_unavailable`` (HTTP 503): no qualified Isaac
+      Sim GPU node is available right now; retry later.
+    - ``simulation_parameter_unsupported`` (HTTP 400): a start parameter the
+      backend cannot honour (e.g. ``timing.range_self_hit_fallback`` or mjlab
+      ``runtime`` options on Isaac, or a device that contradicts the profile).
+    - ``simulation_parameter_invalid`` (HTTP 400): a start parameter outside its
+      valid range.
+
+    The server never falls back to another backend, so neither does the SDK.
+
+    Attributes:
+        code: The stable error code above.
+        backend: The backend the error refers to, when reported.
+        blocking_assets: ``[{"asset_uuid", "twin_uuid", "name", "reasons"}]``.
+        reasons: Environment-level reasons.
+        status_code: HTTP status, when available.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        backend: Optional[str] = None,
+        blocking_assets: Optional[list] = None,
+        reasons: Optional[list] = None,
+        status_code: Optional[int] = None,
+    ):
+        super().__init__(message)
+        self.code = code
+        self.backend = backend
+        self.blocking_assets = list(blocking_assets or [])
+        self.reasons = list(reasons or [])
+        self.status_code = status_code
 
 
 class CyberwaveAPIError(CyberwaveError):
@@ -397,6 +447,24 @@ class CyberwaveMQTTError(CyberwaveError):
 
 class TwinStateTimeoutError(CyberwaveMQTTError):
     """Raised when no MQTT inbound message arrives within the timeout."""
+
+
+class RequestTimeoutError(CyberwaveMQTTError, TimeoutError):
+    """Raised when an MQTT v5 request gets no reply within its timeout.
+
+    The responder may not exist, may predate the reply contract, or the broker
+    may refuse the publish or the reply topic.
+    """
+
+
+class CommandResponseTimeoutError(RequestTimeoutError):
+    """Raised when an MQTT v5 command request gets no reply within its timeout.
+
+    The twin's handler may predate ``twin.command_response.v1`` (it never
+    replies), the device may be offline, or the twin may be *governed*: the
+    broker then refuses direct publishes on its command topic, and commands
+    must go through the command gateway (``twin.commands.send``).
+    """
 
 
 class TwinStateUnavailableError(CyberwaveMQTTError):

@@ -104,12 +104,18 @@ class Scene:
         position: Optional[List[float]] = None,
         orientation: Optional[List[float]] = None,
         fixed_base: bool = False,
+        dock_to: Any = None,
+        dock_link: Optional[str] = None,
+        dock_offset: Optional[Sequence[float]] = None,
+        dock_rotation: Optional[Sequence[float]] = None,
         **kwargs,
     ) -> Any:
         """
-        Add an Asset to the scene as a Twin.
+        Add an Asset to the scene as a Twin, optionally docked to another twin.
 
         The backend creates the Twin and initializes its universal_schema.
+        With ``dock_to`` the new twin is then attached through :meth:`dock`,
+        so its pose follows the parent link plus the offsets.
 
         Args:
             asset_key: The registry ID or UUID of the asset (e.g. "unitree/go2")
@@ -118,10 +124,22 @@ class Scene:
             position: [x, y, z] list (alternative to pose).
             orientation: [r, p, y] or [x, y, z, w] list (alternative to pose).
             fixed_base: Whether the twin base is fixed to the world (default False).
+            dock_to: Parent twin (Twin object or uuid) to dock the new twin to.
+            dock_link: Link of the parent to attach to; None uses its default link.
+            dock_offset: (x, y, z) offset from the parent link, in metres.
+            dock_rotation: (x, y, z, w) quaternion offset from the parent link.
 
         Returns:
-            The created Twin object from the API.
+            The created Twin object from the API, docked when ``dock_to`` is given.
         """
+        if dock_to is None and (dock_offset is not None or dock_rotation is not None):
+            raise ValueError("dock_offset and dock_rotation need dock_to")
+        # Checked before the twin exists, so a bad call leaves no undocked twin.
+        if dock_offset is not None and len(dock_offset) != 3:
+            raise ValueError("dock_offset must be (x, y, z)")
+        if dock_rotation is not None and len(dock_rotation) != 4:
+            raise ValueError("dock_rotation must be [x, y, z, w] quaternion")
+
         # Prepare position/rotation
         if pose is None:
             if position is None:
@@ -157,9 +175,22 @@ class Scene:
             fixed_base=fixed_base,
         )
 
-        # Reload twins list
-        self._load_twins()
+        if dock_to is None:
+            # Reload twins list
+            self._load_twins()
+            return twin
 
+        # dock() writes the attach fields and reloads the twins list.
+        docked = self.dock(
+            twin,
+            dock_to,
+            dock_link,
+            offset_position=list(dock_offset) if dock_offset is not None else None,
+            offset_rotation=list(dock_rotation) if dock_rotation is not None else None,
+        )
+        if hasattr(twin, "_data"):
+            # Keep the returned object current without a second fetch.
+            twin._data = docked
         return twin
 
     def add_twin_centered(

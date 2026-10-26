@@ -229,8 +229,9 @@ class Cyberwave:
         mqtt_username: MQTT username placeholder (default: "mqttcyb")
         mqtt_use_tls: Enable TLS for MQTT connection
         mqtt_tls_ca_cert: Path to CA cert bundle for MQTT TLS
-        mqtt_protocol: MQTT protocol version (default: MQTTv311).
-            Pass ``paho.mqtt.client.MQTTv5`` to use MQTT v5 when your broker supports it.
+        mqtt_protocol: MQTT protocol version (default: MQTTv5).
+            Pass ``paho.mqtt.client.MQTTv311`` (or set ``CYBERWAVE_MQTT_PROTOCOL=311``)
+            for a broker that does not support MQTT v5.
         source_type: Optional explicit default state/telemetry source_type override
         mode: Runtime mode, either live or simulation (defaults to live)
         environment_id: Default environment ID (overrides CYBERWAVE_ENVIRONMENT_ID env var)
@@ -440,13 +441,16 @@ class Cyberwave:
         """
         from cyberwave.actions import ActionsClient
         from cyberwave.agents import AgentManager
+        from cyberwave.commands import CommandGateway
         from cyberwave.resources import (
             AttachmentManager,
+            AssetKitManager,
             AssetManager,
             DatasetManager,
             EdgeManager,
             EnvironmentManager,
             ProjectManager,
+            ReplayFeedManager,
             TwinManager,
             WorkspaceManager,
         )
@@ -471,6 +475,8 @@ class Cyberwave:
         self.datasets = DatasetManager(self.api)
         self.edges = EdgeManager(self.api)
         self.twins = TwinManager(self.api, client=self)
+        self.replay_feeds = ReplayFeedManager(self.api)
+        self.asset_kits = AssetKitManager(self.api, client=self)
         from cyberwave.managers.policies import PolicyManager
 
         self.policies = PolicyManager(self)
@@ -480,6 +486,8 @@ class Cyberwave:
         self.workflows = WorkflowManager(self)
         self.workflow_runs = WorkflowRunManager(self)
         self.workflow_executions = WorkflowExecutionManager(self)
+        # Governed twin commands: gateway, audit, control policy, grants.
+        self.commands = CommandGateway(self)
 
     def _wrap_api_methods(self):
         """Wrap API methods to provide better error messages for authentication failures"""

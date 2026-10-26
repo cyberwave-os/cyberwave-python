@@ -32,6 +32,7 @@ The strict task spec is the round-trip interchange::
 from __future__ import annotations
 
 import json as _json
+import math
 import os
 import shutil
 import zipfile
@@ -1024,6 +1025,48 @@ class RLTaskClient:
             json={"rl_config_spec": dict(rl_config_spec)},
         )
 
+    def get_task_params(self, task_uuid: str) -> dict[str, Any]:
+        """Return the task's declared parameters (Parameters tab).
+
+        The response is ``{"task_params": {...}}`` in canonical form; a task
+        without parameters returns ``{"task_params": {}}``.
+        """
+
+        return self._get(f"/api/v1/rl-tasks/{task_uuid}/task-params")
+
+    def set_task_params(
+        self, task_uuid: str, task_params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Replace the task's declared parameters.
+
+        ``task_params`` is the document the Parameters tab edits:
+        ``{"schema_version": 1, "params": [{"name": "ring_radius_m", "type":
+        "float", "value": 0.15, "min": 0.05, "max": 0.4}], "presets":
+        {"play": {"values": {...}}}}``; ``{}`` clears it. The backend rejects a
+        document that drops a param still referenced by a ``"params.<name>"``
+        spec reference, naming the locations; reads in task code are caught on
+        a best-effort basis by a static scan, which misses reads through e.g.
+        ``self.params`` or an unannotated argument. The
+        response carries the validated canonical form.
+        """
+
+        return self._put(
+            f"/api/v1/rl-tasks/{task_uuid}/task-params",
+            json={"task_params": dict(task_params)},
+        )
+
+    def get_task_params_usage(self, task_uuid: str) -> dict[str, Any]:
+        """Return where each declared parameter is used.
+
+        ``{"usages": {name: ["file.py:LINE" | spec path, ...]}, "unused":
+        [name, ...], "errors": [message, ...], "code_scan": status}``. Code
+        reads come from a best-effort static scan, so ``unused`` is a hint,
+        not proof. ``code_scan`` is ``"skipped_own_params_module"`` when the
+        task keeps its own root ``params`` module and code was not scanned.
+        """
+
+        return self._get(f"/api/v1/rl-tasks/{task_uuid}/task-params/usage")
+
     def set_training_command_spec(
         self,
         task_uuid: str,
@@ -1308,6 +1351,28 @@ def _coerce_action_scalar_or_map(
     raise ValueError(f"{field_name} must be a number or {{joint: number}} mapping")
 
 
+# Mirrors ``BLOCKING_ACTION_TYPES`` in the backend's ``rl_task_specs.validators``
+# (the SDK cannot import it): the action types that append one learnable stop
+# dimension and accept ``locked_actuator_names`` / ``mode``.
+_BLOCKING_ACTION_TYPES: frozenset[str] = frozenset(
+    {"smoothed_blocking_delta_position", "reanchored_blocking_delta_position"}
+)
+
+# Mirrors ``DELTA_ACTION_TYPES`` in the backend's ``rl_task_specs.validators``:
+# the action types that accept ``baseline_delta``. The blocking types build on
+# the smoothed delta. Keep the two in step when an action type is added.
+# The backend's test suite reads both sets from this file (without importing
+# it) and compares them with its own, so keep them plain set literals / unions.
+_DELTA_ACTION_TYPES: frozenset[str] = frozenset(
+    {"position_delta", "smoothed_position_delta"} | _BLOCKING_ACTION_TYPES
+)
+
+# Action types that accept ``continuous_span_rad``.
+_CONTINUOUS_SPAN_ACTION_TYPES: frozenset[str] = _BLOCKING_ACTION_TYPES | {
+    "rate_limited_position"
+}
+
+
 def make_action_term(
     name: str,
     *,
@@ -1322,30 +1387,58 @@ def make_action_term(
     symbol: str | None = None,
     kind: str | None = None,
     kwargs: dict[str, Any] | None = None,
+    dim: int | None = None,
+    locked_actuator_names: list[str] | None = None,
+    mode: str | None = None,
+    continuous_span_rad: float | None = None,
 ) -> dict[str, Any]:
     """Build one entry of ``ACTION_SPEC["actions"]``.
 
     Mirrors the editor's Actions tab: ``action_type`` is one of
-    ``position_delta`` / ``smoothed_position_delta`` / ``position`` /
-    ``velocity`` / ``effort`` / ``custom``. ``smoothed_position_delta``
-    is a delta action like ``position_delta`` but the runtime
-    distributes each per-policy-step delta linearly across
+    ``position_delta`` / ``smoothed_position_delta`` /
+    ``smoothed_blocking_delta_position`` /
+    ``reanchored_blocking_delta_position`` / ``rate_limited_position`` /
+    ``position`` / ``velocity`` / ``effort`` / ``custom``.
+    ``smoothed_position_delta`` is a delta action like ``position_delta``
+    but the runtime distributes each per-policy-step delta linearly across
     ``decimation`` physics steps for a smooth target rate.
     ``target_names_expr`` lists the concrete joint names the policy
     drives (regex patterns are still accepted for legacy import).
 
+    The two blocking types are a smoothed delta on the target joints plus
+    one learnable stop dimension appended last (policy width = joints + 1);
+    while the stop output is active the arm holds its pose. They accept:
+
+    * ``locked_actuator_names``: joints held at their home position. They
+      add no policy dimension and must not repeat a ``target_names_expr``
+      joint.
+    * ``mode``: ``"hard"`` or ``"soft"`` stop behaviour. When unset, the
+      action class's default applies.
+
+    ``rate_limited_position`` slews an absolute ``[-1, 1]`` target at
+    ``scale`` rad per control step. It and the blocking types accept
+    ``continuous_span_rad``, the travel (in radians, > 0) allowed on a
+    continuously rotating joint.
+
     ``custom`` is the escape hatch for a user-owned action class: pass
     ``module`` (dotted path to an uploaded task-local source file) +
-    ``symbol`` (the ``ActionTermCfg`` subclass or factory) + optional
-    ``kind`` (``"class"`` default, or ``"function"`` for a factory) +
-    optional ``kwargs`` forwarded to it. A custom action class defines
-    its own joint targeting, so ``target_names_expr`` is **optional** for
-    ``custom`` terms (it defaults to ``[]``); ``scale`` / ``baseline_delta``
-    are still carried and forwarded to the class. The referenced code is
-    uploaded separately with :meth:`RLTaskClient.upsert_source_file`, then
-    wired at runtime via the ``custom_terms`` registry on the generated
-    ``make_actions()``. Every non-``custom`` action type requires a
-    non-empty ``target_names_expr``.
+    ``symbol`` + optional ``kind`` + optional ``kwargs`` forwarded to it.
+    ``kind`` says what ``symbol`` is: ``"class"`` (default, an
+    ``ActionTermCfg`` subclass instantiated with the term's fields),
+    ``"factory"`` (a function returning the cfg) or ``"cfg"`` (a
+    ready-built cfg instance); ``"function"`` is still accepted as an
+    alias of ``"factory"``. ``dim`` declares the policy width the custom
+    action consumes; set it when a ``previous_action`` observation reads
+    this action, so the observation layout can be sized. A custom action
+    class defines its own joint targeting, so ``target_names_expr`` is
+    **optional** for ``custom`` terms (it defaults to ``[]``); ``scale`` /
+    ``baseline_delta`` are still carried and forwarded to the class. The
+    referenced code is uploaded separately with
+    :meth:`RLTaskClient.upsert_source_file` and linked at runtime from the
+    task package by ``module`` + ``symbol``; a ``custom_terms`` mapping
+    passed to the generated ``make_actions()`` remains an explicit
+    override. Every non-``custom`` action type requires a non-empty
+    ``target_names_expr``.
 
     Numeric parameters accept either a uniform scalar applied to
     every selected joint or a ``{joint_name: value}`` mapping for
@@ -1400,10 +1493,10 @@ def make_action_term(
     if use_default_offset is not None:
         term["use_default_offset"] = bool(use_default_offset)
     if baseline_delta is not None:
-        if action_type not in ("position_delta", "smoothed_position_delta", "custom"):
+        if action_type not in _DELTA_ACTION_TYPES and action_type != "custom":
             raise ValueError(
-                "baseline_delta is only supported on position_delta / "
-                "smoothed_position_delta / custom actions"
+                "baseline_delta is only supported on "
+                f"{sorted(_DELTA_ACTION_TYPES)} or 'custom' actions"
             )
         coerced_baseline = _coerce_action_scalar_or_map(
             baseline_delta, field_name="baseline_delta"
@@ -1418,6 +1511,49 @@ def make_action_term(
         term["kind"] = kind or "class"
         if kwargs:
             term["kwargs"] = dict(kwargs)
+        if dim is not None:
+            if isinstance(dim, bool) or not isinstance(dim, int) or dim < 1:
+                raise ValueError("dim must be a positive integer")
+            term["dim"] = dim
+    elif dim is not None:
+        raise ValueError("dim is only supported on 'custom' actions")
+    if locked_actuator_names is not None or mode is not None:
+        if action_type not in _BLOCKING_ACTION_TYPES:
+            raise ValueError(
+                "locked_actuator_names / mode are only supported on "
+                f"{sorted(_BLOCKING_ACTION_TYPES)}"
+            )
+    if locked_actuator_names:
+        if isinstance(locked_actuator_names, str) or not all(
+            isinstance(joint, str) and joint.strip() for joint in locked_actuator_names
+        ):
+            raise ValueError("locked_actuator_names must be a list of joint names")
+        locked = [joint.strip() for joint in locked_actuator_names]
+        overlap = sorted(set(locked) & set(term["target_names_expr"]))
+        if overlap:
+            raise ValueError(
+                f"locked_actuator_names repeats target joint(s) {overlap}; a "
+                "locked joint is held at home and cannot also be policy-driven"
+            )
+        term["locked_actuator_names"] = locked
+    if mode is not None:
+        if mode not in ("hard", "soft"):
+            raise ValueError("mode must be 'hard' or 'soft'")
+        term["mode"] = mode
+    if continuous_span_rad is not None:
+        if action_type not in _CONTINUOUS_SPAN_ACTION_TYPES:
+            raise ValueError(
+                "continuous_span_rad is only supported on "
+                f"{sorted(_CONTINUOUS_SPAN_ACTION_TYPES)}"
+            )
+        if (
+            isinstance(continuous_span_rad, bool)
+            or not isinstance(continuous_span_rad, int | float)
+            or not math.isfinite(continuous_span_rad)
+            or continuous_span_rad <= 0
+        ):
+            raise ValueError("continuous_span_rad must be a positive finite number")
+        term["continuous_span_rad"] = float(continuous_span_rad)
     return term
 
 
@@ -1464,6 +1600,12 @@ def make_observation_term(
       ``grayscale=True`` on an ``rgb`` camera term to reduce the three
       color channels to a single luminance channel (color-invariant input).
     * ``custom`` requires ``module`` + ``symbol`` + ``kind``.
+
+    ``noise_std`` adds zero-mean Gaussian noise to the term during training,
+    but only in a group whose corruption is on: pass
+    ``enable_corruption={"<group>": True}`` to :func:`make_observation_spec`.
+    With the group's corruption off (the default) the noise is dropped, and
+    ``/validate-definition`` lists the term in ``spec_warnings``.
     """
 
     term: dict[str, Any] = {"name": name, "type": term_type}
@@ -1513,7 +1655,8 @@ def make_observation_spec(
     ``groups`` maps group name (``"policy"`` / ``"critic"`` / ...) to a
     list of terms. ``concatenate_terms`` / ``enable_corruption`` map
     group name → flag and default to the backend's defaults
-    (``True`` / ``False`` respectively) when omitted.
+    (``True`` / ``False`` respectively) when omitted. A term's ``noise_std``
+    only takes effect in a group with ``enable_corruption`` on.
     """
 
     out_groups: dict[str, Any] = {}

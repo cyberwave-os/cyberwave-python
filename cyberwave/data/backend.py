@@ -82,6 +82,51 @@ class DataBackend(ABC):
     ) -> Sample | None:
         """Return the most recent sample on *channel*, or ``None``."""
 
+    # Subscriber presence -----------------------------------------------------
+    #
+    # Optional capability.  Not abstract so existing third-party backends keep
+    # working: the defaults say "this transport cannot tell", which callers
+    # must treat as *unknown* (fail closed), never as "no subscribers".
+
+    def has_subscribers(self, channel: str, *, local_only: bool = False) -> bool | None:
+        """Whether at least one subscriber currently matches *channel*.
+
+        Returns ``None`` when this backend cannot report subscriber presence
+        (the default).  Queryables / ``latest()`` readers do **not** count as
+        subscribers.
+
+        Args:
+            channel: Channel name, as passed to :meth:`publish`.
+            local_only: Count only subscribers that live in this backend's own
+                transport session (e.g. the same process).  See the concrete
+                backend for the exact meaning.
+        """
+        return None
+
+    def on_subscribers_changed(
+        self,
+        channel: str,
+        callback: Callable[[bool], None],
+        *,
+        local_only: bool = False,
+    ) -> Subscription:
+        """Call ``callback(has_subscribers)`` whenever presence on *channel* flips.
+
+        *callback* runs on an internal transport thread: keep it short and
+        non-blocking (set a flag or event).  It is **not** called for the
+        state at registration time; read :meth:`has_subscribers` after
+        registering to get the initial state without a race.
+
+        Raises:
+            NotImplementedError: This backend cannot report subscriber presence.
+
+        Returns:
+            A :class:`Subscription` handle — call ``.close()`` to stop.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support subscriber-presence callbacks"
+        )
+
     @abstractmethod
     def close(self) -> None:
         """Tear down transport resources."""

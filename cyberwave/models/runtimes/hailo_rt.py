@@ -305,6 +305,7 @@ class HailoRuntime(ModelRuntime):
         *,
         confidence: float = 0.5,
         classes: list[str] | None = None,
+        native_resolution: bool = False,
         **kwargs: Any,
     ) -> PredictionResult:
         handle: _HailoHandle = model_handle
@@ -346,7 +347,10 @@ class HailoRuntime(ModelRuntime):
             t2 = time.perf_counter()
 
             depth_map = _extract_depth_map(
-                outputs, orig_h=img_h or target_h, orig_w=img_w or target_w
+                outputs,
+                orig_h=img_h or target_h,
+                orig_w=img_w or target_w,
+                keep_native=native_resolution,
             )
             t3 = time.perf_counter()
 
@@ -710,11 +714,15 @@ def _extract_depth_map(
     *,
     orig_h: int,
     orig_w: int,
+    keep_native: bool = False,
 ) -> np.ndarray:
     """Return an ``(orig_h, orig_w)`` float32 depth map from a Hailo depth HEF.
 
     Accepts ``(H, W, 1)`` / ``(1, H, W, 1)`` / ``(1, 1, H, W)``; squeezes to
     2-D and bilinearly resizes to the original image dimensions.
+    ``keep_native`` returns the HEF's own grid instead when it has fewer
+    pixels — depth HEFs take a plain (unpadded) resize, so that grid still
+    covers the whole frame.
     """
     if isinstance(outputs, dict):
         if not outputs:
@@ -742,7 +750,9 @@ def _extract_depth_map(
 
     target_h = int(max(1, orig_h))
     target_w = int(max(1, orig_w))
-    if depth.shape == (target_h, target_w):
+    if depth.shape == (target_h, target_w) or (
+        keep_native and depth.size < target_h * target_w
+    ):
         return depth.astype(np.float32, copy=False)
 
     try:

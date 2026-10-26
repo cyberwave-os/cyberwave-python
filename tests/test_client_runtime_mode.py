@@ -26,8 +26,10 @@ def _stub_manager_modules(monkeypatch: pytest.MonkeyPatch) -> None:
         ProjectManager=_FakeResourceManager,
         EnvironmentManager=_FakeResourceManager,
         AttachmentManager=_FakeResourceManager,
+        AssetKitManager=_FakeResourceManager,
         AssetManager=_FakeResourceManager,
         DatasetManager=_FakeResourceManager,
+        ReplayFeedManager=_FakeResourceManager,
         EdgeManager=_FakeResourceManager,
         TwinManager=_FakeResourceManager,
         # ModelManager imports this lazily; must be present in the fake module.
@@ -80,7 +82,7 @@ def test_client_respects_env_source_type_when_arg_omitted() -> None:
     assert client.config.source_type == SOURCE_TYPE_EDGE
 
 
-def test_mqtt_client_uses_runtime_mode_client_id_prefix() -> None:
+def test_mqtt_client_id_encodes_producer_mode_and_full_uuid() -> None:
     with patch("cyberwave.mqtt.mqtt.Client"):
         live_client = Cyberwave(base_url="http://localhost:8000", api_key="test_key")
         simulation_client = Cyberwave(
@@ -89,9 +91,36 @@ def test_mqtt_client_uses_runtime_mode_client_id_prefix() -> None:
             mode="simulation",
         )
 
-        assert live_client.mqtt._client.client_id.startswith("sdk_")
-        assert not live_client.mqtt._client.client_id.startswith("sdk_sim_")
-        assert simulation_client.mqtt._client.client_id.startswith("sdk_sim_")
+    live_id = live_client.mqtt._client.client_id
+    sim_id = simulation_client.mqtt._client.client_id
+
+    producer, mode, nonce = live_id.split("_")
+    assert producer == "python-sdk"
+    assert mode == "live"
+    assert len(nonce) == 32
+    int(nonce, 16)  # full uuid4 hex, not the first 8 chars
+
+    assert sim_id.split("_")[1] == "sim"
+
+    # Broker/backend constraints (mqtt_views.py:713,986; recording_mirror._window).
+    for client_id in (live_id, sim_id):
+        assert "/" not in client_id and "+" not in client_id and "#" not in client_id
+        assert len(client_id) < 200
+        assert len(client_id.split("_")) != 2
+
+
+def test_explicit_client_id_and_legacy_prefix_still_win() -> None:
+    from cyberwave.mqtt import CyberwaveMQTTClient
+
+    with patch("cyberwave.mqtt.mqtt.Client"):
+        explicit = CyberwaveMQTTClient(
+            api_key="k", auto_connect=False, client_id="my-fixed-id"
+        )
+        legacy = CyberwaveMQTTClient(
+            api_key="k", auto_connect=False, client_id_prefix="cw_nav_"
+        )
+    assert explicit.client_id == "my-fixed-id"
+    assert legacy.client_id.startswith("cw_nav_")
 
 
 def test_affect_updates_state_source_type_to_match_runtime() -> None:

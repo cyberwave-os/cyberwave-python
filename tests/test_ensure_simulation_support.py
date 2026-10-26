@@ -37,7 +37,7 @@ def _sim(status="running", backend="mujoco"):
 def test_live_mode_is_noop_for_all_levels() -> None:
     twin = _twin("live")
     twin._ensure_simulation_support(SimLevel.UNSUPPORTED, method="x")
-    twin._ensure_simulation_support(SimLevel.MUJOCO, method="x")  # no start, no raise
+    twin._ensure_simulation_support(SimLevel.PHYSICS, method="x")  # no start, no raise
 
 
 def test_playground_level_is_noop_in_sim_mode() -> None:
@@ -51,29 +51,40 @@ def test_unsupported_raises_in_sim_mode() -> None:
         twin._ensure_simulation_support(SimLevel.UNSUPPORTED, method="imu.get")
 
 
-def test_mujoco_without_running_sim_raises_not_running() -> None:
+def test_physics_without_running_sim_raises_not_running() -> None:
     twin = _twin("simulation", active=None)
     with pytest.raises(SimulationNotRunningError) as exc:
-        twin._ensure_simulation_support(SimLevel.MUJOCO, method="camera.get_frame")
+        twin._ensure_simulation_support(SimLevel.PHYSICS, method="camera.get_frame")
     assert "simulations.start" in str(exc.value)
 
 
-def test_mujoco_against_playground_backend_raises_level_error() -> None:
+def test_physics_against_playground_backend_raises_level_error() -> None:
+    twin = _twin("simulation", active=_sim(backend="playground"))
+    with pytest.raises(SimulationLevelError):
+        twin._ensure_simulation_support(SimLevel.PHYSICS, method="camera.get_frame")
+
+
+def test_physics_against_mujoco_backend_passes() -> None:
+    twin = _twin("simulation", active=_sim(backend="mujoco"))
+    twin._ensure_simulation_support(SimLevel.PHYSICS, method="camera.get_frame")
+
+
+def test_physics_against_isaac_backend_passes() -> None:
+    twin = _twin("simulation", active=_sim(backend="isaac"))
+    twin._ensure_simulation_support(SimLevel.PHYSICS, method="camera.get_frame")
+
+
+def test_deprecated_mujoco_alias_gates_like_physics() -> None:
     twin = _twin("simulation", active=_sim(backend="playground"))
     with pytest.raises(SimulationLevelError):
         twin._ensure_simulation_support(SimLevel.MUJOCO, method="camera.get_frame")
 
 
-def test_mujoco_against_mujoco_backend_passes() -> None:
-    twin = _twin("simulation", active=_sim(backend="mujoco"))
-    twin._ensure_simulation_support(SimLevel.MUJOCO, method="camera.get_frame")
-
-
-def test_mujoco_against_loading_sim_raises_not_running() -> None:
+def test_physics_against_loading_sim_raises_not_running() -> None:
     """A sim that exists but hasn't finished starting must not be treated as ready."""
     twin = _twin("simulation", active=_sim(status="loading"))
     with pytest.raises(SimulationNotRunningError) as exc:
-        twin._ensure_simulation_support(SimLevel.MUJOCO, method="camera.get_frame")
+        twin._ensure_simulation_support(SimLevel.PHYSICS, method="camera.get_frame")
     assert "loading" in str(exc.value)
 
 

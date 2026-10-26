@@ -1,6 +1,6 @@
 """CameraTwin simulation-mode streaming branches.
 
-Streaming is MuJoCo-level: it consumes an already-running simulation (started via
+Streaming is PHYSICS-level: it consumes an already-running simulation (started via
 cw.affect("sim") or cw.environments.simulations.start) and never starts one.
 """
 
@@ -49,8 +49,8 @@ def _sim_twin(*, runtime_mode="simulation", active_sim="__running__", cls=Camera
 def test_streaming_methods_are_mujoco_level() -> None:
     from cyberwave.twin.simulation_support import SimLevel
 
-    assert CameraTwin.start_streaming.__cw_sim_level__ == SimLevel.MUJOCO
-    assert CameraTwin.stream_video_background.__cw_sim_level__ == SimLevel.MUJOCO
+    assert CameraTwin.start_streaming.__cw_sim_level__ == SimLevel.PHYSICS
+    assert CameraTwin.stream_video_background.__cw_sim_level__ == SimLevel.PHYSICS
 
 
 def test_resolve_simulation_stream_stores_running_sim() -> None:

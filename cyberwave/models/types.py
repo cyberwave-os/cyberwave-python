@@ -876,6 +876,13 @@ class DepthResult(PredictionResult):
                    * **Relative** (``metric=False``): unitless disparity or
                      inverse depth suitable for visualisation but not for
                      downstream geometric consumers (e.g. ``object_pose``).
+
+                   ``(H, W)`` is the input frame's size by default. With
+                   ``predict(..., native_resolution=True)`` it is the model's
+                   own grid whenever that has fewer pixels — possibly another
+                   aspect ratio, since some runtimes squash to a square. The
+                   grid still spans the whole frame, so scale per axis:
+                   camera ``u = u_depth * w / W`` (fx/cx likewise).
         metric:    Whether ``depth_map`` values carry a metric unit (metres).
                    Downstream metric-only consumers gate on this flag.
         h, w:      Original input image dimensions (``0`` if unknown).

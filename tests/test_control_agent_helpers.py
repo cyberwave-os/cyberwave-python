@@ -8,8 +8,9 @@ from cyberwave.exceptions import CyberwaveAPIError
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status=200):
         self.data = json.dumps(payload).encode("utf-8")
+        self.status = status
 
     def read(self):
         return None
@@ -310,14 +311,6 @@ def test_actions_get_status_requires_twin_uuid():
         actions.get_status("action-1", twin_uuid="")
 
 
-class StatusResponse(FakeResponse):
-    """A response that carries an HTTP status, as the real REST client does."""
-
-    def __init__(self, payload, status):
-        super().__init__(payload)
-        self.status = status
-
-
 class StatusApiClient(FakeApiClient):
     def __init__(self, *responses):
         super().__init__()
@@ -336,7 +329,7 @@ def test_actions_get_status_raises_on_a_non_2xx_response():
     # call_api does not check the HTTP status (the generated client does that
     # in response_deserialize, which this path skips), so without an explicit
     # check an error body reads as an action record with no status.
-    api_client = StatusApiClient(StatusResponse({"detail": "Action not found"}, 404))
+    api_client = StatusApiClient(FakeResponse({"detail": "Action not found"}, 404))
     actions = ActionsClient(api_client)
 
     with pytest.raises(CyberwaveAPIError, match="HTTP 404: Action not found"):
@@ -346,8 +339,8 @@ def test_actions_get_status_raises_on_a_non_2xx_response():
 def test_actions_wait_survives_a_transient_poll_failure(monkeypatch):
     # One bad poll must not end a wait that is holding a robot in motion.
     api_client = StatusApiClient(
-        StatusResponse({"detail": "Service Unavailable"}, 503),
-        StatusResponse({"action_id": "action-1", "status": "completed"}, 200),
+        FakeResponse({"detail": "Service Unavailable"}, 503),
+        FakeResponse({"action_id": "action-1", "status": "completed"}, 200),
     )
     actions = ActionsClient(api_client)
     monkeypatch.setattr("cyberwave.actions.time.sleep", lambda _seconds: None)
@@ -363,7 +356,7 @@ def test_actions_wait_survives_a_transient_poll_failure(monkeypatch):
 def test_actions_wait_names_the_poll_failure_in_the_timeout(monkeypatch):
     # A permanently failing poll still raises TimeoutError — callers' recovery
     # paths are written against it — but the message has to say why.
-    api_client = StatusApiClient(StatusResponse({"detail": "Action not found"}, 404))
+    api_client = StatusApiClient(FakeResponse({"detail": "Action not found"}, 404))
     actions = ActionsClient(api_client)
     monkeypatch.setattr("cyberwave.actions.time.sleep", lambda _seconds: None)
 
@@ -376,3 +369,11 @@ def test_control_surface_discovery_forwards_mode(mode):
     api_client = FakeApiClient([])
     AgentManager(api_client).control.surfaces("env-uuid", mode=mode)
     assert api_client.serialized[0]["query_params"] == [("mode", mode)]
+
+
+def test_agent_call_raises_on_a_non_2xx_response():
+    # An error body must not come back as an empty plan.
+    api_client = StatusApiClient(FakeResponse({"detail": "Forbidden"}, 403))
+
+    with pytest.raises(CyberwaveAPIError, match="HTTP 403: Forbidden"):
+        AgentManager(api_client).control.options("env-uuid")

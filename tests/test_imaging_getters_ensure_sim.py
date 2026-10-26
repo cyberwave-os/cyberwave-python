@@ -1,4 +1,4 @@
-"""Imaging getters require a running MuJoCo simulation (SimLevel.MUJOCO)."""
+"""Imaging getters require a physics-backed simulation (SimLevel.PHYSICS)."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ from cyberwave.twin.simulation_support import SimLevel
 
 def test_camera_getters_are_mujoco_level() -> None:
     # get_frame validates its source arg before the preflight, so it calls
-    # _ensure_simulation_support(MUJOCO) manually rather than via the decorator.
-    assert TwinCameraHandle.get_frames.__cw_sim_level__ == SimLevel.MUJOCO
-    assert TwinCameraHandle.get_video.__cw_sim_level__ == SimLevel.MUJOCO
+    # _ensure_simulation_support(PHYSICS) manually rather than via the decorator.
+    assert TwinCameraHandle.get_frames.__cw_sim_level__ == SimLevel.PHYSICS
+    assert TwinCameraHandle.get_video.__cw_sim_level__ == SimLevel.PHYSICS
 
 
 def test_pointcloud_getter_is_mujoco_level() -> None:
-    assert PointCloudCapableMixin.get_pointcloud.__cw_sim_level__ == SimLevel.MUJOCO
+    assert PointCloudCapableMixin.get_pointcloud.__cw_sim_level__ == SimLevel.PHYSICS
 
 
 def test_camera_get_frame_raises_when_no_sim_running() -> None:

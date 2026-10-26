@@ -256,3 +256,74 @@ def test_a_config_built_client_derives_from_an_api_token_mqtt_password(
     call = mqtt_client_cls.return_value.username_pw_set.call_args.kwargs
     assert call["username"] == mqtt_username_for_token(token)
     assert call["username"] != DEFAULT_MQTT_USERNAME
+
+
+def test_config_resolves_raw_paho_credentials_like_the_client(
+    clean_api_key_env, monkeypatch
+):
+    """Edge drivers on a raw paho client connect exactly as the SDK client would."""
+    for name in ("CYBERWAVE_MQTT_USERNAME", "CYBERWAVE_MQTT_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    token = "cw_" + "c" * 64
+    assert CyberwaveConfig(api_key=token).mqtt_credentials == (
+        mqtt_username_for_token(token),
+        token,
+    )
+    assert CyberwaveConfig(
+        mqtt_username="edge-user", mqtt_password="edge-pass"
+    ).mqtt_credentials == ("edge-user", "edge-pass")
+    assert CyberwaveConfig(mqtt_password="static").mqtt_credentials == (
+        DEFAULT_MQTT_USERNAME,
+        "static",
+    )
+    assert CyberwaveConfig().mqtt_credentials == (DEFAULT_MQTT_USERNAME, None)
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        ({}, ""),
+        ({"CYBERWAVE_ENVIRONMENT": "production"}, ""),
+        ({"CYBERWAVE_ENVIRONMENT": "Production"}, ""),
+        ({"CYBERWAVE_ENVIRONMENT": "dev"}, "dev"),
+        ({"CYBERWAVE_ENVIRONMENT": " staging "}, "staging"),
+        # Simulation nodes export CYBERWAVE_TOPIC_PREFIX; Edge Core forwards it.
+        ({"CYBERWAVE_TOPIC_PREFIX": "local", "CYBERWAVE_ENVIRONMENT": "dev"}, "local"),
+        (
+            {
+                "CYBERWAVE_MQTT_TOPIC_PREFIX": "explicit",
+                "CYBERWAVE_TOPIC_PREFIX": "local",
+                "CYBERWAVE_ENVIRONMENT": "dev",
+            },
+            "explicit",
+        ),
+    ],
+)
+def test_config_topic_prefix_resolution(monkeypatch, environment, expected):
+    for name in (
+        "CYBERWAVE_MQTT_TOPIC_PREFIX",
+        "CYBERWAVE_TOPIC_PREFIX",
+        "CYBERWAVE_ENVIRONMENT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    assert CyberwaveConfig().topic_prefix == expected
+
+
+@pytest.mark.parametrize(
+    ("environment", "port", "tls"),
+    [
+        ({}, 8883, True),
+        ({"CYBERWAVE_MQTT_PORT": "1883"}, 1883, False),
+        ({"CYBERWAVE_MQTT_PORT": "8883"}, 8883, True),
+        ({"CYBERWAVE_MQTT_PORT": "1883", "CYBERWAVE_MQTT_USE_TLS": "true"}, 1883, True),
+    ],
+)
+def test_config_port_and_tls_resolution(monkeypatch, environment, port, tls):
+    for name in ("CYBERWAVE_MQTT_PORT", "CYBERWAVE_MQTT_USE_TLS"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    config = CyberwaveConfig()
+    assert (config.mqtt_port, config.mqtt_use_tls) == (port, tls)

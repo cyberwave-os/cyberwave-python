@@ -48,6 +48,27 @@ def _make_stream(prefix=""):
     )
 
 
+def test_ice_servers_follow_the_shared_ice_profile(monkeypatch):
+    from cyberwave.sensor.ice import DEFAULT_TURN_SERVERS, ICE_MODE_ENV
+
+    monkeypatch.delenv(ICE_MODE_ENV, raising=False)
+    urls = [server.urls for server in _make_stream()._ice_servers()]
+    assert urls == [entry["urls"] for entry in DEFAULT_TURN_SERVERS]
+
+    explicit = [{"urls": "turn:relay.example:3478", "username": "u", "credential": "c"}]
+    stream = _make_stream()
+    stream._turn_servers = explicit
+    (server,) = stream._ice_servers()
+    assert (server.urls, server.username, server.credential) == (
+        "turn:relay.example:3478",
+        "u",
+        "c",
+    )
+
+    monkeypatch.setenv(ICE_MODE_ENV, "lan")
+    assert stream._ice_servers() == []
+
+
 def test_offer_payload_matches_contract():
     s = _make_stream(prefix="dev/")
     payload = s._build_offer_payload("v=0\r\n")

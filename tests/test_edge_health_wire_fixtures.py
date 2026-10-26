@@ -90,16 +90,12 @@ class _FakeMQTT:
 
 
 def _synthesise_payload(checker: EdgeHealthCheck, *, twin_uuid: str) -> Dict[str, Any]:
-    """Build one wire payload, mirroring the publisher's compose path."""
-    health_data = checker.get_health_data()
-    return {
-        "type": "edge_health",
-        "timestamp": 1700000000.0,
-        "edge_id": checker.edge_id,
-        "twin_uuid": twin_uuid,
-        "uptime_seconds": 0.0,
-        **health_data,
-    }
+    """Build one wire payload from the publisher's *actual* compose path.
+
+    This used to restate the dict, which pinned the cross-language contract
+    against a second implementation rather than against the wire.
+    """
+    return dict(checker.build_payload(), twin_uuid=twin_uuid)
 
 
 @pytest.mark.parametrize(

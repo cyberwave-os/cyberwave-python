@@ -209,6 +209,31 @@ def test_catalog_camera_up_stays_raw_mqtt_publish() -> None:
     assert entry.payload["data"]["tilt"] == 0.1
 
 
+def test_request_resolves_like_a_catalog_command() -> None:
+    # ``twin.commands.request`` goes through the same outbound resolution as
+    # ``twin.commands.<name>()``: catalog validation, source type, policy gate.
+    twin = _make_twin(
+        LocomoteTwin,
+        metadata=_go2_metadata(),
+        capabilities={"can_locomote": True},
+    )
+    twin.client.mqtt.request_command.return_value = {"status": "accepted"}
+
+    with patch.object(twin, "_prepare_outbound_command") as prepare:
+        reply = twin.commands.request("camera_up", {"tilt": 0.1}, timeout_s=3)
+
+    assert reply == {"status": "accepted"}
+    prepare.assert_called_once_with()
+    twin.client.mqtt.request_command.assert_called_once_with(
+        "twin-uuid", "camera_up", {"tilt": 0.1}, timeout_s=3, source_type="tele"
+    )
+    assert [entry.command for entry in twin._outbound_log] == ["camera_up"]
+
+    with pytest.raises(ValueError, match="not in the MQTT catalog"):
+        twin.commands.request("self_destruct")
+    twin.client.mqtt.request_command.assert_called_once()
+
+
 def test_catalog_flight_command_delegates_to_flight_handle() -> None:
     twin = _make_twin(
         FlyingTwin,

@@ -74,6 +74,13 @@ __all__ = [
     # Pre-encoded H.264 passthrough (bypasses aiortc's PyAV encode step)
     "H264PacketCameraStreamer",
     "H264PacketVideoTrack",
+    # H.264 over RTP/UDP ingest (stdlib-only depayloader + passthrough streamer)
+    "RtpH264CameraStreamer",
+    "UdpRtpReceiver",
+    "H264Depayloader",
+    "RtpPacket",
+    "RtpH264Packetizer",
+    "AccessUnit",
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",
@@ -84,6 +91,9 @@ __all__ = [
     "MultimediaStreamer",
     # Constants
     "DEFAULT_TURN_SERVERS",
+    "ICE_MODE_ENV",
+    "effective_ice_servers",
+    "ice_mode",
     "CONNECTION_LOSS_CONFIRMATION_CHECKS",
     "SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS",
     "SDK_EDGE_HEALTH_INTERVAL_SECONDS",
@@ -125,6 +135,9 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "BaseVideoTrack": (".base_video", "BaseVideoTrack"),
     "BaseVideoStreamer": (".base_video", "BaseVideoStreamer"),
     "DEFAULT_TURN_SERVERS": (".ice", "DEFAULT_TURN_SERVERS"),
+    "ICE_MODE_ENV": (".ice", "ICE_MODE_ENV"),
+    "effective_ice_servers": (".ice", "effective_ice_servers"),
+    "ice_mode": (".ice", "ice_mode"),
     "CONNECTION_LOSS_CONFIRMATION_CHECKS": (
         ".base_video",
         "CONNECTION_LOSS_CONFIRMATION_CHECKS",
@@ -161,6 +174,12 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "VirtualCameraStreamer": (".camera_virtual", "VirtualCameraStreamer"),
     "H264PacketVideoTrack": (".camera_h264", "H264PacketVideoTrack"),
     "H264PacketCameraStreamer": (".camera_h264", "H264PacketCameraStreamer"),
+    "RtpH264CameraStreamer": (".camera_h264", "RtpH264CameraStreamer"),
+    "UdpRtpReceiver": (".rtp_h264", "UdpRtpReceiver"),
+    "H264Depayloader": (".rtp_h264", "H264Depayloader"),
+    "RtpPacket": (".rtp_h264", "RtpPacket"),
+    "RtpH264Packetizer": (".rtp_h264", "RtpH264Packetizer"),
+    "AccessUnit": (".rtp_h264", "AccessUnit"),
     "CameraStreamManager": (".manager", "CameraStreamManager"),
     "run_streamer_in_background": (".manager", "run_streamer_in_background"),
     "BaseAudioTrack": (".microphone", "BaseAudioTrack"),

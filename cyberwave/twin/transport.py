@@ -107,20 +107,31 @@ class TwinTransportMixin:
         )
         return resolved
 
-    def _publish_resolved(self: Self, resolved: ResolvedOutbound) -> None:
-        """Publish resolved outbound to MQTT and retain a test log entry."""
+    def _admit_resolved(self: Self, resolved: ResolvedOutbound) -> None:
+        """Gate motion commands behind the controller policy; log the outbound."""
         if motion_outbound_requires_policy(resolved.command):
             if resolved.source_type not in EDGE_STATE_SOURCE_TYPES:
                 self._prepare_outbound_command()
         self._init_transport_state()
         self._outbound_log.append(resolved)
+
+    def _publish_resolved(self: Self, resolved: ResolvedOutbound) -> None:
+        """Publish resolved outbound to MQTT and retain a test log entry."""
+        self._admit_resolved(resolved)
         mqtt = getattr(self.client, "mqtt", None)
         if mqtt is not None:
             self._ensure_mqtt_connected()
             if mqtt.publish(resolved.topic, resolved.payload) is False:
+                # Connected, the client refused it itself: a payload over its
+                # size limit, which no retry sends, or a paho error it logged.
+                advice = (
+                    "The MQTT client refused it; its log says why."
+                    if mqtt.connected
+                    else "Check the MQTT connection before retrying."
+                )
                 raise CyberwaveMQTTError(
                     f"Command {resolved.command!r} could not be sent for twin "
-                    f"{self.uuid}. Check the MQTT connection before retrying."
+                    f"{self.uuid}. {advice}"
                 )
         logger.debug(
             "twin outbound publish: twin=%s command=%s topic=%s",
@@ -143,6 +154,37 @@ class TwinTransportMixin:
             source_type=source_type,
         )
         self._publish_resolved(resolved)
+
+    def _request_command(
+        self: Self,
+        command: str,
+        data: dict[str, Any] | None = None,
+        *,
+        timeout_s: float = 5.0,
+        source_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Send a catalog command as an MQTT v5 request and return the reply.
+
+        Resolved and admitted exactly like :meth:`publish_command` (catalog
+        validation, source type, controller-policy gate); the MQTT client then
+        adds the reply inbox and correlation data and waits for the driver's
+        ``twin.command_response.v1``. The ``twin_command`` channel always
+        resolves to the canonical command topic, which is the one
+        :meth:`cyberwave.mqtt.CyberwaveMQTTClient.request_command` publishes on.
+        """
+        resolved = self._resolve_topic_and_payload(
+            command=command,
+            data=dict(data or {}),
+            source_type=source_type,
+        )
+        self._admit_resolved(resolved)
+        return self.client.mqtt.request_command(
+            self.uuid,
+            resolved.command,
+            resolved.payload["data"],
+            timeout_s=timeout_s,
+            source_type=resolved.source_type,
+        )
 
     def publish_telemetry(self: Self, payload: dict[str, Any]) -> None:
         """Publish *payload* on ``cyberwave/twin/{uuid}/telemetry``.

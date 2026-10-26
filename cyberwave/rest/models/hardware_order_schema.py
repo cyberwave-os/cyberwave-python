@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from typing_extensions import Annotated
 from cyberwave.rest.models.hardware_order_line_item_schema import HardwareOrderLineItemSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -37,7 +36,7 @@ class HardwareOrderSchema(BaseModel):
     purchase_type: StrictStr
     booked_amount_minor: Optional[StrictInt] = None
     booked_currency: Optional[StrictStr] = ''
-    total_cost_credits: Annotated[str, Field(strict=True)]
+    total_cost_credits: StrictStr
     tracking_number: StrictStr
     delivery_address_uuid: Optional[StrictStr] = None
     shipping_label: StrictStr
@@ -55,13 +54,6 @@ class HardwareOrderSchema(BaseModel):
     updated_at: StrictStr
     line_items: List[HardwareOrderLineItemSchema]
     __properties: ClassVar[List[str]] = ["uuid", "organization_uuid", "workspace_uuid", "created_by_uuid", "status", "purchase_type", "booked_amount_minor", "booked_currency", "total_cost_credits", "tracking_number", "delivery_address_uuid", "shipping_label", "shipping_contact_name", "shipping_contact_phone", "shipping_contact_email", "shipping_address_line1", "shipping_address_line2", "shipping_city", "shipping_state", "shipping_postal_code", "shipping_country", "metadata", "created_at", "updated_at", "line_items"]
-
-    @field_validator('total_cost_credits')
-    def total_cost_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,

@@ -17,10 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from typing_extensions import Annotated
-from cyberwave.rest.models.rates_value_value import RatesValueValue
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -30,31 +28,17 @@ class OrganizationCreditAccountSchema(BaseModel):
     OrganizationCreditAccountSchema
     """ # noqa: E501
     organization_uuid: StrictStr
-    balance_credits: Annotated[str, Field(strict=True)]
+    balance_credits: StrictStr
     status: StrictStr
-    warning_threshold_credits: Annotated[str, Field(strict=True)]
+    warning_threshold_credits: StrictStr
     enforcement_enabled: StrictBool
-    rates: Dict[str, Dict[str, RatesValueValue]]
+    rates: Dict[str, Dict[str, StrictStr]]
     manual_block: Optional[StrictBool] = False
     manual_block_reason: Optional[StrictStr] = ''
     billing_provider: Optional[StrictStr] = 'stripe'
     billing_provider_label: Optional[StrictStr] = 'Direct billing'
     billing_status: Optional[StrictStr] = ''
     __properties: ClassVar[List[str]] = ["organization_uuid", "balance_credits", "status", "warning_threshold_credits", "enforcement_enabled", "rates", "manual_block", "manual_block_reason", "billing_provider", "billing_provider_label", "billing_status"]
-
-    @field_validator('balance_credits')
-    def balance_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
-
-    @field_validator('warning_threshold_credits')
-    def warning_threshold_credits_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$", value):
-            raise ValueError(r"must validate the regular expression /^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/")
-        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -95,15 +79,6 @@ class OrganizationCreditAccountSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each value in rates (dict of dict)
-        _field_dict_of_dict = {}
-        if self.rates:
-            for _key_rates, _value_rates in self.rates.items():
-                if _value_rates is not None:
-                    _field_dict_of_dict[_key_rates] = {
-                        _key: _value.to_dict() for _key, _value in _value_rates.items()
-                    }
-            _dict['rates'] = _field_dict_of_dict
         return _dict
 
     @classmethod
@@ -121,18 +96,7 @@ class OrganizationCreditAccountSchema(BaseModel):
             "status": obj.get("status"),
             "warning_threshold_credits": obj.get("warning_threshold_credits"),
             "enforcement_enabled": obj.get("enforcement_enabled"),
-            "rates": dict(
-                (_k, dict(
-                    (_ik, RatesValueValue.from_dict(_iv))
-                        for _ik, _iv in _v.items()
-                    )
-                    if _v is not None
-                    else None
-                )
-                for _k, _v in obj["rates"].items()
-            )
-            if obj.get("rates") is not None
-            else None,
+            "rates": obj.get("rates"),
             "manual_block": obj.get("manual_block") if obj.get("manual_block") is not None else False,
             "manual_block_reason": obj.get("manual_block_reason") if obj.get("manual_block_reason") is not None else '',
             "billing_provider": obj.get("billing_provider") if obj.get("billing_provider") is not None else 'stripe',

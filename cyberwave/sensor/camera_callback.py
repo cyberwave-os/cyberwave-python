@@ -111,11 +111,7 @@ class CallbackVideoTrack(BaseVideoTrack):
         if captured:
             self.captured_frame_count += 1
 
-        if self.time_reference is not None:
-            timestamp, timestamp_monotonic = self.time_reference.read()
-        else:
-            timestamp = time.time()
-            timestamp_monotonic = time.monotonic()
+        timestamp, timestamp_monotonic = self._capture_timestamp(self.time_reference)
 
         if self.frame_count == 0:
             self.frame_0_timestamp = timestamp

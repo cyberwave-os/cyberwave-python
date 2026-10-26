@@ -1,5 +1,6 @@
 {
   "type": "edge_health",
+  "source_type": "edge",
   "edge_id": "twin-fixture",
   "twin_uuid": "twin-fixture",
   "stream_count": 2,
