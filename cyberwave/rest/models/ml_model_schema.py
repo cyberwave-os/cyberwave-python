@@ -21,6 +21,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.io_schema_schema import IOSchemaSchema
+from cyberwave.rest.models.ml_model_schema_video_input_value import MLModelSchemaVideoInputValue
 from cyberwave.rest.models.model_task_contract_schema import ModelTaskContractSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -65,6 +66,7 @@ class MLModelSchema(BaseModel):
     output_family: Optional[StrictStr] = None
     allowed_structured_tasks: Optional[List[StrictStr]] = None
     execution_surfaces: Optional[List[StrictStr]] = None
+    video_input: Optional[Dict[str, Optional[MLModelSchemaVideoInputValue]]] = None
     inference_issue: Optional[StrictStr] = None
     sdk_load_id: Optional[StrictStr] = None
     edge_catalog_id: Optional[StrictStr] = None
@@ -77,7 +79,7 @@ class MLModelSchema(BaseModel):
     credential_header_name: Optional[StrictStr] = None
     io_schema: Optional[IOSchemaSchema] = None
     task_contracts: Optional[List[ModelTaskContractSchema]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "inference_issue", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs", "has_credential", "credential_auth_type", "credential_header_name", "io_schema", "task_contracts"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "created_at", "updated_at", "created_by", "updated_by", "workspace_uuid", "workspace_name", "workspace_slug", "metadata", "visibility", "tags", "model_external_id", "model_provider_name", "mapped_model_id", "output_format", "deployment", "is_trainable", "supported_level", "can_take_video_as_input", "can_take_audio_as_input", "can_take_image_as_input", "can_take_text_as_input", "can_take_action_as_input", "is_edge_compatible", "is_cloud_compatible", "playground_kind", "playground_base_catalog_key", "playground_base_model_slug", "playground_base_model_name", "output_family", "allowed_structured_tasks", "execution_surfaces", "video_input", "inference_issue", "sdk_load_id", "edge_catalog_id", "edge_runtime", "supports_builtin_vad_filter", "weights_url", "required_inputs", "has_credential", "credential_auth_type", "credential_header_name", "io_schema", "task_contracts"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -118,6 +120,13 @@ class MLModelSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each value in video_input (dict)
+        _field_dict = {}
+        if self.video_input:
+            for _key_video_input in self.video_input:
+                if self.video_input[_key_video_input]:
+                    _field_dict[_key_video_input] = self.video_input[_key_video_input].to_dict()
+            _dict['video_input'] = _field_dict
         # override the default output from pydantic by calling `to_dict()` of io_schema
         if self.io_schema:
             _dict['io_schema'] = self.io_schema.to_dict()
@@ -187,6 +196,11 @@ class MLModelSchema(BaseModel):
         # and model_fields_set contains the field
         if self.output_family is None and "output_family" in self.model_fields_set:
             _dict['output_family'] = None
+
+        # set to None if video_input (nullable) is None
+        # and model_fields_set contains the field
+        if self.video_input is None and "video_input" in self.model_fields_set:
+            _dict['video_input'] = None
 
         # set to None if inference_issue (nullable) is None
         # and model_fields_set contains the field
@@ -275,6 +289,12 @@ class MLModelSchema(BaseModel):
             "output_family": obj.get("output_family"),
             "allowed_structured_tasks": obj.get("allowed_structured_tasks"),
             "execution_surfaces": obj.get("execution_surfaces"),
+            "video_input": dict(
+                (_k, MLModelSchemaVideoInputValue.from_dict(_v))
+                for _k, _v in obj["video_input"].items()
+            )
+            if obj.get("video_input") is not None
+            else None,
             "inference_issue": obj.get("inference_issue"),
             "sdk_load_id": obj.get("sdk_load_id"),
             "edge_catalog_id": obj.get("edge_catalog_id"),

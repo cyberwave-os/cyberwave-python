@@ -41,8 +41,8 @@ class ContentPromptInput(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page']):
-            raise ValueError("must be one of enum values ('blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page')")
+        if value not in set(['blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page', 'partner', 'use_case']):
+            raise ValueError("must be one of enum values ('blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page', 'partner', 'use_case')")
         return value
 
     model_config = ConfigDict(

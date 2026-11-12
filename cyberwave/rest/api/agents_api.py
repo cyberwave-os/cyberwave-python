@@ -37,7 +37,12 @@ from cyberwave.rest.models.agent_setup_and_draft_response_schema import AgentSet
 from cyberwave.rest.models.agent_setup_and_draft_schema import AgentSetupAndDraftSchema
 from cyberwave.rest.models.agent_twin_control_surface import AgentTwinControlSurface
 from cyberwave.rest.models.agent_workflow_apply_response_schema import AgentWorkflowApplyResponseSchema
+from cyberwave.rest.models.agent_workflow_graph_edit_response_schema import AgentWorkflowGraphEditResponseSchema
+from cyberwave.rest.models.agent_workflow_graph_edit_schema import AgentWorkflowGraphEditSchema
 from cyberwave.rest.models.control_setup_plan_request import ControlSetupPlanRequest
+from cyberwave.rest.models.environment_agent_history_schema import EnvironmentAgentHistorySchema
+from cyberwave.rest.models.environment_agent_history_update_schema import EnvironmentAgentHistoryUpdateSchema
+from cyberwave.rest.models.environment_agent_model_choice_schema import EnvironmentAgentModelChoiceSchema
 from cyberwave.rest.models.environment_agent_model_list_schema import EnvironmentAgentModelListSchema
 from cyberwave.rest.models.environment_agent_request_schema import EnvironmentAgentRequestSchema
 from cyberwave.rest.models.environment_agent_response_schema import EnvironmentAgentResponseSchema
@@ -2009,8 +2014,282 @@ class AgentsApi:
 
 
     @validate_call
+    def src_app_api_agents_environment_agents_get_environment_agent_history(
+        self,
+        environment_uuid: StrictStr,
+        assistant_session_id: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> EnvironmentAgentHistorySchema:
+        """Read the saved environment assistant transcript
+
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param assistant_session_id: (required)
+        :type assistant_session_id: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_get_environment_agent_history_serialize(
+            environment_uuid=environment_uuid,
+            assistant_session_id=assistant_session_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentHistorySchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_get_environment_agent_history_with_http_info(
+        self,
+        environment_uuid: StrictStr,
+        assistant_session_id: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[EnvironmentAgentHistorySchema]:
+        """Read the saved environment assistant transcript
+
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param assistant_session_id: (required)
+        :type assistant_session_id: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_get_environment_agent_history_serialize(
+            environment_uuid=environment_uuid,
+            assistant_session_id=assistant_session_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentHistorySchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_get_environment_agent_history_without_preload_content(
+        self,
+        environment_uuid: StrictStr,
+        assistant_session_id: StrictStr,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Read the saved environment assistant transcript
+
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param assistant_session_id: (required)
+        :type assistant_session_id: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_get_environment_agent_history_serialize(
+            environment_uuid=environment_uuid,
+            assistant_session_id=assistant_session_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentHistorySchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_agents_environment_agents_get_environment_agent_history_serialize(
+        self,
+        environment_uuid,
+        assistant_session_id,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if environment_uuid is not None:
+            _path_params['environment_uuid'] = environment_uuid
+        if assistant_session_id is not None:
+            _path_params['assistant_session_id'] = assistant_session_id
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/agents/environments/{environment_uuid}/sessions/{assistant_session_id}/history',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
     def src_app_api_agents_environment_agents_list_environment_agent_models(
         self,
+        environment_uuid: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2026,8 +2305,10 @@ class AgentsApi:
     ) -> EnvironmentAgentModelListSchema:
         """List environment agent-capable models
 
-        Return the compact model list used by the environment editor assistant.
+        Return the compact model list used by the environment editor assistant.  With ``environment_uuid``, also the chat model saved for that environment, and the generic Agentic controller (for \"Ask the agent\").
 
+        :param environment_uuid:
+        :type environment_uuid: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2051,6 +2332,7 @@ class AgentsApi:
         """ # noqa: E501
 
         _param = self._src_app_api_agents_environment_agents_list_environment_agent_models_serialize(
+            environment_uuid=environment_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2074,6 +2356,7 @@ class AgentsApi:
     @validate_call
     def src_app_api_agents_environment_agents_list_environment_agent_models_with_http_info(
         self,
+        environment_uuid: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2089,8 +2372,10 @@ class AgentsApi:
     ) -> ApiResponse[EnvironmentAgentModelListSchema]:
         """List environment agent-capable models
 
-        Return the compact model list used by the environment editor assistant.
+        Return the compact model list used by the environment editor assistant.  With ``environment_uuid``, also the chat model saved for that environment, and the generic Agentic controller (for \"Ask the agent\").
 
+        :param environment_uuid:
+        :type environment_uuid: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2114,6 +2399,7 @@ class AgentsApi:
         """ # noqa: E501
 
         _param = self._src_app_api_agents_environment_agents_list_environment_agent_models_serialize(
+            environment_uuid=environment_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2137,6 +2423,7 @@ class AgentsApi:
     @validate_call
     def src_app_api_agents_environment_agents_list_environment_agent_models_without_preload_content(
         self,
+        environment_uuid: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2152,8 +2439,10 @@ class AgentsApi:
     ) -> RESTResponseType:
         """List environment agent-capable models
 
-        Return the compact model list used by the environment editor assistant.
+        Return the compact model list used by the environment editor assistant.  With ``environment_uuid``, also the chat model saved for that environment, and the generic Agentic controller (for \"Ask the agent\").
 
+        :param environment_uuid:
+        :type environment_uuid: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2177,6 +2466,7 @@ class AgentsApi:
         """ # noqa: E501
 
         _param = self._src_app_api_agents_environment_agents_list_environment_agent_models_serialize(
+            environment_uuid=environment_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2195,6 +2485,7 @@ class AgentsApi:
 
     def _src_app_api_agents_environment_agents_list_environment_agent_models_serialize(
         self,
+        environment_uuid,
         _request_auth,
         _content_type,
         _headers,
@@ -2217,6 +2508,10 @@ class AgentsApi:
 
         # process the path parameters
         # process the query parameters
+        if environment_uuid is not None:
+            
+            _query_params.append(('environment_uuid', environment_uuid))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -2239,6 +2534,599 @@ class AgentsApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/api/v1/agents/environments/models',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_save_environment_agent_history(
+        self,
+        environment_uuid: StrictStr,
+        assistant_session_id: StrictStr,
+        environment_agent_history_update_schema: EnvironmentAgentHistoryUpdateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> EnvironmentAgentHistorySchema:
+        """Save the environment assistant transcript
+
+        Replace the caller's transcript; an empty one clears it.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param assistant_session_id: (required)
+        :type assistant_session_id: str
+        :param environment_agent_history_update_schema: (required)
+        :type environment_agent_history_update_schema: EnvironmentAgentHistoryUpdateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_save_environment_agent_history_serialize(
+            environment_uuid=environment_uuid,
+            assistant_session_id=assistant_session_id,
+            environment_agent_history_update_schema=environment_agent_history_update_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentHistorySchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_save_environment_agent_history_with_http_info(
+        self,
+        environment_uuid: StrictStr,
+        assistant_session_id: StrictStr,
+        environment_agent_history_update_schema: EnvironmentAgentHistoryUpdateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[EnvironmentAgentHistorySchema]:
+        """Save the environment assistant transcript
+
+        Replace the caller's transcript; an empty one clears it.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param assistant_session_id: (required)
+        :type assistant_session_id: str
+        :param environment_agent_history_update_schema: (required)
+        :type environment_agent_history_update_schema: EnvironmentAgentHistoryUpdateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_save_environment_agent_history_serialize(
+            environment_uuid=environment_uuid,
+            assistant_session_id=assistant_session_id,
+            environment_agent_history_update_schema=environment_agent_history_update_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentHistorySchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_save_environment_agent_history_without_preload_content(
+        self,
+        environment_uuid: StrictStr,
+        assistant_session_id: StrictStr,
+        environment_agent_history_update_schema: EnvironmentAgentHistoryUpdateSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Save the environment assistant transcript
+
+        Replace the caller's transcript; an empty one clears it.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param assistant_session_id: (required)
+        :type assistant_session_id: str
+        :param environment_agent_history_update_schema: (required)
+        :type environment_agent_history_update_schema: EnvironmentAgentHistoryUpdateSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_save_environment_agent_history_serialize(
+            environment_uuid=environment_uuid,
+            assistant_session_id=assistant_session_id,
+            environment_agent_history_update_schema=environment_agent_history_update_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentHistorySchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_agents_environment_agents_save_environment_agent_history_serialize(
+        self,
+        environment_uuid,
+        assistant_session_id,
+        environment_agent_history_update_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if environment_uuid is not None:
+            _path_params['environment_uuid'] = environment_uuid
+        if assistant_session_id is not None:
+            _path_params['assistant_session_id'] = assistant_session_id
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if environment_agent_history_update_schema is not None:
+            _body_params = environment_agent_history_update_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='PUT',
+            resource_path='/api/v1/agents/environments/{environment_uuid}/sessions/{assistant_session_id}/history',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_save_environment_agent_model(
+        self,
+        environment_uuid: StrictStr,
+        environment_agent_model_choice_schema: EnvironmentAgentModelChoiceSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> EnvironmentAgentModelChoiceSchema:
+        """Save the environment assistant's chat model
+
+        Store the chat model everyone in this environment starts with.  Only the assistant uses it; robots decide with their Agentic controller's model, set in the controller settings. ``null`` returns to the default.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param environment_agent_model_choice_schema: (required)
+        :type environment_agent_model_choice_schema: EnvironmentAgentModelChoiceSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_save_environment_agent_model_serialize(
+            environment_uuid=environment_uuid,
+            environment_agent_model_choice_schema=environment_agent_model_choice_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentModelChoiceSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_save_environment_agent_model_with_http_info(
+        self,
+        environment_uuid: StrictStr,
+        environment_agent_model_choice_schema: EnvironmentAgentModelChoiceSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[EnvironmentAgentModelChoiceSchema]:
+        """Save the environment assistant's chat model
+
+        Store the chat model everyone in this environment starts with.  Only the assistant uses it; robots decide with their Agentic controller's model, set in the controller settings. ``null`` returns to the default.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param environment_agent_model_choice_schema: (required)
+        :type environment_agent_model_choice_schema: EnvironmentAgentModelChoiceSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_save_environment_agent_model_serialize(
+            environment_uuid=environment_uuid,
+            environment_agent_model_choice_schema=environment_agent_model_choice_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentModelChoiceSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_agents_environment_agents_save_environment_agent_model_without_preload_content(
+        self,
+        environment_uuid: StrictStr,
+        environment_agent_model_choice_schema: EnvironmentAgentModelChoiceSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Save the environment assistant's chat model
+
+        Store the chat model everyone in this environment starts with.  Only the assistant uses it; robots decide with their Agentic controller's model, set in the controller settings. ``null`` returns to the default.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param environment_agent_model_choice_schema: (required)
+        :type environment_agent_model_choice_schema: EnvironmentAgentModelChoiceSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_agents_save_environment_agent_model_serialize(
+            environment_uuid=environment_uuid,
+            environment_agent_model_choice_schema=environment_agent_model_choice_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "EnvironmentAgentModelChoiceSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_agents_environment_agents_save_environment_agent_model_serialize(
+        self,
+        environment_uuid,
+        environment_agent_model_choice_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if environment_uuid is not None:
+            _path_params['environment_uuid'] = environment_uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if environment_agent_model_choice_schema is not None:
+            _body_params = environment_agent_model_choice_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='PUT',
+            resource_path='/api/v1/agents/environments/{environment_uuid}/model',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -5607,6 +6495,310 @@ class AgentsApi:
         return self.api_client.param_serialize(
             method='POST',
             resource_path='/api/v1/agents/environments/{environment_uuid}/workflows/{workflow_uuid}/apply-plan',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_agents_environment_workflow_agents_agent_edit_workflow_graph(
+        self,
+        environment_uuid: StrictStr,
+        workflow_uuid: StrictStr,
+        agent_workflow_graph_edit_schema: AgentWorkflowGraphEditSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> AgentWorkflowGraphEditResponseSchema:
+        """Apply explicit, deterministic graph operations to an existing workflow
+
+        Run ordered graph operations without the planner; all-or-nothing.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param workflow_uuid: (required)
+        :type workflow_uuid: str
+        :param agent_workflow_graph_edit_schema: (required)
+        :type agent_workflow_graph_edit_schema: AgentWorkflowGraphEditSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_workflow_agents_agent_edit_workflow_graph_serialize(
+            environment_uuid=environment_uuid,
+            workflow_uuid=workflow_uuid,
+            agent_workflow_graph_edit_schema=agent_workflow_graph_edit_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AgentWorkflowGraphEditResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_agents_environment_workflow_agents_agent_edit_workflow_graph_with_http_info(
+        self,
+        environment_uuid: StrictStr,
+        workflow_uuid: StrictStr,
+        agent_workflow_graph_edit_schema: AgentWorkflowGraphEditSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[AgentWorkflowGraphEditResponseSchema]:
+        """Apply explicit, deterministic graph operations to an existing workflow
+
+        Run ordered graph operations without the planner; all-or-nothing.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param workflow_uuid: (required)
+        :type workflow_uuid: str
+        :param agent_workflow_graph_edit_schema: (required)
+        :type agent_workflow_graph_edit_schema: AgentWorkflowGraphEditSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_workflow_agents_agent_edit_workflow_graph_serialize(
+            environment_uuid=environment_uuid,
+            workflow_uuid=workflow_uuid,
+            agent_workflow_graph_edit_schema=agent_workflow_graph_edit_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AgentWorkflowGraphEditResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_agents_environment_workflow_agents_agent_edit_workflow_graph_without_preload_content(
+        self,
+        environment_uuid: StrictStr,
+        workflow_uuid: StrictStr,
+        agent_workflow_graph_edit_schema: AgentWorkflowGraphEditSchema,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Apply explicit, deterministic graph operations to an existing workflow
+
+        Run ordered graph operations without the planner; all-or-nothing.
+
+        :param environment_uuid: (required)
+        :type environment_uuid: str
+        :param workflow_uuid: (required)
+        :type workflow_uuid: str
+        :param agent_workflow_graph_edit_schema: (required)
+        :type agent_workflow_graph_edit_schema: AgentWorkflowGraphEditSchema
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_agents_environment_workflow_agents_agent_edit_workflow_graph_serialize(
+            environment_uuid=environment_uuid,
+            workflow_uuid=workflow_uuid,
+            agent_workflow_graph_edit_schema=agent_workflow_graph_edit_schema,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "AgentWorkflowGraphEditResponseSchema",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_agents_environment_workflow_agents_agent_edit_workflow_graph_serialize(
+        self,
+        environment_uuid,
+        workflow_uuid,
+        agent_workflow_graph_edit_schema,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if environment_uuid is not None:
+            _path_params['environment_uuid'] = environment_uuid
+        if workflow_uuid is not None:
+            _path_params['workflow_uuid'] = workflow_uuid
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if agent_workflow_graph_edit_schema is not None:
+            _body_params = agent_workflow_graph_edit_schema
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/agents/environments/{environment_uuid}/workflows/{workflow_uuid}/graph-edit',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

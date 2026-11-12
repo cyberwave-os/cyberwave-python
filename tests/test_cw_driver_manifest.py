@@ -95,3 +95,45 @@ def test_load_so101_reference_manifest() -> None:
     resolved = resolve_driver_config_dict(raw)
     assert "joint" in resolved["mqtt"]
     assert "twin" in resolved["mqtt"]
+
+
+def test_kinematics_slug_is_readable_for_the_pose_stream() -> None:
+    """A publish-only kinematics declaration must still reach twin.pose."""
+    from cyberwave.manifest.driver_config import (
+        TWIN_KINEMATICS_TOPIC_SLUG,
+        _slug_readable,
+    )
+
+    entry = {"direction": "publish", "payload_schema_ref": "TwinKinematicsPayload"}
+    assert _slug_readable(TWIN_KINEMATICS_TOPIC_SLUG, entry, stream="pose") is True
+
+
+def test_publish_only_slug_stays_unreadable_for_other_streams() -> None:
+    from cyberwave.manifest.driver_config import (
+        TWIN_KINEMATICS_TOPIC_SLUG,
+        _slug_readable,
+    )
+
+    entry = {"direction": "publish"}
+    assert _slug_readable(TWIN_KINEMATICS_TOPIC_SLUG, entry, stream="joints") is False
+
+
+def test_kinematics_payload_round_trips_through_the_decoder() -> None:
+    """Guards the exact payload shape Task 7's publisher must emit."""
+    from cyberwave.data.state_representation import decode_kinematics_protobuf_stub
+
+    payload = {
+        "message_type": "cartesian_pose",
+        "cartesian_pose": {
+            "reference_frame": "base_link",
+            "position": {"x": 0.1, "y": 0.2, "z": 0.3},
+            "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+        },
+    }
+    msg = decode_kinematics_protobuf_stub(payload)
+    assert msg.message_type == "cartesian_pose"
+    assert msg.cartesian_pose is not None
+    assert msg.cartesian_pose.position.x == 0.1
+    assert msg.cartesian_pose.position.z == 0.3
+    assert msg.cartesian_pose.orientation.w == 1.0
+    assert msg.cartesian_pose.spatial_state.reference_frame == "base_link"

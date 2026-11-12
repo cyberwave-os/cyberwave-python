@@ -7,7 +7,9 @@ import os
 import shlex
 import signal
 import subprocess
+import sys
 import tempfile
+import threading
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +22,16 @@ from .ros_setup_env import collect_ros_setup_scripts
 logger = logging.getLogger(__name__)
 
 _DEFAULT_LOG_BASENAME = "cyberwave_managed_launch.log"
+
+#: Set truthy to also forward the launch's output to this process's stdout -- the
+#: container log -- prefixed ``[managed_launch]``. The log file is still written:
+#: it is what a failed start quotes. Off by default, so a driver opts in.
+LOG_TO_STDOUT_ENV = "CW_MANAGED_LAUNCH_LOG_TO_STDOUT"
+
+
+def _log_to_stdout() -> bool:
+    value = os.environ.get(LOG_TO_STDOUT_ENV, "").strip().lower()
+    return value in ("1", "true", "yes", "on")
 
 
 class ManagedRosLaunch:
@@ -40,6 +52,7 @@ class ManagedRosLaunch:
         self._proc: subprocess.Popen[str] | None = None
         self._log_handle: object | None = None
         self._log_path: str = ""
+        self._log_pump: threading.Thread | None = None
 
     def build_shell_command(self) -> str:
         setup = self._ros_setup_snippet()
@@ -90,7 +103,9 @@ class ManagedRosLaunch:
             return ""
         try:
             with open(self._log_path, "rb") as f:
-                data = f.read(max_bytes)
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - max_bytes))
+                data = f.read()
             return data.decode("utf-8", errors="replace")
         except OSError:
             return ""
@@ -112,16 +127,29 @@ class ManagedRosLaunch:
         )
         if domain_id:
             child_env["ROS_DOMAIN_ID"] = domain_id
+        forward = _log_to_stdout()
         self._proc = subprocess.Popen(
             ["bash", "-lc", cmd],
-            stdout=self._log_handle,  # type: ignore[arg-type]
+            stdout=subprocess.PIPE if forward else self._log_handle,  # type: ignore[arg-type]
             stderr=subprocess.STDOUT,
             start_new_session=True,
             env=child_env,
+            text=forward or None,
+            bufsize=1 if forward else -1,
         )
+        if forward:
+            self._log_pump = threading.Thread(
+                target=self._pump_output,
+                args=(self._proc.stdout, self._log_handle),
+                name="managed-launch-log",
+                daemon=True,
+            )
+            self._log_pump.start()
         time.sleep(0.5)
         if self._proc.poll() is not None:
             code = self._proc.returncode
+            if self._log_pump is not None:
+                self._log_pump.join(timeout=2)
             if self._log_handle is not None:
                 self._log_handle.flush()
             tail = self._tail_log()
@@ -129,6 +157,16 @@ class ManagedRosLaunch:
                 f"Managed launch exited immediately (code={code}). "
                 f"Check {self._log_path}. Last output:\n{tail}"
             )
+
+    @staticmethod
+    def _pump_output(stream: Any, handle: Any) -> None:
+        """Copy each line to the log file and to stdout until the child exits."""
+        for line in iter(stream.readline, ""):
+            handle.write(line)
+            handle.flush()
+            sys.stdout.write(f"[managed_launch] {line}")
+            sys.stdout.flush()
+        stream.close()
 
     def _service_visible(self, name: str) -> bool:
         """Return True when *name* appears on the ROS graph (LifecycleNode-safe)."""
@@ -161,15 +199,16 @@ class ManagedRosLaunch:
         name = self._spec.readiness.name
         deadline = time.monotonic() + self._spec.readiness.timeout_s
         while time.monotonic() < deadline:
-            if self._service_visible(name):
-                logger.info("ManagedRosLaunch ready: service %s available", name)
-                return
             if self._proc and self._proc.poll() is not None:
                 tail = self._tail_log()
                 raise RuntimeError(
                     f"Managed launch exited before {name} ready "
                     f"(code={self._proc.returncode}). Log: {self._log_path}\n{tail}"
                 )
+            if self._service_visible(name):
+                logger.info("ManagedRosLaunch ready: service %s available", name)
+                return
+            time.sleep(0.05)
         tail = self._tail_log()
         raise TimeoutError(
             f"Service {name} not ready within {self._spec.readiness.timeout_s}s. "
@@ -192,6 +231,9 @@ class ManagedRosLaunch:
                     os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                     proc.wait(timeout=5)
         self._proc = None
+        if self._log_pump is not None:
+            self._log_pump.join(timeout=5)
+            self._log_pump = None
         if self._log_handle is not None:
             try:
                 self._log_handle.close()  # type: ignore[union-attr]

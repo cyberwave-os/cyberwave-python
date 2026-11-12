@@ -9,12 +9,27 @@ drivers that never issue EE/pose commands never import pinocchio.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from typing import Any, Protocol
 
 import numpy as np
 
-from .config import ArmKinematicsConfig
+from .config import ArmKinematicsConfig, tool_offset_from_xyz_rpy
+
+
+def _jog_ik_kwargs(kin: Any) -> dict[str, Any]:
+    """``restart=False`` for a solver that has it.
+
+    A jog must stay on the arm's current IK branch: a multi-seed restart answers
+    a 1 cm jog with a different posture reaching the same point, and the arm
+    swings through a large, unplanned motion to get there. Refusing is right.
+    """
+    try:
+        parameters = inspect.signature(kin.ik).parameters
+    except (TypeError, ValueError):
+        return {}
+    return {"restart": False} if "restart" in parameters else {}
 
 
 class EEPoseLike(Protocol):
@@ -42,18 +57,31 @@ def pose_to_matrix(pose: EEPoseLike) -> np.ndarray:
     """4x4 homogeneous transform from x,y,z + roll,pitch,yaw.
 
     Standard fixed-axis (extrinsic XYZ) RPY convention: R = Rz(yaw) @ Ry(pitch)
-    @ Rx(roll), matching ROS/URDF ``rpy`` semantics.
+    @ Rx(roll), matching ROS/URDF ``rpy`` semantics. The formula is
+    :func:`~cyberwave.driver.kinematics.arm.config.tool_offset_from_xyz_rpy`'s;
+    there is one.
     """
-    cr, sr = np.cos(pose.roll), np.sin(pose.roll)
-    cp, sp = np.cos(pose.pitch), np.sin(pose.pitch)
-    cy, sy = np.cos(pose.yaw), np.sin(pose.yaw)
-    rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]])
-    ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
-    rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
-    out = np.eye(4)
-    out[:3, :3] = rz @ ry @ rx
-    out[:3, 3] = [pose.x, pose.y, pose.z]
-    return out
+    return tool_offset_from_xyz_rpy(
+        pose.x, pose.y, pose.z, pose.roll, pose.pitch, pose.yaw
+    )
+
+
+def validate_kinematics_candidate(
+    installed: Any | None, candidate: Any, obstacles: tuple[Any, ...]
+) -> None:
+    """Raise ``ValueError`` unless *candidate* may replace *installed*.
+
+    The rules every rebuild obeys: a reviewed self-collision model that loaded
+    must survive the rebuild, and requested world geometry must actually be
+    paired with the arm -- otherwise a scene would be silently ignored while
+    reported as active.
+    """
+    if getattr(installed, "collision_model_valid", False) and not getattr(
+        candidate, "collision_model_valid", False
+    ):
+        raise ValueError("the reviewed self-collision model did not load")
+    if obstacles and not getattr(candidate, "obstacle_collision_available", False):
+        raise ValueError("the requested world geometry was not paired with the arm")
 
 
 class ArmController:
@@ -83,6 +111,50 @@ class ArmController:
             self._kin = build(self._config)
         return self._kin
 
+    @property
+    def base_frame(self) -> str:
+        """The frame :meth:`ee_pose` is expressed in: ``config.base_frame``, or
+        the URDF root link the kinematics resolved when that is unset."""
+        if self._config.base_frame is not None:
+            return self._config.base_frame
+        resolved = getattr(self._kinematics(), "base_frame", None)
+        return str(resolved) if resolved else "base_link"
+
+    @property
+    def loaded_kinematics(self) -> Any | None:
+        """The kinematics instance if it has been built, else ``None``.
+
+        For status reads that must not trigger the (pinocchio) build, e.g. a
+        precondition asking whether the loaded collision model is valid.
+        """
+        return self._kin
+
+    def replace_kinematics(self, candidate: Any) -> None:
+        """Install a rebuilt solver (new world geometry, a carried payload).
+
+        Validate it first with :func:`validate_kinematics_candidate`.
+        """
+        self._kin = candidate
+
+    @property
+    def kinematics(self) -> Any:
+        """The single kinematics instance this controller owns (built lazily).
+
+        Public so read-only consumers — e.g. the ``state/kinematics`` publisher —
+        borrow this model instead of constructing a second one from the same
+        URDF. Prefer :meth:`ee_pose` over touching this directly.
+        """
+        return self._kinematics()
+
+    def ee_pose(self, current: dict[str, float]) -> np.ndarray:
+        """Measured TCP pose (4x4) in :attr:`base_frame` for *current*.
+
+        The one place forward kinematics is run for reporting, so transport
+        layers never call ``fk`` themselves. Honours ``config.tool_offset``:
+        the result is the tool centre point when one is configured.
+        """
+        return self._kinematics().fk(self._start(current))
+
     def _start(self, current: dict[str, float]) -> dict[str, float]:
         return {n: current.get(n, 0.0) for n in self._config.arm_joints}
 
@@ -97,7 +169,7 @@ class ArmController:
         kin = self._kinematics()
         start = self._start(current)
         target = kin.apply_translation(kin.fk(start), components, frame=frame)
-        return kin.ik(start, target)
+        return kin.ik(start, target, **_jog_ik_kwargs(kin))
 
     def rotate(
         self, current: dict[str, float], axis: str, angle: float, frame: str = "tool"
@@ -105,13 +177,121 @@ class ArmController:
         kin = self._kinematics()
         start = self._start(current)
         target = kin.apply_rotation(kin.fk(start), axis, angle, frame=frame)
-        return kin.ik(start, target)
+        return kin.ik(start, target, **_jog_ik_kwargs(kin))
 
     def pose_to_joints(
         self, current: dict[str, float], pose: EEPoseLike
     ) -> dict[str, float] | None:
         kin = self._kinematics()
         return kin.ik(self._start(current), pose_to_matrix(pose))
+
+    def pose_path_to_joints(
+        self,
+        current: dict[str, float],
+        pose: EEPoseLike,
+        *,
+        steps: int = 1,
+        max_joint_step: float | None = None,
+        ik_kwargs: dict[str, Any] | None = None,
+    ) -> list[dict[str, float]] | None:
+        """Solve a straight-line TCP path to *pose*, one waypoint at a time.
+
+        Each waypoint is seeded from the previous solution. Returns ``None`` —
+        never a partial path — if any waypoint misses IK or any consecutive joint
+        delta exceeds *max_joint_step* (rad).
+
+        ``max_joint_step`` is a backstop, not the continuity guarantee. A solver
+        that retries from other seeds can return a solution on a DIFFERENT IK
+        branch when the previous-solution seed fails to converge, and a branch
+        change smaller than *max_joint_step* passes this check. ``ik_kwargs`` is
+        forwarded verbatim to the solver so a caller that needs strict continuity
+        can disable that retry for path solving; ``None`` changes nothing.
+        """
+        kin = self._kinematics()
+        seed = self._start(current)
+        waypoints = kin.pose_waypoints(kin.fk(seed), pose_to_matrix(pose), steps)
+        path: list[dict[str, float]] = []
+        for target in waypoints:
+            solution = kin.ik(seed, target, **(ik_kwargs or {}))
+            if solution is None:
+                return None
+            if max_joint_step is not None and any(
+                abs(solution[name] - seed.get(name, 0.0)) > max_joint_step
+                for name in solution
+            ):
+                return None
+            path.append(solution)
+            seed = solution
+        return path
+
+    def pose_matrix_path_to_joints(
+        self,
+        current: dict[str, float],
+        poses: list[np.ndarray],
+        *,
+        max_joint_step: float | None = None,
+        allow_ik_gaps: bool = False,
+        ik_kwargs: dict[str, Any] | None = None,
+    ) -> list[dict[str, float]] | None:
+        """Solve an ordered base-frame TCP path of 4x4 pose via points.
+
+        The path is geometry only; the caller owns time parameterisation and
+        trajectory execution. Every solve is seeded from the preceding solution.
+        ``allow_ik_gaps`` explicitly permits unresolved interior CIRC samples to
+        become a joint-space PTP transition; collision refusals and an unresolved
+        final target still refuse the whole path.
+        """
+        kin = self._kinematics()
+        seed = self._start(current)
+        path: list[dict[str, float]] = []
+        final_solved = False
+        for index, target in enumerate(poses):
+            solution = kin.ik(
+                seed, np.asarray(target, dtype=float), **(ik_kwargs or {})
+            )
+            if solution is None:
+                if allow_ik_gaps and not getattr(kin, "last_ik_refusal", None):
+                    final_solved = False
+                    continue
+                return None
+            if max_joint_step is not None and any(
+                abs(solution[name] - seed.get(name, 0.0)) > max_joint_step
+                for name in solution
+            ):
+                return None
+            path.append(solution)
+            seed = solution
+            final_solved = index == len(poses) - 1
+        return path if path and final_solved else None
+
+    def position_path_to_joints(
+        self,
+        current: dict[str, float],
+        positions_m: list[np.ndarray],
+        *,
+        max_joint_step: float | None = None,
+        ik_kwargs: dict[str, Any] | None = None,
+    ) -> list[dict[str, float]] | None:
+        """Solve base-frame TCP positions while leaving tool orientation free."""
+        kin = self._kinematics()
+        seed = self._start(current)
+        posture_reference = dict(seed)
+        path: list[dict[str, float]] = []
+        for position in positions_m:
+            solution = kin.ik_position(
+                seed, position, posture_reference=posture_reference,
+                **(ik_kwargs or {}),
+            )
+            if solution is None:
+                return None
+            if max_joint_step is not None and any(
+                abs(solution[name] - seed.get(name, 0.0)) > max_joint_step
+                for name in solution
+            ):
+                return None
+            path.append(solution)
+            seed = solution
+        return path
 
     # ── base joint nudge (no IK) ─────────────────────────────────────────────
 
@@ -149,7 +329,7 @@ class ArmController:
 
     def binarize(self, payload: dict[str, float]) -> dict[str, float]:
         g = self._config.gripper
-        if g is None or not g.binarize:
+        if g is None or not g.binarize or not g.binarize_measured:
             return payload
         result = payload
         for name in g.names:

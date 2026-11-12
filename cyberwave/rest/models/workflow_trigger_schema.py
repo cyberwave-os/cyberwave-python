@@ -28,7 +28,8 @@ class WorkflowTriggerSchema(BaseModel):
     Schema for triggering a workflow run from the SDK.
     """ # noqa: E501
     inputs: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["inputs"]
+    params: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["inputs", "params"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -74,6 +75,11 @@ class WorkflowTriggerSchema(BaseModel):
         if self.inputs is None and "inputs" in self.model_fields_set:
             _dict['inputs'] = None
 
+        # set to None if params (nullable) is None
+        # and model_fields_set contains the field
+        if self.params is None and "params" in self.model_fields_set:
+            _dict['params'] = None
+
         return _dict
 
     @classmethod
@@ -86,7 +92,8 @@ class WorkflowTriggerSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "inputs": obj.get("inputs")
+            "inputs": obj.get("inputs"),
+            "params": obj.get("params")
         })
         return _obj
 

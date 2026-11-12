@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -37,7 +37,8 @@ class SkillTeachingRequestCreateSchema(BaseModel):
     train_seeds: Optional[List[StrictInt]] = None
     idempotency_key: Optional[StrictStr] = ''
     reuse_existing_policy: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["environment_uuid", "target_twin_uuid", "objective", "task_family", "rl_task_uuid", "strategy_key", "strategy_config", "train_seeds", "idempotency_key", "reuse_existing_policy"]
+    task_params_overrides: Optional[Dict[str, Any]] = Field(default=None, description="{param: value} run overrides, checked against the RL task's task_params.")
+    __properties: ClassVar[List[str]] = ["environment_uuid", "target_twin_uuid", "objective", "task_family", "rl_task_uuid", "strategy_key", "strategy_config", "train_seeds", "idempotency_key", "reuse_existing_policy", "task_params_overrides"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -104,7 +105,8 @@ class SkillTeachingRequestCreateSchema(BaseModel):
             "strategy_config": obj.get("strategy_config"),
             "train_seeds": obj.get("train_seeds"),
             "idempotency_key": obj.get("idempotency_key") if obj.get("idempotency_key") is not None else '',
-            "reuse_existing_policy": obj.get("reuse_existing_policy") if obj.get("reuse_existing_policy") is not None else True
+            "reuse_existing_policy": obj.get("reuse_existing_policy") if obj.get("reuse_existing_policy") is not None else True,
+            "task_params_overrides": obj.get("task_params_overrides")
         })
         return _obj
 

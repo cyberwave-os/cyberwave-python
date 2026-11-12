@@ -37,13 +37,13 @@ class AgentPreviewResponseSchema(BaseModel):
     preview: Dict[str, Any]
     embodiment_context: AgentEmbodimentContextSchema
     execution_readiness: Optional[StrictStr] = 'ready'
-    missing_requirements: Optional[List[Optional[Dict[str, Any]]]] = None
-    proposed_environment_changes: Optional[List[Optional[Dict[str, Any]]]] = None
+    missing_requirements: Optional[List[Dict[str, Any]]] = None
+    proposed_environment_changes: Optional[List[Dict[str, Any]]] = None
     intent_assessment: Optional[Dict[str, Any]] = None
     proposal: Optional[AgentProposalSchema] = None
     composition_strategy: Optional[StrictStr] = None
-    resolved_node_hints: Optional[List[Optional[Dict[str, Any]]]] = None
-    dropped_node_hints: Optional[List[Optional[Dict[str, Any]]]] = None
+    resolved_node_hints: Optional[List[Dict[str, Any]]] = None
+    dropped_node_hints: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["strategy", "template_kind", "template_summary", "preview_kind", "preview", "embodiment_context", "execution_readiness", "missing_requirements", "proposed_environment_changes", "intent_assessment", "proposal", "composition_strategy", "resolved_node_hints", "dropped_node_hints"]
 
     @field_validator('preview_kind')

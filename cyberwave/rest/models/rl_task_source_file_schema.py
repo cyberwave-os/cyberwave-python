@@ -19,7 +19,7 @@ import json
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -35,7 +35,8 @@ class RLTaskSourceFileSchema(BaseModel):
     owner: StrictStr
     generated_kind: StrictStr
     updated_at: datetime
-    __properties: ClassVar[List[str]] = ["path", "content", "content_sha256", "is_entrypoint", "owner", "generated_kind", "updated_at"]
+    editable: Optional[StrictBool] = True
+    __properties: ClassVar[List[str]] = ["path", "content", "content_sha256", "is_entrypoint", "owner", "generated_kind", "updated_at", "editable"]
 
     @field_validator('owner')
     def owner_validate_enum(cls, value):
@@ -101,7 +102,8 @@ class RLTaskSourceFileSchema(BaseModel):
             "is_entrypoint": obj.get("is_entrypoint"),
             "owner": obj.get("owner"),
             "generated_kind": obj.get("generated_kind"),
-            "updated_at": obj.get("updated_at")
+            "updated_at": obj.get("updated_at"),
+            "editable": obj.get("editable") if obj.get("editable") is not None else True
         })
         return _obj
 

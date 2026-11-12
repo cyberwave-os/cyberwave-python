@@ -36,8 +36,8 @@ class RLTaskOrchestrationHintsSchema(BaseModel):
     entity_actuator_groups: Optional[Dict[str, List[Dict[str, Any]]]] = None
     entity_actuated_joint_names: Optional[Dict[str, List[StrictStr]]] = None
     entity_passive_joint_names: Optional[Dict[str, List[StrictStr]]] = None
-    camera_sensors: Optional[List[Optional[Dict[str, Any]]]] = None
-    contact_sensors: Optional[List[Optional[Dict[str, Any]]]] = None
+    camera_sensors: Optional[List[Dict[str, Any]]] = None
+    contact_sensors: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["articulation_entities", "rigid_entities", "entity_actuator_types", "entity_action_target_regexes", "entity_joint_names", "entity_body_names", "entity_actuator_groups", "entity_actuated_joint_names", "entity_passive_joint_names", "camera_sensors", "contact_sensors"]
 
     model_config = ConfigDict(

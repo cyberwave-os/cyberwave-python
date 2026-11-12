@@ -825,9 +825,80 @@ class TestUltralyticsWritableModelDirContract:
         finally:
             os.chdir(cwd_before)
 
-        assert observed_cwds == [writable_dir]
+        # A subfolder of the writable dir, so a companion cached there as a folder
+        # named like its file can never be what Ultralytics finds by bare name.
+        assert observed_cwds == [writable_dir / ".cw-prompt"]
         assert Path.cwd() == cwd_before
         handle.set_classes.assert_called_once_with(["helmet"], "text_pe_tensor")
+
+    def test_apply_text_prompt_places_the_cached_text_encoder_in_the_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ultralytics looks for ``mobileclip2_b.ts`` in the current directory, which
+        is the writable dir: the copy Edge Core cached must be there by then."""
+        models_root = tmp_path / "cache"
+        (models_root / "mobileclip2_b.ts").mkdir(parents=True)
+        (models_root / "mobileclip2_b.ts" / "mobileclip2_b.ts").write_bytes(b"ts")
+        monkeypatch.setenv("CYBERWAVE_MODELS_DIR", str(models_root))
+        writable_dir = tmp_path / "yoloe-26s-seg.pt"
+        writable_dir.mkdir()
+
+        found: list[bool] = []
+        handle = MagicMock()
+        handle.set_classes = MagicMock()
+        handle.get_text_pe = MagicMock(
+            side_effect=lambda _: (
+                found.append(Path("mobileclip2_b.ts").is_file()) or "text_pe_tensor"
+            )
+        )
+        del handle._cw_active_prompt
+        handle._cw_writable_dir = str(writable_dir)
+        handle.model = [MagicMock(spec=[])]  # prompt-driven (no lrpc)
+
+        cwd_before = Path.cwd()
+        try:
+            UltralyticsRuntime._apply_text_prompt(handle, "helmet")
+        finally:
+            os.chdir(cwd_before)
+
+        assert found == [True]
+
+    def test_the_text_encoder_is_found_when_the_weights_sit_in_the_models_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Weights downloaded flat into the models folder make that folder the writable
+        dir, and there the encoder is cached as a folder named ``mobileclip2_b.ts``:
+        the prompt must still find the file, not that folder."""
+        models_root = tmp_path / "models"
+        (models_root / "mobileclip2_b.ts").mkdir(parents=True)
+        (models_root / "mobileclip2_b.ts" / "mobileclip2_b.ts").write_bytes(b"ts")
+        monkeypatch.setenv("CYBERWAVE_MODELS_DIR", str(models_root))
+
+        seen: list[tuple[bool, bool]] = []
+        handle = MagicMock()
+        handle.set_classes = MagicMock()
+        handle.get_text_pe = MagicMock(
+            side_effect=lambda _: (
+                seen.append(
+                    (
+                        Path("mobileclip2_b.ts").is_file(),
+                        Path("mobileclip2_b.ts").is_dir(),
+                    )
+                )
+                or "text_pe_tensor"
+            )
+        )
+        del handle._cw_active_prompt
+        handle._cw_writable_dir = str(models_root)
+        handle.model = [MagicMock(spec=[])]  # prompt-driven (no lrpc)
+
+        cwd_before = Path.cwd()
+        try:
+            UltralyticsRuntime._apply_text_prompt(handle, "helmet")
+        finally:
+            os.chdir(cwd_before)
+
+        assert seen == [(True, False)]
 
     def test_apply_text_prompt_restores_cwd_when_get_text_pe_raises(
         self, tmp_path: Path

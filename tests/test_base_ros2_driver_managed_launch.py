@@ -105,3 +105,40 @@ def test_build_shell_command_empty_package_runs_launch_file_as_path() -> None:
     assert "ros2 launch  " not in cmd
     assert "ros2 launch '' " not in cmd
     assert "cw_namespace:=/twin_abc" in cmd
+
+
+def test_managed_launch_reports_recent_output(tmp_path) -> None:
+    from cyberwave.driver.ros2.managed_launch import ManagedRosLaunch
+
+    launch = ManagedRosLaunch(
+        ManifestManagedLaunch(package="piper", launch_file="start.launch.py")
+    )
+    log = tmp_path / "launch.log"
+    log.write_text("old output\n" + "x" * 5000 + "\ncontroller failed\n")
+    launch._log_path = str(log)
+
+    assert "controller failed" in launch._tail_log()
+    assert "old output" not in launch._tail_log()
+
+
+def test_managed_launch_does_not_report_ready_after_process_exit() -> None:
+    from cyberwave.driver.ros2.managed_launch import ManagedRosLaunch
+
+    launch = ManagedRosLaunch(
+        ManifestManagedLaunch(
+            package="piper",
+            launch_file="start.launch.py",
+            readiness=ManifestReadiness(name="/enable_srv"),
+        ),
+        node=MagicMock(),
+    )
+    launch._proc = MagicMock(returncode=1)
+    launch._proc.poll.return_value = 1
+    launch._service_visible = MagicMock(return_value=True)
+    launch._tail_log = MagicMock(return_value="controller failed")
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="controller failed"):
+        launch.wait_ready()
+    launch._service_visible.assert_not_called()

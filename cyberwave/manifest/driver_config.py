@@ -21,6 +21,7 @@ MQTT_BUNDLE_SCHEMA_VERSION = 1
 JOINT_UPDATE_TOPIC_SLUG = "cyberwave/joint/{twin_uuid}/update"
 JOINT_SUBSCRIBE_TOPIC_SLUG = "cyberwave/joint/{twin_uuid}/+"
 TWIN_COMMAND_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/command"
+TWIN_POSE_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/pose"
 TWIN_POSITION_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/position"
 TWIN_ROTATION_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/rotation"
 TWIN_KINEMATICS_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/state/kinematics"
@@ -30,6 +31,10 @@ TWIN_IMU_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/imu"
 TWIN_GPS_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/gps"
 TWIN_DEPTH_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/depth"
 TWIN_POINTCLOUD_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/pointcloud"
+#: World poses of a twin's named frames, sent by ``publish_frame_poses``. Each
+#: message is stored as one ``twin_frame_poses`` telemetry row. The interface
+#: registry maps ``TopicSpec(namespace="twin", leaf="frame_poses")`` to it.
+TWIN_FRAME_POSES_TOPIC_SLUG = "cyberwave/twin/{twin_uuid}/frame_poses"
 
 InboundStream = Literal[
     "pose", "joints", "power", "camera", "imu", "gps", "depth", "pointcloud"
@@ -37,6 +42,7 @@ InboundStream = Literal[
 
 INBOUND_STREAM_SLUGS: dict[InboundStream, tuple[str, ...]] = {
     "pose": (
+        TWIN_POSE_TOPIC_SLUG,
         TWIN_KINEMATICS_TOPIC_SLUG,
         TWIN_POSITION_TOPIC_SLUG,
         TWIN_ROTATION_TOPIC_SLUG,
@@ -301,9 +307,16 @@ def _slug_readable(slug: str, entry: dict[str, Any], *, stream: InboundStream) -
     direction = str(entry.get("direction", "both")).lower()
     if direction in {"subscribe", "both"}:
         return True
-    # Platform publishes position/rotation for viz; locomotion twins still read them.
+    # /pose and the historical split position/rotation streams are published by
+    # the driver, but remain readable by the twin SDK.
+    if stream == "pose" and slug == TWIN_POSE_TOPIC_SLUG:
+        return True
     if stream == "pose" and slug in {TWIN_POSITION_TOPIC_SLUG, TWIN_ROTATION_TOPIC_SLUG}:
         return slug.endswith("/position") or slug.endswith("/rotation")
+    # The driver publishes EE pose for consumers to read; there is no
+    # subscribe side, so "publish" must not hide it from the pose stream.
+    if stream == "pose" and slug == TWIN_KINEMATICS_TOPIC_SLUG:
+        return True
     return False
 
 
@@ -331,6 +344,19 @@ def resolve_inbound_topics(
     prefix = topic_prefix or ""
     candidates = INBOUND_STREAM_SLUGS.get(stream, ())
     resolved: list[tuple[str, str]] = []
+
+    # A driver-declared /pose is the canonical complete pose stream. Prefer it
+    # exclusively over the historical split position/rotation and derived
+    # kinematics topics, which otherwise create duplicate updates.
+    if stream == "pose" and TWIN_POSE_TOPIC_SLUG in catalog_slugs:
+        entry = _topic_entry(bundle, TWIN_POSE_TOPIC_SLUG)
+        if _slug_readable(TWIN_POSE_TOPIC_SLUG, entry, stream=stream):
+            return [
+                (
+                    TWIN_POSE_TOPIC_SLUG,
+                    f"{prefix}{TWIN_POSE_TOPIC_SLUG.format(twin_uuid=twin_uuid)}",
+                )
+            ]
 
     if stream == "power":
         for slug in _battery_slugs(catalog_slugs):
@@ -407,11 +433,12 @@ def resolve_inbound_topics(
             resolved.append((slug, f"{prefix}{slug.format(twin_uuid=twin_uuid)}"))
 
     if stream == "pose":
+        has_direct_pose = any(TWIN_POSE_TOPIC_SLUG == s for s, _ in resolved)
         has_kinematics = any(TWIN_KINEMATICS_TOPIC_SLUG == s for s, _ in resolved)
         has_legacy = any(
             s in {TWIN_POSITION_TOPIC_SLUG, TWIN_ROTATION_TOPIC_SLUG} for s, _ in resolved
         )
-        if not has_kinematics and not has_legacy:
+        if not has_direct_pose and not has_kinematics and not has_legacy:
             # Fallback: canonical position+rotation when catalog is command-only.
             resolved = [
                 (TWIN_POSITION_TOPIC_SLUG, f"{prefix}{TWIN_POSITION_TOPIC_SLUG.format(twin_uuid=twin_uuid)}"),
@@ -484,7 +511,12 @@ def select_listen_slugs(
             )
         selected: set[str] = set()
         for name in filters:
-            selected.update(INBOUND_STREAM_SLUGS.get(name, ()))  # type: ignore[arg-type]
+            if name == "pose" and TWIN_POSE_TOPIC_SLUG in topics:
+                # A complete canonical pose stream replaces the historical
+                # position/rotation and kinematics subscriptions.
+                selected.add(TWIN_POSE_TOPIC_SLUG)
+            else:
+                selected.update(INBOUND_STREAM_SLUGS.get(name, ()))  # type: ignore[arg-type]
             if name == "power":
                 selected.update(_battery_slugs(set(topics.keys())))
     else:
@@ -507,7 +539,11 @@ def select_listen_slugs(
 
     if filters is not None:
         for name in filters:
+            if name == "pose" and TWIN_POSE_TOPIC_SLUG in topics:
+                continue
             for slug in INBOUND_STREAM_SLUGS.get(name, ()):  # type: ignore[arg-type]
+                if name == "pose" and slug == TWIN_POSE_TOPIC_SLUG:
+                    continue
                 if slug and slug not in result:
                     result.append(str(slug))
 

@@ -33,6 +33,9 @@ class PartnerIntegrationSchema(BaseModel):
     created_by_uuid: Optional[StrictStr] = None
     partner_key: StrictStr
     integration_name: StrictStr
+    partner_name: StrictStr
+    partner_description: StrictStr
+    partner_website: StrictStr
     authentication_type: StrictStr
     credential_type: StrictStr
     secret_type: StrictStr
@@ -59,7 +62,7 @@ class PartnerIntegrationSchema(BaseModel):
     connector_base_url: Optional[StrictStr] = None
     created_at: datetime
     updated_at: datetime
-    __properties: ClassVar[List[str]] = ["uuid", "organization_uuid", "created_by_uuid", "partner_key", "integration_name", "authentication_type", "credential_type", "secret_type", "grant_type", "token_format", "authorization_endpoint", "token_endpoint", "domain", "integration_client_id", "username", "status", "status_detail", "external_connector_id", "is_service_active", "expiration_date", "last_token_fetched_at", "last_verified_at", "last_registered_at", "metadata", "has_password", "has_oauth_client_secret", "has_client_secret", "has_inbound_secret", "connector_base_url", "created_at", "updated_at"]
+    __properties: ClassVar[List[str]] = ["uuid", "organization_uuid", "created_by_uuid", "partner_key", "integration_name", "partner_name", "partner_description", "partner_website", "authentication_type", "credential_type", "secret_type", "grant_type", "token_format", "authorization_endpoint", "token_endpoint", "domain", "integration_client_id", "username", "status", "status_detail", "external_connector_id", "is_service_active", "expiration_date", "last_token_fetched_at", "last_verified_at", "last_registered_at", "metadata", "has_password", "has_oauth_client_secret", "has_client_secret", "has_inbound_secret", "connector_base_url", "created_at", "updated_at"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -147,6 +150,9 @@ class PartnerIntegrationSchema(BaseModel):
             "created_by_uuid": obj.get("created_by_uuid"),
             "partner_key": obj.get("partner_key"),
             "integration_name": obj.get("integration_name"),
+            "partner_name": obj.get("partner_name"),
+            "partner_description": obj.get("partner_description"),
+            "partner_website": obj.get("partner_website"),
             "authentication_type": obj.get("authentication_type"),
             "credential_type": obj.get("credential_type"),
             "secret_type": obj.get("secret_type"),

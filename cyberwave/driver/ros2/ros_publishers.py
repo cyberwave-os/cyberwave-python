@@ -120,7 +120,7 @@ def wire_ros_publishers(driver: BaseROS2Driver) -> None:
                     positions = joint_positions_from_transport_payload(payload)
                     if positions:
                         joints_note = f" ({len(positions)} joints)"
-                    driver.get_logger().info(
+                    driver.get_logger().debug(
                         f"ROS RX {ros_topic}: {rx_count} message(s) — "
                         f"publishing to Cyberwave MQTT{joints_note}"
                     )

@@ -28,7 +28,8 @@ class WorkflowExecuteSchema(BaseModel):
     WorkflowExecuteSchema
     """ # noqa: E501
     trigger_data: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["trigger_data"]
+    params: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["trigger_data", "params"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -74,6 +75,11 @@ class WorkflowExecuteSchema(BaseModel):
         if self.trigger_data is None and "trigger_data" in self.model_fields_set:
             _dict['trigger_data'] = None
 
+        # set to None if params (nullable) is None
+        # and model_fields_set contains the field
+        if self.params is None and "params" in self.model_fields_set:
+            _dict['params'] = None
+
         return _dict
 
     @classmethod
@@ -86,7 +92,8 @@ class WorkflowExecuteSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "trigger_data": obj.get("trigger_data")
+            "trigger_data": obj.get("trigger_data"),
+            "params": obj.get("params")
         })
         return _obj
 

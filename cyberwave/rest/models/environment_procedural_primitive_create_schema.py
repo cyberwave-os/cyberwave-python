@@ -44,9 +44,11 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
     visible: Optional[StrictBool] = True
     locked: Optional[StrictBool] = False
     fixed_base: Optional[StrictBool] = None
+    attach_to: Optional[Dict[str, Any]] = None
+    attach_offset: Optional[Dict[str, Any]] = None
     auto_place: Optional[StrictBool] = False
     near: Optional[Near] = None
-    __properties: ClassVar[List[str]] = ["id", "primitive_id", "template_key", "template_version", "primitive_type", "name", "parameters", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "auto_place", "near"]
+    __properties: ClassVar[List[str]] = ["id", "primitive_id", "template_key", "template_version", "primitive_type", "name", "parameters", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "attach_to", "attach_offset", "auto_place", "near"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -151,6 +153,16 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
         if self.fixed_base is None and "fixed_base" in self.model_fields_set:
             _dict['fixed_base'] = None
 
+        # set to None if attach_to (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_to is None and "attach_to" in self.model_fields_set:
+            _dict['attach_to'] = None
+
+        # set to None if attach_offset (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset is None and "attach_offset" in self.model_fields_set:
+            _dict['attach_offset'] = None
+
         # set to None if near (nullable) is None
         # and model_fields_set contains the field
         if self.near is None and "near" in self.model_fields_set:
@@ -182,6 +194,8 @@ class EnvironmentProceduralPrimitiveCreateSchema(BaseModel):
             "visible": obj.get("visible") if obj.get("visible") is not None else True,
             "locked": obj.get("locked") if obj.get("locked") is not None else False,
             "fixed_base": obj.get("fixed_base"),
+            "attach_to": obj.get("attach_to"),
+            "attach_offset": obj.get("attach_offset"),
             "auto_place": obj.get("auto_place") if obj.get("auto_place") is not None else False,
             "near": Near.from_dict(obj["near"]) if obj.get("near") is not None else None
         })

@@ -7,7 +7,8 @@ Provides:
 - ``WorkflowRun`` object with ``refresh()``, ``wait()``, ``cancel()``,
   and ``on_status_change()`` for MQTT-based real-time updates.
 - ``WorkflowManager`` (``client.workflows``) for list / get / trigger.
-- ``WorkflowRunManager`` (``client.workflow_runs``) for list / get / cancel.
+- ``WorkflowRunManager`` (``client.workflow_runs``) for list / iter / get /
+  cancel.
 
 Example::
 
@@ -40,7 +41,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional
 
 from ._rest import api_error, decode_json
 from .exceptions import (
@@ -57,6 +58,9 @@ logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = frozenset({"success", "error", "canceled"})
 CANCELABLE_STATUSES = frozenset({"running", "waiting", "requested"})
+
+DEFAULT_RUNS_PAGE_SIZE = 100
+"""Page size ``GET /workflow-runs`` serves when no ``limit`` is sent."""
 
 _AUTH = ["CustomTokenAuthentication"]
 
@@ -160,18 +164,47 @@ class Workflow:
         return self._client.workflows.trigger(self.uuid, inputs=inputs, params=params)
 
     def runs(
-        self, *, status: Optional[str] = None
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        before: Optional[str] = None,
     ) -> List["WorkflowRun"]:
-        """List past runs of this workflow.
+        """List past runs of this workflow, newest first.
+
+        Returns one page (the latest 100 runs by default); use
+        :meth:`iter_runs` to walk all of them.
 
         Args:
             status: Optional status filter (e.g. ``"running"``).
+            limit: Page size (the server default is 100).
+            offset: Number of runs to skip.
+            before: UUID of a run; only runs listed after it are returned.
 
         Returns:
             List of :class:`WorkflowRun` instances.
         """
         return self._client.workflow_runs.list(
-            workflow_id=self.uuid, status=status
+            workflow_id=self.uuid,
+            status=status,
+            limit=limit,
+            offset=offset,
+            before=before,
+        )
+
+    def iter_runs(
+        self,
+        *,
+        status: Optional[str] = None,
+        page_size: int = DEFAULT_RUNS_PAGE_SIZE,
+    ) -> Iterator["WorkflowRun"]:
+        """Iterate over every run of this workflow, newest first.
+
+        See :meth:`WorkflowRunManager.iter`.
+        """
+        return self._client.workflow_runs.iter(
+            workflow_id=self.uuid, status=status, page_size=page_size
         )
 
     def is_running(self) -> bool:
@@ -526,19 +559,79 @@ class WorkflowRunManager:
         *,
         workflow_id: Optional[str] = None,
         status: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        before: Optional[str] = None,
     ) -> List[WorkflowRun]:
-        """List workflow runs, with optional filtering.
+        """List one page of workflow runs, newest first, with optional filtering.
+
+        Without *limit* / *offset* / *before* this is the latest 100 runs.
+        Use :meth:`iter` to walk every run.
 
         Args:
             workflow_id: Only return runs for this workflow.
             status: Only return runs with this status
                 (e.g. ``"running"``, ``"success"``, ``"error"``).
+            limit: Page size (the server default is 100, the maximum 1000).
+            offset: Number of runs to skip.
+            before: UUID of a run, usually the last one of the previous page;
+                only runs listed after it are returned. Unlike *offset*, it
+                keeps its place when runs start, finish or are deleted
+                between requests.
 
         Returns:
             List of :class:`WorkflowRun` instances.
         """
-        items = _list_workflow_runs(self._client, workflow_id, status)
+        items = _list_workflow_runs(
+            self._client,
+            workflow_id,
+            status,
+            limit=limit,
+            offset=offset,
+            before=before,
+        )
         return [WorkflowRun(self._client, item) for item in items]
+
+    def iter(
+        self,
+        *,
+        workflow_id: Optional[str] = None,
+        status: Optional[str] = None,
+        page_size: int = DEFAULT_RUNS_PAGE_SIZE,
+    ) -> Iterator[WorkflowRun]:
+        """Iterate over every workflow run, newest first, one page at a time.
+
+        Pages are chained with the ``before`` cursor, so runs that start,
+        finish or are deleted while iterating neither shift nor skip the rest.
+        Runs started after iteration began are not included.
+
+        Args:
+            workflow_id: Only return runs for this workflow.
+            status: Only return runs with this status.
+            page_size: Runs fetched per request (at most 1000).
+
+        Yields:
+            :class:`WorkflowRun` instances.
+        """
+        seen: set = set()
+        before: Optional[str] = None
+        while True:
+            page = self.list(
+                workflow_id=workflow_id,
+                status=status,
+                limit=page_size,
+                before=before,
+            )
+            new_runs = [run for run in page if run.uuid not in seen]
+            for run in new_runs:
+                seen.add(run.uuid)
+                yield run
+            # A short page is the last one. A page with nothing new means the
+            # server ignored ``before`` (a backend without cursors): stop
+            # instead of fetching the same runs forever.
+            if len(page) < page_size or not new_runs:
+                return
+            before = page[-1].uuid
 
     def get(self, run_id: str) -> WorkflowRun:
         """Get a single workflow run by UUID.
@@ -696,6 +789,10 @@ def _list_workflow_runs(
     client: "Cyberwave",
     workflow_id: Optional[str],
     status: Optional[str],
+    *,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    before: Optional[str] = None,
 ) -> list:
     try:
         query_params: list = []
@@ -703,6 +800,12 @@ def _list_workflow_runs(
             query_params.append(("workflow_id", workflow_id))
         if status:
             query_params.append(("status", status))
+        if limit is not None:
+            query_params.append(("limit", limit))
+        if offset is not None:
+            query_params.append(("offset", offset))
+        if before:
+            query_params.append(("before", before))
         _param = _api(client).param_serialize(
             method="GET",
             resource_path="/api/v1/workflow-runs",

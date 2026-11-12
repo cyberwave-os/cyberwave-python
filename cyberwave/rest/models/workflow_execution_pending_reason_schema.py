@@ -25,12 +25,13 @@ from pydantic_core import to_jsonable_python
 
 class WorkflowExecutionPendingReasonSchema(BaseModel):
     """
-    Why a ``requested`` edge execution has not started yet.  ``None`` on any row that is not waiting on an edge worker.
+    Why an execution has not started yet.  ``None`` on any row that is not waiting on an edge or workflow worker.
     """ # noqa: E501
     reason: StrictStr
+    code: Optional[StrictStr] = None
     message: StrictStr
     progress_percent: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["reason", "message", "progress_percent"]
+    __properties: ClassVar[List[str]] = ["reason", "code", "message", "progress_percent"]
 
     @field_validator('reason')
     def reason_validate_enum(cls, value):
@@ -78,6 +79,11 @@ class WorkflowExecutionPendingReasonSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if code (nullable) is None
+        # and model_fields_set contains the field
+        if self.code is None and "code" in self.model_fields_set:
+            _dict['code'] = None
+
         # set to None if progress_percent (nullable) is None
         # and model_fields_set contains the field
         if self.progress_percent is None and "progress_percent" in self.model_fields_set:
@@ -96,6 +102,7 @@ class WorkflowExecutionPendingReasonSchema(BaseModel):
 
         _obj = cls.model_validate({
             "reason": obj.get("reason"),
+            "code": obj.get("code"),
             "message": obj.get("message"),
             "progress_percent": obj.get("progress_percent")
         })

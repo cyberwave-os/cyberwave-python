@@ -25,6 +25,9 @@ _NAMESPACE_PREFIXES: dict[str, str] = {
     "twin": "cyberwave/twin/{twin_uuid}",
     "webrtc": "cyberwave/twin/{twin_uuid}",
     "pose": "cyberwave/twin/{twin_uuid}",
+    # Nested: leaves flatten to cyberwave/twin/{uuid}/state/<leaf>, which is how
+    # TWIN_KINEMATICS_TOPIC_SLUG round-trips through the manifest.
+    "state": "cyberwave/twin/{twin_uuid}/state",
     "environment": "cyberwave/environment/{environment_uuid}",
 }
 

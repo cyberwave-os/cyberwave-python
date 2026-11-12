@@ -110,7 +110,8 @@ class _DefaultApiStub:
 
     def _src_app_api_assets_list_assets_serialize(self, **kwargs):
         headers = kwargs.get("_headers") or {}
-        return ("GET", "/api/v1/assets", headers, None, [], None)
+        # The generated serializer returns (method, url, headers, body, post_params).
+        return ("GET", "/api/v1/assets", headers, None, [])
 
     def __call__(self, *a, **kw):
         return _SchemaStub()

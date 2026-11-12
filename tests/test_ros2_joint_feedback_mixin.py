@@ -110,3 +110,67 @@ def test_register_callbacks_gated_on_flag():
     d = _Disabled()
     d.register_callbacks()
     assert d.subscriptions == []
+
+
+def _msg_full(names, positions, velocities=None, efforts=None):
+    return SimpleNamespace(
+        name=list(names),
+        position=list(positions),
+        velocity=list(velocities or []),
+        effort=list(efforts or []),
+    )
+
+
+def test_effort_and_velocity_are_captured():
+    d = _Driver()
+    d._on_joint_feedback(_msg_full(["j1", "j2"], [0.1, 0.2], [0.5, 0.6], [1.5, 2.5]))
+    assert d.joint_efforts() == {"j1": 1.5, "j2": 2.5}
+    assert d.joint_velocities() == {"j1": 0.5, "j2": 0.6}
+
+
+def test_missing_effort_array_yields_empty_dicts():
+    d = _Driver()
+    d._on_joint_feedback(_msg(["j1"], [0.1]))
+    assert d.joint_efforts() == {}
+    assert d.joint_velocities() == {}
+
+
+def test_short_effort_array_is_ignored_not_misaligned():
+    """A vendor that publishes fewer efforts than names must not shift values."""
+    d = _Driver()
+    d._on_joint_feedback(_msg_full(["j1", "j2"], [0.1, 0.2], efforts=[1.5]))
+    assert d.joint_efforts() == {}
+    assert d._current_joint_positions() == {"j1": 0.1, "j2": 0.2}
+
+
+def test_effort_is_cleared_when_a_later_message_omits_it():
+    """Stale effort must not be presented as belonging to current feedback."""
+    d = _Driver()
+    d._on_joint_feedback(_msg_full(["j1"], [0.1], efforts=[1.5]))
+    assert d.joint_efforts() == {"j1": 1.5}
+    d._on_joint_feedback(_msg(["j1"], [0.2]))  # vendor drops the effort array
+    assert d.joint_efforts() == {}
+
+
+def test_velocity_is_cleared_when_a_later_message_omits_it():
+    d = _Driver()
+    d._on_joint_feedback(_msg_full(["j1"], [0.1], velocities=[0.5]))
+    assert d.joint_velocities() == {"j1": 0.5}
+    d._on_joint_feedback(_msg_full(["j1"], [0.2]))
+    assert d.joint_velocities() == {}
+
+
+def test_misaligned_effort_clears_rather_than_retaining():
+    d = _Driver()
+    d._on_joint_feedback(_msg_full(["j1", "j2"], [0.1, 0.2], efforts=[1.5, 2.5]))
+    assert d.joint_efforts() == {"j1": 1.5, "j2": 2.5}
+    d._on_joint_feedback(_msg_full(["j1", "j2"], [0.1, 0.2], efforts=[1.5]))
+    assert d.joint_efforts() == {}
+
+
+def test_effort_is_replaced_not_merged_across_messages():
+    """A message reporting a different joint set must not leave the old one behind."""
+    d = _Driver()
+    d._on_joint_feedback(_msg_full(["j1", "j2"], [0.1, 0.2], efforts=[1.5, 2.5]))
+    d._on_joint_feedback(_msg_full(["j1"], [0.3], efforts=[9.0]))
+    assert d.joint_efforts() == {"j1": 9.0}

@@ -18,11 +18,12 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from uuid import UUID
 from cyberwave.rest.models.paper_reference import PaperReference
+from cyberwave.rest.models.use_case_cta import UseCaseCta
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -45,13 +46,33 @@ class ContentDetails(BaseModel):
     media_url: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = ''
     session_date: Optional[datetime] = None
     related_objects: Optional[Annotated[List[PaperReference], Field(max_length=12)]] = None
-    __properties: ClassVar[List[str]] = ["kind", "customer_name", "industry", "use_case", "challenge", "solution", "results", "engagement_mode", "template_uuid", "audience", "key_takeaways", "media_url", "session_date", "related_objects"]
+    website: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = ''
+    logo_url: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = ''
+    partner_type: Optional[StrictStr] = None
+    roles: Optional[Annotated[List[StrictStr], Field(max_length=4)]] = None
+    focus_areas: Optional[Annotated[List[StrictStr], Field(max_length=30)]] = None
+    industries: Optional[Annotated[List[StrictStr], Field(max_length=30)]] = None
+    priority: Optional[Annotated[int, Field(le=100000, strict=True, ge=0)]] = None
+    related_use_cases: Optional[Annotated[List[StrictStr], Field(max_length=50)]] = None
+    show_in_logo_banner: Optional[StrictBool] = False
+    logo_attachment_uuid: Optional[UUID] = None
+    logo_render: Optional[StrictStr] = 'mono'
+    gallery_attachment_uuids: Optional[Annotated[List[UUID], Field(max_length=4)]] = None
+    eyebrow: Optional[Annotated[str, Field(strict=True, max_length=120)]] = ''
+    title_accent: Optional[Annotated[str, Field(strict=True, max_length=160)]] = ''
+    category: Optional[Annotated[str, Field(strict=True, max_length=120)]] = ''
+    primary_cta: Optional[UseCaseCta] = None
+    secondary_cta: Optional[UseCaseCta] = None
+    environment_template_uuids: Optional[Annotated[List[UUID], Field(max_length=12)]] = None
+    workflow_template_uuids: Optional[Annotated[List[UUID], Field(max_length=12)]] = None
+    template_tag: Optional[Annotated[str, Field(strict=True)]] = ''
+    __properties: ClassVar[List[str]] = ["kind", "customer_name", "industry", "use_case", "challenge", "solution", "results", "engagement_mode", "template_uuid", "audience", "key_takeaways", "media_url", "session_date", "related_objects", "website", "logo_url", "partner_type", "roles", "focus_areas", "industries", "priority", "related_use_cases", "show_in_logo_banner", "logo_attachment_uuid", "logo_render", "gallery_attachment_uuids", "eyebrow", "title_accent", "category", "primary_cta", "secondary_cta", "environment_template_uuids", "workflow_template_uuids", "template_tag"]
 
     @field_validator('kind')
     def kind_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page']):
-            raise ValueError("must be one of enum values ('customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page')")
+        if value not in set(['customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page', 'partner', 'use_case']):
+            raise ValueError("must be one of enum values ('customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page', 'partner', 'use_case')")
         return value
 
     @field_validator('engagement_mode')
@@ -62,6 +83,47 @@ class ContentDetails(BaseModel):
 
         if value not in set(['self_service', 'assisted']):
             raise ValueError("must be one of enum values ('self_service', 'assisted')")
+        return value
+
+    @field_validator('partner_type')
+    def partner_type_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['technology', 'system-integrator', 'consulting', 'robotics']):
+            raise ValueError("must be one of enum values ('technology', 'system-integrator', 'consulting', 'robotics')")
+        return value
+
+    @field_validator('roles')
+    def roles_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        for i in value:
+            if i not in set(['partner', 'supplier', 'reseller', 'customer']):
+                raise ValueError("each list item must be one of ('partner', 'supplier', 'reseller', 'customer')")
+        return value
+
+    @field_validator('logo_render')
+    def logo_render_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['mono', 'original']):
+            raise ValueError("must be one of enum values ('mono', 'original')")
+        return value
+
+    @field_validator('template_tag')
+    def template_tag_validate_regular_expression(cls, value):
+        """Validates the regular expression"""
+        if value is None:
+            return value
+
+        if not re.match(r"^[a-z0-9-]{0,120}$", value):
+            raise ValueError(r"must validate the regular expression /^[a-z0-9-]{0,120}$/")
         return value
 
     model_config = ConfigDict(
@@ -110,6 +172,12 @@ class ContentDetails(BaseModel):
                 if _item_related_objects:
                     _items.append(_item_related_objects.to_dict())
             _dict['related_objects'] = _items
+        # override the default output from pydantic by calling `to_dict()` of primary_cta
+        if self.primary_cta:
+            _dict['primary_cta'] = self.primary_cta.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of secondary_cta
+        if self.secondary_cta:
+            _dict['secondary_cta'] = self.secondary_cta.to_dict()
         # set to None if template_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.template_uuid is None and "template_uuid" in self.model_fields_set:
@@ -119,6 +187,31 @@ class ContentDetails(BaseModel):
         # and model_fields_set contains the field
         if self.session_date is None and "session_date" in self.model_fields_set:
             _dict['session_date'] = None
+
+        # set to None if partner_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.partner_type is None and "partner_type" in self.model_fields_set:
+            _dict['partner_type'] = None
+
+        # set to None if priority (nullable) is None
+        # and model_fields_set contains the field
+        if self.priority is None and "priority" in self.model_fields_set:
+            _dict['priority'] = None
+
+        # set to None if logo_attachment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.logo_attachment_uuid is None and "logo_attachment_uuid" in self.model_fields_set:
+            _dict['logo_attachment_uuid'] = None
+
+        # set to None if primary_cta (nullable) is None
+        # and model_fields_set contains the field
+        if self.primary_cta is None and "primary_cta" in self.model_fields_set:
+            _dict['primary_cta'] = None
+
+        # set to None if secondary_cta (nullable) is None
+        # and model_fields_set contains the field
+        if self.secondary_cta is None and "secondary_cta" in self.model_fields_set:
+            _dict['secondary_cta'] = None
 
         return _dict
 
@@ -145,7 +238,27 @@ class ContentDetails(BaseModel):
             "key_takeaways": obj.get("key_takeaways") if obj.get("key_takeaways") is not None else '',
             "media_url": obj.get("media_url") if obj.get("media_url") is not None else '',
             "session_date": obj.get("session_date"),
-            "related_objects": [PaperReference.from_dict(_item) for _item in obj["related_objects"]] if obj.get("related_objects") is not None else None
+            "related_objects": [PaperReference.from_dict(_item) for _item in obj["related_objects"]] if obj.get("related_objects") is not None else None,
+            "website": obj.get("website") if obj.get("website") is not None else '',
+            "logo_url": obj.get("logo_url") if obj.get("logo_url") is not None else '',
+            "partner_type": obj.get("partner_type"),
+            "roles": obj.get("roles"),
+            "focus_areas": obj.get("focus_areas"),
+            "industries": obj.get("industries"),
+            "priority": obj.get("priority"),
+            "related_use_cases": obj.get("related_use_cases"),
+            "show_in_logo_banner": obj.get("show_in_logo_banner") if obj.get("show_in_logo_banner") is not None else False,
+            "logo_attachment_uuid": obj.get("logo_attachment_uuid"),
+            "logo_render": obj.get("logo_render") if obj.get("logo_render") is not None else 'mono',
+            "gallery_attachment_uuids": obj.get("gallery_attachment_uuids"),
+            "eyebrow": obj.get("eyebrow") if obj.get("eyebrow") is not None else '',
+            "title_accent": obj.get("title_accent") if obj.get("title_accent") is not None else '',
+            "category": obj.get("category") if obj.get("category") is not None else '',
+            "primary_cta": UseCaseCta.from_dict(obj["primary_cta"]) if obj.get("primary_cta") is not None else None,
+            "secondary_cta": UseCaseCta.from_dict(obj["secondary_cta"]) if obj.get("secondary_cta") is not None else None,
+            "environment_template_uuids": obj.get("environment_template_uuids"),
+            "workflow_template_uuids": obj.get("workflow_template_uuids"),
+            "template_tag": obj.get("template_tag") if obj.get("template_tag") is not None else ''
         })
         return _obj
 

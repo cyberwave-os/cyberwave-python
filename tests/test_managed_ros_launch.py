@@ -64,3 +64,38 @@ def test_wait_ready_uses_service_graph() -> None:
     ml._proc = MagicMock(poll=lambda: None)
     ml.wait_ready()
     assert node.get_service_names_and_types.call_count >= 2
+
+
+def _run_to_exit(
+    monkeypatch, tmp_path, *, forward: bool
+) -> tuple[ManagedRosLaunch, str]:
+    log = tmp_path / "launch.log"
+    monkeypatch.setenv("CW_MANAGED_LAUNCH_LOG", str(log))
+    if forward:
+        monkeypatch.setenv("CW_MANAGED_LAUNCH_LOG_TO_STDOUT", "true")
+    else:
+        monkeypatch.delenv("CW_MANAGED_LAUNCH_LOG_TO_STDOUT", raising=False)
+    ml = ManagedRosLaunch(_spec())
+    ml.build_shell_command = lambda: "echo vendor up; sleep 1; echo CAN feedback stale"
+    ml.start()
+    ml._proc.wait(timeout=5)
+    ml.stop()
+    return ml, log.read_text()
+
+
+def test_launch_output_reaches_the_container_log_when_asked(
+    monkeypatch, tmp_path, capsys
+):
+    """The vendor node's warnings were only in a file inside the container."""
+    _, logged = _run_to_exit(monkeypatch, tmp_path, forward=True)
+    out = capsys.readouterr().out
+    assert "[managed_launch] vendor up\n" in out
+    assert "[managed_launch] CAN feedback stale\n" in out
+    # The file is still written: a failed start quotes its tail.
+    assert logged == "vendor up\nCAN feedback stale\n"
+
+
+def test_launch_output_stays_in_the_file_by_default(monkeypatch, tmp_path, capsys):
+    _, logged = _run_to_exit(monkeypatch, tmp_path, forward=False)
+    assert "[managed_launch]" not in capsys.readouterr().out
+    assert logged == "vendor up\nCAN feedback stale\n"

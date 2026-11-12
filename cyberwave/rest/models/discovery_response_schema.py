@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.twin_binding_schema import TwinBindingSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -31,7 +31,8 @@ class DiscoveryResponseSchema(BaseModel):
     edge_uuid: StrictStr
     fingerprint: StrictStr
     twins: List[TwinBindingSchema]
-    __properties: ClassVar[List[str]] = ["edge_uuid", "fingerprint", "twins"]
+    driver_deployments: Optional[List[Dict[str, Any]]] = None
+    __properties: ClassVar[List[str]] = ["edge_uuid", "fingerprint", "twins", "driver_deployments"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -93,7 +94,8 @@ class DiscoveryResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "edge_uuid": obj.get("edge_uuid"),
             "fingerprint": obj.get("fingerprint"),
-            "twins": [TwinBindingSchema.from_dict(_item) for _item in obj["twins"]] if obj.get("twins") is not None else None
+            "twins": [TwinBindingSchema.from_dict(_item) for _item in obj["twins"]] if obj.get("twins") is not None else None,
+            "driver_deployments": obj.get("driver_deployments")
         })
         return _obj
 

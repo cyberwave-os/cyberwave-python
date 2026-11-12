@@ -88,7 +88,6 @@ from .manifest import (
 from .message_payload import ros_joint_state_to_transport_payload
 from .ros_publishers import unwire_ros_publishers, wire_ros_publishers
 from .ros_setup_env import apply_ros_setup_environment, collect_ros_setup_scripts
-from .topic_discovery import resolve_ros_message_class
 
 MsgT = TypeVar("MsgT")
 
@@ -273,9 +272,12 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
             while rclpy.ok() and not run_future.done():
                 executor.spin_once(timeout_sec=0.1)
         except KeyboardInterrupt:
+            logger.info("ROS driver interrupted by keyboard")
             self.request_shutdown()
         finally:
             if not run_future.done():
+                if not rclpy.ok():
+                    logger.warning("ROS context stopped; requesting driver shutdown")
                 self.request_shutdown()
             try:
                 run_future.result(timeout=120)
@@ -302,6 +304,13 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
         if self._driver_loop is None:
             raise RuntimeError("driver asyncio loop not started; call run() first")
         return self._driver_loop
+
+    def request_shutdown(self) -> None:
+        loop = self._driver_loop
+        if loop is not None and loop.is_running() and threading.current_thread() is not self._driver_loop_thread:
+            loop.call_soon_threadsafe(BaseDriver.request_shutdown, self)
+        else:
+            BaseDriver.request_shutdown(self)
 
     def _signal_ros_active(self) -> None:
         logger.info(
@@ -379,7 +388,24 @@ class BaseROS2Driver(_BaseDriverAsyncHooks, BaseDriver, LifecycleNode):
             )
         except KeyboardInterrupt:
             logger.info("Shutting down...")
-        except BaseException:
+        except asyncio.CancelledError:
+            # A stop (SIGINT/SIGTERM, docker stop) can cancel the loop's tasks
+            # while the shutdown it requested is already under way. That is
+            # the requested teardown, not a failure -- reporting it as
+            # `active -> error` sent a false alert on every such restart.
+            if not self._shutdown.is_set():
+                logger.error("Driver tasks cancelled before any shutdown was requested")
+                self._transition_to(DriverLifecycleState.ERROR)
+                raise
+            logger.info("Driver tasks cancelled during the requested shutdown")
+        except BaseException as exc:
+            # Say what failed: the state change alone left no trace in the logs.
+            logger.error(
+                "Driver failed while %s: %s",
+                self._lifecycle_state.value,
+                exc,
+                exc_info=True,
+            )
             self._transition_to(DriverLifecycleState.ERROR)
             raise
         finally:

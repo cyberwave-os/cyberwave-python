@@ -45,9 +45,11 @@ class EnvironmentProceduralPrimitiveSchema(BaseModel):
     visible: Optional[StrictBool] = True
     locked: Optional[StrictBool] = False
     fixed_base: Optional[StrictBool] = True
+    attach_to: Optional[Dict[str, Any]] = None
+    attach_offset: Optional[Dict[str, Any]] = None
     revision: Optional[StrictStr] = None
-    validation_warnings: Optional[List[Optional[Dict[str, Any]]]] = None
-    __properties: ClassVar[List[str]] = ["id", "name", "primitive_type", "template_key", "template_version", "parameters", "position", "size", "rotation", "color", "material", "style", "metadata", "compiled", "visible", "locked", "fixed_base", "revision", "validation_warnings"]
+    validation_warnings: Optional[List[Dict[str, Any]]] = None
+    __properties: ClassVar[List[str]] = ["id", "name", "primitive_type", "template_key", "template_version", "parameters", "position", "size", "rotation", "color", "material", "style", "metadata", "compiled", "visible", "locked", "fixed_base", "attach_to", "attach_offset", "revision", "validation_warnings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -131,6 +133,16 @@ class EnvironmentProceduralPrimitiveSchema(BaseModel):
         if self.compiled is None and "compiled" in self.model_fields_set:
             _dict['compiled'] = None
 
+        # set to None if attach_to (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_to is None and "attach_to" in self.model_fields_set:
+            _dict['attach_to'] = None
+
+        # set to None if attach_offset (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset is None and "attach_offset" in self.model_fields_set:
+            _dict['attach_offset'] = None
+
         # set to None if revision (nullable) is None
         # and model_fields_set contains the field
         if self.revision is None and "revision" in self.model_fields_set:
@@ -165,6 +177,8 @@ class EnvironmentProceduralPrimitiveSchema(BaseModel):
             "visible": obj.get("visible") if obj.get("visible") is not None else True,
             "locked": obj.get("locked") if obj.get("locked") is not None else False,
             "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else True,
+            "attach_to": obj.get("attach_to"),
+            "attach_offset": obj.get("attach_offset"),
             "revision": obj.get("revision"),
             "validation_warnings": obj.get("validation_warnings")
         })

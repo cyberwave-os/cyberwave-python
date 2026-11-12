@@ -55,11 +55,14 @@ class TwinCreateResultSchema(BaseModel):
     kinematics_override: Optional[Dict[str, Any]] = None
     joint_calibration: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any]
+    warnings: Optional[List[Dict[str, Any]]] = None
     capabilities: Dict[str, Any]
     configuration_feedback: Optional[List[ConfigurationFeedbackSchema]] = None
     universal_schema: Optional[Dict[str, Any]] = None
+    model_frame: Optional[Dict[str, Any]] = None
     schema_hash: Optional[StrictStr] = None
     controller_policy_uuid: Optional[StrictStr] = None
+    resolved_controller_settings: Optional[Dict[str, Dict[str, Any]]] = None
     visibility: Optional[StrictStr] = None
     attach_to_twin_uuid: Optional[StrictStr] = None
     attach_to_link: Optional[StrictStr] = None
@@ -77,7 +80,7 @@ class TwinCreateResultSchema(BaseModel):
     mqtt_command_schema: Optional[Dict[str, Any]] = None
     controllable_joint_names: Optional[List[StrictStr]] = None
     control_setup_inherited: StrictBool
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "visual_asset_status", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "capabilities", "configuration_feedback", "universal_schema", "schema_hash", "controller_policy_uuid", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names", "control_setup_inherited"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "visual_asset_status", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "warnings", "capabilities", "configuration_feedback", "universal_schema", "model_frame", "schema_hash", "controller_policy_uuid", "resolved_controller_settings", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names", "control_setup_inherited"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -160,10 +163,20 @@ class TwinCreateResultSchema(BaseModel):
         if self.joint_calibration is None and "joint_calibration" in self.model_fields_set:
             _dict['joint_calibration'] = None
 
+        # set to None if warnings (nullable) is None
+        # and model_fields_set contains the field
+        if self.warnings is None and "warnings" in self.model_fields_set:
+            _dict['warnings'] = None
+
         # set to None if universal_schema (nullable) is None
         # and model_fields_set contains the field
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
             _dict['universal_schema'] = None
+
+        # set to None if model_frame (nullable) is None
+        # and model_fields_set contains the field
+        if self.model_frame is None and "model_frame" in self.model_fields_set:
+            _dict['model_frame'] = None
 
         # set to None if schema_hash (nullable) is None
         # and model_fields_set contains the field
@@ -228,11 +241,14 @@ class TwinCreateResultSchema(BaseModel):
             "kinematics_override": obj.get("kinematics_override"),
             "joint_calibration": obj.get("joint_calibration"),
             "metadata": obj.get("metadata"),
+            "warnings": obj.get("warnings"),
             "capabilities": obj.get("capabilities"),
             "configuration_feedback": [ConfigurationFeedbackSchema.from_dict(_item) for _item in obj["configuration_feedback"]] if obj.get("configuration_feedback") is not None else None,
             "universal_schema": obj.get("universal_schema"),
+            "model_frame": obj.get("model_frame"),
             "schema_hash": obj.get("schema_hash"),
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
+            "resolved_controller_settings": obj.get("resolved_controller_settings"),
             "visibility": obj.get("visibility"),
             "attach_to_twin_uuid": obj.get("attach_to_twin_uuid"),
             "attach_to_link": obj.get("attach_to_link"),

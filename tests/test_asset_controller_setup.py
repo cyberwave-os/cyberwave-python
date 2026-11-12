@@ -1,5 +1,6 @@
 from types import SimpleNamespace
-from typing import get_type_hints
+
+from typing_extensions import get_type_hints
 
 import cyberwave
 from cyberwave.resources import (
@@ -155,3 +156,15 @@ def test_controller_setup_sdk_types_are_exported() -> None:
     assert "recommended_setup" in setup_hints
     assert set(policy_ref_hints) == {"kind", "value"}
     assert {"enabled", "runtime_kind", "backend"}.issubset(runtime_target_hints)
+
+
+def test_policy_ref_kind_accepts_catalog_key_and_the_legacy_spelling() -> None:
+    # typing_extensions, not typing: the generated TypedDict marks keys with
+    # typing_extensions.Required, which typing.get_type_hints strips only from
+    # Python 3.11 on.
+    from typing_extensions import get_args
+    from typing_extensions import get_type_hints as get_hints
+
+    kind = get_hints(PolicyRefPayload, include_extras=False)["kind"]
+
+    assert {"catalog_key", "catalog_seed_id", "uuid", "slug"} == set(get_args(kind))

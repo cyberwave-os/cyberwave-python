@@ -55,8 +55,8 @@ class TwinNavigationCommandSchema(BaseModel):
     @field_validator('command')
     def command_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['goto', 'path', 'stop', 'pause', 'resume', 'relative_move', 'takeoff', 'hover', 'land']):
-            raise ValueError("must be one of enum values ('goto', 'path', 'stop', 'pause', 'resume', 'relative_move', 'takeoff', 'hover', 'land')")
+        if value not in set(['goto', 'path', 'stop', 'pause', 'resume', 'relative_move', 'takeoff', 'hover', 'land', 'arm', 'disarm']):
+            raise ValueError("must be one of enum values ('goto', 'path', 'stop', 'pause', 'resume', 'relative_move', 'takeoff', 'hover', 'land', 'arm', 'disarm')")
         return value
 
     model_config = ConfigDict(

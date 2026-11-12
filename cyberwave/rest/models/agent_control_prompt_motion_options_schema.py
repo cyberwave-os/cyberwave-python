@@ -31,7 +31,7 @@ class AgentControlPromptMotionOptionsSchema(BaseModel):
     models: Optional[List[AgentControlModelOptionSchema]] = None
     default_mlmodel_uuid: Optional[StrictStr] = None
     default_unavailable_reason: Optional[StrictStr] = None
-    preferences: Optional[List[Optional[Dict[str, Any]]]] = None
+    preferences: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["models", "default_mlmodel_uuid", "default_unavailable_reason", "preferences"]
 
     model_config = ConfigDict(

@@ -113,3 +113,92 @@ def test_missing_pinocchio_message(monkeypatch) -> None:
     monkeypatch.setattr(builtins, "__import__", fake_import)
     with pytest.raises(ImportError, match=r"cyberwave\[drivers\]"):
         BaseKinematicsManipulator(_cfg())
+
+
+def _cfg_with_tool(z: float = 0.05) -> ArmKinematicsConfig:
+    from cyberwave.driver.kinematics import tool_offset_from_xyz_rpy
+
+    base = _cfg()
+    return ArmKinematicsConfig(
+        urdf_path=base.urdf_path,
+        ee_frame=base.ee_frame,
+        arm_joints=base.arm_joints,
+        locked_joints=base.locked_joints,
+        tool_axes=dict(base.tool_axes),
+        base_axes=dict(base.base_axes),
+        rot_axes=dict(base.rot_axes),
+        tool_offset=tool_offset_from_xyz_rpy(0.0, 0.0, z),
+    )
+
+
+def test_fk_without_tool_offset_is_unchanged() -> None:
+    pose = BaseKinematicsManipulator(_cfg()).fk({"joint1": 0.0, "joint2": 0.0})
+    assert pose[2, 3] == pytest.approx(0.45, abs=1e-6)
+
+
+def test_fk_applies_tool_offset_at_zero_config() -> None:
+    kin = BaseKinematicsManipulator(_cfg_with_tool(0.05))
+    pose = kin.fk({"joint1": 0.0, "joint2": 0.0})
+    # tool_link is at z=0.45; the TCP sits 0.05 further along local +Z.
+    assert pose[2, 3] == pytest.approx(0.50, abs=1e-6)
+
+
+def test_ik_target_is_interpreted_as_tcp() -> None:
+    kin = BaseKinematicsManipulator(_cfg_with_tool(0.05))
+    start = {"joint1": 0.0, "joint2": 0.0}
+    target = kin.fk({"joint1": 0.3, "joint2": 0.2})
+    solution = kin.ik(start, target)
+    assert solution is not None
+    # Round-trip: FK of the solution must reproduce the requested TCP pose.
+    assert kin.fk(solution)[:3, 3] == pytest.approx(target[:3, 3], abs=1e-4)
+
+
+def _cfg_with_base_frame(name: str) -> ArmKinematicsConfig:
+    base = _cfg()
+    return ArmKinematicsConfig(
+        urdf_path=base.urdf_path,
+        ee_frame=base.ee_frame,
+        arm_joints=base.arm_joints,
+        locked_joints=base.locked_joints,
+        tool_axes=dict(base.tool_axes),
+        base_axes=dict(base.base_axes),
+        rot_axes=dict(base.rot_axes),
+        base_frame=name,
+    )
+
+
+def test_base_frame_validation_accepts_the_urdf_root() -> None:
+    # simple_arm's root link IS base_link, so the default must validate.
+    kin = BaseKinematicsManipulator(_cfg_with_base_frame("base_link"))
+    assert kin.fk({"joint1": 0.0, "joint2": 0.0})[2, 3] == pytest.approx(0.45, abs=1e-6)
+
+
+def test_base_frame_validation_rejects_a_non_identity_frame() -> None:
+    """link1 sits 0.1 m above the root: FK is not measured from it."""
+    with pytest.raises(ValueError, match="base_frame 'link1' is not the frame"):
+        BaseKinematicsManipulator(_cfg_with_base_frame("link1"))
+
+
+def test_unset_base_frame_is_the_urdf_root() -> None:
+    assert _kin().base_frame == "base_link"
+
+
+def test_unset_base_frame_builds_an_arm_whose_root_is_not_base_link(tmp_path) -> None:
+    urdf = tmp_path / "base_root.urdf"
+    urdf.write_text(Path(_URDF).read_text().replace('"base_link"', '"base"'))
+    base = _cfg()
+    kin = BaseKinematicsManipulator(
+        ArmKinematicsConfig(
+            urdf_path=str(urdf),
+            ee_frame=base.ee_frame,
+            arm_joints=base.arm_joints,
+            locked_joints=base.locked_joints,
+        )
+    )
+    assert kin.base_frame == "base"
+    assert kin.fk({"joint1": 0.0, "joint2": 0.0})[2, 3] == pytest.approx(0.45, abs=1e-6)
+
+
+def test_base_frame_validation_rejects_an_unknown_frame() -> None:
+    with pytest.raises(ValueError, match="base_frame 'nope' is not present"):
+        BaseKinematicsManipulator(_cfg_with_base_frame("nope"))

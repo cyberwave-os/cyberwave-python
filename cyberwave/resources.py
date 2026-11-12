@@ -53,6 +53,10 @@ from typing_extensions import NotRequired, Required, TypedDict
 
 import urllib3
 
+from cyberwave._contract_types import (
+    ControlRuntimeTargetPayload,
+    PolicyRefPayload,
+)
 from cyberwave.rest import (
     DefaultApi,
     WorkspaceSchema,
@@ -102,27 +106,6 @@ EDGE_CONFIG_INTERNAL_KEYS = {
     "edge_fingerprint",
 }
 EDGE_DEVICE_UUID_NAMESPACE = uuid_lib.UUID("7f09e16f-ef6f-410d-9d5d-c071d8fbd1ad")
-
-
-class PolicyRefPayload(TypedDict):
-    """Typed controller policy reference resolved by the backend."""
-
-    kind: Required[Literal["uuid", "catalog_seed_id", "slug"]]
-    value: Required[str]
-
-
-class ControlRuntimeTargetPayload(TypedDict, total=False):
-    """Backend-resolved runtime target for a controller policy."""
-
-    enabled: Required[bool]
-    runtime_kind: Required[Literal["physical", "simulation"]]
-    backend: Required[str]
-    adapter: NotRequired[str | None]
-    source_type: NotRequired[str | None]
-    safety_level: NotRequired[str | None]
-    input_contract: NotRequired[str | None]
-    output_contract: NotRequired[str | None]
-    metadata: NotRequired[Dict[str, Any]]
 
 
 class AssetControllerConfigPayload(TypedDict, total=False):
@@ -803,7 +786,8 @@ class EnvironmentManager(BaseResourceManager):
             # If no project is specified, use the first one. If none exist, create
             # a default folder-backed project.
             if not project_id:
-                project_id = self.api.src_app_api_projects_list_projects()[0].uuid
+                projects = self.api.src_app_api_projects_list_projects()
+                project_id = projects[0].uuid if projects else None
             if not project_id:
                 project = self.api.src_app_api_projects_create_project(
                     ProjectCreateSchema(
@@ -1565,11 +1549,10 @@ class EnvironmentManager(BaseResourceManager):
             Tar archive contents as bytes
 
         Raises:
-            SimulationBackendError: the server refused the export, either because
-                Isaac Sim is not enabled for the organization
-                (``simulation_backend_not_enabled``) or because the scene cannot
-                be converted (``simulation_backend_incompatible``); ``reasons``
-                and ``blocking_assets`` say what to fix.
+            SimulationBackendError: the server refused the export because the
+                scene cannot be converted (``simulation_backend_incompatible``);
+                ``reasons`` and ``blocking_assets`` say what to fix. Exporting
+                needs write access to the environment (else a plain 403).
             CyberwaveAPIError: if the build fails or does not finish in time.
 
         Example:

@@ -30,7 +30,9 @@ class EnvironmentAgentModelListSchema(BaseModel):
     """ # noqa: E501
     models: Optional[List[EnvironmentAgentModelOptionSchema]] = None
     default_mlmodel_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["models", "default_mlmodel_uuid"]
+    environment_mlmodel_uuid: Optional[StrictStr] = None
+    agentic_controller_uuid: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["models", "default_mlmodel_uuid", "environment_mlmodel_uuid", "agentic_controller_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -83,6 +85,16 @@ class EnvironmentAgentModelListSchema(BaseModel):
         if self.default_mlmodel_uuid is None and "default_mlmodel_uuid" in self.model_fields_set:
             _dict['default_mlmodel_uuid'] = None
 
+        # set to None if environment_mlmodel_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_mlmodel_uuid is None and "environment_mlmodel_uuid" in self.model_fields_set:
+            _dict['environment_mlmodel_uuid'] = None
+
+        # set to None if agentic_controller_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.agentic_controller_uuid is None and "agentic_controller_uuid" in self.model_fields_set:
+            _dict['agentic_controller_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -96,7 +108,9 @@ class EnvironmentAgentModelListSchema(BaseModel):
 
         _obj = cls.model_validate({
             "models": [EnvironmentAgentModelOptionSchema.from_dict(_item) for _item in obj["models"]] if obj.get("models") is not None else None,
-            "default_mlmodel_uuid": obj.get("default_mlmodel_uuid")
+            "default_mlmodel_uuid": obj.get("default_mlmodel_uuid"),
+            "environment_mlmodel_uuid": obj.get("environment_mlmodel_uuid"),
+            "agentic_controller_uuid": obj.get("agentic_controller_uuid")
         })
         return _obj
 

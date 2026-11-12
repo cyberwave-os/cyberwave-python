@@ -45,7 +45,7 @@ class AssetControlProfileSchema(BaseModel):
     operator_option_id: Optional[StrictStr] = None
     runtime_defaults: Optional[Dict[str, Dict[str, ControllerRefSchema]]] = None
     runtime_default_option_ids: Optional[Dict[str, Dict[str, StrictStr]]] = None
-    controller_settings: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
+    controller_settings: Optional[Dict[str, Dict[str, Any]]] = None
     controller_options: Optional[List[AssetControlOptionSchema]] = None
     basic_simulation_capabilities: Optional[List[AssetBasicSimulationCapabilitySchema]] = None
     control_capabilities: Optional[List[AssetControlCapabilitySchema]] = None

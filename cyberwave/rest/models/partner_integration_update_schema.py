@@ -28,6 +28,9 @@ class PartnerIntegrationUpdateSchema(BaseModel):
     PartnerIntegrationUpdateSchema
     """ # noqa: E501
     integration_name: Optional[StrictStr] = None
+    partner_name: Optional[StrictStr] = None
+    partner_description: Optional[StrictStr] = None
+    partner_website: Optional[StrictStr] = None
     authorization_endpoint: Optional[StrictStr] = None
     username: Optional[StrictStr] = None
     password: Optional[StrictStr] = None
@@ -36,7 +39,7 @@ class PartnerIntegrationUpdateSchema(BaseModel):
     integration_client_id: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     is_service_active: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["integration_name", "authorization_endpoint", "username", "password", "oauth_client_secret", "domain", "integration_client_id", "metadata", "is_service_active"]
+    __properties: ClassVar[List[str]] = ["integration_name", "partner_name", "partner_description", "partner_website", "authorization_endpoint", "username", "password", "oauth_client_secret", "domain", "integration_client_id", "metadata", "is_service_active"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +84,21 @@ class PartnerIntegrationUpdateSchema(BaseModel):
         # and model_fields_set contains the field
         if self.integration_name is None and "integration_name" in self.model_fields_set:
             _dict['integration_name'] = None
+
+        # set to None if partner_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.partner_name is None and "partner_name" in self.model_fields_set:
+            _dict['partner_name'] = None
+
+        # set to None if partner_description (nullable) is None
+        # and model_fields_set contains the field
+        if self.partner_description is None and "partner_description" in self.model_fields_set:
+            _dict['partner_description'] = None
+
+        # set to None if partner_website (nullable) is None
+        # and model_fields_set contains the field
+        if self.partner_website is None and "partner_website" in self.model_fields_set:
+            _dict['partner_website'] = None
 
         # set to None if authorization_endpoint (nullable) is None
         # and model_fields_set contains the field
@@ -135,6 +153,9 @@ class PartnerIntegrationUpdateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "integration_name": obj.get("integration_name"),
+            "partner_name": obj.get("partner_name"),
+            "partner_description": obj.get("partner_description"),
+            "partner_website": obj.get("partner_website"),
             "authorization_endpoint": obj.get("authorization_endpoint"),
             "username": obj.get("username"),
             "password": obj.get("password"),

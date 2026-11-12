@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cyberwave"
-version = "0.7.4"
+version = "0.7.5"
 description = "Python SDK for Cyberwave"
 authors = [
     "Simone Di Somma <sdisomma@cyberwave.com>",
@@ -42,13 +42,17 @@ cyberwave-geometry = ">=0.2.0,<0.3.0"
 cyberwave-contracts = ">=0.1.0,<0.2.0"
 # Core dependencies for REST API client
 urllib3 = "^2.1.0"
+certifi = ">=2023.7.22"
 python-dateutil = "^2.8.2"
 pydantic = "^2"
 typing-extensions = "^4.7.1"
 # YAML manifest support
 pyyaml = ">=6.0"
-# MQTT dependencies
-paho-mqtt = "^2.1.0"
+# MQTT dependencies. Capped at the newest release the SDK is tested against:
+# cyberwave/_paho_compat.py and the MQTT tests reach into paho internals, which
+# a minor release can change (2.2.0 did, CYB-4991). Raise the cap only after the
+# SDK test suite passes on the new version.
+paho-mqtt = ">=2.1.0,<=2.2.0"
 # numpy (>=2.2 required by pin/cmeel-boost for Python 3.10+)
 numpy = ">=1.26.0"
 # Optional image annotation/rendering dependency
@@ -107,6 +111,14 @@ rapidfuzz = { version = ">=3.0.0", optional = true }
 # Apache-2.0; prebuilt wheels for manylinux x86_64 / aarch64 / musllinux /
 # macOS / Windows. Lightweight enough for Raspberry Pi (~few MB native + numpy).
 zxing-cpp = { version = "3.0.0", optional = true }
+# Optional model-agnostic multi-object tracking (cyberwave.models.tracking):
+# ByteTrack / BoT-SORT from ``trackers`` (Apache-2.0), and the declared state
+# machines (``python-statemachine``, MIT, no dependencies) for stream lifecycles.
+# Pinned to the 2.6 minor: ``make_tracker`` names this package's constructor
+# parameters, and SDK CI skips the tests that reach it (it pulls the
+# non-headless ``opencv-python``), so widen only after running them locally.
+trackers = { version = ">=2.6,<2.7", optional = true }
+python-statemachine = { version = ">=3.0,<4", optional = true }
 # Optional robot-arm kinematics (FK/IK) via pinocchio. Pulls numpy>=2.2
 # transitively for Python 3.10+ (cmeel-boost requirement).
 pin = { version = ">=3.0.0", optional = true }
@@ -137,6 +149,10 @@ fuzzy-match = ["rapidfuzz"]
 # licensed (Apache-2.0); wheels are prebuilt for Pi-class hardware so this
 # adds a few MB to the image without a system package or build toolchain.
 barcode = ["zxing-cpp"]
+# Object tracking (``cyberwave.models.tracking``): a stable ``track_id`` per
+# detection for any detection model. ``trackers`` pulls ``opencv-python``;
+# images that need the headless build swap it after install.
+ml-tracking = ["trackers", "python-statemachine"]
 # Robot-arm kinematics (BaseKinematics / ArmCapabilityMixin). pinocchio + numpy.
 # scipy powers the default trapezoidal JointController motion generator.
 drivers = ["pin", "scipy"]
@@ -197,9 +213,13 @@ mypy = "^1.5"
 types-python-dateutil = "^2.8.19.14"
 croniter = ">=6.2.2"
 pillow = ">=10.0.0"
+# Lets the tracking tests import cyberwave.models.tracking without the heavier
+# ``trackers`` package, which those tests replace with a fake.
+python-statemachine = ">=3.0,<4"
 
 [tool.poetry.scripts]
 cyberwave-generate-stubs = "cyberwave.stubs_generator:main"
+cyberwave-stress-test = "cyberwave.test.driver_testing.cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

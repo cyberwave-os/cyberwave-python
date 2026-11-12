@@ -30,7 +30,8 @@ class ControllerPolicyExecuteResponseSchema(BaseModel):
     action_id: Optional[StrictStr] = None
     status: StrictStr
     message: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["action_id", "status", "message"]
+    task_execution_uri: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["action_id", "status", "message", "task_execution_uri"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +82,11 @@ class ControllerPolicyExecuteResponseSchema(BaseModel):
         if self.message is None and "message" in self.model_fields_set:
             _dict['message'] = None
 
+        # set to None if task_execution_uri (nullable) is None
+        # and model_fields_set contains the field
+        if self.task_execution_uri is None and "task_execution_uri" in self.model_fields_set:
+            _dict['task_execution_uri'] = None
+
         return _dict
 
     @classmethod
@@ -95,7 +101,8 @@ class ControllerPolicyExecuteResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "action_id": obj.get("action_id"),
             "status": obj.get("status"),
-            "message": obj.get("message")
+            "message": obj.get("message"),
+            "task_execution_uri": obj.get("task_execution_uri")
         })
         return _obj
 

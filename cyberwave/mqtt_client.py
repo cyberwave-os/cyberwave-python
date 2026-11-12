@@ -6,7 +6,7 @@ from the mqtt module to work with the CyberwaveConfig object used by the main cl
 """
 
 import logging
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, List, Union
 
 from .config import CyberwaveConfig, DEFAULT_MQTT_PORT, DEFAULT_MQTT_USERNAME
 from .mqtt import CyberwaveMQTTClient as BaseMQTTClient
@@ -81,6 +81,11 @@ class CyberwaveMQTTClient:
         return self._client.connected
 
     @property
+    def disconnect_count(self) -> int:
+        """Number of disconnect callbacks, including outages between driver ticks."""
+        return self._client.disconnect_count
+
+    @property
     def topic_prefix(self) -> str:
         """Get the topic prefix used by this MQTT client."""
         return self._topic_prefix
@@ -94,6 +99,23 @@ class CyberwaveMQTTClient:
         """Connect to the MQTT broker."""
         if not self.connected:
             self._client.connect()
+
+    @property
+    def connecting_in_background(self) -> bool:
+        """Whether paho's network thread is (re)connecting on its own.
+
+        True for :meth:`connect_in_background`, and after a dropped connection
+        while paho reconnects; :meth:`connect` would only wait for it then.
+        """
+        return (
+            self._client.connecting_in_background
+            or self._client._network_loop_running
+        )
+
+    def connect_in_background(self):
+        """Keep connecting from the network thread until the broker answers."""
+        if not self.connected:
+            self._client.connect_in_background()
 
     def disconnect(self):
         """Disconnect from the MQTT broker."""
@@ -184,6 +206,54 @@ class CyberwaveMQTTClient:
             rotation: Dictionary with rotation values (quaternion or euler)
         """
         return self._client.update_twin_rotation(twin_uuid, rotation)
+
+    def publish_metric(
+        self,
+        twin_uuid: str,
+        channel: str,
+        value: Any,
+        *,
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> bool:
+        """
+        Publish one float, int or bool sample on ``metrics/{channel}``.
+
+        See ``cyberwave.mqtt.CyberwaveMQTTClient.publish_metric``.
+
+        Args:
+            twin_uuid: UUID of the twin
+            channel: ``.``-separated name, e.g. ``"arm.gripper"``
+            value: A float, an int or a bool
+            timestamp: Measurement time in Unix seconds, not ms (default: now)
+            source_type: Override the default source type
+        """
+        return self._client.publish_metric(
+            twin_uuid, channel, value, timestamp=timestamp, source_type=source_type
+        )
+
+    def publish_metrics(
+        self,
+        twin_uuid: str,
+        metrics: Dict[str, Any],
+        *,
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> bool:
+        """
+        Publish several float, int or bool samples in one ``metrics`` bag.
+
+        See ``cyberwave.mqtt.CyberwaveMQTTClient.publish_metrics``.
+
+        Args:
+            twin_uuid: UUID of the twin
+            metrics: Channel name -> sample
+            timestamp: Measurement time in Unix seconds, not ms (default: now)
+            source_type: Override the default source type
+        """
+        return self._client.publish_metrics(
+            twin_uuid, metrics, timestamp=timestamp, source_type=source_type
+        )
 
     def update_twin_scale(self, twin_uuid: str, scale: Dict[str, float]):
         """
@@ -279,6 +349,29 @@ class CyberwaveMQTTClient:
             source_type=source_type,
             sender=sender,
             source_subtype=source_subtype,
+        )
+
+    def publish_recording_boundary(
+        self,
+        twin_uuid: str,
+        state: str,
+        *,
+        stream_source: str,
+        stream_instance_id: str,
+        observations: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Open (``"start"``) or close (``"end"``) one recording window.
+
+        For a publisher that switches recording on and off while its streams
+        keep running, such as a simulator's recording toggle. See
+        ``MQTTClient.publish_recording_boundary`` for the full rationale.
+        """
+        return self._client.publish_recording_boundary(
+            twin_uuid,
+            state,
+            stream_source=stream_source,
+            stream_instance_id=stream_instance_id,
+            observations=observations,
         )
 
     def update_joint_state(
@@ -428,6 +521,57 @@ class CyberwaveMQTTClient:
         """
         return self._client.publish_environment_update(
             environment_uuid, update_type, data
+        )
+
+    def publish_frame_poses(
+        self,
+        twin_uuid: str,
+        frames: List[Dict[str, Any]],
+        *,
+        substrate: Optional[str] = None,
+        pose_provenance: Optional[str] = None,
+        frame_id: str = "environment",
+        source_subtype: Optional[str] = None,
+        producer_instance: Optional[str] = None,
+        producer_sequence: Optional[Union[int, str]] = None,
+        workload_uuid: Optional[str] = None,
+        simulation_time_s: Optional[float] = None,
+    ) -> bool:
+        """
+        Publish environment-frame poses for one or more robot frames.
+
+        Args:
+            twin_uuid: UUID of the twin
+            frames: ``[{"child_frame_id", "position": {x,y,z},
+                "orientation": {x,y,z,w}, "pose_provenance"?,
+                "pose_covariance"?}, ...]``, at least one
+            substrate: ``"sim"`` or ``"hardware"``; defaults from the client's
+                source type.
+            pose_provenance: How the poses were obtained (``"odometry"``,
+                ``"slam"``...), for entries that do not say. Ground truth by
+                default on a simulator; required on hardware.
+            frame_id: Must be ``"environment"``.
+            source_subtype, producer_instance, producer_sequence,
+            workload_uuid, simulation_time_s: Envelope fields, as
+                :meth:`cyberwave.mqtt.CyberwaveMQTTClient.publish_frame_poses`
+                takes them.
+
+        Raises:
+            ValueError: ``twin_uuid`` is not a UUID, ``frames`` is empty, a
+                frame or envelope field is malformed, or the frames break a
+                contract rule.
+        """
+        return self._client.publish_frame_poses(
+            twin_uuid,
+            frames,
+            substrate=substrate,
+            pose_provenance=pose_provenance,
+            frame_id=frame_id,
+            source_subtype=source_subtype,
+            producer_instance=producer_instance,
+            producer_sequence=producer_sequence,
+            workload_uuid=workload_uuid,
+            simulation_time_s=simulation_time_s,
         )
 
     def subscribe_video_stream(

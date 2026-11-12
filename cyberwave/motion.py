@@ -571,6 +571,10 @@ class TwinNavigationHandle:
                 )
                 return
             try:
+                if getattr(mqtt, "connected", True) is False:
+                    mqtt.connect()
+                    if not mqtt.connected:
+                        raise ConnectionError("MQTT client did not connect")
                 mqtt.subscribe(self._status_topic(), self._on_status)
                 self._status_subscribed = True
             except Exception as exc:
@@ -921,6 +925,7 @@ class TwinNavigationHandle:
             payload["environment_uuid"] = environment_uuid
         if source_type:
             payload["source_type"] = source_type
+        self._ensure_status_subscription()
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
     def pause(
@@ -936,6 +941,7 @@ class TwinNavigationHandle:
             payload["environment_uuid"] = environment_uuid
         if source_type:
             payload["source_type"] = source_type
+        self._ensure_status_subscription()
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
     def resume(
@@ -951,6 +957,7 @@ class TwinNavigationHandle:
             payload["environment_uuid"] = environment_uuid
         if source_type:
             payload["source_type"] = source_type
+        self._ensure_status_subscription()
         return self._send_command(payload, controller_policy_uuid=controller_policy_uuid)
 
     def wait_for_completion(

@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 import os
 import platform
+import ssl
+import sys
 import time
 import warnings
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -76,6 +78,37 @@ _SDK_ACCEPT_ENCODING = "gzip"
 CLIENT_USER_AGENT_ENV = "CYBERWAVE_CLIENT_USER_AGENT"
 
 
+_HOST_CA_BUNDLES = (
+    "/etc/ssl/certs/ca-certificates.crt",  # Debian, Ubuntu, Alpine
+    "/etc/pki/tls/certs/ca-bundle.crt",  # RHEL, Fedora
+    "/etc/ssl/ca-bundle.pem",  # openSUSE
+    "/etc/ssl/cert.pem",  # macOS
+)
+
+
+def _default_ca_bundle() -> str | None:
+    """CA bundle for REST calls, or None to let urllib3 load the OS store.
+
+    None whenever the OS store is usable, so CAs installed on the host
+    (corporate proxies, private backends) keep working. Only an OpenSSL that
+    finds no CA file -- a binary built on another distro family, e.g.
+    AlmaLinux, which looks in /etc/pki/tls -- gets the host's bundle, then
+    certifi. Explicit ``SSL_CERT_FILE``/``SSL_CERT_DIR`` still win. Windows
+    always returns None: ``load_default_certs()`` reads the Windows store,
+    which ``cafile`` does not reflect.
+    """
+    if os.environ.get("SSL_CERT_FILE") or os.environ.get("SSL_CERT_DIR"):
+        return None
+    if sys.platform == "win32" or ssl.get_default_verify_paths().cafile:
+        return None
+    for bundle in _HOST_CA_BUNDLES:
+        if os.path.isfile(bundle):
+            return bundle
+    import certifi
+
+    return certifi.where()
+
+
 def _compose_user_agent(client_identity: str | None) -> str:
     """Build the ``User-Agent`` for outbound REST calls.
 
@@ -134,6 +167,33 @@ def _apply_sdk_identity_headers(header_params: dict[str, Any]) -> dict[str, Any]
     if not any(str(key).lower() == "accept-encoding" for key in header_params):
         header_params["Accept-Encoding"] = _SDK_ACCEPT_ENCODING
     return header_params
+
+
+def _default_request_timeout(
+    timeout: Any, *, has_body: bool = False
+) -> Optional[tuple[Optional[float], float]]:
+    """Return the (connect, read) timeout for a call that didn't pass one.
+
+    The generated client waits forever by default, so a half-open connection
+    after the uplink drops would hang the caller for good. A positive
+    ``config.timeout`` is the read timeout (the longest wait for the
+    response), and connect is capped at 10 s. Zero or None keeps the old
+    unbounded behaviour.
+
+    A call with a body gets no connect timeout: urllib3 keeps the connect
+    timeout on the socket while it sends the body, and one ``sendall`` must
+    finish within it, so any upload slower than that would be cut off. The
+    kernel still bounds that connect (SYN retries) and send (retransmits).
+    """
+    try:
+        seconds = float(timeout)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    if has_body:
+        return (None, seconds)
+    return (min(seconds, 10.0), seconds)
 
 
 def _with_workspace_query_param(url: str, workspace_id: Optional[str]) -> str:
@@ -332,6 +392,7 @@ class Cyberwave:
             configuration.api_key_prefix["CustomTokenAuthentication"] = "Bearer"
 
         configuration.verify_ssl = self.config.verify_ssl
+        configuration.ssl_ca_cert = _default_ca_bundle()
 
         api_client = ApiClient(configuration)
         # Replaces the generated placeholder ``OpenAPI-Generator/1.0.0/python``.
@@ -412,6 +473,11 @@ class Cyberwave:
             last_request_headers.clear()
             if header_params:
                 last_request_headers.update(header_params)
+            if _request_timeout is None:
+                _request_timeout = _default_request_timeout(
+                    self.config.timeout,
+                    has_body=body is not None or bool(post_params),
+                )
             return original_call_api(
                 method,
                 url,
@@ -1633,6 +1699,13 @@ class Cyberwave:
                 "MQTT connect failed; events will be dropped until reconnected",
                 exc_info=True,
             )
+            # A worker with no MQTT hooks would otherwise never reconnect.
+            try:
+                self.mqtt.connect_in_background()
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "MQTT background reconnect could not start", exc_info=True
+                )
         self._runtime = WorkerRuntime(self)
         # Worker modules construct their models at import time, so ``load``
         # is where a cold device downloads weights — the single longest step

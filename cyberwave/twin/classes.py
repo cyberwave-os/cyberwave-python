@@ -1104,9 +1104,9 @@ class GripperTwin(GripperCapableMixin, PolicyCapableMixin, Twin):
     Provides methods for controlling grippers and end effectors.
     """
 
-    def grip(self, force: float = 1.0) -> None:
+    def grip(self, force: float = 1.0, *, max_effort_nm: float | None = None) -> None:
         """Close the gripper via :attr:`gripper` handle."""
-        return self.gripper.grip(force)
+        return self.gripper.grip(force, max_effort_nm=max_effort_nm)
 
     def release(self) -> None:
         """Open the gripper via :attr:`gripper` handle."""

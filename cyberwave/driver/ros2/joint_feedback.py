@@ -33,6 +33,8 @@ class Ros2JointFeedbackMixin:
     def _init_joint_feedback(self) -> None:
         """Initialize feedback state. Call once from ``__init__``."""
         self._joint_states: dict[str, float] = {}
+        self._joint_efforts: dict[str, float] = {}
+        self._joint_velocities: dict[str, float] = {}
         self._joint_feedback_count = 0
         self._joint_feedback_sub: Any | None = None
 
@@ -79,11 +81,34 @@ class Ros2JointFeedbackMixin:
             return {n: float(p) for n, p in zip(names, positions)}
         return name_map.to_platform(names, positions)
 
+    def _feedback_aux(self, msg: Any, field: str) -> dict[str, float]:
+        """Map ``msg.<field>`` onto platform joint names, or {} if unusable.
+
+        A vendor that publishes a shorter array than ``name`` is skipped rather
+        than zip-truncated: silently pairing the wrong joint with the wrong
+        effort would be worse than having no effort at all.
+        """
+        names = list(msg.name)
+        values = list(getattr(msg, field, []) or [])
+        if not values or len(values) != len(names):
+            return {}
+        name_map = self.joint_name_map()
+        if name_map is None:
+            return {n: float(v) for n, v in zip(names, values)}
+        return name_map.to_platform(names, values)
+
     def _on_joint_feedback(self, msg: Any) -> None:
         positions = self._feedback_positions(msg)
         if not positions:
             return
         self._joint_states.update(positions)
+        # Replace, never merge: these describe *this* message. Retaining a
+        # previous array when the vendor omits or misaligns it would present
+        # stale effort/velocity as if it belonged to the current sample —
+        # positions accumulate (each message may carry a subset), but derivative
+        # quantities do not.
+        self._joint_efforts = self._feedback_aux(msg, "effort")
+        self._joint_velocities = self._feedback_aux(msg, "velocity")
         self._joint_feedback_count += 1
         touch = getattr(self, "_touch_edge_health", None)
         if callable(touch):
@@ -99,6 +124,22 @@ class Ros2JointFeedbackMixin:
     def _current_joint_positions(self) -> dict[str, float]:
         """Mutated only on the ROS executor thread; read lock-free."""
         return dict(self._joint_states)
+
+    def joint_efforts(self) -> dict[str, float]:
+        """Per-joint effort from the **most recent** feedback message.
+
+        Empty when that message omitted the array or its length disagreed with
+        ``name`` — never a carried-over older sample.
+        """
+        return dict(self._joint_efforts)
+
+    def joint_velocities(self) -> dict[str, float]:
+        """Per-joint velocity from the **most recent** feedback message.
+
+        Empty when that message omitted the array or its length disagreed with
+        ``name`` — never a carried-over older sample.
+        """
+        return dict(self._joint_velocities)
 
     def convert_joints_to_payload(self, msg: Any) -> dict[str, Any] | None:
         """``from_ros`` forwarder seam: JointState -> flat edge payload (or None).

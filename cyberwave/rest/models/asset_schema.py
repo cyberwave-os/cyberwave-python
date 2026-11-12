@@ -29,7 +29,9 @@ class AssetSchema(BaseModel):
     """
     AssetSchema
     """ # noqa: E501
+    is_edge_device: Optional[StrictBool] = None
     is_kit: Optional[StrictBool] = False
+    warnings: Optional[List[Dict[str, Any]]] = None
     uuid: StrictStr
     name: StrictStr
     description: StrictStr
@@ -61,7 +63,7 @@ class AssetSchema(BaseModel):
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["is_kit", "uuid", "name", "description", "created_at", "updated_at", "visibility", "origin_environment_uuid", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "configuration_feedback", "thumbnail", "has_universal_schema", "build_status", "universal_schema_source", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["is_edge_device", "is_kit", "warnings", "uuid", "name", "description", "created_at", "updated_at", "visibility", "origin_environment_uuid", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "configuration_feedback", "thumbnail", "has_universal_schema", "build_status", "universal_schema_source", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -109,6 +111,16 @@ class AssetSchema(BaseModel):
                 if _item_configuration_feedback:
                     _items.append(_item_configuration_feedback.to_dict())
             _dict['configuration_feedback'] = _items
+        # set to None if is_edge_device (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_edge_device is None and "is_edge_device" in self.model_fields_set:
+            _dict['is_edge_device'] = None
+
+        # set to None if warnings (nullable) is None
+        # and model_fields_set contains the field
+        if self.warnings is None and "warnings" in self.model_fields_set:
+            _dict['warnings'] = None
+
         # set to None if visibility (nullable) is None
         # and model_fields_set contains the field
         if self.visibility is None and "visibility" in self.model_fields_set:
@@ -221,7 +233,9 @@ class AssetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "is_edge_device": obj.get("is_edge_device"),
             "is_kit": obj.get("is_kit") if obj.get("is_kit") is not None else False,
+            "warnings": obj.get("warnings"),
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "description": obj.get("description"),

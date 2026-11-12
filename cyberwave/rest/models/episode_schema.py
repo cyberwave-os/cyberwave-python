@@ -39,7 +39,7 @@ class EpisodeSchema(BaseModel):
     created_by: Optional[StrictStr] = None
     created_by_name: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    audio: Optional[List[Optional[Dict[str, Any]]]] = None
+    audio: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["uuid", "task_name", "twins", "started_at", "finished_at", "metadata", "created_at", "updated_at", "created_by", "created_by_name", "updated_by", "audio"]
 
     model_config = ConfigDict(

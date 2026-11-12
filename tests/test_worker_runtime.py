@@ -689,6 +689,56 @@ def test_runtime_subscribes_mqtt_hook_via_client_mqtt():
         runtime.stop()
 
 
+def test_runtime_keeps_an_mqtt_hook_when_the_broker_is_down_at_startup():
+    """A broker unreachable at startup must not leave the worker deaf.
+
+    The worker used to log the failed connect and return, so a run command
+    published after the broker came up reached nobody.
+    """
+
+    class FakeMQTT:
+        def __init__(self):
+            self.connected = False
+            self.connecting_in_background = False
+            self.topic_prefix = "local"
+            self.subscriptions = []
+            self.connect_calls = 0
+
+        def connect(self):
+            self.connect_calls += 1
+            raise ConnectionRefusedError("refused")
+
+        def connect_in_background(self):
+            self.connecting_in_background = True
+
+        def subscribe(self, topic, handler, qos=0):
+            self.subscriptions.append(topic)
+
+    fake_mqtt = FakeMQTT()
+    fake_cw = FakeCw()
+    fake_cw.mqtt = fake_mqtt
+    fake_cw._hook_registry.on_mqtt(TEST_TWIN_UUID, subtopic="status")(
+        lambda payload, topic, ctx: None
+    )
+    fake_cw._hook_registry.on_mqtt(TEST_TWIN_UUID, subtopic="position")(
+        lambda payload, topic, ctx: None
+    )
+
+    runtime = WorkerRuntime(fake_cw)
+    runtime.start()
+
+    try:
+        assert fake_mqtt.connecting_in_background
+        # The second hook leaves connecting to the background loop.
+        assert fake_mqtt.connect_calls == 1
+        assert fake_mqtt.subscriptions == [
+            f"localcyberwave/twin/{TEST_TWIN_UUID}/status",
+            f"localcyberwave/twin/{TEST_TWIN_UUID}/position",
+        ]
+    finally:
+        runtime.stop()
+
+
 def test_runtime_subscribes_manual_trigger_hook_on_workflow_topic():
     """``@cw.on_manual_trigger`` subscribes under the workflow base topic.
 

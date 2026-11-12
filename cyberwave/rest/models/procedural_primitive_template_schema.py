@@ -43,10 +43,11 @@ class ProceduralPrimitiveTemplateSchema(BaseModel):
     outputs: Optional[List[StrictStr]] = None
     derived_values: Optional[Dict[str, Any]] = None
     validation: Optional[Dict[str, Any]] = None
-    examples: Optional[List[Optional[Dict[str, Any]]]] = None
+    examples: Optional[List[Dict[str, Any]]] = None
     metadata: Optional[Dict[str, Any]] = None
+    resize_parameters: Optional[Dict[str, List[StrictStr]]] = None
     default_fixed_base: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["key", "version", "category", "name", "description", "keywords", "legacy_registry_ids", "aliases", "generator", "coordinate_frame", "parameter_schema", "parameters_schema", "defaults", "outputs", "derived_values", "validation", "examples", "metadata", "default_fixed_base"]
+    __properties: ClassVar[List[str]] = ["key", "version", "category", "name", "description", "keywords", "legacy_registry_ids", "aliases", "generator", "coordinate_frame", "parameter_schema", "parameters_schema", "defaults", "outputs", "derived_values", "validation", "examples", "metadata", "resize_parameters", "default_fixed_base"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -117,6 +118,7 @@ class ProceduralPrimitiveTemplateSchema(BaseModel):
             "validation": obj.get("validation"),
             "examples": obj.get("examples"),
             "metadata": obj.get("metadata"),
+            "resize_parameters": obj.get("resize_parameters"),
             "default_fixed_base": obj.get("default_fixed_base") if obj.get("default_fixed_base") is not None else True
         })
         return _obj

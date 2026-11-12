@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class SimulationTimingOptionsSchema(BaseModel):
     """
-    Per-simulation timing overrides.  All fields are optional; the sim service falls back to its env/config defaults for any field not supplied.
+    Per-simulation timing overrides.  All fields are optional; the sim service falls back to its env/config defaults for any field not supplied.  Unknown keys are kept (``extra=\"allow\"``) so the start handler can judge them per backend: ``isaac`` refuses them with ``simulation_parameter_unsupported`` (as it does ``range_self_hit_fallback``, which has no Isaac equivalent), while MuJoCo keeps dropping them.
     """ # noqa: E501
     dt: Optional[Union[StrictFloat, StrictInt]] = None
     realtime: Optional[StrictBool] = None
@@ -33,7 +33,13 @@ class SimulationTimingOptionsSchema(BaseModel):
     stream_frequency_hz: Optional[Union[StrictFloat, StrictInt]] = None
     range_stream_frequency_hz: Optional[Union[StrictFloat, StrictInt]] = None
     range_self_hit_fallback: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["dt", "realtime", "simulation_speed", "stream_frequency_hz", "range_stream_frequency_hz", "range_self_hit_fallback"]
+    full_camera_resolution: Optional[StrictBool] = None
+    rendering_dt: Optional[Union[StrictFloat, StrictInt]] = None
+    substeps: Optional[StrictInt] = None
+    solver_position_iterations: Optional[StrictInt] = None
+    solver_velocity_iterations: Optional[StrictInt] = None
+    additional_properties: Dict[str, Any] = {}
+    __properties: ClassVar[List[str]] = ["dt", "realtime", "simulation_speed", "stream_frequency_hz", "range_stream_frequency_hz", "range_self_hit_fallback", "full_camera_resolution", "rendering_dt", "substeps", "solver_position_iterations", "solver_velocity_iterations"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -65,8 +71,10 @@ class SimulationTimingOptionsSchema(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -74,6 +82,11 @@ class SimulationTimingOptionsSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+
         # set to None if dt (nullable) is None
         # and model_fields_set contains the field
         if self.dt is None and "dt" in self.model_fields_set:
@@ -104,6 +117,31 @@ class SimulationTimingOptionsSchema(BaseModel):
         if self.range_self_hit_fallback is None and "range_self_hit_fallback" in self.model_fields_set:
             _dict['range_self_hit_fallback'] = None
 
+        # set to None if full_camera_resolution (nullable) is None
+        # and model_fields_set contains the field
+        if self.full_camera_resolution is None and "full_camera_resolution" in self.model_fields_set:
+            _dict['full_camera_resolution'] = None
+
+        # set to None if rendering_dt (nullable) is None
+        # and model_fields_set contains the field
+        if self.rendering_dt is None and "rendering_dt" in self.model_fields_set:
+            _dict['rendering_dt'] = None
+
+        # set to None if substeps (nullable) is None
+        # and model_fields_set contains the field
+        if self.substeps is None and "substeps" in self.model_fields_set:
+            _dict['substeps'] = None
+
+        # set to None if solver_position_iterations (nullable) is None
+        # and model_fields_set contains the field
+        if self.solver_position_iterations is None and "solver_position_iterations" in self.model_fields_set:
+            _dict['solver_position_iterations'] = None
+
+        # set to None if solver_velocity_iterations (nullable) is None
+        # and model_fields_set contains the field
+        if self.solver_velocity_iterations is None and "solver_velocity_iterations" in self.model_fields_set:
+            _dict['solver_velocity_iterations'] = None
+
         return _dict
 
     @classmethod
@@ -121,8 +159,18 @@ class SimulationTimingOptionsSchema(BaseModel):
             "simulation_speed": obj.get("simulation_speed"),
             "stream_frequency_hz": obj.get("stream_frequency_hz"),
             "range_stream_frequency_hz": obj.get("range_stream_frequency_hz"),
-            "range_self_hit_fallback": obj.get("range_self_hit_fallback")
+            "range_self_hit_fallback": obj.get("range_self_hit_fallback"),
+            "full_camera_resolution": obj.get("full_camera_resolution"),
+            "rendering_dt": obj.get("rendering_dt"),
+            "substeps": obj.get("substeps"),
+            "solver_position_iterations": obj.get("solver_position_iterations"),
+            "solver_velocity_iterations": obj.get("solver_velocity_iterations")
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 

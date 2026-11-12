@@ -40,7 +40,6 @@ class AgentControlEvidenceResolveRequest(BaseModel):
     label: Optional[StrictStr] = None
     confidence: Optional[Union[StrictFloat, StrictInt]] = None
     metadata: Optional[Dict[str, Any]] = None
-    additional_properties: Dict[str, Any] = {}
     __properties: ClassVar[List[str]] = ["result", "selected_result", "detection", "grasp", "world_position", "quaternion", "model_task_ref", "mlmodel_uuid", "mlmodel_run_uuid", "frame_id", "label", "confidence", "metadata"]
 
     model_config = ConfigDict(
@@ -73,10 +72,8 @@ class AgentControlEvidenceResolveRequest(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
-        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
-            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -84,11 +81,6 @@ class AgentControlEvidenceResolveRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # puts key-value pairs in additional_properties in the top level
-        if self.additional_properties is not None:
-            for _key, _value in self.additional_properties.items():
-                _dict[_key] = _value
-
         # set to None if result (nullable) is None
         # and model_fields_set contains the field
         if self.result is None and "result" in self.model_fields_set:
@@ -180,11 +172,6 @@ class AgentControlEvidenceResolveRequest(BaseModel):
             "confidence": obj.get("confidence"),
             "metadata": obj.get("metadata")
         })
-        # store additional fields in additional_properties
-        for _key in obj.keys():
-            if _key not in cls.__properties:
-                _obj.additional_properties[_key] = obj.get(_key)
-
         return _obj
 
 

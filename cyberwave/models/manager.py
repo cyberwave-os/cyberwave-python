@@ -33,13 +33,14 @@ import json
 import logging
 import os
 import shutil
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
+from cyberwave.downloads import download_file, is_partial_download
 from cyberwave.exceptions import CyberwaveAPIError, CyberwaveModelIntegrityError
 from cyberwave.models.cloud import CloudLoadedModel
+from cyberwave.models.companions import add_model_root
 from cyberwave.models.loaded_model import LoadedModel
 from cyberwave.models.runtimes import (
     available_runtimes,
@@ -59,8 +60,8 @@ MODEL_METADATA_FILENAME = "metadata.json"
 DEFAULT_MODEL_DIR = "/app/models"
 FALLBACK_MODEL_DIR = os.path.expanduser("~/.cyberwave/models")
 
-_DOWNLOAD_CHUNK_SIZE = 1 << 20  # 1 MiB — matches the edge-core streaming buffer.
-_DOWNLOAD_TIMEOUT_SECS = 300.0
+# A catalog lookup made while a model loads must not stall the load.
+_CATALOG_LOOKUP_TIMEOUT_SECS = 10.0
 
 # ---------------------------------------------------------------------------
 # Filter shorthand helpers for list()
@@ -731,6 +732,7 @@ class ModelManager:
         # (the worker container's CWD is typically not writable).
         if runtime == "ultralytics":
             self._model_dir.mkdir(parents=True, exist_ok=True)
+            self._fetch_companions_of(model_id)
             return self._model_dir / model_id
 
         # faster-whisper downloads CTranslate2 weights into download_root.
@@ -771,9 +773,9 @@ class ModelManager:
         recognizable weight file (handled by the caller before this
         helper runs) **and** every remaining entry is either the
         metadata sidecar (``MODEL_METADATA_FILENAME``) or a partial
-        streaming download (``.dl_*.part`` — matches the temp-file
-        prefix used by both the SDK's :meth:`_stream_download_to` and
-        the edge orchestrator's own download helper).
+        streaming download (:func:`cyberwave.downloads.is_partial_download`:
+        the temp file :func:`~cyberwave.downloads.download_file` writes, which
+        both the SDK and the edge orchestrator use).
 
         We deliberately keep this strict: any other file in the
         directory (a half-written weight file with an unexpected
@@ -788,9 +790,7 @@ class ModelManager:
             if not entry.is_file():
                 return False
             name = entry.name
-            if name == MODEL_METADATA_FILENAME:
-                continue
-            if name.startswith(".dl_") and name.endswith(".part"):
+            if name == MODEL_METADATA_FILENAME or is_partial_download(name):
                 continue
             return False
         return True
@@ -874,7 +874,10 @@ class ModelManager:
         if not cache_dir.is_dir():
             return None
         for candidate in sorted(cache_dir.iterdir()):
-            if candidate.name == MODEL_METADATA_FILENAME:
+            # A download killed midway leaves its temp file here; it is not the weights.
+            if candidate.name == MODEL_METADATA_FILENAME or is_partial_download(
+                candidate.name
+            ):
                 continue
             if candidate.is_file() and candidate.stat().st_size > 0:
                 return candidate
@@ -930,6 +933,8 @@ class ModelManager:
             model_path = existing
         else:
             model_path = self._download_checkpoint(model_id, summary)
+
+        self._fetch_companions(model_id, summary)
 
         return self._load_from_cached_download(
             model_id=model_id,
@@ -1059,6 +1064,90 @@ class ModelManager:
 
         return dest
 
+    def _catalog_entry(self, ref: str) -> Any:
+        """The one catalog entry whose ``model_external_id`` is *ref* (a filename).
+
+        ``PlaygroundClient.get`` resolves slugs and UUIDs only, so a bare id such as
+        ``yoloe-26s-seg.pt`` or ``mobileclip2_b.ts`` goes through the list endpoint's
+        exact filter, as Edge Core does. Slugs and UUIDs never get here: they are cloud
+        refs and take ``_load_with_download``, which already holds the entry. Raises
+        :class:`LookupError` when there is no API connection or not exactly one match.
+        """
+        if self._catalog is None:
+            raise LookupError("no API connection")
+        matches = self._catalog.api.src_app_api_mlmodels_list_mlmodels(
+            model_external_id=ref, _request_timeout=_CATALOG_LOOKUP_TIMEOUT_SECS
+        )
+        if len(matches) != 1:
+            raise LookupError(
+                f"{len(matches)} catalog entries have model_external_id {ref!r}"
+            )
+        return matches[0]
+
+    def _fetch_companions_of(self, model_id: str) -> None:
+        """Fetch what the catalog says a bare-id model requires, before it first loads.
+
+        This is the path generated workflows take (``cw.models.load("yoloe-26s-seg.pt")``):
+        the weights are not on disk yet, so Ultralytics is about to download them. One
+        catalog request on that first load tells us what else it will ask for by name.
+        Best effort: offline or unauthenticated, the runtime downloads it itself.
+        """
+        try:
+            entry = self._catalog_entry(model_id)
+        except Exception as exc:  # noqa: BLE001 - never fail the model load
+            logger.debug(
+                "No catalog entry for %r to read requires from (%s)", model_id, exc
+            )
+            return
+        self._fetch_companions(model_id, entry)
+
+    def _fetch_companions(self, model_id: str, summary: Any) -> None:
+        """Download the catalog entries ``summary.metadata["requires"]`` names.
+
+        Edge Core does this on a device; this covers a notebook or script, on the first
+        load of a bare id and on a slug or UUID loaded with ``download=True``. Each
+        companion is the catalog's own pinned ``download_url``, verified against
+        ``checksum_sha256`` and cached as ``<model dir>/<id>/<filename>`` -- the layout
+        Edge Core uses, so either one finds the other's file. Best effort: a failure is
+        logged and the runtime falls back to fetching the file itself, as it did before.
+        """
+        requires = (getattr(summary, "metadata", None) or {}).get("requires")
+        if not isinstance(requires, list):
+            return
+        ids = dict.fromkeys(
+            i.strip() for i in requires if isinstance(i, str) and i.strip()
+        )
+        for companion_id in ids:
+            try:
+                self._fetch_companion(companion_id)
+            except Exception as exc:  # noqa: BLE001 - never fail the model load
+                logger.warning(
+                    "Could not fetch %r, which %r needs (%s); the runtime will "
+                    "try to download it itself",
+                    companion_id,
+                    model_id,
+                    exc,
+                )
+
+    def _fetch_companion(self, companion_id: str) -> None:
+        # A file already here was checked when it was downloaded (atomic rename) or by
+        # Edge Core, so a cache hit costs neither a catalog request nor a re-hash.
+        if self._find_cached_download(companion_id) is None:
+            entry = self._catalog_entry(companion_id)
+            metadata = getattr(entry, "metadata", None) or {}
+            url = metadata.get("download_url")
+            expected = metadata.get("checksum_sha256")
+            if not (isinstance(url, str) and url.startswith("https://") and expected):
+                raise RuntimeError(
+                    "its catalog entry has no pinned download_url + checksum"
+                )
+            name = Path(str(metadata.get("filename") or url.rsplit("/", 1)[-1])).name
+            dest = self._download_cache_dir(companion_id) / name
+            logger.info("Downloading %s for a model that needs it into %s", name, dest)
+            # Checked while it is written; a mismatch removes it and raises.
+            self._stream_download_to(url, dest, expected_sha256=expected)
+        add_model_root(self._model_dir)
+
     @staticmethod
     def _filename_for_download(payload: dict[str, Any], summary: Any) -> str:
         """Pick a reasonable filename for the downloaded checkpoint.
@@ -1092,44 +1181,16 @@ class ModelManager:
         return "checkpoint.tar"
 
     @staticmethod
-    def _stream_download_to(url: str, dest: Path) -> None:
-        """Stream ``url`` to ``dest`` via a sibling tempfile, then rename.
-
-        Mirrors the same atomic-rename download pattern used by the edge
-        orchestrator: downloading to ``tmp`` in the same directory as
-        ``dest`` means the ``os.replace`` at the end is atomic on POSIX,
-        so an interrupted download never leaves a half-written file that
-        ``_find_cached_download`` would later mistake for a valid
-        cache hit.
+    def _stream_download_to(
+        url: str, dest: Path, expected_sha256: str | None = None
+    ) -> None:
+        """Download ``url`` to ``dest`` (see :func:`cyberwave.downloads.download_file`).
 
         We deliberately do not retry here — the signed URL has a TTL,
         and if it has expired the caller should re-enter
         :meth:`_download_checkpoint` to mint a fresh one.
         """
-        from urllib.request import urlopen
-
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp_fd, tmp_path_str = tempfile.mkstemp(
-            dir=dest.parent, prefix=".dl_", suffix=".part"
-        )
-        tmp_path = Path(tmp_path_str)
-        try:
-            with (
-                os.fdopen(tmp_fd, "wb") as fh,
-                urlopen(  # noqa: S310
-                    url,
-                    timeout=_DOWNLOAD_TIMEOUT_SECS,
-                ) as resp,
-            ):
-                while True:
-                    chunk = resp.read(_DOWNLOAD_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    fh.write(chunk)
-            tmp_path.replace(dest)
-        except Exception:
-            tmp_path.unlink(missing_ok=True)
-            raise
+        download_file(url, dest, expected_sha256=expected_sha256)
 
     def _load_cloud(self, model_id: str) -> CloudLoadedModel | None:
         """Resolve ``model_id`` via the Playground client, if attached.

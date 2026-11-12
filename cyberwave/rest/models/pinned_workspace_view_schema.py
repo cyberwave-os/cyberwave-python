@@ -38,8 +38,8 @@ class PinnedWorkspaceViewSchema(BaseModel):
     @field_validator('kind')
     def kind_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['control', 'camera', 'audio', 'route']):
-            raise ValueError("must be one of enum values ('control', 'camera', 'audio', 'route')")
+        if value not in set(['control', 'camera', 'audio', 'route', 'vehicle', 'commands']):
+            raise ValueError("must be one of enum values ('control', 'camera', 'audio', 'route', 'vehicle', 'commands')")
         return value
 
     model_config = ConfigDict(

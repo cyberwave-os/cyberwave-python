@@ -42,6 +42,11 @@ class ResolvedOutbound:
     payload: dict[str, Any]
     command: str
     source_type: str
+    #: MQTT QoS for the publish. The default 0 suits streamed and relative
+    #: commands, where a replay would move twice. A caller sending an absolute,
+    #: idempotent target (the gripper's jaw endpoints) asks for 1 so a one-shot
+    #: command survives transient packet loss.
+    qos: int = 0
 
 
 class TwinTransportMixin:
@@ -67,6 +72,7 @@ class TwinTransportMixin:
         channel: OutboundChannel = "twin_command",
         source_type: str | None = None,
         sensor_id: str | None = None,
+        qos: int = 0,
     ) -> ResolvedOutbound:
         """Map command + catalog to topic + payload."""
         self._init_transport_state()
@@ -98,6 +104,7 @@ class TwinTransportMixin:
             payload=payload,
             command=command,
             source_type=resolved_source,
+            qos=qos,
         )
         logger.debug(
             "twin outbound resolved: twin=%s command=%s topic=%s",
@@ -121,7 +128,11 @@ class TwinTransportMixin:
         mqtt = getattr(self.client, "mqtt", None)
         if mqtt is not None:
             self._ensure_mqtt_connected()
-            if mqtt.publish(resolved.topic, resolved.payload) is False:
+            if resolved.qos:
+                sent = mqtt.publish(resolved.topic, resolved.payload, qos=resolved.qos)
+            else:
+                sent = mqtt.publish(resolved.topic, resolved.payload)
+            if sent is False:
                 # Connected, the client refused it itself: a payload over its
                 # size limit, which no retry sends, or a paho error it logged.
                 advice = (
@@ -208,6 +219,26 @@ class TwinTransportMixin:
             self.uuid,
             payload.get("type"),
         )
+
+    def publish_kinematics(self: Self, payload: dict[str, Any]) -> None:
+        """Publish *payload* on ``cyberwave/twin/{uuid}/state/kinematics``.
+
+        Used by :class:`~cyberwave.driver.control.cartesian_state.CartesianStateMixin`
+        to report the measured end-effector pose. The payload shape is the one
+        :func:`~cyberwave.data.state_representation.decode_kinematics_protobuf_stub`
+        parses.
+        """
+        from ..manifest.driver_config import TWIN_KINEMATICS_TOPIC_SLUG
+
+        self._init_transport_state()
+        topic_prefix = getattr(getattr(self.client, "config", None), "topic_prefix", None) or ""
+        topic = f"{topic_prefix}{TWIN_KINEMATICS_TOPIC_SLUG.format(twin_uuid=self.uuid)}"
+        mqtt = getattr(self.client, "mqtt", None)
+        if mqtt is None:
+            logger.warning("publish_kinematics: no MQTT client on twin %s", self.uuid)
+            return
+        self._ensure_mqtt_connected()
+        mqtt.publish(topic, payload)
 
     def publish_command_burst(
         self: Self,

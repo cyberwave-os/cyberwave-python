@@ -38,7 +38,14 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
     rejecting_instance_uuid: Optional[StrictStr] = None
     simulation_ready: Optional[StrictBool] = None
     simulation_elapsed_s: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
-    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid", "simulation_ready", "simulation_elapsed_s"]
+    runtime_backend: Optional[Annotated[str, Field(strict=True, max_length=32)]] = None
+    runtime_execution_profile: Optional[Annotated[str, Field(strict=True, max_length=64)]] = None
+    scene_warnings: Optional[Annotated[List[Dict[str, Any]], Field(max_length=50)]] = None
+    simulation_progress_sim_time_s: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
+    simulation_progress_steps: Optional[Annotated[int, Field(strict=True, ge=0)]] = None
+    simulation_progress_real_time_factor: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
+    simulation_progress_target_real_time_factor: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
+    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid", "simulation_ready", "simulation_elapsed_s", "runtime_backend", "runtime_execution_profile", "scene_warnings", "simulation_progress_sim_time_s", "simulation_progress_steps", "simulation_progress_real_time_factor", "simulation_progress_target_real_time_factor"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -129,6 +136,41 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
         if self.simulation_elapsed_s is None and "simulation_elapsed_s" in self.model_fields_set:
             _dict['simulation_elapsed_s'] = None
 
+        # set to None if runtime_backend (nullable) is None
+        # and model_fields_set contains the field
+        if self.runtime_backend is None and "runtime_backend" in self.model_fields_set:
+            _dict['runtime_backend'] = None
+
+        # set to None if runtime_execution_profile (nullable) is None
+        # and model_fields_set contains the field
+        if self.runtime_execution_profile is None and "runtime_execution_profile" in self.model_fields_set:
+            _dict['runtime_execution_profile'] = None
+
+        # set to None if scene_warnings (nullable) is None
+        # and model_fields_set contains the field
+        if self.scene_warnings is None and "scene_warnings" in self.model_fields_set:
+            _dict['scene_warnings'] = None
+
+        # set to None if simulation_progress_sim_time_s (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_progress_sim_time_s is None and "simulation_progress_sim_time_s" in self.model_fields_set:
+            _dict['simulation_progress_sim_time_s'] = None
+
+        # set to None if simulation_progress_steps (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_progress_steps is None and "simulation_progress_steps" in self.model_fields_set:
+            _dict['simulation_progress_steps'] = None
+
+        # set to None if simulation_progress_real_time_factor (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_progress_real_time_factor is None and "simulation_progress_real_time_factor" in self.model_fields_set:
+            _dict['simulation_progress_real_time_factor'] = None
+
+        # set to None if simulation_progress_target_real_time_factor (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_progress_target_real_time_factor is None and "simulation_progress_target_real_time_factor" in self.model_fields_set:
+            _dict['simulation_progress_target_real_time_factor'] = None
+
         return _dict
 
     @classmethod
@@ -150,7 +192,14 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
             "rejection_reason": obj.get("rejection_reason"),
             "rejecting_instance_uuid": obj.get("rejecting_instance_uuid"),
             "simulation_ready": obj.get("simulation_ready"),
-            "simulation_elapsed_s": obj.get("simulation_elapsed_s")
+            "simulation_elapsed_s": obj.get("simulation_elapsed_s"),
+            "runtime_backend": obj.get("runtime_backend"),
+            "runtime_execution_profile": obj.get("runtime_execution_profile"),
+            "scene_warnings": obj.get("scene_warnings"),
+            "simulation_progress_sim_time_s": obj.get("simulation_progress_sim_time_s"),
+            "simulation_progress_steps": obj.get("simulation_progress_steps"),
+            "simulation_progress_real_time_factor": obj.get("simulation_progress_real_time_factor"),
+            "simulation_progress_target_real_time_factor": obj.get("simulation_progress_target_real_time_factor")
         })
         return _obj
 

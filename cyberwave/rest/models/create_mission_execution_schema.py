@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,7 +32,7 @@ class CreateMissionExecutionSchema(BaseModel):
     priority: Optional[StrictInt] = None
     start_at: Optional[StrictStr] = None
     dry_run: Optional[StrictBool] = False
-    idempotency_key: Optional[StrictStr] = None
+    idempotency_key: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
     __properties: ClassVar[List[str]] = ["parameters", "priority", "start_at", "dry_run", "idempotency_key"]
 
     model_config = ConfigDict(

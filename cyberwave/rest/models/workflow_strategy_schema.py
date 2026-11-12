@@ -29,12 +29,12 @@ class WorkflowStrategySchema(BaseModel):
     """ # noqa: E501
     source: Optional[StrictStr] = 'none'
     selected_template_uuid: Optional[StrictStr] = None
-    candidates: Optional[List[Optional[Dict[str, Any]]]] = None
-    templates: Optional[List[Optional[Dict[str, Any]]]] = None
-    similar_workflows: Optional[List[Optional[Dict[str, Any]]]] = None
+    candidates: Optional[List[Dict[str, Any]]] = None
+    templates: Optional[List[Dict[str, Any]]] = None
+    similar_workflows: Optional[List[Dict[str, Any]]] = None
     assessment: Optional[Dict[str, Any]] = None
     missing_requirements: Optional[List[Dict[str, Any]]] = None
-    proposed_actions: Optional[List[Optional[Dict[str, Any]]]] = None
+    proposed_actions: Optional[List[Dict[str, Any]]] = None
     validation: Optional[Dict[str, Any]] = None
     __properties: ClassVar[List[str]] = ["source", "selected_template_uuid", "candidates", "templates", "similar_workflows", "assessment", "missing_requirements", "proposed_actions", "validation"]
 

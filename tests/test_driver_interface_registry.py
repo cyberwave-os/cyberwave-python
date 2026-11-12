@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -18,6 +20,7 @@ from cyberwave.driver import (
     default_management_commands,
 )
 from cyberwave.driver.interface.args import PublisherArgs, effective_publish_mode
+from cyberwave.driver.interface.registry import resolve_topic_path
 from cyberwave.driver.interface.registry_mixin import InterfaceRegistryMixin
 from cyberwave.manifest.driver_config import TWIN_IMU_TOPIC_SLUG
 
@@ -82,6 +85,92 @@ def test_legacy_command_args_keep_positional_constructor_and_exact_wire_shape() 
         CommandArg("action", required=True).to_catalog_dict()
 
 
+class _Probe(InterfaceRegistryMixin):
+    def get_driver_manifest(self, *, compiled: bool = False) -> dict:
+        return {"mqtt": {"commands": {"supported": ["home"]}}}
+
+    def _emit_driver_info_after_schema(self, schema: dict) -> None:
+        pass
+
+
+_COMPILED = {"commands": {"supported": ["home"]}}
+
+
+def _probe_on_twin(record=None, mqtt=None):
+    """A probe whose twin holds *record* and an ``mqtt`` catalog block."""
+    probe = _Probe()
+    metadata = {} if mqtt is None else {"mqtt": mqtt}
+    if record is not None:
+        metadata[_Probe.CATALOG_HASH_METADATA_KEY] = record
+    twin = SimpleNamespace(
+        uuid="t-1",
+        driver=MagicMock(),
+        client=SimpleNamespace(twins=MagicMock()),
+        _data={"metadata": metadata},
+    )
+
+    def set_schema(driver_config, *, merge):
+        # Like the real handle: the twin is reloaded with the compiled blocks.
+        twin._data = {"metadata": {**twin._data["metadata"], "mqtt": _COMPILED}}
+        return {"mqtt": _COMPILED}
+
+    twin.driver.set_schema.side_effect = set_schema
+    twin.driver.get_schemas.return_value = {"mqtt": _COMPILED}
+    probe._twin = twin
+    return probe, twin
+
+
+def _recorded(twin) -> dict:
+    ((_, kwargs),) = twin.client.twins.update.call_args_list
+    return kwargs["metadata"][_Probe.CATALOG_HASH_METADATA_KEY]
+
+
+def test_a_changed_catalog_replaces_the_twins_and_records_its_hash() -> None:
+    probe, twin = _probe_on_twin(record={"input": "an older catalog"})
+    probe.register_interface_on_twin()
+    twin.driver.set_schema.assert_called_once_with(probe.cw_driver, merge=False)
+    record = _recorded(twin)
+    assert record["input"] == probe.catalog_hash()
+    # The digest of what the twin holds after the write, not before it.
+    assert record["written"] == probe._written_catalog_hash({"mqtt": _COMPILED})
+
+
+def test_an_unchanged_catalog_is_not_rewritten() -> None:
+    probe, twin = _probe_on_twin()
+    probe.register_interface_on_twin()
+    probe, twin = _probe_on_twin(record=_recorded(twin), mqtt=_COMPILED)
+    schemas = probe.register_interface_on_twin()
+    twin.driver.set_schema.assert_not_called()
+    twin.client.twins.update.assert_not_called()
+    assert schemas == twin.driver.get_schemas.return_value
+    # Forced, or asked to merge into a changed one, it is written.
+    probe.register_interface_on_twin(force=True, merge=True)
+    twin.driver.set_schema.assert_called_once_with(probe.cw_driver, merge=True)
+
+
+def test_a_catalog_another_writer_replaced_is_registered_again() -> None:
+    # v2 registers; a rollback to a driver that predates the record (or an
+    # edit) rewrites the catalog and leaves the record; v2 starts again.
+    probe, twin = _probe_on_twin()
+    probe.register_interface_on_twin()
+    older = {"commands": {"supported": ["home", "legacy"]}}
+    probe, twin = _probe_on_twin(record=_recorded(twin), mqtt=older)
+    probe.register_interface_on_twin()
+    twin.driver.set_schema.assert_called_once_with(probe.cw_driver, merge=False)
+
+
+def test_the_catalog_hash_ignores_key_order() -> None:
+    first, second = _Probe(), _Probe()
+    second.get_driver_manifest = lambda compiled=False: {  # type: ignore[method-assign]
+        "mqtt": {"commands": {"supported": ["home"]}}
+    }
+    assert first.catalog_hash() == second.catalog_hash()
+    second.get_driver_manifest = lambda compiled=False: {  # type: ignore[method-assign]
+        "mqtt": {"commands": {"supported": ["home", "stop"]}}
+    }
+    assert first.catalog_hash() != second.catalog_hash()
+
+
 def test_async_mqtt_handler_runs_on_driver_loop() -> None:
     received: list[dict[str, object]] = []
 
@@ -116,6 +205,19 @@ def test_add_listener_command_exports_cw_driver_root() -> None:
     raw = registry.to_cw_driver_dict(registry_id="acme/test")
     assert raw["mqtt"]["twin"]["command"]["payload_schema_ref"] == "TwinCommandPayload"
     assert "stop" in raw["mqtt"]["commands"]["supported"]
+
+
+def test_fallback_state_topic_substitutes_the_twin_uuid() -> None:
+    """New state leaves are not necessarily enumerated in the static slug map."""
+    motion = TopicSpec(
+        namespace="state",
+        leaf="motion",
+        payload_schema_ref="TwinMotionStatusPayload",
+    )
+
+    assert resolve_topic_path(motion, "twin-123", prefix="local") == (
+        "localcyberwave/twin/twin-123/state/motion"
+    )
 
 
 def test_default_management_commands() -> None:
@@ -326,3 +428,37 @@ def test_unwire_interface_without_client_does_not_mask_startup_error() -> None:
     bare = _Bare()
     asyncio.run(bare._unwire_interface_from_registry())  # must not raise
     assert bare._wired_mqtt_handlers == []
+
+
+def test_command_topic_subscribes_at_qos1() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    class Probe(InterfaceRegistryMixin):
+        def __init__(self) -> None:
+            self._cw = SimpleNamespace(
+                mqtt=MagicMock(), config=SimpleNamespace(source_type="edge")
+            )
+            self._interface = DriverInterfaceRegistry()
+            self._operation_mode = DriverOperationMode.NO_OP
+            self._wired_mqtt_handlers = []
+
+        def _twin_uuid_for_wire(self) -> str:
+            return "arm-1"
+
+        def _mqtt_prefix_for_wire(self) -> str:
+            return ""
+
+        async def _wire_zenoh_from_registry(self) -> None:
+            pass
+
+    probe = Probe()
+    probe._interface.add_listener(
+        TopicSpec(namespace="twin", leaf="command", payload_schema_ref="TwinCommandPayload"),
+        CallbackGroup(lambda _e: None),
+        command=CommandArgs(name="grip", args=()),
+    )
+    asyncio.run(probe._wire_interface_from_registry())
+    call = probe._cw.mqtt.subscribe.call_args
+    assert call.args[0] == "cyberwave/twin/arm-1/command"
+    assert call.kwargs["qos"] == 1

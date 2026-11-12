@@ -44,6 +44,12 @@ from . import (
     SDK_EDGE_HEALTH_INTERVAL_SECONDS,
     SDK_EDGE_HEALTH_STALE_TIMEOUT_SECONDS,
 )
+from ._reconnect import (
+    FAST_RECONNECT_ATTEMPTS,
+    RECONNECT_BASE_DELAY,
+    reconnect_backoff,
+    signaling_ready,
+)
 from .answer_subscription import answer_topics, wait_for_subscriptions
 from .base_video import _strip_vp8_video, read_liveness_counter
 from .ice import effective_ice_servers
@@ -354,7 +360,8 @@ class MultimediaStreamer:
             "audio_track_id": self.audio_track.id if self.audio_track else None,
             "session_id": f"{self.client.client_id}_multimedia",
         }
-        self.client.publish(topic, offer_payload, qos=2)
+        if self.client.publish(topic, offer_payload, qos=2) is False:
+            raise ConnectionError("MQTT client refused the offer; not sent")
         logger.info("Published multimedia offer to %s", topic)
 
     async def _wait_for_answer(self, timeout: float = 60.0) -> None:
@@ -494,16 +501,22 @@ class MultimediaStreamer:
 
         A failed attempt leaves pc None, so it is tracked in _reconnect_pending:
         otherwise the next pass would wait forever for a pc and never reach the
-        backoff and attempt cap. A cancelled reconnect or the cap parks the
-        monitor rather than ending it, so a later start command is watched.
+        backoff. Retries never give up on their own, so a stream outlives any
+        uplink outage. A cancelled reconnect parks the monitor rather than
+        ending it, so a later start command is watched.
         """
-        reconnect_delay = 2.0
-        max_attempts = 10
+        reconnect_delay = RECONNECT_BASE_DELAY
+        max_attempts = FAST_RECONNECT_ATTEMPTS
         attempt = 0
         while not stop_event.is_set() and self._is_running:
             if not self._should_reconnect or (
                 self.pc is None and not self._reconnect_pending
             ):
+                await asyncio.sleep(1.0)
+                continue
+            if not signaling_ready(self.client):
+                # An offer can't be answered while MQTT is down; wait for the
+                # broker rather than spend attempts on offers that go nowhere.
                 await asyncio.sleep(1.0)
                 continue
             if self._reconnect_pending or self._is_connection_lost():
@@ -552,12 +565,15 @@ class MultimediaStreamer:
         except Exception as e:
             attempt += 1
             logger.error("Reconnect attempt failed: %s", e, exc_info=True)
-            if attempt >= max_attempts:
-                self._should_reconnect = False
-                self._reconnect_pending = False
-                return -1
+            if attempt == max_attempts:
+                logger.error(
+                    "Multimedia stream still down after %s reconnect attempts; "
+                    "retrying every %.0fs until it connects or is stopped",
+                    attempt,
+                    reconnect_backoff(attempt),
+                )
             self._reconnect_pending = True
-            await asyncio.sleep(min(base_delay * (2**attempt), 30.0))
+            await asyncio.sleep(reconnect_backoff(attempt))
             return attempt
 
     # ------------------------------------------------------------------

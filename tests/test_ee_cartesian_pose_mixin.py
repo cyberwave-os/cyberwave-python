@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from cyberwave.driver import (
     ArmCapabilityMixin,
@@ -165,3 +166,41 @@ def test_ik_on_miss_surfaces_failure() -> None:
     )
     assert driver.applied == []
     assert driver.failures and driver.failures[-1][0] == "ee_pose"
+
+
+def test_plan_ee_pose_returns_solution_without_applying() -> None:
+    d = _Driver(process_joints_ik=True, solve=True)
+    solution = d.plan_ee_pose(EEPose(0.1, 0.0, 0.2, 0.0, 0.0, 0.0))
+    assert solution == {"joint1": 0.25, "joint2": 0.25}
+    assert d.applied == []
+    assert d.failures == []
+
+
+def test_plan_ee_pose_returns_none_on_unreachable_without_alerting() -> None:
+    d = _Driver(process_joints_ik=True, solve=False)
+    assert d.plan_ee_pose(EEPose(9.0, 9.0, 9.0, 0.0, 0.0, 0.0)) is None
+    assert d.applied == []
+    assert d.failures == []  # planning is not a command failure
+
+
+def test_plan_ee_pose_requires_a_controller() -> None:
+    """A driver that composes the pose mixin without an arm mixin has no ``_arm``."""
+
+    class _NoArm(EECartesianPoseMixin, _TerminalBase):
+        def _current_joint_positions(self):
+            return {}
+
+    d = _NoArm(process_joints_ik=True)
+    with pytest.raises(RuntimeError, match="requires a composed arm controller"):
+        d.plan_ee_pose(EEPose(0.1, 0.0, 0.2, 0.0, 0.0, 0.0))
+
+
+def test_plan_ee_pose_honours_an_explicit_controller() -> None:
+    """DualArmMixin passes its per-arm controller in; ``_arm`` must not win."""
+    from cyberwave.driver.kinematics.arm.controller import ArmController
+
+    d = _Driver(process_joints_ik=True, solve=False)  # self._arm would miss IK
+    other = ArmController(_cfg(), build_kinematics=lambda c: _FakeKin(c, solve=True))
+    assert d.plan_ee_pose(
+        EEPose(0.1, 0.0, 0.2, 0.0, 0.0, 0.0), controller=other
+    ) == {"joint1": 0.25, "joint2": 0.25}

@@ -44,7 +44,9 @@ class GTMInput(BaseModel):
     asset_uuid: Optional[UUID] = None
     mlmodel_uuid: Optional[UUID] = None
     workflow_uuid: Optional[UUID] = None
-    __properties: ClassVar[List[str]] = ["partners", "asset_types", "sales_channel", "industry", "use_case", "origin", "objective", "source_url", "next_action", "next_action_date", "customer_workspace_uuid", "asset_uuid", "mlmodel_uuid", "workflow_uuid"]
+    sourced_by_partner_uuid: Optional[UUID] = None
+    partner_account_uuid: Optional[UUID] = None
+    __properties: ClassVar[List[str]] = ["partners", "asset_types", "sales_channel", "industry", "use_case", "origin", "objective", "source_url", "next_action", "next_action_date", "customer_workspace_uuid", "asset_uuid", "mlmodel_uuid", "workflow_uuid", "sourced_by_partner_uuid", "partner_account_uuid"]
 
     @field_validator('origin')
     def origin_validate_enum(cls, value):
@@ -130,6 +132,16 @@ class GTMInput(BaseModel):
         if self.workflow_uuid is None and "workflow_uuid" in self.model_fields_set:
             _dict['workflow_uuid'] = None
 
+        # set to None if sourced_by_partner_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.sourced_by_partner_uuid is None and "sourced_by_partner_uuid" in self.model_fields_set:
+            _dict['sourced_by_partner_uuid'] = None
+
+        # set to None if partner_account_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.partner_account_uuid is None and "partner_account_uuid" in self.model_fields_set:
+            _dict['partner_account_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -155,7 +167,9 @@ class GTMInput(BaseModel):
             "customer_workspace_uuid": obj.get("customer_workspace_uuid"),
             "asset_uuid": obj.get("asset_uuid"),
             "mlmodel_uuid": obj.get("mlmodel_uuid"),
-            "workflow_uuid": obj.get("workflow_uuid")
+            "workflow_uuid": obj.get("workflow_uuid"),
+            "sourced_by_partner_uuid": obj.get("sourced_by_partner_uuid"),
+            "partner_account_uuid": obj.get("partner_account_uuid")
         })
         return _obj
 

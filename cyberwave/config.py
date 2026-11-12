@@ -2,6 +2,8 @@
 Configuration management for the Cyberwave SDK
 """
 
+import logging
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Optional
@@ -14,7 +16,14 @@ DEFAULT_BASE_URL = "https://api.cyberwave.com"
 DEFAULT_MQTT_HOST = "mqtt.cyberwave.com"
 DEFAULT_MQTT_PORT = 8883
 DEFAULT_MQTT_USERNAME = "mqttcyb"
-DEFAULT_TIMEOUT = 30
+# REST read timeout: the longest wait for a response, or a gap in one, before
+# a call fails. Generous so slow server-side jobs still finish; it only exists so
+# a half-open connection can't hang a caller forever. Edge services set
+# CYBERWAVE_API_TIMEOUT lower.
+DEFAULT_TIMEOUT = 300
+HOSTED_MQTT_DOMAIN = "mqtt.cyberwave.com"
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_bool_env(value: Optional[str], default: bool = False) -> bool:
@@ -87,7 +96,9 @@ class CyberwaveConfig:
             ``paho.mqtt.client.MQTTv5``).  Defaults to MQTTv5.
         environment_id: Default environment ID to use
         workspace_id: Default workspace ID to use
-        timeout: Request timeout in seconds
+        timeout: REST read timeout in seconds. Unset, it comes from
+            ``CYBERWAVE_API_TIMEOUT``, else ``DEFAULT_TIMEOUT`` (300 s);
+            0 disables it
         verify_ssl: Whether to verify SSL certificates
         runtime_mode: Whether the SDK is running in live or simulation mode
     """
@@ -105,7 +116,7 @@ class CyberwaveConfig:
     mqtt_protocol: Optional[int] = None
     environment_id: Optional[str] = None
     workspace_id: Optional[str] = None
-    timeout: int = DEFAULT_TIMEOUT
+    timeout: Optional[float] = None
     verify_ssl: bool = True
     source_type: str = SOURCE_TYPE_EDGE
     topic_prefix: Optional[str] = None
@@ -162,6 +173,24 @@ class CyberwaveConfig:
         if not self.workspace_id:
             self.workspace_id = os.getenv("CYBERWAVE_WORKSPACE_ID")
 
+        if self.timeout is None:
+            self.timeout = DEFAULT_TIMEOUT
+            timeout_str = os.getenv("CYBERWAVE_API_TIMEOUT")
+            if timeout_str:
+                try:
+                    seconds = float(timeout_str)
+                except ValueError:
+                    seconds = math.nan
+                # A negative value would silently mean "unbounded"; only 0 does.
+                if math.isfinite(seconds) and seconds >= 0:
+                    self.timeout = seconds
+                else:
+                    logger.warning(
+                        "Ignoring CYBERWAVE_API_TIMEOUT=%r: not a number of "
+                        "seconds >= 0",
+                        timeout_str,
+                    )
+
         if not self.source_type:
             self.source_type = os.getenv("CYBERWAVE_SOURCE_TYPE", SOURCE_TYPE_EDGE)
 
@@ -181,11 +210,38 @@ class CyberwaveConfig:
                 else:
                     self.topic_prefix = ""
 
+        self._warn_on_topic_prefix_mismatch()
+
         if not self.runtime_mode:
             self.runtime_mode = "live"
 
         if not self.twin_uuid:
             self.twin_uuid = os.getenv("CYBERWAVE_TWIN_UUID")
+
+    def _warn_on_topic_prefix_mismatch(self) -> None:
+        """Warn when the topic prefix cannot match the hosted broker in use.
+
+        The broker accepts publishes to topics nobody subscribes to, so a
+        prefix that disagrees with the broker (e.g. ``staging.mqtt.cyberwave.com``
+        without ``CYBERWAVE_ENVIRONMENT=staging``) silently drops every
+        command and receives no telemetry. Custom and local brokers are skipped.
+        """
+        host = (self.mqtt_host or "").strip().lower()
+        if host == HOSTED_MQTT_DOMAIN:
+            expected = ""
+        elif host.endswith(f".{HOSTED_MQTT_DOMAIN}"):
+            expected = host.removesuffix(f".{HOSTED_MQTT_DOMAIN}")
+        else:
+            return
+        if (self.topic_prefix or "") != expected:
+            logger.warning(
+                "MQTT topic prefix %r does not match broker %s (expected %r): "
+                "messages will not reach the platform. Set CYBERWAVE_ENVIRONMENT "
+                "(or CYBERWAVE_MQTT_TOPIC_PREFIX) to match CYBERWAVE_MQTT_HOST.",
+                self.topic_prefix or "",
+                host,
+                expected,
+            )
 
     @property
     def mqtt_credentials(self) -> tuple[str, Optional[str]]:

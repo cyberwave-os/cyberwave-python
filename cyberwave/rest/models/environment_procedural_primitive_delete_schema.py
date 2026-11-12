@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -30,7 +30,7 @@ class EnvironmentProceduralPrimitiveDeleteSchema(BaseModel):
     success: StrictBool
     deleted_id: StrictStr
     procedural_primitive: Dict[str, Any]
-    procedural_primitives: List[Optional[Dict[str, Any]]]
+    procedural_primitives: List[Dict[str, Any]]
     __properties: ClassVar[List[str]] = ["success", "deleted_id", "procedural_primitive", "procedural_primitives"]
 
     model_config = ConfigDict(

@@ -112,6 +112,7 @@ AuthSettings = TypedDict(
     "AuthSettings",
     {
         "CustomTokenAuthentication": APIKeyAuthSetting,
+        "DriverReleasePublisherAuth": BearerAuthSetting,
     },
     total=False,
 )
@@ -542,6 +543,13 @@ conf = cyberwave.rest.Configuration(
                 'value': self.get_api_key_with_prefix(
                     'CustomTokenAuthentication',
                 ),
+            }
+        if self.access_token is not None:
+            auth['DriverReleasePublisherAuth'] = {
+                'type': 'bearer',
+                'in': 'header',
+                'key': 'Authorization',
+                'value': 'Bearer ' + self.access_token
             }
         return auth
 

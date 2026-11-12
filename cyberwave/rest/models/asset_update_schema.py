@@ -27,6 +27,7 @@ class AssetUpdateSchema(BaseModel):
     """
     AssetUpdateSchema
     """ # noqa: E501
+    is_edge_device: Optional[StrictBool] = None
     expected_revision: Optional[StrictStr] = None
     name: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
@@ -42,7 +43,7 @@ class AssetUpdateSchema(BaseModel):
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = None
     is_rentable: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["expected_revision", "name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "registry_id_alias", "fixed_base", "universal_schema", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["is_edge_device", "expected_revision", "name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "registry_id_alias", "fixed_base", "universal_schema", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -83,6 +84,11 @@ class AssetUpdateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if is_edge_device (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_edge_device is None and "is_edge_device" in self.model_fields_set:
+            _dict['is_edge_device'] = None
+
         # set to None if expected_revision (nullable) is None
         # and model_fields_set contains the field
         if self.expected_revision is None and "expected_revision" in self.model_fields_set:
@@ -170,6 +176,7 @@ class AssetUpdateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "is_edge_device": obj.get("is_edge_device"),
             "expected_revision": obj.get("expected_revision"),
             "name": obj.get("name"),
             "description": obj.get("description"),

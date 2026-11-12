@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from typing import Any
 
 from cyberwave._rest import request
@@ -54,8 +55,14 @@ class ActionsClient:
         timeout: float = 120.0,
         poll_interval: float = 1.0,
         raise_on_failure: bool = True,
+        on_poll: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
-        """Poll until an action reaches a terminal status."""
+        """Poll until an action reaches a terminal status.
+
+        ``on_poll`` runs before every status poll. Whatever it raises ends the
+        wait and propagates, which is how a caller that owns the wait (a
+        heartbeat, a cancel check) can stop it between polls.
+        """
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         if poll_interval <= 0:
@@ -65,6 +72,8 @@ class ActionsClient:
         last_status: dict[str, Any] | None = None
         last_error: CyberwaveAPIError | None = None
         while time.monotonic() < deadline:
+            if on_poll is not None:
+                on_poll()
             # A single failed poll must not end the wait: callers hold a robot
             # in motion for the whole timeout, and their recovery is written
             # against TimeoutError. Keep polling and report the last failure

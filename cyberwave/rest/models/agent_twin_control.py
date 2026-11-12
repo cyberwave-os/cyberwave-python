@@ -45,7 +45,7 @@ class AgentTwinControl(BaseModel):
     end_effector_frame: Optional[StrictStr] = None
     missing_capabilities: Optional[List[StrictStr]] = None
     sensor_ids: Optional[List[StrictStr]] = None
-    sensor_geometries: Optional[List[Optional[Dict[str, Any]]]] = None
+    sensor_geometries: Optional[List[Dict[str, Any]]] = None
     poses: Optional[List[Dict[str, StrictStr]]] = None
     movements: Optional[List[Dict[str, StrictStr]]] = None
     joints: Optional[List[AgentTwinControlJointSchema]] = None

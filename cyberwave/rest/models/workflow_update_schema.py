@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -37,10 +37,22 @@ class WorkflowUpdateSchema(BaseModel):
     allow_concurrent_executions: Optional[StrictBool] = None
     concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: Optional[StrictStr] = None
+    params_schema: Optional[List[Dict[str, Any]]] = None
+    cyberwave_log: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "environment_uuid", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "metadata", "tags", "is_template"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "environment_uuid", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "params_schema", "cyberwave_log", "metadata", "tags", "is_template"]
+
+    @field_validator('cyberwave_log')
+    def cyberwave_log_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['all', 'errors', 'none']):
+            raise ValueError("must be one of enum values ('all', 'errors', 'none')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -131,6 +143,16 @@ class WorkflowUpdateSchema(BaseModel):
         if self.execution_target is None and "execution_target" in self.model_fields_set:
             _dict['execution_target'] = None
 
+        # set to None if params_schema (nullable) is None
+        # and model_fields_set contains the field
+        if self.params_schema is None and "params_schema" in self.model_fields_set:
+            _dict['params_schema'] = None
+
+        # set to None if cyberwave_log (nullable) is None
+        # and model_fields_set contains the field
+        if self.cyberwave_log is None and "cyberwave_log" in self.model_fields_set:
+            _dict['cyberwave_log'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -168,6 +190,8 @@ class WorkflowUpdateSchema(BaseModel):
             "allow_concurrent_executions": obj.get("allow_concurrent_executions"),
             "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
+            "params_schema": obj.get("params_schema"),
+            "cyberwave_log": obj.get("cyberwave_log"),
             "metadata": obj.get("metadata"),
             "tags": obj.get("tags"),
             "is_template": obj.get("is_template")

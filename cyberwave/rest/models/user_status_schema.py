@@ -17,6 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
@@ -40,9 +41,10 @@ class UserStatusSchema(BaseModel):
     banned: StrictBool
     onboarded: StrictBool
     completed_tours: List[StrictStr]
+    control_auto_approve_accepted_at: Optional[datetime] = None
     user_status: StrictStr
     client_compatible_version: StrictStr
-    __properties: ClassVar[List[str]] = ["uuid", "username", "email", "first_name", "last_name", "full_name", "profile_picture", "is_staff", "waitlist", "waitlist_position", "banned", "onboarded", "completed_tours", "user_status", "client_compatible_version"]
+    __properties: ClassVar[List[str]] = ["uuid", "username", "email", "first_name", "last_name", "full_name", "profile_picture", "is_staff", "waitlist", "waitlist_position", "banned", "onboarded", "completed_tours", "control_auto_approve_accepted_at", "user_status", "client_compatible_version"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -93,6 +95,11 @@ class UserStatusSchema(BaseModel):
         if self.waitlist_position is None and "waitlist_position" in self.model_fields_set:
             _dict['waitlist_position'] = None
 
+        # set to None if control_auto_approve_accepted_at (nullable) is None
+        # and model_fields_set contains the field
+        if self.control_auto_approve_accepted_at is None and "control_auto_approve_accepted_at" in self.model_fields_set:
+            _dict['control_auto_approve_accepted_at'] = None
+
         return _dict
 
     @classmethod
@@ -118,6 +125,7 @@ class UserStatusSchema(BaseModel):
             "banned": obj.get("banned"),
             "onboarded": obj.get("onboarded"),
             "completed_tours": obj.get("completed_tours"),
+            "control_auto_approve_accepted_at": obj.get("control_auto_approve_accepted_at"),
             "user_status": obj.get("user_status"),
             "client_compatible_version": obj.get("client_compatible_version")
         })

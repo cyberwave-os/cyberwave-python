@@ -30,11 +30,12 @@ class RLTrainingJobCreateSchema(BaseModel):
     strategy_key: StrictStr
     strategy_config: Optional[Dict[str, Any]] = None
     train_seeds: List[StrictInt]
+    task_params_overrides: Optional[Dict[str, Any]] = None
     source_bundle_hash: Optional[StrictStr] = None
     source_revision: Optional[StrictStr] = ''
     runtime_versions: Optional[Dict[str, Any]] = None
     workload_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["strategy_key", "strategy_config", "train_seeds", "source_bundle_hash", "source_revision", "runtime_versions", "workload_uuid"]
+    __properties: ClassVar[List[str]] = ["strategy_key", "strategy_config", "train_seeds", "task_params_overrides", "source_bundle_hash", "source_revision", "runtime_versions", "workload_uuid"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -105,6 +106,7 @@ class RLTrainingJobCreateSchema(BaseModel):
             "strategy_key": obj.get("strategy_key"),
             "strategy_config": obj.get("strategy_config"),
             "train_seeds": obj.get("train_seeds"),
+            "task_params_overrides": obj.get("task_params_overrides"),
             "source_bundle_hash": obj.get("source_bundle_hash"),
             "source_revision": obj.get("source_revision") if obj.get("source_revision") is not None else '',
             "runtime_versions": obj.get("runtime_versions"),

@@ -347,3 +347,19 @@ def test_takeoff_publishes_when_in_catalog() -> None:
     mqtt.publish.assert_called_once()
     assert twin._outbound_log[-1].command == "takeoff"
     assert twin._outbound_log[-1].payload["data"]["altitude"] == 2.0
+
+
+@pytest.mark.parametrize("qos", [0, 1])
+def test_publish_uses_the_qos_the_caller_resolved(qos: int) -> None:
+    """The transport holds no per-command list: the command's owner decides."""
+    twin = _make_locomote_twin()
+    resolved = _transport.ResolvedOutbound(
+        topic="cyberwave/twin/twin-uuid/command",
+        payload={"source_type": "tele", "command": "grip", "data": {}},
+        command="grip",
+        source_type="tele",
+        qos=qos,
+    )
+    with patch.object(twin, "_prepare_outbound_command"):
+        twin._publish_resolved(resolved)
+    assert twin.client.mqtt.publish.call_args.kwargs.get("qos", 0) == qos

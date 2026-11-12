@@ -119,6 +119,12 @@ def label_color(label: str, box_color: BoxColor = "auto") -> tuple[int, int, int
     return _default_color_for(label, box_color)
 
 
+def _display_label(det: Detection) -> str:
+    """Show a confirmed track ID without changing class-based colours."""
+    track_id = getattr(det, "track_id", None)
+    return f"{det.label} #{track_id}" if track_id is not None else det.label
+
+
 def annotate_detections(
     frame: np.ndarray,
     detections: Iterable[Detection],
@@ -231,7 +237,9 @@ def annotate_detections(
         if font_scale <= 0:
             continue
 
-        caption = f"{det.label} {det.confidence:.2f}" if show_confidence else det.label
+        caption = _display_label(det)
+        if show_confidence:
+            caption = f"{caption} {det.confidence:.2f}"
         # ``FONT_HERSHEY_SIMPLEX`` matches Ultralytics' default annotator
         # so worker output and cloud-rendered annotations stay visually
         # consistent. cv2 caption thickness must be >= 1.
@@ -449,7 +457,8 @@ def build_overlay_payload(
                 "boxes": [
                     {
                         "box_2d": [x1, y1, x2, y2],
-                        "label": "person",
+                        "label": "person #7",
+                        "track_id": 7,
                         "conf": 0.92,
                         "color": [r, g, b],
                     },
@@ -491,10 +500,13 @@ def build_overlay_payload(
                 float(bbox.x2),
                 float(bbox.y2),
             ],
-            "label": det.label,
+            "label": _display_label(det),
             "conf": float(det.confidence),
             "color": [r, g, b],
         }
+        track_id = getattr(det, "track_id", None)
+        if track_id is not None:
+            entry["track_id"] = int(track_id)
         det_mask = getattr(det, "mask", None)
         if det_mask is not None and (want_polygon or want_png):
             if want_polygon:

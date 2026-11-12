@@ -5,6 +5,7 @@ from __future__ import annotations
 from cyberwave.twin.capabilities import joints as _joints
 from cyberwave.data.state_representation import (
     CartesianPose,
+    cartesian_pose_from_direct_payload,
     cartesian_pose_from_position_payload,
     cartesian_pose_from_rotation_payload,
     decode_joint_update_payload,
@@ -13,6 +14,18 @@ from cyberwave.data.state_representation import (
     merge_legacy_position_rotation,
     parse_joint_mqtt_payload,
 )
+
+
+def test_decode_direct_pose_xyzw_array() -> None:
+    pose = cartesian_pose_from_direct_payload(
+        {
+            "frame_id": "base_link",
+            "pose_xyzw": [1.0, 2.0, 3.0, 0.0, 0.0, 0.5, 0.8660254],
+        }
+    )
+    assert pose.frame_id() == "base_link"
+    assert pose.translation_dict() == {"x": 1.0, "y": 2.0, "z": 3.0}
+    assert pose.orientation.z == 0.5
 
 
 def test_decode_json_legacy_position_rotation_merges() -> None:

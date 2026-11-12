@@ -1,6 +1,7 @@
 """Proto-shaped kinematic types (manual mirror until generated bindings)."""
 
 from .decode import (
+    cartesian_pose_from_direct_payload,
     cartesian_pose_from_position_payload,
     cartesian_pose_from_rotation_payload,
     decode_joint_update_payload,
@@ -33,6 +34,7 @@ __all__ = [
     "RobotStateMessage",
     "SpatialState",
     "Vector3d",
+    "cartesian_pose_from_direct_payload",
     "cartesian_pose_from_position_payload",
     "cartesian_pose_from_rotation_payload",
     "decode_joint_update_payload",

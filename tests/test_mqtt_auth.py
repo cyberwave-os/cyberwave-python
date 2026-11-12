@@ -327,3 +327,36 @@ def test_config_port_and_tls_resolution(monkeypatch, environment, port, tls):
         monkeypatch.setenv(name, value)
     config = CyberwaveConfig()
     assert (config.mqtt_port, config.mqtt_use_tls) == (port, tls)
+
+
+@pytest.mark.parametrize(
+    ("host", "environment", "warns"),
+    [
+        ("staging.mqtt.cyberwave.com", None, True),
+        ("staging.mqtt.cyberwave.com", "dev", True),
+        ("staging.mqtt.cyberwave.com", "staging", False),
+        ("dev.mqtt.cyberwave.com", "dev", False),
+        ("mqtt.cyberwave.com", None, False),
+        ("mqtt.cyberwave.com", "production", False),
+        ("mqtt.cyberwave.com", "staging", True),
+        ("localhost", "local", False),
+        ("custom.example.com", None, False),
+    ],
+)
+def test_topic_prefix_broker_mismatch_warns(
+    monkeypatch, caplog, host, environment, warns
+):
+    for name in (
+        "CYBERWAVE_MQTT_TOPIC_PREFIX",
+        "CYBERWAVE_TOPIC_PREFIX",
+        "CYBERWAVE_ENVIRONMENT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    if environment is not None:
+        monkeypatch.setenv("CYBERWAVE_ENVIRONMENT", environment)
+    with caplog.at_level("WARNING", logger="cyberwave.config"):
+        config = CyberwaveConfig(mqtt_host=host)
+    # The prefix is never inferred from the broker host.
+    expected_prefix = "" if environment in (None, "production") else environment
+    assert config.topic_prefix == expected_prefix
+    assert ("does not match broker" in caplog.text) is warns

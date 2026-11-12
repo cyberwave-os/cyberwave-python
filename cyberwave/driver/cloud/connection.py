@@ -234,13 +234,16 @@ class CloudConnectionMixin:
 
         while not self._shutdown.is_set():
             # Block until either a disconnect is signalled or shutdown is requested.
-            _done, _ = await asyncio.wait(
-                [
-                    asyncio.create_task(self._connection_lost.wait()),
-                    asyncio.create_task(self._shutdown.wait()),
-                ],
-                return_when=asyncio.FIRST_COMPLETED,
+            waiters = (
+                asyncio.create_task(self._connection_lost.wait()),
+                asyncio.create_task(self._shutdown.wait()),
             )
+            try:
+                await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for waiter in waiters:
+                    waiter.cancel()
+                await asyncio.gather(*waiters, return_exceptions=True)
             if self._shutdown.is_set():
                 return
 

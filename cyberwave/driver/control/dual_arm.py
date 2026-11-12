@@ -24,14 +24,8 @@ from ..interface import CallbackGroup, CommandArg, CommandArgs, TopicSpec
 from ..interface.args import TELEOP_MODES
 from ..kinematics import ArmKinematicsConfig
 from ..kinematics.arm.controller import ArmController
-from .arm import (
-    _BASE_ROTATIONS,
-    _EE_ROTATIONS,
-    _EE_TRANSLATE,
-    _ArmSeams,
-    execute_arm_command,
-)
-from .cartesian import EE_POSE_ARGS, EEPose
+from .arm import _BASE_ROTATIONS, _ArmSeams, execute_arm_command
+from .cartesian import EEPose, cartesian_command_specs
 
 logger = logging.getLogger(__name__)
 
@@ -107,24 +101,19 @@ class DualArmMixin(_ArmSeams):
     def _dual_arm_command_specs(
         self, cfg: DualArmConfig
     ) -> list[tuple[str, list[CommandArg]]]:
-        dist = [
-            CommandArg("forward", 0.0, "m"),
-            CommandArg("up", 0.0, "m"),
-            CommandArg("left", 0.0, "m"),
-            CommandArg("frame", "tool"),
-        ]
+        # Cartesian rows come from cartesian.py, prefixed per arm, so this
+        # surface cannot drift from the single-arm one (which is how `speed`
+        # previously reached ee_move but never left_ee_move).
         angle = [CommandArg("angle", 0.0, "rad")]
         specs: list[tuple[str, list[CommandArg]]] = []
         arm_cfgs = {"left": cfg.left, "right": cfg.right}
         cartesian = getattr(type(self), "use_cartesian_pose", False)
         for prefix in _ARMS:
             arm_cfg = arm_cfgs[prefix]
-            if arm_cfg.supports_ee:
-                specs.append((f"{prefix}_{_EE_TRANSLATE}", list(dist)))
-                for name in _EE_ROTATIONS:
-                    specs.append((f"{prefix}_{name}", list(angle)))
-                if cartesian:
-                    specs.append((f"{prefix}_ee_pose", list(EE_POSE_ARGS)))
+            for name, args in cartesian_command_specs(
+                arm_cfg, include_pose=cartesian
+            ):
+                specs.append((f"{prefix}_{name}", list(args)))
             if arm_cfg.supports_base_rotate:
                 for name in _BASE_ROTATIONS:
                     specs.append((f"{prefix}_{name}", list(angle)))
@@ -171,6 +160,7 @@ class DualArmMixin(_ArmSeams):
                 self._current_joint_positions(),
                 apply_targets=self._apply_joint_targets,
                 on_failed=self._on_arm_command_failed,
+                set_speed=self._set_command_speed,
             ):
                 return
             logger.warning("DualArm: unknown command %r", command)

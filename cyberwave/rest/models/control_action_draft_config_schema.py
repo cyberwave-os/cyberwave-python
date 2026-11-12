@@ -34,11 +34,10 @@ class ControlActionDraftConfigSchema(BaseModel):
     version: Optional[StrictInt] = 1
     capability_id: Annotated[str, Field(min_length=1, strict=True, max_length=64)]
     name: Annotated[str, Field(min_length=1, strict=True, max_length=150)]
-    input_policy_uuids: Optional[Annotated[List[UUID], Field(max_length=16)]] = None
     policy_uuid: Optional[UUID] = None
     operator_ui: Optional[ControlOperatorUISchema] = None
     input_trigger: Optional[ControlActionInputTriggerSchema] = None
-    __properties: ClassVar[List[str]] = ["version", "capability_id", "name", "input_policy_uuids", "policy_uuid", "operator_ui", "input_trigger"]
+    __properties: ClassVar[List[str]] = ["version", "capability_id", "name", "policy_uuid", "operator_ui", "input_trigger"]
 
     @field_validator('version')
     def version_validate_enum(cls, value):
@@ -125,7 +124,6 @@ class ControlActionDraftConfigSchema(BaseModel):
             "version": obj.get("version") if obj.get("version") is not None else 1,
             "capability_id": obj.get("capability_id"),
             "name": obj.get("name"),
-            "input_policy_uuids": obj.get("input_policy_uuids"),
             "policy_uuid": obj.get("policy_uuid"),
             "operator_ui": ControlOperatorUISchema.from_dict(obj["operator_ui"]) if obj.get("operator_ui") is not None else None,
             "input_trigger": ControlActionInputTriggerSchema.from_dict(obj["input_trigger"]) if obj.get("input_trigger") is not None else None

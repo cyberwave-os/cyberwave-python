@@ -416,6 +416,29 @@ only sent to this twin's reply inbox. `cyberwave.driver.current_command()`
 returns the request being handled; `cyberwave.mqtt.command_response` has the
 payload builder and topic rules for drivers that do not use `BaseDriver`.
 
+## Structured metrics
+
+A metric channel is a timeseries of one float, int or bool. Publish one sample
+per call, on its own topic (`cyberwave/twin/<uuid>/metrics/arm/gripper/force_n`):
+
+```python
+client.mqtt.publish_metric(twin_uuid, "arm.gripper.force_n", 12.5)
+client.mqtt.publish_metric(twin_uuid, "arm.gripper.closed", True)
+```
+
+or several at once in the `metrics` bag, which is also merged into the twin's
+metadata and fires `metrics` workflow triggers:
+
+```python
+client.mqtt.publish_metrics(twin_uuid, {"cycle_count": 3, "motor_on": True})
+```
+
+Anything but a finite float (below 2**63 in magnitude), a 64-bit int or a bool
+raises before it is sent; numpy scalars are converted. The latest value of each
+channel is under `channels` in `GET /twins/<uuid>/metrics/latest`. Every sample
+is stored as a row, at the rate you publish it, in the cloud and on self-hosted
+(Enterprise) deployments alike. A channel sample fires no workflow.
+
 ## H.264 over RTP ingest
 
 `cyberwave.sensor.rtp_h264` receives an H.264/RTP/UDP push (IP cameras, payload
@@ -449,6 +472,30 @@ if `turn_servers` or an edge TURN override is configured. Both ends must be
 able to reach each other's LAN addresses directly. Unset (or `default`) keeps
 the current behaviour.
 
+## Stress-testing an arm driver
+
+`cyberwave-stress-test` ships with the SDK. It tests your driver on its real twin, with no
+per-robot test code: it reads the twin's capabilities, command catalog,
+universal schema joints and limits, and `state/motion`, then runs only the test
+sections that match. Every section passes or fails on measured feedback, and
+results are matched to commands by the driver's `motion_id`. Every command the
+driver exposes must be tested: `--list` shows each catalog command as tested,
+not selected or untested, and an untested command stops the run unless it is
+named in `--allow-untested`.
+
+```bash
+cyberwave-stress-test --uuid <twin-uuid> --list          # print the plan; nothing moves
+cyberwave-stress-test --uuid <twin-uuid> --yes           # run it (moves the robot)
+cyberwave-stress-test --uuid <twin-uuid> --sections joints,planned --report ./run/report.json --yes
+```
+
+Targets stay inside the joint limits and a Cartesian box, a failed section ends
+in `stop` and a measured hold, and Ctrl-C always ends in `stop`. The report
+(`report.json`, `events.jsonl`, `joints.csv`) lists every section as passed,
+failed or skipped with its reason. A new capability gets a section with the
+`@section` decorator of `cyberwave.test.driver_testing`. See
+[Stress-testing your driver](https://docs.cyberwave.com/feature-reference/edge/drivers/stress-testing-your-driver).
+
 ## Compatibility notes for the next release
 
 **The SDK now connects to the MQTT broker with protocol v5 by default** (it was
@@ -459,6 +506,18 @@ request/response work without extra setup. A broker that does not support v5
 `CYBERWAVE_MQTT_PROTOCOL=311` (or pass `mqtt_protocol=paho.mqtt.client.MQTTv311`)
 to keep the old behaviour. `request()` and `request_command()` need v5 and raise
 `CyberwaveMQTTError` on a client set to 3.1.1. The C++ SDK's default is unchanged.
+
+**REST calls now time out instead of waiting forever.** A call that does not
+pass `_request_timeout` gets a 10 s connect timeout and a 300 s read timeout.
+The read timeout bounds the wait for the response and each gap while it
+arrives, not the whole call, so a slow download that keeps moving data is not
+cut off. A call that sends a body (an upload, a JSON payload) has no connect
+timeout, since urllib3 would also apply it to sending the body.
+Before, a connection left half-open by a network drop could hang the caller for
+good. To change the read timeout, set `CYBERWAVE_API_TIMEOUT=<seconds>` or pass
+`Cyberwave(timeout=...)`; fractions are fine, `0` restores the old unbounded
+behaviour, and a negative or non-numeric value is ignored with a warning.
+`_request_timeout` on a single call still wins.
 
 `depth_to_colored_pointcloud` now checks its declared encoded-depth input: with
 `output_mode="normalized_uint16"` (the default) or `"metric_mm"`, the array must

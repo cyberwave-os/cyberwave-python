@@ -65,6 +65,77 @@ def ros_joint_state_to_transport_payload(
     return payload
 
 
+def ros_pose_stamped_to_twin_pose_payload(
+    msg: Any,
+    *,
+    source_type: str = "edge",
+    frame_id: str | None = None,
+    child_frame_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Map ``geometry_msgs/msg/PoseStamped`` to the canonical ``twin/pose`` wire form.
+
+    ``pose_xyzw`` is ``[x, y, z, qx, qy, qz, qw]`` (metres, unit quaternion) and
+    ``timestamp_ms`` is the message's *source* stamp, not the receive time: a
+    vendor end-pose stream is only useful for hand-eye or pick verification when
+    it can be matched against the joint state it was measured with.
+
+    ``frame_id`` comes from ``msg.header.frame_id`` unless the caller overrides
+    it -- some vendor nodes publish an empty or vendor-internal header frame
+    while the driver knows the configured base frame. ``child_frame_id`` is the
+    tool frame the pose describes and is omitted when not given.
+
+    Returns ``None`` (drop the sample) rather than publishing something wrong:
+    a missing stamp, a non-finite value, a negative or malformed stamp, a zero
+    quaternion, or no frame at all. The quaternion is normalised because vendor
+    firmware commonly reports one that is only approximately unit length.
+    """
+    pose = getattr(msg, "pose", None)
+    header = getattr(msg, "header", None)
+    stamp = getattr(header, "stamp", None)
+    position = getattr(pose, "position", None)
+    orientation = getattr(pose, "orientation", None)
+    if position is None or orientation is None or stamp is None:
+        return None
+
+    try:
+        values = [
+            float(position.x),
+            float(position.y),
+            float(position.z),
+            float(orientation.x),
+            float(orientation.y),
+            float(orientation.z),
+            float(orientation.w),
+        ]
+        stamp_sec = int(stamp.sec)
+        stamp_nanosec = int(stamp.nanosec)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if (
+        not all(math.isfinite(value) for value in values)
+        or stamp_sec < 0
+        or not 0 <= stamp_nanosec < 1_000_000_000
+    ):
+        return None
+
+    quaternion_norm = math.sqrt(sum(value * value for value in values[3:]))
+    if quaternion_norm <= 0.0:
+        return None
+    values[3:] = [value / quaternion_norm for value in values[3:]]
+
+    frame = frame_id if frame_id is not None else getattr(header, "frame_id", "")
+    if not isinstance(frame, str) or not frame:
+        return None
+    payload: dict[str, Any] = {"source_type": source_type, "frame_id": frame}
+    if child_frame_id is not None:
+        if not child_frame_id:
+            return None
+        payload["child_frame_id"] = child_frame_id
+    payload["pose_xyzw"] = values
+    payload["timestamp_ms"] = stamp_sec * 1_000 + stamp_nanosec // 1_000_000
+    return payload
+
+
 # Top-level keys on joint ``/update`` payloads that are not ``name: position`` pairs
 # (aligned with the flat joint-telemetry wire format described above).
 _JOINT_UPDATE_METADATA_KEYS = frozenset(

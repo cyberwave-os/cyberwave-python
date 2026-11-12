@@ -38,7 +38,7 @@ class RLPolicyEvaluationSchema(BaseModel):
     protocol: Dict[str, Any]
     protocol_hash: StrictStr
     seeds: List[StrictInt]
-    episode_results: Optional[List[Optional[Dict[str, Any]]]] = None
+    episode_results: Optional[List[Dict[str, Any]]] = None
     replay_recordings: Optional[List[RLPolicyEvaluationReplaySchema]] = None
     aggregate_metrics: Optional[Dict[str, Any]] = None
     passed: Optional[StrictBool] = None

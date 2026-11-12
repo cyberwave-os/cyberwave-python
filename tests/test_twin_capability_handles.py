@@ -2,10 +2,17 @@
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-from cyberwave.twin.capabilities import joints as _joints
+
+import pytest
 
 from cyberwave.twin import CameraTwin, LocomoteTwin, create_twin
-from cyberwave.twin.classes import FlyingTwin, GripperJointTwin, JointTwin, LocomoteCameraTwin
+from cyberwave.twin.capabilities import joints as _joints
+from cyberwave.twin.classes import (
+    FlyingTwin,
+    GripperJointTwin,
+    JointTwin,
+    LocomoteCameraTwin,
+)
 
 
 def test_camera_twin_exposes_camera_not_locomotion() -> None:
@@ -105,7 +112,11 @@ def test_joint_twin_get_pose_set_pose() -> None:
         SimpleNamespace(uuid="arm", name="SO101", asset_uuid="asset-1"),
     )
     with patch.object(_joints, "controllable_joint_names", return_value=["_1", "_2"]):
-        with patch.object(twin, "_prepare_outbound_command"):
+        # Joint positions: the deprecated joint-space form of set_pose.
+        with (
+            patch.object(twin, "_prepare_outbound_command"),
+            pytest.warns(DeprecationWarning, match="use set_joints"),
+        ):
             twin.set_pose({"_1": -1.5, "_2": 1.5})
         assert twin.get_joints()["_1"] != 0.0
         assert twin.get_pose() == twin.get_joints()

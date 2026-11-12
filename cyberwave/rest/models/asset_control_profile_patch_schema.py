@@ -41,7 +41,7 @@ class AssetControlProfilePatchSchema(BaseModel):
     operator_option_id: Optional[StrictStr] = None
     runtime_defaults: Optional[Dict[str, Dict[str, Optional[AssetControlProfilePatchSchemaDefaultRuntimeRoutesValueValue]]]] = None
     runtime_default_option_ids: Optional[Dict[str, Dict[str, Optional[AssetControlProfilePatchSchemaDefaultRuntimeOptionIdsValueValue]]]] = None
-    controller_settings: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
+    controller_settings: Optional[Dict[str, Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["expected_revision", "control_setups", "manual_controller_ref", "manual_option_id", "default_runtime_routes", "default_runtime_option_ids", "operator_controller_ref", "operator_option_id", "runtime_defaults", "runtime_default_option_ids", "controller_settings"]
 
     model_config = ConfigDict(

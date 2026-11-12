@@ -377,7 +377,11 @@ def test_the_brokers_connack_reaches_the_alias_budget_through_paho() -> None:
     client = _client()
     client.connected = False
     packet = b"\x00\x00" + _connack(10).pack()  # session flags, reason code 0
-    client.client._in_packet = {"remaining_length": len(packet), "packet": packet}
+    client.client._in_packet = {
+        "command": mqtt.CONNACK,
+        "remaining_length": len(packet),
+        "packet": packet,
+    }
 
     client.client._handle_connack()
 

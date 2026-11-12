@@ -593,6 +593,10 @@ class Detection:
         obb:           :class:`OrientedBoundingBox` for OBB tasks; ``None`` for
                        all other task types.
         metadata:      Arbitrary extra fields from the runtime.
+        track_id:      Stable identity of the object across frames of one
+                       stream, set by :mod:`cyberwave.models.tracking` when
+                       tracking is enabled; ``None`` otherwise, or while a
+                       new object is not yet confirmed.
 
     Raises :class:`ValueError` if *confidence* is outside ``[0, 1]``.
     """
@@ -610,6 +614,8 @@ class Detection:
     # obb: oriented bounding box for OBB tasks
     obb: OrientedBoundingBox | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    # track_id: last so positional construction is unchanged
+    track_id: int | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.confidence <= 1.0:
@@ -626,6 +632,7 @@ class Detection:
         """Token list for CLI / notebooks (label, conf, bbox, optional extras)."""
         parts = [
             repr(self.label),
+            *([f"track={self.track_id}"] if self.track_id is not None else []),
             f"conf={self.confidence:.3f}",
             f"bbox=({self.bbox.x1:.1f},{self.bbox.y1:.1f})-"
             f"({self.bbox.x2:.1f},{self.bbox.y2:.1f})",

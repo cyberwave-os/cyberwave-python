@@ -16,6 +16,8 @@ from cyberwave.exceptions import TwinStateTimeoutError
 from cyberwave.manifest.driver_config import (
     JOINT_UPDATE_TOPIC_SLUG,
     TWIN_COMMAND_TOPIC_SLUG,
+    TWIN_KINEMATICS_TOPIC_SLUG,
+    TWIN_POSE_TOPIC_SLUG,
     TWIN_POSITION_TOPIC_SLUG,
     TWIN_ROTATION_TOPIC_SLUG,
 )
@@ -127,6 +129,68 @@ def test_pose_get_single_canonical_state() -> None:
     assert pose.orientation.w == 0.99
 
 
+def test_pose_get_v1_reads_direct_pose_array_while_v0_stays_legacy() -> None:
+    twin = _make_locomote_twin()
+    twin._data.metadata = {
+        "mqtt": {
+            "topics": {TWIN_POSE_TOPIC_SLUG: {"direction": "publish"}},
+            "commands": {"supported": []},
+        }
+    }
+    topic = TWIN_POSE_TOPIC_SLUG.format(twin_uuid=twin.uuid)
+    v0_view = twin.pose.get(timeout=0.0)
+    v0_topics = {
+        TWIN_POSITION_TOPIC_SLUG.format(twin_uuid=twin.uuid),
+        TWIN_ROTATION_TOPIC_SLUG.format(twin_uuid=twin.uuid),
+        TWIN_KINEMATICS_TOPIC_SLUG.format(twin_uuid=twin.uuid),
+    }
+    assert set(twin.client.mqtt._subs) == v0_topics
+
+    view = twin.pose.get(timeout=0.0, version="v1")
+
+    assert set(twin.client.mqtt._subs) == v0_topics | {topic}
+    _inject(
+        twin.client.mqtt,
+        topic,
+        {
+            "source_type": "edge",
+            "frame_id": "base_link",
+            "pose_xyzw": [0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0],
+            "timestamp_ms": 1_773_000_000_000,
+        },
+    )
+
+    assert view.translation_dict() == {"x": 0.1, "y": 0.2, "z": 0.3}
+    assert view.orientation_dict() == {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
+    assert view.frame_id() == "base_link"
+    assert v0_view.pose is None
+
+
+def test_pose_get_v0_reads_measured_tcp_pose_from_state_kinematics() -> None:
+    # CartesianStateMixin publishes the measured TCP pose on state/kinematics
+    # only; twin.pose.get() must keep reading it.
+    twin = _make_locomote_twin()
+    result, thread = _read_pose_async(twin)
+    _inject(
+        twin.client.mqtt,
+        TWIN_KINEMATICS_TOPIC_SLUG.format(twin_uuid=twin.uuid),
+        {
+            "source_type": "edge",
+            "message_type": "cartesian_pose",
+            "cartesian_pose": {
+                "reference_frame": "base_link",
+                "position": {"x": 0.3, "y": -0.1, "z": 0.25},
+                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+            },
+        },
+    )
+    thread.join(timeout=2.0)
+    pose = result[0]
+    assert pose.position.x == 0.3
+    assert pose.position.z == 0.25
+    assert pose.orientation.w == 1.0
+
+
 def test_pose_get_returns_same_live_view() -> None:
     twin = _make_locomote_twin()
     pos_topic = TWIN_POSITION_TOPIC_SLUG.format(twin_uuid=twin.uuid)
@@ -189,12 +253,47 @@ def test_pose_get_does_not_call_prepare_outbound_command() -> None:
     gate.assert_not_called()
 
 
-def test_pose_set_raises_not_implemented() -> None:
+def test_pose_set_v0_publishes_split_position_and_rotation() -> None:
     twin = _make_locomote_twin()
     with patch.object(twin, "_prepare_outbound_command") as gate:
-        with pytest.raises(NotImplementedError, match="pose.set"):
-            twin.pose.set(x=1.0)
+        twin.pose.set([1.0, 2.0, 3.0, 0.0, 0.0, 0.0], frame_id="base_link")
     gate.assert_not_called()
+    first, second = twin.client.mqtt.publish.call_args_list
+    assert first.args[0] == TWIN_POSITION_TOPIC_SLUG.format(twin_uuid=twin.uuid)
+    assert first.args[1]["position"] == {"x": 1.0, "y": 2.0, "z": 3.0}
+    assert first.args[1]["frame_id"] == "base_link"
+    assert second.args[0] == TWIN_ROTATION_TOPIC_SLUG.format(twin_uuid=twin.uuid)
+    assert second.args[1]["rotation"] == {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
+    assert first.args[1]["timestamp_ms"] == second.args[1]["timestamp_ms"]
+
+
+def test_pose_set_v1_publishes_one_direct_pose_payload() -> None:
+    twin = _make_locomote_twin()
+    twin.pose.set(
+        [0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0],
+        version="v1",
+        frame_id="base_link",
+    )
+
+    twin.client.mqtt.publish.assert_called_once()
+    topic, payload = twin.client.mqtt.publish.call_args.args
+    assert topic == TWIN_POSE_TOPIC_SLUG.format(twin_uuid=twin.uuid)
+    assert payload["frame_id"] == "base_link"
+    assert payload["pose_xyzw"] == [0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0]
+    assert isinstance(payload["timestamp_ms"], int)
+
+
+def test_pose_set_v1_requires_frame_and_unit_quaternion() -> None:
+    twin = _make_locomote_twin()
+
+    with pytest.raises(ValueError, match="frame_id"):
+        twin.pose.set([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], version="v1")
+    with pytest.raises(ValueError, match="unit length"):
+        twin.pose.set(
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0],
+            version="v1",
+            frame_id="base_link",
+        )
     twin.client.mqtt.publish.assert_not_called()
 
 
@@ -203,7 +302,7 @@ def test_set_pose_does_not_call_edit_or_rest() -> None:
     with patch.object(twin, "edit_position") as edit_pos:
         with patch.object(twin, "edit_rotation") as edit_rot:
             with patch.object(twin, "_update_state") as update_state:
-                with pytest.raises(NotImplementedError):
+                with pytest.raises(TypeError, match="PoseHandle.set"):
                     twin.set_pose(x=1.0, y=2.0)
     edit_pos.assert_not_called()
     edit_rot.assert_not_called()

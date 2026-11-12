@@ -536,10 +536,12 @@ class SimulationManager(BaseResourceManager):
         returned as is.
 
         Raises:
-            SimulationBackendError: ``simulation_backend_not_enabled`` (HTTP 403)
-                when Isaac Sim is not enabled for the organization, or
+            SimulationBackendError: ``simulation_backend_unsupported`` (HTTP
+                400) for an unknown execution profile, or
                 ``simulation_backend_incompatible`` (HTTP 409) when the scene
                 cannot be bundled; ``blocking_assets`` and ``reasons`` say why.
+                Without write access to the environment the server answers a
+                plain 403.
         """
         try:
             _param = self.api.api_client.param_serialize(

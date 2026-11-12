@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -41,7 +41,7 @@ class RLTaskSceneEntitySchema(BaseModel):
     selectors: Optional[Dict[str, Any]] = None
     entity_cfg: Optional[Dict[str, Any]] = None
     sensors: Optional[List[Dict[str, Any]]] = None
-    include_contacts: StrictBool
+    include_contacts: StrictBool = Field(description="Contact sensing only. When true and no contact sensor targets this entity, the RL export creates an '<entity>__contacts' ContactSensorCfg over the entity's root-body subtree. MJCF <exclude>/<pair> contact filters are always preserved regardless of this flag.")
     include_actuators: StrictBool
     zero_root_pose: StrictBool
     sort_order: StrictInt

@@ -81,8 +81,8 @@ class CapabilityControlSetup(BaseModel):
             return value
 
         for i in value:
-            if i not in set(['keyboard', 'gamepad', 'leader_arm', 'custom_leader_arm']):
-                raise ValueError("each list item must be one of ('keyboard', 'gamepad', 'leader_arm', 'custom_leader_arm')")
+            if i not in set(['keyboard', 'leader_arm', 'custom_leader_arm']):
+                raise ValueError("each list item must be one of ('keyboard', 'leader_arm', 'custom_leader_arm')")
         return value
 
     model_config = ConfigDict(

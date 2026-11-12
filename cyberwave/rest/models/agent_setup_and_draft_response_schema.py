@@ -41,7 +41,7 @@ class AgentSetupAndDraftResponseSchema(BaseModel):
     execution_readiness: Optional[StrictStr] = 'ready'
     missing_requirements: Optional[List[Dict[str, Any]]] = None
     proposed_environment_changes: Optional[List[Dict[str, Any]]] = None
-    applied_setup_changes: Optional[List[Optional[Dict[str, Any]]]] = None
+    applied_setup_changes: Optional[List[Dict[str, Any]]] = None
     proposal: Optional[AgentProposalSchema] = None
     composition_strategy: Optional[StrictStr] = None
     resolved_node_hints: Optional[List[Dict[str, Any]]] = None

@@ -38,6 +38,7 @@ class RLTrainingJobSchema(BaseModel):
     task_spec_hash: StrictStr
     source_bundle_hash: StrictStr
     train_seeds: Optional[List[StrictInt]] = None
+    task_params_overrides: Optional[Dict[str, Any]] = None
     source_revision: StrictStr
     runtime_versions: Optional[Dict[str, Any]] = None
     metrics: Optional[Dict[str, Any]] = None
@@ -47,7 +48,7 @@ class RLTrainingJobSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by_uuid: StrictStr
-    __properties: ClassVar[List[str]] = ["uuid", "rl_task_uuid", "workload_uuid", "produced_checkpoint_uuid", "status", "strategy_key", "strategy_config", "task_spec_hash", "source_bundle_hash", "train_seeds", "source_revision", "runtime_versions", "metrics", "error", "started_at", "completed_at", "created_at", "updated_at", "created_by_uuid"]
+    __properties: ClassVar[List[str]] = ["uuid", "rl_task_uuid", "workload_uuid", "produced_checkpoint_uuid", "status", "strategy_key", "strategy_config", "task_spec_hash", "source_bundle_hash", "train_seeds", "task_params_overrides", "source_revision", "runtime_versions", "metrics", "error", "started_at", "completed_at", "created_at", "updated_at", "created_by_uuid"]
 
     @field_validator('status')
     def status_validate_enum(cls, value):
@@ -137,6 +138,7 @@ class RLTrainingJobSchema(BaseModel):
             "task_spec_hash": obj.get("task_spec_hash"),
             "source_bundle_hash": obj.get("source_bundle_hash"),
             "train_seeds": obj.get("train_seeds"),
+            "task_params_overrides": obj.get("task_params_overrides"),
             "source_revision": obj.get("source_revision"),
             "runtime_versions": obj.get("runtime_versions"),
             "metrics": obj.get("metrics"),

@@ -33,6 +33,9 @@ class PartnerIntegrationCreateSchema(BaseModel):
     """ # noqa: E501
     partner_key: Optional[StrictStr] = 'generic_oauth2'
     integration_name: StrictStr
+    partner_name: Optional[StrictStr] = ''
+    partner_description: Optional[StrictStr] = ''
+    partner_website: Optional[StrictStr] = ''
     authentication_type: Optional[PartnerIntegrationAuthenticationType] = None
     credential_type: Optional[PartnerIntegrationCredentialType] = None
     secret_type: Optional[PartnerIntegrationSecretType] = None
@@ -46,7 +49,7 @@ class PartnerIntegrationCreateSchema(BaseModel):
     password: StrictStr
     oauth_client_secret: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["partner_key", "integration_name", "authentication_type", "credential_type", "secret_type", "grant_type", "token_format", "authorization_endpoint", "token_endpoint", "domain", "integration_client_id", "username", "password", "oauth_client_secret", "metadata"]
+    __properties: ClassVar[List[str]] = ["partner_key", "integration_name", "partner_name", "partner_description", "partner_website", "authentication_type", "credential_type", "secret_type", "grant_type", "token_format", "authorization_endpoint", "token_endpoint", "domain", "integration_client_id", "username", "password", "oauth_client_secret", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -106,6 +109,9 @@ class PartnerIntegrationCreateSchema(BaseModel):
         _obj = cls.model_validate({
             "partner_key": obj.get("partner_key") if obj.get("partner_key") is not None else 'generic_oauth2',
             "integration_name": obj.get("integration_name"),
+            "partner_name": obj.get("partner_name") if obj.get("partner_name") is not None else '',
+            "partner_description": obj.get("partner_description") if obj.get("partner_description") is not None else '',
+            "partner_website": obj.get("partner_website") if obj.get("partner_website") is not None else '',
             "authentication_type": obj.get("authentication_type"),
             "credential_type": obj.get("credential_type"),
             "secret_type": obj.get("secret_type"),

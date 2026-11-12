@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -31,10 +31,13 @@ class MLModelExecutionSummarySchema(BaseModel):
     uuid: StrictStr
     created_at: datetime
     status: StrictStr
+    source: Optional[StrictStr] = 'unknown'
+    metadata: Optional[Dict[str, Any]] = None
+    media_omitted: Optional[StrictBool] = False
     prompt_preview: Optional[StrictStr] = ''
     output_format: Optional[StrictStr] = ''
     latency_ms: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["uuid", "created_at", "status", "prompt_preview", "output_format", "latency_ms"]
+    __properties: ClassVar[List[str]] = ["uuid", "created_at", "status", "source", "metadata", "media_omitted", "prompt_preview", "output_format", "latency_ms"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -95,6 +98,9 @@ class MLModelExecutionSummarySchema(BaseModel):
             "uuid": obj.get("uuid"),
             "created_at": obj.get("created_at"),
             "status": obj.get("status"),
+            "source": obj.get("source") if obj.get("source") is not None else 'unknown',
+            "metadata": obj.get("metadata"),
+            "media_omitted": obj.get("media_omitted") if obj.get("media_omitted") is not None else False,
             "prompt_preview": obj.get("prompt_preview") if obj.get("prompt_preview") is not None else '',
             "output_format": obj.get("output_format") if obj.get("output_format") is not None else '',
             "latency_ms": obj.get("latency_ms")

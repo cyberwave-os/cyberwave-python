@@ -46,11 +46,12 @@ class RLTaskUpdateSchema(BaseModel):
     action_spec: Optional[Dict[str, Any]] = None
     observation_spec: Optional[Dict[str, Any]] = None
     rl_config_spec: Optional[Dict[str, Any]] = None
+    task_params: Optional[Dict[str, Any]] = None
     training_command_spec: Optional[Dict[str, Any]] = None
     inference_command_spec: Optional[Dict[str, Any]] = None
     training_command_setup_enabled: Optional[StrictBool] = None
     inference_command_setup_enabled: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "description", "environment_uuid", "detach_environment", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "task_spec", "action_spec", "observation_spec", "rl_config_spec", "training_command_spec", "inference_command_spec", "training_command_setup_enabled", "inference_command_setup_enabled"]
+    __properties: ClassVar[List[str]] = ["name", "description", "environment_uuid", "detach_environment", "visibility", "scene_cfg_path", "env_cfg_path", "env_cfg_factory", "rl_cfg_path", "rl_cfg_factory", "registry_path", "runtime_target", "runtime_accelerator", "runtime_versions", "policy_interface", "task_spec", "action_spec", "observation_spec", "rl_config_spec", "task_params", "training_command_spec", "inference_command_spec", "training_command_setup_enabled", "inference_command_setup_enabled"]
 
     @field_validator('runtime_target')
     def runtime_target_validate_enum(cls, value):
@@ -206,6 +207,11 @@ class RLTaskUpdateSchema(BaseModel):
         if self.rl_config_spec is None and "rl_config_spec" in self.model_fields_set:
             _dict['rl_config_spec'] = None
 
+        # set to None if task_params (nullable) is None
+        # and model_fields_set contains the field
+        if self.task_params is None and "task_params" in self.model_fields_set:
+            _dict['task_params'] = None
+
         # set to None if training_command_spec (nullable) is None
         # and model_fields_set contains the field
         if self.training_command_spec is None and "training_command_spec" in self.model_fields_set:
@@ -257,6 +263,7 @@ class RLTaskUpdateSchema(BaseModel):
             "action_spec": obj.get("action_spec"),
             "observation_spec": obj.get("observation_spec"),
             "rl_config_spec": obj.get("rl_config_spec"),
+            "task_params": obj.get("task_params"),
             "training_command_spec": obj.get("training_command_spec"),
             "inference_command_spec": obj.get("inference_command_spec"),
             "training_command_setup_enabled": obj.get("training_command_setup_enabled"),

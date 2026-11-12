@@ -304,6 +304,40 @@ def test_actions_wait_polls_until_terminal(monkeypatch):
     assert len(api_client.calls) == 2
 
 
+def test_actions_wait_calls_on_poll_before_each_poll(monkeypatch):
+    api_client = FakeApiClient(
+        {"action_id": "action-1", "status": "queued"},
+        {"action_id": "action-1", "status": "completed"},
+    )
+    actions = ActionsClient(api_client)
+    monkeypatch.setattr("cyberwave.actions.time.sleep", lambda _seconds: None)
+    seen_calls = []
+
+    actions.wait(
+        "action-1",
+        twin_uuid="twin-uuid",
+        timeout=5,
+        poll_interval=0.1,
+        on_poll=lambda: seen_calls.append(len(api_client.calls)),
+    )
+
+    assert seen_calls == [0, 1]
+
+
+def test_actions_wait_stops_when_on_poll_raises(monkeypatch):
+    api_client = FakeApiClient({"action_id": "action-1", "status": "queued"})
+    actions = ActionsClient(api_client)
+    monkeypatch.setattr("cyberwave.actions.time.sleep", lambda _seconds: None)
+
+    def cancel():
+        raise KeyboardInterrupt("canceled")
+
+    with pytest.raises(KeyboardInterrupt):
+        actions.wait("action-1", twin_uuid="twin-uuid", on_poll=cancel)
+
+    assert api_client.calls == []
+
+
 def test_actions_get_status_requires_twin_uuid():
     actions = ActionsClient(FakeApiClient())
 

@@ -35,14 +35,15 @@ class AssetGenerationCreateSchema(BaseModel):
     visibility: Optional[StrictStr] = 'private'
     design_review: Optional[Dict[str, Any]] = None
     strategy: Optional[StrictStr] = 'auto'
-    builder: StrictStr
+    builder: Optional[StrictStr] = None
+    design: Optional[Dict[str, Any]] = None
     position: Optional[List[Union[StrictFloat, StrictInt]]] = None
     dimensions: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None
     source_asset_uuid: Optional[StrictStr] = None
     target_twin_uuid: Optional[StrictStr] = None
     assistant_session_id: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
     review_on_complete: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["name", "prompt", "environment_uuid", "workspace_uuid", "visibility", "design_review", "strategy", "builder", "position", "dimensions", "source_asset_uuid", "target_twin_uuid", "assistant_session_id", "review_on_complete"]
+    __properties: ClassVar[List[str]] = ["name", "prompt", "environment_uuid", "workspace_uuid", "visibility", "design_review", "strategy", "builder", "design", "position", "dimensions", "source_asset_uuid", "target_twin_uuid", "assistant_session_id", "review_on_complete"]
 
     @field_validator('visibility')
     def visibility_validate_enum(cls, value):
@@ -67,6 +68,9 @@ class AssetGenerationCreateSchema(BaseModel):
     @field_validator('builder')
     def builder_validate_enum(cls, value):
         """Validates the enum"""
+        if value is None:
+            return value
+
         if value not in set(['pencil', 'gearbox', 'forklift', 'hinged_enclosure', 'hinged_box', 'deployable_solar_array', 'wind_turbine', 'cement_cyclone', 'generic_enclosure']):
             raise ValueError("must be one of enum values ('pencil', 'gearbox', 'forklift', 'hinged_enclosure', 'hinged_box', 'deployable_solar_array', 'wind_turbine', 'cement_cyclone', 'generic_enclosure')")
         return value
@@ -125,6 +129,16 @@ class AssetGenerationCreateSchema(BaseModel):
         if self.design_review is None and "design_review" in self.model_fields_set:
             _dict['design_review'] = None
 
+        # set to None if builder (nullable) is None
+        # and model_fields_set contains the field
+        if self.builder is None and "builder" in self.model_fields_set:
+            _dict['builder'] = None
+
+        # set to None if design (nullable) is None
+        # and model_fields_set contains the field
+        if self.design is None and "design" in self.model_fields_set:
+            _dict['design'] = None
+
         # set to None if position (nullable) is None
         # and model_fields_set contains the field
         if self.position is None and "position" in self.model_fields_set:
@@ -170,6 +184,7 @@ class AssetGenerationCreateSchema(BaseModel):
             "design_review": obj.get("design_review"),
             "strategy": obj.get("strategy") if obj.get("strategy") is not None else 'auto',
             "builder": obj.get("builder"),
+            "design": obj.get("design"),
             "position": obj.get("position"),
             "dimensions": obj.get("dimensions"),
             "source_asset_uuid": obj.get("source_asset_uuid"),

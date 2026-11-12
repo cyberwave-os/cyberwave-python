@@ -35,6 +35,7 @@ class SkillTeachingRequestSchema(BaseModel):
     environment_uuid: StrictStr
     target_twin_uuid: StrictStr
     rl_task_uuid: Optional[StrictStr] = None
+    task_params_overrides: Optional[Dict[str, Any]] = None
     proposal: Optional[Dict[str, Any]] = None
     proposal_hash: StrictStr
     error: StrictStr
@@ -58,7 +59,7 @@ class SkillTeachingRequestSchema(BaseModel):
     evaluation_summary: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
-    __properties: ClassVar[List[str]] = ["uuid", "status", "objective", "task_family", "environment_uuid", "target_twin_uuid", "rl_task_uuid", "proposal", "proposal_hash", "error", "expires_at", "confirmed_at", "training_job_uuid", "training_status", "training_metrics", "training_error", "checkpoint_uuid", "selected_policy_uuid", "selected_policy_name", "selected_policy_slug", "selected_policy_visibility", "target_twin_name", "current_controller_policy_uuid", "current_controller_policy_name", "policy_bound", "checkpoint_ready", "controller_active", "evaluation_summary", "created_at", "updated_at"]
+    __properties: ClassVar[List[str]] = ["uuid", "status", "objective", "task_family", "environment_uuid", "target_twin_uuid", "rl_task_uuid", "task_params_overrides", "proposal", "proposal_hash", "error", "expires_at", "confirmed_at", "training_job_uuid", "training_status", "training_metrics", "training_error", "checkpoint_uuid", "selected_policy_uuid", "selected_policy_name", "selected_policy_slug", "selected_policy_visibility", "target_twin_name", "current_controller_policy_uuid", "current_controller_policy_name", "policy_bound", "checkpoint_ready", "controller_active", "evaluation_summary", "created_at", "updated_at"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -178,6 +179,7 @@ class SkillTeachingRequestSchema(BaseModel):
             "environment_uuid": obj.get("environment_uuid"),
             "target_twin_uuid": obj.get("target_twin_uuid"),
             "rl_task_uuid": obj.get("rl_task_uuid"),
+            "task_params_overrides": obj.get("task_params_overrides"),
             "proposal": obj.get("proposal"),
             "proposal_hash": obj.get("proposal_hash"),
             "error": obj.get("error"),

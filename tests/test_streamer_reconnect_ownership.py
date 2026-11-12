@@ -5,8 +5,9 @@ connected, by the run loop or by a start command, every retry belongs to the
 monitor: a second offer from the run loop would overwrite (and leak) the peer
 connection a reconnect is building, or undo a stop command. A failed reconnect
 leaves pc None, so the monitor tracks it in ``_reconnect_pending`` instead of
-waiting for a pc that never comes, and a cancelled or capped reconnect parks
-the monitor rather than ending it, so a later start command is watched again.
+waiting for a pc that never comes. Retries never give up on their own and wait
+while MQTT is down, and a cancelled reconnect parks the monitor rather than
+ending it, so a later start command is watched again.
 """
 
 from __future__ import annotations
@@ -211,23 +212,37 @@ async def test_the_monitor_retries_after_a_failed_reconnect(kind, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS, ids=_ids(KINDS))
-async def test_the_monitor_watches_a_stream_restarted_after_the_cap(kind, monkeypatch):
+async def test_the_monitor_keeps_retrying_past_the_fast_attempts(kind, monkeypatch):
+    # An uplink outage outlasts any fixed number of attempts; a stream that
+    # parked after ten would stay dead until the process restarts.
     h = _Harness(kind, monkeypatch)
-    h.fail_below = 10
+    h.fail_below = 14
     task, stop = h.start_monitor()
 
-    await h.spin(2000)
-    assert len(h.starts) == 10
-    assert h.streamer._should_reconnect is False
-    assert not task.done()
+    await h.spin(4000)
 
-    # The operator starts the stream again, and it drops again.
-    await h.streamer._handle_start_command()
-    assert len(h.starts) == 11
-    h.streamer.pc = _failed()
+    assert len(h.starts) == 15
+    assert h.streamer.pc is not None
+    assert h.streamer._should_reconnect is True
+    assert h.streamer._reconnect_pending is False
+    await _finish(task, stop)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", KINDS, ids=_ids(KINDS))
+async def test_the_monitor_holds_off_while_mqtt_is_down(kind, monkeypatch):
+    h = _Harness(kind, monkeypatch)
+    h.streamer.client.connected = False
+    task, stop = h.start_monitor()
+
+    await h.spin()
+    # No offer can be answered without the broker, so none is sent.
+    assert h.starts == []
+
+    h.streamer.client.connected = True
     await h.spin()
 
-    assert len(h.starts) == 12
+    assert h.starts == [0]
     assert h.streamer.pc is not None
     await _finish(task, stop)
 
@@ -238,7 +253,7 @@ async def test_a_stop_command_between_reconnect_attempts_ends_them(kind, monkeyp
     h = _Harness(kind, monkeypatch)
     h.fail_below = 1000
     task, stop = h.start_monitor()
-    # A few failed attempts, well short of the cap of 10.
+    # A few failed attempts.
     await h.spin(15)
     assert h.streamer.pc is None
     assert h.streamer._reconnect_pending is True
@@ -249,7 +264,7 @@ async def test_a_stop_command_between_reconnect_attempts_ends_them(kind, monkeyp
     attempts = len(h.starts)
     await h.spin()
 
-    assert 0 < attempts < 10
+    assert attempts > 0
     assert len(h.starts) == attempts
     assert h.streamer._should_reconnect is False
     assert h.streamer._reconnect_pending is False

@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -29,7 +29,8 @@ class SendDepthTwinEntry(BaseModel):
     """ # noqa: E501
     twin_uuid: StrictStr
     workflow_uuid: StrictStr
-    __properties: ClassVar[List[str]] = ["twin_uuid", "workflow_uuid"]
+    depth_metric: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["twin_uuid", "workflow_uuid", "depth_metric"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -70,6 +71,11 @@ class SendDepthTwinEntry(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if depth_metric (nullable) is None
+        # and model_fields_set contains the field
+        if self.depth_metric is None and "depth_metric" in self.model_fields_set:
+            _dict['depth_metric'] = None
+
         return _dict
 
     @classmethod
@@ -83,7 +89,8 @@ class SendDepthTwinEntry(BaseModel):
 
         _obj = cls.model_validate({
             "twin_uuid": obj.get("twin_uuid"),
-            "workflow_uuid": obj.get("workflow_uuid")
+            "workflow_uuid": obj.get("workflow_uuid"),
+            "depth_metric": obj.get("depth_metric")
         })
         return _obj
 

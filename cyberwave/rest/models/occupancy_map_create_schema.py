@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,7 +28,10 @@ class OccupancyMapCreateSchema(BaseModel):
     Link an existing map (uploaded via POST /maps) to a locomotion twin and trigger the occupancy-map-tf MQTT notification.
     """ # noqa: E501
     map_uuid: StrictStr
-    __properties: ClassVar[List[str]] = ["map_uuid"]
+    navigation: Optional[Dict[str, Any]] = None
+    fiducial_landmarks: Optional[Dict[str, Any]] = None
+    solved_only: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["map_uuid", "navigation", "fiducial_landmarks", "solved_only"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -69,6 +72,16 @@ class OccupancyMapCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if navigation (nullable) is None
+        # and model_fields_set contains the field
+        if self.navigation is None and "navigation" in self.model_fields_set:
+            _dict['navigation'] = None
+
+        # set to None if fiducial_landmarks (nullable) is None
+        # and model_fields_set contains the field
+        if self.fiducial_landmarks is None and "fiducial_landmarks" in self.model_fields_set:
+            _dict['fiducial_landmarks'] = None
+
         return _dict
 
     @classmethod
@@ -81,7 +94,10 @@ class OccupancyMapCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "map_uuid": obj.get("map_uuid")
+            "map_uuid": obj.get("map_uuid"),
+            "navigation": obj.get("navigation"),
+            "fiducial_landmarks": obj.get("fiducial_landmarks"),
+            "solved_only": obj.get("solved_only") if obj.get("solved_only") is not None else False
         })
         return _obj
 

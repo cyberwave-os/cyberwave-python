@@ -34,7 +34,8 @@ class APITokenCreateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     expires_at: Optional[datetime] = None
     use_existing: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["scope_workspace_uuids", "name", "service_role", "metadata", "expires_at", "use_existing"]
+    a2a_enabled: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["scope_workspace_uuids", "name", "service_role", "metadata", "expires_at", "use_existing", "a2a_enabled"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -107,7 +108,8 @@ class APITokenCreateSchema(BaseModel):
             "service_role": obj.get("service_role"),
             "metadata": obj.get("metadata"),
             "expires_at": obj.get("expires_at"),
-            "use_existing": obj.get("use_existing") if obj.get("use_existing") is not None else False
+            "use_existing": obj.get("use_existing") if obj.get("use_existing") is not None else False,
+            "a2a_enabled": obj.get("a2a_enabled") if obj.get("a2a_enabled") is not None else False
         })
         return _obj
 

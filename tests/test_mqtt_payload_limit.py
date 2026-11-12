@@ -415,6 +415,7 @@ def test_a_refused_puback_completes_the_publish_instead_of_killing_the_loop() ->
     )
     info = client.publish("a/b", b"x", qos=1)
     client._in_packet = {
+        "command": mqtt.PUBACK,
         "remaining_length": 3,
         "packet": struct.pack("!HB", info.mid, _paho_compat.PACKET_TOO_LARGE),
     }
@@ -448,6 +449,7 @@ def test_a_refused_pubrec_is_reported_and_paho_still_handles_it() -> None:
     published = []
     client.on_publish = lambda *args: published.append(args)
     client._in_packet = {
+        "command": mqtt.PUBREC,
         "remaining_length": 3,
         "packet": struct.pack("!HB", mid, _paho_compat.PACKET_TOO_LARGE),
     }
@@ -486,6 +488,7 @@ def test_an_accepting_pubrec_reports_nothing(remaining_length, body) -> None:
     reports: list = []
     client, mid = _qos2_client(reports)
     client._in_packet = {
+        "command": mqtt.PUBREC,
         "remaining_length": remaining_length,
         "packet": struct.pack("!H", mid) + body,
     }
@@ -506,6 +509,7 @@ def test_the_client_logs_a_refused_qos2_publish(caplog) -> None:
     client = _client(protocol=mqtt.MQTTv5)
     mid = client.client.publish("a/b", b"x", qos=2).mid
     client.client._in_packet = {
+        "command": mqtt.PUBREC,
         "remaining_length": 3,
         "packet": struct.pack("!HB", mid, _paho_compat.PACKET_TOO_LARGE),
     }

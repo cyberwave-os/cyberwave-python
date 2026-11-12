@@ -32,6 +32,7 @@ class TaskExecutionSchema(BaseModel):
     task_uuid: StrictStr
     task_name: StrictStr
     twin_uuid: StrictStr
+    twin_name: StrictStr
     mission_execution_uuid: Optional[StrictStr] = None
     mission_step: Optional[StrictInt] = None
     parameters: Dict[str, Any]
@@ -43,7 +44,10 @@ class TaskExecutionSchema(BaseModel):
     completed_at: Optional[datetime] = None
     result: Dict[str, Any]
     error_message: StrictStr
-    __properties: ClassVar[List[str]] = ["uuid", "task_uuid", "task_name", "twin_uuid", "mission_execution_uuid", "mission_step", "parameters", "status", "action_id", "external_reference", "created_at", "started_at", "completed_at", "result", "error_message"]
+    held_object: Optional[StrictStr] = None
+    checks: Optional[List[StrictStr]] = None
+    progress: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["uuid", "task_uuid", "task_name", "twin_uuid", "twin_name", "mission_execution_uuid", "mission_step", "parameters", "status", "action_id", "external_reference", "created_at", "started_at", "completed_at", "result", "error_message", "held_object", "checks", "progress"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -104,6 +108,11 @@ class TaskExecutionSchema(BaseModel):
         if self.completed_at is None and "completed_at" in self.model_fields_set:
             _dict['completed_at'] = None
 
+        # set to None if held_object (nullable) is None
+        # and model_fields_set contains the field
+        if self.held_object is None and "held_object" in self.model_fields_set:
+            _dict['held_object'] = None
+
         return _dict
 
     @classmethod
@@ -120,6 +129,7 @@ class TaskExecutionSchema(BaseModel):
             "task_uuid": obj.get("task_uuid"),
             "task_name": obj.get("task_name"),
             "twin_uuid": obj.get("twin_uuid"),
+            "twin_name": obj.get("twin_name"),
             "mission_execution_uuid": obj.get("mission_execution_uuid"),
             "mission_step": obj.get("mission_step"),
             "parameters": obj.get("parameters"),
@@ -130,7 +140,10 @@ class TaskExecutionSchema(BaseModel):
             "started_at": obj.get("started_at"),
             "completed_at": obj.get("completed_at"),
             "result": obj.get("result"),
-            "error_message": obj.get("error_message")
+            "error_message": obj.get("error_message"),
+            "held_object": obj.get("held_object"),
+            "checks": obj.get("checks"),
+            "progress": obj.get("progress")
         })
         return _obj
 

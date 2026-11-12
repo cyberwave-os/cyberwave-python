@@ -16,8 +16,9 @@ from cyberwave.driver.interface.registry import DriverInterfaceRegistry
 class _FakeKin:
     """Stand-in for BaseKinematicsManipulator with deterministic outputs."""
 
-    def __init__(self, config: ArmKinematicsConfig) -> None:
+    def __init__(self, config: ArmKinematicsConfig, *, solve: bool = True) -> None:
         self.config = config
+        self.solve = solve
 
     def fk(self, positions):
         return np.eye(4)
@@ -30,7 +31,7 @@ class _FakeKin:
 
     def ik(self, start, target):
         # Echo a fixed reachable solution for the arm joints.
-        return {n: 0.25 for n in self.config.arm_joints}
+        return {n: 0.25 for n in self.config.arm_joints} if self.solve else None
 
     def joint_limits(self):
         return {n: (-1.0, 1.0) for n in self.config.arm_joints}
@@ -42,8 +43,13 @@ def _full_cfg() -> ArmKinematicsConfig:
         ee_frame="tool",
         arm_joints=("joint1", "joint2"),
         tool_axes={"forward": np.array([0.0, 0.0, 1.0])},
-        rot_axes={"yaw": np.array([-1.0, 0.0, 0.0]), "pitch": np.array([0.0, -1.0, 0.0])},
-        gripper=GripperConfig(names=("jg",), open=0.0, closed=0.04, mimic={"jg_mimic": -1.0}),
+        rot_axes={
+            "yaw": np.array([-1.0, 0.0, 0.0]),
+            "pitch": np.array([0.0, -1.0, 0.0]),
+        },
+        gripper=GripperConfig(
+            names=("jg",), open=0.0, closed=0.04, mimic={"jg_mimic": -1.0}
+        ),
         base_joint="joint1",
     )
 
@@ -60,10 +66,12 @@ class _Driver(ArmCapabilityMixin, _TerminalBase):
 
     use_base_commands = True
 
-    def __init__(self, cfg: ArmKinematicsConfig | None) -> None:
+    def __init__(self, cfg: ArmKinematicsConfig | None, *, solve: bool = True) -> None:
         self._cfg = cfg
+        self._solve = solve
         self.applied: list[dict[str, float]] = []
         self.failures: list[tuple[str | None, str]] = []
+        self.speeds: list[float | None] = []
         self.home_pending = False
         self._joints = {"joint1": 0.5, "joint2": 0.0}
         self._arm_kin_obj = None
@@ -82,9 +90,12 @@ class _Driver(ArmCapabilityMixin, _TerminalBase):
     def _on_arm_command_failed(self, command, reason):
         self.failures.append((command, reason))
 
+    def _set_command_speed(self, scale):
+        self.speeds.append(scale)
+
     # override kinematics factory to avoid pinocchio
     def _build_arm_kinematics(self, config):
-        return _FakeKin(config)
+        return _FakeKin(config, solve=self._solve)
 
     # capture home flag (mixin sets self._home_pending)
     @property
@@ -117,14 +128,23 @@ def test_full_config_registers_all_commands() -> None:
     driver = _Driver(_full_cfg())
     names = _registered_command_names(driver)
     assert {
-        "ee_move", "ee_rotate_left", "ee_rotate_right", "ee_rotate_up",
-        "ee_rotate_down", "base_rotate_left", "base_rotate_right",
-        "grip", "release", "home",
+        "ee_move",
+        "ee_rotate_left",
+        "ee_rotate_right",
+        "ee_rotate_up",
+        "ee_rotate_down",
+        "base_rotate_left",
+        "base_rotate_right",
+        "grip",
+        "release",
+        "home",
     } == names
 
 
 def test_partial_config_gates_commands() -> None:
-    cfg = ArmKinematicsConfig(urdf_path="", ee_frame="", arm_joints=())  # nothing but home
+    cfg = ArmKinematicsConfig(
+        urdf_path="", ee_frame="", arm_joints=()
+    )  # nothing but home
     driver = _Driver(cfg)
     names = _registered_command_names(driver)
     assert names == {"home"}
@@ -184,28 +204,28 @@ def test_gripper_hold_defaults_to_open() -> None:
 
 def test_latch_and_hold_closed() -> None:
     d = _Driver(_full_cfg())
-    d.latch_gripper({"jg": 0.04})           # commanded closed
+    d.latch_gripper({"jg": 0.04})  # commanded closed
     assert d.gripper_hold() == {"jg": 0.04}
 
 
 def test_latch_ignores_absent_gripper() -> None:
     d = _Driver(_full_cfg())
-    d.latch_gripper({"joint1": 0.5})        # no gripper joint present
+    d.latch_gripper({"joint1": 0.5})  # no gripper joint present
     assert d.gripper_hold() == {"jg": 0.0}  # stays default open
 
 
 def test_binarize_snaps_gripper_and_present_mimic() -> None:
     d = _Driver(_full_cfg())
     out = d.binarize_gripper({"joint1": 0.5, "jg": 0.03, "jg_mimic": -0.03})
-    assert out["joint1"] == 0.5             # untouched
-    assert out["jg"] == 0.04                # 0.03 nearer closed(0.04) than open(0.0)
-    assert out["jg_mimic"] == -0.04         # factor -1.0 * snapped
+    assert out["joint1"] == 0.5  # untouched
+    assert out["jg"] == 0.04  # 0.03 nearer closed(0.04) than open(0.0)
+    assert out["jg_mimic"] == -0.04  # factor -1.0 * snapped
 
 
 def test_binarize_leaves_absent_mimic_absent() -> None:
     d = _Driver(_full_cfg())
     out = d.binarize_gripper({"jg": 0.001})  # mimic not present
-    assert out["jg"] == 0.0                  # nearer open
+    assert out["jg"] == 0.0  # nearer open
     assert "jg_mimic" not in out
 
 
@@ -228,6 +248,7 @@ def test_on_arm_command_failed_emits_throttled_alert():
     class _D(ArmCapabilityMixin):
         def __init__(self):
             self.alerts = []
+
         def create_twin_alert(self, name, **kwargs):
             self.alerts.append((name, kwargs.get("alert_type")))
 
@@ -235,3 +256,40 @@ def test_on_arm_command_failed_emits_throttled_alert():
     d._on_arm_command_failed("ee_move", "out of reach")
     d._on_arm_command_failed("ee_move", "out of reach")  # throttled → no 2nd alert
     assert d.alerts == [("ik_failed", "ik_failed")]
+
+
+def test_ee_move_forwards_speed_scale() -> None:
+    d = _Driver(_full_cfg())
+    d._on_arm_command({"command": "ee_move", "data": {"forward": 0.05, "speed": 0.2}})
+    assert d.speeds == [0.2]
+    assert d.applied  # targets still applied
+
+
+def test_ee_move_without_speed_passes_none() -> None:
+    d = _Driver(_full_cfg())
+    d._on_arm_command({"command": "ee_move", "data": {"forward": 0.05}})
+    assert d.speeds == [None]
+
+
+def test_non_numeric_speed_is_ignored_not_fatal() -> None:
+    d = _Driver(_full_cfg())
+    d._on_arm_command(
+        {"command": "ee_move", "data": {"forward": 0.05, "speed": "fast"}}
+    )
+    assert d.speeds == [None]
+    assert d.applied
+
+
+def test_speed_is_not_set_when_ik_fails() -> None:
+    d = _Driver(_full_cfg(), solve=False)
+    d._on_arm_command({"command": "ee_move", "data": {"forward": 9.0, "speed": 0.2}})
+    assert d.speeds == []
+    assert d.failures
+
+
+def test_ee_move_spec_declares_speed_arg() -> None:
+    d = _Driver(_full_cfg())
+    specs = dict(d._arm_command_specs(d.arm_config()))
+    move_speed = next(arg for arg in specs["ee_move"] if arg.name == "speed")
+    rotate_speed = next(arg for arg in specs["ee_rotate_left"] if arg.name == "speed")
+    assert move_speed.default == rotate_speed.default == 0.5

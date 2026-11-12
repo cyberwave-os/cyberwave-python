@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,9 +28,9 @@ class VendorPublicContentSchema(BaseModel):
     VendorPublicContentSchema
     """ # noqa: E501
     models: List[Dict[str, Any]]
-    workflows: List[Optional[Dict[str, Any]]]
-    controllers: List[Optional[Dict[str, Any]]]
-    environments: List[Optional[Dict[str, Any]]]
+    workflows: List[Dict[str, Any]]
+    controllers: List[Dict[str, Any]]
+    environments: List[Dict[str, Any]]
     __properties: ClassVar[List[str]] = ["models", "workflows", "controllers", "environments"]
 
     model_config = ConfigDict(

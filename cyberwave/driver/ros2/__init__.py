@@ -20,6 +20,7 @@ from .message_payload import (
     joint_positions_from_transport_payload,
     ros_joint_state_to_transport_payload,
     ros_message_to_transport_payload,
+    ros_pose_stamped_to_twin_pose_payload,
 )
 from .topic_discovery import RosTopicDiscoveryError, resolve_ros_message_class
 from .topic_spec import Ros2TopicSpec
@@ -34,6 +35,10 @@ __all__ = [
     "joint_positions_from_transport_payload",
     "ros_joint_state_to_transport_payload",
     "ros_message_to_transport_payload",
+    "ros_pose_stamped_to_twin_pose_payload",
+    "ArbiterNodeSpec",
+    "TrajectoryExecutor",
+    "build_motion_arbiter_node_class",
     "NodeManifest",
     "ManifestParam",
     "ManifestTopic",
@@ -57,4 +62,14 @@ def __getattr__(name: str):  # noqa: ANN001
         from .base_ros2_driver import BaseROS2Driver
 
         return BaseROS2Driver
+    # Lazy like BaseROS2Driver: both pull in the arbiter / action message types
+    # only when a driver actually builds a node or sends a trajectory.
+    if name in ("ArbiterNodeSpec", "build_motion_arbiter_node_class"):
+        from . import arbiter_node
+
+        return getattr(arbiter_node, name)
+    if name == "TrajectoryExecutor":
+        from .trajectory_executor import TrajectoryExecutor
+
+        return TrajectoryExecutor
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

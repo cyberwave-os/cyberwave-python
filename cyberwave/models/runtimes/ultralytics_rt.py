@@ -25,6 +25,7 @@ from typing import Any
 
 import numpy as np
 
+from cyberwave.models.companions import stage_companion_assets
 from cyberwave.models.runtimes.base import ModelRuntime
 from cyberwave.models.types import (
     BoundingBox,
@@ -252,6 +253,21 @@ class UltralyticsRuntime(ModelRuntime):
         writable_dir = getattr(model_handle, "_cw_writable_dir", None)
         if not isinstance(writable_dir, (str, PurePath)):
             writable_dir = None
+        if writable_dir:
+            # Ultralytics looks the text encoder up by bare name in the current
+            # directory. Work in a subfolder of the models folder, never in the models
+            # folder itself: there the companion is cached as a folder of the same name
+            # (<models>/mobileclip2_b.ts/), which would be found instead of the file.
+            work_dir = Path(writable_dir) / ".cw-prompt"
+            try:
+                work_dir.mkdir(exist_ok=True)
+            except OSError:
+                work_dir = Path(writable_dir)
+            writable_dir = work_dir
+            try:
+                stage_companion_assets(work_dir)
+            except Exception:  # never the reason a prompt is not applied
+                _logger.debug("Could not stage companion assets", exc_info=True)
         old_cwd = os.getcwd() if writable_dir else None
         try:
             try:

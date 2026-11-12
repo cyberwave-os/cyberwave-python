@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,7 +28,8 @@ class EnvironmentNavigationSettingsPatchSchema(BaseModel):
     EnvironmentNavigationSettingsPatchSchema
     """ # noqa: E501
     navigation: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["navigation"]
+    expected_navigation: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["navigation", "expected_navigation"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -69,6 +70,11 @@ class EnvironmentNavigationSettingsPatchSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if expected_navigation (nullable) is None
+        # and model_fields_set contains the field
+        if self.expected_navigation is None and "expected_navigation" in self.model_fields_set:
+            _dict['expected_navigation'] = None
+
         return _dict
 
     @classmethod
@@ -81,7 +87,8 @@ class EnvironmentNavigationSettingsPatchSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "navigation": obj.get("navigation")
+            "navigation": obj.get("navigation"),
+            "expected_navigation": obj.get("expected_navigation")
         })
         return _obj
 

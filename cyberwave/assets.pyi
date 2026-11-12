@@ -21,7 +21,7 @@ class TheRobotStudioso101Twin(Twin):
 
 class BerkeleyberkeleyHumanoidTwin(Twin):
     """
-    Digital twin for Berkeley Humanoid Lite
+    Digital twin for Berkeley Humanoid
     Registry ID: berkeley/berkeley-humanoid
     """
     def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
@@ -1253,41 +1253,10 @@ class Cyberwavego2BackpackTwin(Twin):
     """
     pass
 
-class ObsbotobsbotTiny3Twin(Twin):
-    """
-    Digital twin for Obsbot Tiny 3
-    Registry ID: obsbot/obsbot-tiny-3
-    """
-    @property
-    def joints(self) -> JointsHandle:
-        """Controller for robot joints"""
-        ...
-
 class CyberwavedoosanA0509sTwin(Twin):
     """
     Digital twin for Doosan A0509S
     Registry ID: cyberwave/doosan-a0509s
-    """
-    pass
-
-class CyberwavedoosanA0509s2Twin(Twin):
-    """
-    Digital twin for Doosan A0509S
-    Registry ID: cyberwave/doosan-a0509s-2
-    """
-    pass
-
-class CyberwavedoosanA0509s3Twin(Twin):
-    """
-    Digital twin for Doosan A0509S
-    Registry ID: cyberwave/doosan-a0509s-3
-    """
-    pass
-
-class CyberwavedoosanA0509s4Twin(Twin):
-    """
-    Digital twin for Doosan A0509S
-    Registry ID: cyberwave/doosan-a0509s-4
     """
     pass
 
@@ -1296,9 +1265,11 @@ class ModalaistarlingMaxTwin(Twin):
     Digital twin for ModalAI Starling 2 Max
     Registry ID: modalai/starling-max
     """
-    @property
-    def joints(self) -> JointsHandle:
-        """Controller for robot joints"""
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
         ...
 
 class MovishsWorkspaceg1CyberwaveTwin(Twin):
@@ -2876,6 +2847,12 @@ class PollenmicroduckTwin(Twin):
     Digital twin for Microduck
     Registry ID: pollen/microduck
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -2893,6 +2870,12 @@ class ParrotanafiAiTwin(Twin):
     Digital twin for ANAFI Ai
     Registry ID: parrot/anafi-ai
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -2952,6 +2935,230 @@ class DeepRoboticslynxM20Twin(Twin):
     def move_to(self, position: list[float]) -> None:
         """Move to a specific position [x, y, z]"""
         ...
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Hitachisdslserver2uTwin(Twin):
+    """
+    Digital twin for server-2u
+    Registry ID: hitachisdsl/server-2u
+    """
+    pass
+
+class PrensiliamiaHandTwin(Twin):
+    """
+    Digital twin for Mia Hand
+    Registry ID: prensilia/mia-hand
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class AuteldragonfishTwin(Twin):
+    """
+    Digital twin for Dragonfish
+    Registry ID: autel/dragonfish
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Djimatrice4eTwin(Twin):
+    """
+    Digital twin for Matrice 4E
+    Registry ID: dji/matrice-4e
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class PndboticsadamLiteTwin(Twin):
+    """
+    Digital twin for PNDbotics Adam Lite
+    Registry ID: pndbotics/adam_lite
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ApptronikapolloTwin(Twin):
+    """
+    Digital twin for Apptronik Apollo
+    Registry ID: apptronik/apollo
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class ArxRoboticsxl5Twin(Twin):
+    """
+    Digital twin for ARX L5
+    Registry ID: arx-roboticsx/l5
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Fanuccrx5iaTwin(Twin):
+    """
+    Digital twin for FANUC CRX-5iA
+    Registry ID: fanuc/crx-5ia
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class IntelrealsenseD435iTwin(Twin):
+    """
+    Digital twin for RealSense D435i
+    Registry ID: intel/realsense-d435i
+    """
+    pass
+
+class FrankaRoboticsfr3V2Twin(Twin):
+    """
+    Digital twin for Franka Research 3 v2 (FR3 v2)
+    Registry ID: franka_robotics/fr3_v2
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Ufactorylite6Twin(Twin):
+    """
+    Digital twin for UFACTORY Lite 6
+    Registry ID: ufactory/lite6
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Fouriern1Twin(Twin):
+    """
+    Digital twin for Fourier N1
+    Registry ID: fourier/n1
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Robotisomy3mTwin(Twin):
+    """
+    Digital twin for ROBOTIS OMY-3M
+    Registry ID: robotis/omy_3m
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class SeeedrebotDevarmTwin(Twin):
+    """
+    Digital twin for Seeed reBot DevArm
+    Registry ID: seeed/rebot-devarm
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class FlexivRoboticsrizon4sTwin(Twin):
+    """
+    Digital twin for Flexiv Rizon 4s
+    Registry ID: flexiv_robotics/rizon_4s
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Robotiq2f85Twin(Twin):
+    """
+    Digital twin for Robotiq 2F-85
+    Registry ID: robotiq/2f-85
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class TheRobotStudioso100Twin(Twin):
+    """
+    Digital twin for SO-100
+    Registry ID: the-robot-studio/so100
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HelloRobotstretch3Twin(Twin):
+    """
+    Digital twin for Hello Robot Stretch 3
+    Registry ID: hello-robot/stretch_3
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class PalRoboticstiagoDualTwin(Twin):
+    """
+    Digital twin for PAL Robotics TIAGo Dual
+    Registry ID: pal_robotics/tiago_dual
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class HaochenShitoddlerbot2xmTwin(Twin):
+    """
+    Digital twin for ToddlerBot 2XM
+    Registry ID: haochen-shi/toddlerbot_2xm
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class TrossenRoboticswxaiTwin(Twin):
+    """
+    Digital twin for Trossen WidowX AI
+    Registry ID: trossen-robotics/wxai
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class Ufactoryxarm7Twin(Twin):
+    """
+    Digital twin for UFACTORY xArm 7
+    Registry ID: ufactory/xarm7
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class I2rtyamTwin(Twin):
+    """
+    Digital twin for I2RT YAM
+    Registry ID: i2rt/yam
+    """
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -3074,11 +3281,7 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "cyberwave/electric-substation": CyberwaveelectricSubstationTwin,
     "mls-team/obsbot-tiny-3": MlsTeamobsbotTiny3Twin,
     "cyberwave/go2-backpack": Cyberwavego2BackpackTwin,
-    "obsbot/obsbot-tiny-3": ObsbotobsbotTiny3Twin,
     "cyberwave/doosan-a0509s": CyberwavedoosanA0509sTwin,
-    "cyberwave/doosan-a0509s-2": CyberwavedoosanA0509s2Twin,
-    "cyberwave/doosan-a0509s-3": CyberwavedoosanA0509s3Twin,
-    "cyberwave/doosan-a0509s-4": CyberwavedoosanA0509s4Twin,
     "modalai/starling-max": ModalaistarlingMaxTwin,
     "starling-max": ModalaistarlingMaxTwin,
     "movishs-workspace/g1-cyberwave": MovishsWorkspaceg1CyberwaveTwin,
@@ -3223,4 +3426,27 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "vector-robotics/guardian": VectorRoboticsguardianTwin,
     "cyberwave/server-rack-42u": CyberwaveserverRack42uTwin,
     "deep-robotics/lynx-m20": DeepRoboticslynxM20Twin,
+    "hitachisdsl/server-2u": Hitachisdslserver2uTwin,
+    "prensilia/mia-hand": PrensiliamiaHandTwin,
+    "autel/dragonfish": AuteldragonfishTwin,
+    "dji/matrice-4e": Djimatrice4eTwin,
+    "pndbotics/adam_lite": PndboticsadamLiteTwin,
+    "apptronik/apollo": ApptronikapolloTwin,
+    "arx-roboticsx/l5": ArxRoboticsxl5Twin,
+    "fanuc/crx-5ia": Fanuccrx5iaTwin,
+    "intel/realsense-d435i": IntelrealsenseD435iTwin,
+    "franka_robotics/fr3_v2": FrankaRoboticsfr3V2Twin,
+    "ufactory/lite6": Ufactorylite6Twin,
+    "fourier/n1": Fouriern1Twin,
+    "robotis/omy_3m": Robotisomy3mTwin,
+    "seeed/rebot-devarm": SeeedrebotDevarmTwin,
+    "flexiv_robotics/rizon_4s": FlexivRoboticsrizon4sTwin,
+    "robotiq/2f-85": Robotiq2f85Twin,
+    "the-robot-studio/so100": TheRobotStudioso100Twin,
+    "hello-robot/stretch_3": HelloRobotstretch3Twin,
+    "pal_robotics/tiago_dual": PalRoboticstiagoDualTwin,
+    "haochen-shi/toddlerbot_2xm": HaochenShitoddlerbot2xmTwin,
+    "trossen-robotics/wxai": TrossenRoboticswxaiTwin,
+    "ufactory/xarm7": Ufactoryxarm7Twin,
+    "i2rt/yam": I2rtyamTwin,
 }

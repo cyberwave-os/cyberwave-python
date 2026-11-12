@@ -29,22 +29,34 @@ from ..interface.args import TELEOP_MODES
 from ..kinematics import ArmKinematicsConfig
 from ..kinematics.arm.controller import ArmController
 from ..support.throttle import Throttle
+from .cartesian import (
+    cartesian_command_specs,
+    is_cartesian_jog,
+    solve_cartesian_jog,
+)
 
 logger = logging.getLogger(__name__)
 
-# command name -> rot axis + sign for IK-driven orientation commands.
-_EE_ROTATIONS: dict[str, tuple[str, float]] = {
-    "ee_rotate_left": ("yaw", 1.0),
-    "ee_rotate_right": ("yaw", -1.0),
-    "ee_rotate_up": ("pitch", 1.0),
-    "ee_rotate_down": ("pitch", -1.0),
-}
-# base-joint yaw nudge (no IK).
+# base-joint yaw nudge (no IK) — not cartesian, so it stays here rather than
+# moving to cartesian.py with the ee_* commands.
 _BASE_ROTATIONS: dict[str, float] = {
     "base_rotate_left": 1.0,
     "base_rotate_right": -1.0,
 }
-_EE_TRANSLATE = "ee_move"
+
+
+def _speed_scale(data: dict[str, Any]) -> float | None:
+    """Clamp ``data["speed"]`` to (0, 1]; None when absent or unparseable."""
+    raw = data.get("speed")
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if not value > 0.0:
+        return None
+    return min(1.0, value)
 
 
 def execute_arm_command(
@@ -55,6 +67,7 @@ def execute_arm_command(
     *,
     apply_targets: Callable[[dict[str, float]], None],
     on_failed: Callable[[str | None, str], None],
+    set_speed: Callable[[float | None], None] | None = None,
 ) -> bool:
     """Run one motion/gripper command against *controller*.
 
@@ -77,19 +90,15 @@ def execute_arm_command(
         angle = float(data.get("angle", 0.0)) * _BASE_ROTATIONS[command]
         apply_targets(controller.base_rotate(current, angle))
         return True
-    if command == _EE_TRANSLATE or command in _EE_ROTATIONS:
-        frame = str(data.get("frame", "tool"))
-        if command == _EE_TRANSLATE:
-            components = {k: float(data.get(k, 0.0)) for k in ("forward", "up", "left")}
-            solution = controller.translate(current, components, frame=frame)
-        else:
-            axis, sign = _EE_ROTATIONS[command]
-            solution = controller.rotate(
-                current, axis, float(data.get("angle", 0.0)) * sign, frame=frame
-            )
+    if is_cartesian_jog(command):
+        solution = solve_cartesian_jog(controller, command, data, current)
         if solution is None:
             on_failed(command, "IK did not converge / out of reach")
             return True
+        # Only after a successful solve: a failed IK must not leave the driver's
+        # velocity template mutated.
+        if set_speed is not None:
+            set_speed(_speed_scale(data))
         apply_targets(solution)
         return True
     return False
@@ -108,6 +117,14 @@ class _ArmSeams:
     def _current_joint_positions(self) -> dict[str, float]:
         """Return the arm's current joint positions (read seam)."""
         return super()._current_joint_positions()  # type: ignore[misc]
+
+    def _set_command_speed(self, scale: float | None) -> None:
+        """Apply a 0–1 speed scale to the next joint targets (optional seam).
+
+        Default is a no-op: drivers that do not expose a velocity control keep
+        their previous behaviour, and ``_apply_joint_targets`` keeps its
+        single-argument signature so no existing override breaks.
+        """
 
     def _build_arm_kinematics(self, config: ArmKinematicsConfig) -> Any:
         from ..kinematics import BaseKinematicsManipulator
@@ -189,34 +206,37 @@ class ArmCapabilityMixin(_ArmSeams):
             iface.add_listener(
                 cmd_topic,
                 CallbackGroup(callback=self._on_arm_command),
-                command=CommandArgs(name=name, args=tuple(args)),
+                command=CommandArgs(
+                    name=name,
+                    args=tuple(args),
+                    description=self._arm_command_description(name),
+                ),
                 operation_modes=TELEOP_MODES,
             )
 
     def _arm_command_specs(
         self, cfg: ArmKinematicsConfig
     ) -> list[tuple[str, list[CommandArg]]]:
-        dist = [
-            CommandArg("forward", 0.0, "m"),
-            CommandArg("up", 0.0, "m"),
-            CommandArg("left", 0.0, "m"),
-            CommandArg("frame", "tool"),
+        # base_rotate_* runs no IK and carries no speed; the cartesian rows come
+        # from cartesian.py so this table cannot drift from the dual-arm one.
+        base_angle = [CommandArg("angle", 0.0, "rad")]
+        specs: list[tuple[str, list[CommandArg]]] = [
+            (name, list(args)) for name, args in cartesian_command_specs(cfg)
         ]
-        angle = [CommandArg("angle", 0.0, "rad")]
-        specs: list[tuple[str, list[CommandArg]]] = []
-        if cfg.supports_ee:
-            specs.append((_EE_TRANSLATE, dist))
-            for name in _EE_ROTATIONS:
-                specs.append((name, list(angle)))
         if cfg.supports_base_rotate:
             for name in _BASE_ROTATIONS:
-                specs.append((name, list(angle)))
+                specs.append((name, list(base_angle)))
         if cfg.supports_gripper:
             specs.append(("grip", [CommandArg("force", 1.0)]))
             specs.append(("release", []))
         if cfg.supports_home:
             specs.append(("home", []))
         return specs
+
+    def _arm_command_description(self, name: str) -> str:
+        """Catalog description hook for a driver-specific arm command."""
+        del name
+        return ""
 
     # ── dispatch ─────────────────────────────────────────────────────────────
 
@@ -240,6 +260,7 @@ class ArmCapabilityMixin(_ArmSeams):
                 self._current_joint_positions(),
                 apply_targets=self._apply_joint_targets,
                 on_failed=self._on_arm_command_failed,
+                set_speed=self._set_command_speed,
             ):
                 return
             logger.warning("Arm: unknown command %r", command)

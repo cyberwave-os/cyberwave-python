@@ -30,7 +30,7 @@ class AgentSetupAndDraftSchema(BaseModel):
     Request schema for confirmed setup application plus workflow drafting.
     """ # noqa: E501
     prompt: StrictStr
-    confirmed_actions: Optional[List[Optional[Dict[str, Any]]]] = None
+    confirmed_actions: Optional[List[Dict[str, Any]]] = None
     agent_plan: Optional[Dict[str, Any]] = None
     mlmodel_uuid: Optional[StrictStr] = None
     twin_uuid: Optional[StrictStr] = None

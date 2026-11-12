@@ -89,7 +89,7 @@ class BaseDriver(
   **Preferred construction**::
 
         twin = cw.twin("intel/realsensed455", twin_id="...")
-        twin.driver.set_schema(driver.manifest)  # before run(), recommended
+        twin.driver.set_schema(driver.manifest, merge=False)  # before run()
         MyDriver(twin).run()
 
     **Operator entrypoints** (usually called from ``__main__`` or a demo script):
@@ -596,6 +596,8 @@ class BaseDriver(
             driver.request_shutdown()
             await run_task  # the original asyncio.create_task(driver.run_async())
         """
+        if not self._shutdown.is_set():
+            logger.info("Driver shutdown requested")
         self._shutdown.set()
 
     # ── Lifecycle entrypoint (not intended to be overridden) ─────────────────

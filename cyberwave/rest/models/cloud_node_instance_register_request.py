@@ -29,7 +29,8 @@ class CloudNodeInstanceRegisterRequest(BaseModel):
     """ # noqa: E501
     profile_slug: StrictStr
     environment_uuid: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["profile_slug", "environment_uuid"]
+    hardware_qualification: Optional[Dict[str, Any]] = None
+    __properties: ClassVar[List[str]] = ["profile_slug", "environment_uuid", "hardware_qualification"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -75,6 +76,11 @@ class CloudNodeInstanceRegisterRequest(BaseModel):
         if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
             _dict['environment_uuid'] = None
 
+        # set to None if hardware_qualification (nullable) is None
+        # and model_fields_set contains the field
+        if self.hardware_qualification is None and "hardware_qualification" in self.model_fields_set:
+            _dict['hardware_qualification'] = None
+
         return _dict
 
     @classmethod
@@ -88,7 +94,8 @@ class CloudNodeInstanceRegisterRequest(BaseModel):
 
         _obj = cls.model_validate({
             "profile_slug": obj.get("profile_slug"),
-            "environment_uuid": obj.get("environment_uuid")
+            "environment_uuid": obj.get("environment_uuid"),
+            "hardware_qualification": obj.get("hardware_qualification")
         })
         return _obj
 

@@ -22,7 +22,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 from cyberwave.rest.models.position import Position
 from cyberwave.rest.models.rotation import Rotation
 from cyberwave.rest.models.size import Size
-from cyberwave.rest.models.style1 import Style1
+from cyberwave.rest.models.style import Style
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -37,10 +37,11 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
     name: Optional[StrictStr] = None
     color: Optional[StrictStr] = None
     material: Optional[StrictStr] = None
-    style: Optional[Style1] = None
+    style: Optional[Style] = None
     parameters: Optional[Dict[str, Any]] = None
     size: Optional[Size] = None
     dimensions: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None
+    extents: Optional[Dict[str, Union[StrictFloat, StrictInt]]] = None
     json_patch: Optional[List[Dict[str, Any]]] = None
     pose: Optional[Dict[str, Any]] = None
     position: Optional[Position] = None
@@ -49,8 +50,10 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
     visible: Optional[StrictBool] = None
     locked: Optional[StrictBool] = None
     fixed_base: Optional[StrictBool] = None
+    attach_to: Optional[Dict[str, Any]] = None
+    attach_offset: Optional[Dict[str, Any]] = None
     expected_revision: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["template_key", "template_version", "primitive_type", "name", "color", "material", "style", "parameters", "size", "dimensions", "json_patch", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "expected_revision"]
+    __properties: ClassVar[List[str]] = ["template_key", "template_version", "primitive_type", "name", "color", "material", "style", "parameters", "size", "dimensions", "extents", "json_patch", "pose", "position", "rotation", "metadata", "visible", "locked", "fixed_base", "attach_to", "attach_offset", "expected_revision"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -153,6 +156,11 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
         if self.dimensions is None and "dimensions" in self.model_fields_set:
             _dict['dimensions'] = None
 
+        # set to None if extents (nullable) is None
+        # and model_fields_set contains the field
+        if self.extents is None and "extents" in self.model_fields_set:
+            _dict['extents'] = None
+
         # set to None if json_patch (nullable) is None
         # and model_fields_set contains the field
         if self.json_patch is None and "json_patch" in self.model_fields_set:
@@ -193,6 +201,16 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
         if self.fixed_base is None and "fixed_base" in self.model_fields_set:
             _dict['fixed_base'] = None
 
+        # set to None if attach_to (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_to is None and "attach_to" in self.model_fields_set:
+            _dict['attach_to'] = None
+
+        # set to None if attach_offset (nullable) is None
+        # and model_fields_set contains the field
+        if self.attach_offset is None and "attach_offset" in self.model_fields_set:
+            _dict['attach_offset'] = None
+
         # set to None if expected_revision (nullable) is None
         # and model_fields_set contains the field
         if self.expected_revision is None and "expected_revision" in self.model_fields_set:
@@ -216,10 +234,11 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
             "name": obj.get("name"),
             "color": obj.get("color"),
             "material": obj.get("material"),
-            "style": Style1.from_dict(obj["style"]) if obj.get("style") is not None else None,
+            "style": Style.from_dict(obj["style"]) if obj.get("style") is not None else None,
             "parameters": obj.get("parameters"),
             "size": Size.from_dict(obj["size"]) if obj.get("size") is not None else None,
             "dimensions": obj.get("dimensions"),
+            "extents": obj.get("extents"),
             "json_patch": obj.get("json_patch"),
             "pose": obj.get("pose"),
             "position": Position.from_dict(obj["position"]) if obj.get("position") is not None else None,
@@ -228,6 +247,8 @@ class EnvironmentProceduralPrimitivePatchSchema(BaseModel):
             "visible": obj.get("visible"),
             "locked": obj.get("locked"),
             "fixed_base": obj.get("fixed_base"),
+            "attach_to": obj.get("attach_to"),
+            "attach_offset": obj.get("attach_offset"),
             "expected_revision": obj.get("expected_revision")
         })
         return _obj

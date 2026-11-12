@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from cyberwave.rest.models.agent_bound_control_capability_schema import AgentBoundControlCapabilitySchema
 from cyberwave.rest.models.agent_control_capability_details_schema import AgentControlCapabilityDetailsSchema
 from cyberwave.rest.models.agent_twin_control import AgentTwinControl
@@ -31,7 +31,7 @@ class AgentTwinControlSurface(BaseModel):
     """
     Metadata-derived controls exposed by one twin.
     """ # noqa: E501
-    runtimes: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
+    runtimes: Optional[Dict[str, Dict[str, Any]]] = None
     twin_uuid: StrictStr
     twin_name: StrictStr
     asset_uuid: Optional[StrictStr] = None
@@ -42,7 +42,8 @@ class AgentTwinControlSurface(BaseModel):
     controls: Optional[List[AgentTwinControl]] = None
     control_capabilities: Optional[List[AgentBoundControlCapabilitySchema]] = None
     routes: Optional[List[AgentTwinControlRoute]] = None
-    __properties: ClassVar[List[str]] = ["runtimes", "twin_uuid", "twin_name", "asset_uuid", "asset_name", "control_status_label", "capabilities", "capability_details", "controls", "control_capabilities", "routes"]
+    gripper: Optional[Dict[str, Dict[str, Union[StrictFloat, StrictInt]]]] = None
+    __properties: ClassVar[List[str]] = ["runtimes", "twin_uuid", "twin_name", "asset_uuid", "asset_name", "control_status_label", "capabilities", "capability_details", "controls", "control_capabilities", "routes", "gripper"]
 
     @field_validator('capabilities')
     def capabilities_validate_enum(cls, value):
@@ -133,6 +134,11 @@ class AgentTwinControlSurface(BaseModel):
         if self.control_status_label is None and "control_status_label" in self.model_fields_set:
             _dict['control_status_label'] = None
 
+        # set to None if gripper (nullable) is None
+        # and model_fields_set contains the field
+        if self.gripper is None and "gripper" in self.model_fields_set:
+            _dict['gripper'] = None
+
         return _dict
 
     @classmethod
@@ -155,7 +161,8 @@ class AgentTwinControlSurface(BaseModel):
             "capability_details": AgentControlCapabilityDetailsSchema.from_dict(obj["capability_details"]) if obj.get("capability_details") is not None else None,
             "controls": [AgentTwinControl.from_dict(_item) for _item in obj["controls"]] if obj.get("controls") is not None else None,
             "control_capabilities": [AgentBoundControlCapabilitySchema.from_dict(_item) for _item in obj["control_capabilities"]] if obj.get("control_capabilities") is not None else None,
-            "routes": [AgentTwinControlRoute.from_dict(_item) for _item in obj["routes"]] if obj.get("routes") is not None else None
+            "routes": [AgentTwinControlRoute.from_dict(_item) for _item in obj["routes"]] if obj.get("routes") is not None else None,
+            "gripper": obj.get("gripper")
         })
         return _obj
 

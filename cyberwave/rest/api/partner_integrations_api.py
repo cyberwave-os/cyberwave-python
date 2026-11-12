@@ -18,6 +18,7 @@ from typing_extensions import Annotated
 from pydantic import StrictStr
 from typing import List
 from cyberwave.rest.models.create_partner_integration_response_schema import CreatePartnerIntegrationResponseSchema
+from cyberwave.rest.models.integration_catalog_entry_schema import IntegrationCatalogEntrySchema
 from cyberwave.rest.models.partner_integration_create_schema import PartnerIntegrationCreateSchema
 from cyberwave.rest.models.partner_integration_schema import PartnerIntegrationSchema
 from cyberwave.rest.models.partner_integration_update_schema import PartnerIntegrationUpdateSchema
@@ -42,7 +43,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_create_partner_integration(
+    def src_app_api_integrations_create_partner_integration(
         self,
         uuid: StrictStr,
         partner_integration_create_schema: PartnerIntegrationCreateSchema,
@@ -88,7 +89,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_create_partner_integration_serialize(
+        _param = self._src_app_api_integrations_create_partner_integration_serialize(
             uuid=uuid,
             partner_integration_create_schema=partner_integration_create_schema,
             _request_auth=_request_auth,
@@ -112,7 +113,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_create_partner_integration_with_http_info(
+    def src_app_api_integrations_create_partner_integration_with_http_info(
         self,
         uuid: StrictStr,
         partner_integration_create_schema: PartnerIntegrationCreateSchema,
@@ -158,7 +159,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_create_partner_integration_serialize(
+        _param = self._src_app_api_integrations_create_partner_integration_serialize(
             uuid=uuid,
             partner_integration_create_schema=partner_integration_create_schema,
             _request_auth=_request_auth,
@@ -182,7 +183,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_create_partner_integration_without_preload_content(
+    def src_app_api_integrations_create_partner_integration_without_preload_content(
         self,
         uuid: StrictStr,
         partner_integration_create_schema: PartnerIntegrationCreateSchema,
@@ -228,7 +229,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_create_partner_integration_serialize(
+        _param = self._src_app_api_integrations_create_partner_integration_serialize(
             uuid=uuid,
             partner_integration_create_schema=partner_integration_create_schema,
             _request_auth=_request_auth,
@@ -247,7 +248,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_create_partner_integration_serialize(
+    def _src_app_api_integrations_create_partner_integration_serialize(
         self,
         uuid,
         partner_integration_create_schema,
@@ -328,7 +329,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_delete_partner_integration(
+    def src_app_api_integrations_delete_partner_integration(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -374,7 +375,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_delete_partner_integration_serialize(
+        _param = self._src_app_api_integrations_delete_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -398,7 +399,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_delete_partner_integration_with_http_info(
+    def src_app_api_integrations_delete_partner_integration_with_http_info(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -444,7 +445,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_delete_partner_integration_serialize(
+        _param = self._src_app_api_integrations_delete_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -468,7 +469,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_delete_partner_integration_without_preload_content(
+    def src_app_api_integrations_delete_partner_integration_without_preload_content(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -514,7 +515,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_delete_partner_integration_serialize(
+        _param = self._src_app_api_integrations_delete_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -533,7 +534,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_delete_partner_integration_serialize(
+    def _src_app_api_integrations_delete_partner_integration_serialize(
         self,
         uuid,
         integration_uuid,
@@ -594,7 +595,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_get_partner_integration(
+    def src_app_api_integrations_get_partner_integration(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -640,7 +641,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_get_partner_integration_serialize(
+        _param = self._src_app_api_integrations_get_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -664,7 +665,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_get_partner_integration_with_http_info(
+    def src_app_api_integrations_get_partner_integration_with_http_info(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -710,7 +711,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_get_partner_integration_serialize(
+        _param = self._src_app_api_integrations_get_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -734,7 +735,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_get_partner_integration_without_preload_content(
+    def src_app_api_integrations_get_partner_integration_without_preload_content(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -780,7 +781,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_get_partner_integration_serialize(
+        _param = self._src_app_api_integrations_get_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -799,7 +800,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_get_partner_integration_serialize(
+    def _src_app_api_integrations_get_partner_integration_serialize(
         self,
         uuid,
         integration_uuid,
@@ -867,7 +868,253 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_list_partner_integrations(
+    def src_app_api_integrations_list_integration_catalog(
+        self,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> List[IntegrationCatalogEntrySchema]:
+        """List Integration Catalog
+
+        Not feature-flag-gated here; that gate lives at the frontend page/nav level instead.
+
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_integrations_list_integration_catalog_serialize(
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "List[IntegrationCatalogEntrySchema]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_integrations_list_integration_catalog_with_http_info(
+        self,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[List[IntegrationCatalogEntrySchema]]:
+        """List Integration Catalog
+
+        Not feature-flag-gated here; that gate lives at the frontend page/nav level instead.
+
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_integrations_list_integration_catalog_serialize(
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "List[IntegrationCatalogEntrySchema]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_integrations_list_integration_catalog_without_preload_content(
+        self,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """List Integration Catalog
+
+        Not feature-flag-gated here; that gate lives at the frontend page/nav level instead.
+
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_integrations_list_integration_catalog_serialize(
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "List[IntegrationCatalogEntrySchema]",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_integrations_list_integration_catalog_serialize(
+        self,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/api/v1/integrations/catalog',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_integrations_list_partner_integrations(
         self,
         uuid: StrictStr,
         _request_timeout: Union[
@@ -910,7 +1157,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_list_partner_integrations_serialize(
+        _param = self._src_app_api_integrations_list_partner_integrations_serialize(
             uuid=uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -933,7 +1180,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_list_partner_integrations_with_http_info(
+    def src_app_api_integrations_list_partner_integrations_with_http_info(
         self,
         uuid: StrictStr,
         _request_timeout: Union[
@@ -976,7 +1223,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_list_partner_integrations_serialize(
+        _param = self._src_app_api_integrations_list_partner_integrations_serialize(
             uuid=uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -999,7 +1246,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_list_partner_integrations_without_preload_content(
+    def src_app_api_integrations_list_partner_integrations_without_preload_content(
         self,
         uuid: StrictStr,
         _request_timeout: Union[
@@ -1042,7 +1289,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_list_partner_integrations_serialize(
+        _param = self._src_app_api_integrations_list_partner_integrations_serialize(
             uuid=uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -1060,7 +1307,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_list_partner_integrations_serialize(
+    def _src_app_api_integrations_list_partner_integrations_serialize(
         self,
         uuid,
         _request_auth,
@@ -1125,7 +1372,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_register_partner_integration(
+    def src_app_api_integrations_register_partner_integration(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1172,7 +1419,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_register_partner_integration_serialize(
+        _param = self._src_app_api_integrations_register_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1196,7 +1443,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_register_partner_integration_with_http_info(
+    def src_app_api_integrations_register_partner_integration_with_http_info(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1243,7 +1490,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_register_partner_integration_serialize(
+        _param = self._src_app_api_integrations_register_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1267,7 +1514,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_register_partner_integration_without_preload_content(
+    def src_app_api_integrations_register_partner_integration_without_preload_content(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1314,7 +1561,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_register_partner_integration_serialize(
+        _param = self._src_app_api_integrations_register_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1333,7 +1580,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_register_partner_integration_serialize(
+    def _src_app_api_integrations_register_partner_integration_serialize(
         self,
         uuid,
         integration_uuid,
@@ -1401,7 +1648,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_rotate_inbound_secret(
+    def src_app_api_integrations_rotate_inbound_secret(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1447,7 +1694,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_rotate_inbound_secret_serialize(
+        _param = self._src_app_api_integrations_rotate_inbound_secret_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1471,7 +1718,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_rotate_inbound_secret_with_http_info(
+    def src_app_api_integrations_rotate_inbound_secret_with_http_info(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1517,7 +1764,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_rotate_inbound_secret_serialize(
+        _param = self._src_app_api_integrations_rotate_inbound_secret_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1541,7 +1788,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_rotate_inbound_secret_without_preload_content(
+    def src_app_api_integrations_rotate_inbound_secret_without_preload_content(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1587,7 +1834,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_rotate_inbound_secret_serialize(
+        _param = self._src_app_api_integrations_rotate_inbound_secret_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1606,7 +1853,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_rotate_inbound_secret_serialize(
+    def _src_app_api_integrations_rotate_inbound_secret_serialize(
         self,
         uuid,
         integration_uuid,
@@ -1674,7 +1921,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_test_partner_integration_connection(
+    def src_app_api_integrations_test_partner_integration_connection(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1693,7 +1940,7 @@ class PartnerIntegrationsApi:
     ) -> PartnerIntegrationSchema:
         """Test Partner Integration Connection
 
-        Fetch a fresh token and, if already registered, re-verify — never (re-)registers. `status` only becomes CONNECTED if verify() actually ran; a successful token fetch alone just means credentials still work.
+        Fetches a fresh token and re-verifies if already registered; never (re-)registers. `status` only becomes CONNECTED if verify() ran — a successful token fetch alone doesn't mean that.
 
         :param uuid: (required)
         :type uuid: str
@@ -1721,7 +1968,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_test_partner_integration_connection_serialize(
+        _param = self._src_app_api_integrations_test_partner_integration_connection_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1745,7 +1992,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_test_partner_integration_connection_with_http_info(
+    def src_app_api_integrations_test_partner_integration_connection_with_http_info(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1764,7 +2011,7 @@ class PartnerIntegrationsApi:
     ) -> ApiResponse[PartnerIntegrationSchema]:
         """Test Partner Integration Connection
 
-        Fetch a fresh token and, if already registered, re-verify — never (re-)registers. `status` only becomes CONNECTED if verify() actually ran; a successful token fetch alone just means credentials still work.
+        Fetches a fresh token and re-verifies if already registered; never (re-)registers. `status` only becomes CONNECTED if verify() ran — a successful token fetch alone doesn't mean that.
 
         :param uuid: (required)
         :type uuid: str
@@ -1792,7 +2039,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_test_partner_integration_connection_serialize(
+        _param = self._src_app_api_integrations_test_partner_integration_connection_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1816,7 +2063,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_test_partner_integration_connection_without_preload_content(
+    def src_app_api_integrations_test_partner_integration_connection_without_preload_content(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1835,7 +2082,7 @@ class PartnerIntegrationsApi:
     ) -> RESTResponseType:
         """Test Partner Integration Connection
 
-        Fetch a fresh token and, if already registered, re-verify — never (re-)registers. `status` only becomes CONNECTED if verify() actually ran; a successful token fetch alone just means credentials still work.
+        Fetches a fresh token and re-verifies if already registered; never (re-)registers. `status` only becomes CONNECTED if verify() ran — a successful token fetch alone doesn't mean that.
 
         :param uuid: (required)
         :type uuid: str
@@ -1863,7 +2110,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_test_partner_integration_connection_serialize(
+        _param = self._src_app_api_integrations_test_partner_integration_connection_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             _request_auth=_request_auth,
@@ -1882,7 +2129,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_test_partner_integration_connection_serialize(
+    def _src_app_api_integrations_test_partner_integration_connection_serialize(
         self,
         uuid,
         integration_uuid,
@@ -1950,7 +2197,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_update_partner_integration(
+    def src_app_api_integrations_update_partner_integration(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -1999,7 +2246,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_update_partner_integration_serialize(
+        _param = self._src_app_api_integrations_update_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             partner_integration_update_schema=partner_integration_update_schema,
@@ -2024,7 +2271,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_update_partner_integration_with_http_info(
+    def src_app_api_integrations_update_partner_integration_with_http_info(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -2073,7 +2320,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_update_partner_integration_serialize(
+        _param = self._src_app_api_integrations_update_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             partner_integration_update_schema=partner_integration_update_schema,
@@ -2098,7 +2345,7 @@ class PartnerIntegrationsApi:
 
 
     @validate_call
-    def src_app_api_partner_integrations_update_partner_integration_without_preload_content(
+    def src_app_api_integrations_update_partner_integration_without_preload_content(
         self,
         uuid: StrictStr,
         integration_uuid: StrictStr,
@@ -2147,7 +2394,7 @@ class PartnerIntegrationsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._src_app_api_partner_integrations_update_partner_integration_serialize(
+        _param = self._src_app_api_integrations_update_partner_integration_serialize(
             uuid=uuid,
             integration_uuid=integration_uuid,
             partner_integration_update_schema=partner_integration_update_schema,
@@ -2167,7 +2414,7 @@ class PartnerIntegrationsApi:
         return response_data.response
 
 
-    def _src_app_api_partner_integrations_update_partner_integration_serialize(
+    def _src_app_api_integrations_update_partner_integration_serialize(
         self,
         uuid,
         integration_uuid,

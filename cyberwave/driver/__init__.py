@@ -15,6 +15,8 @@ Install the ``cyberwave`` package from PyPI; import from ``cyberwave.driver`` or
 from .base import BaseDriver
 from .control import (
     ArmCapabilityMixin,
+    CartesianStateMixin,
+    WorldObstaclesMixin,
     DualArmConfig,
     DualArmMixin,
     EECartesianPoseMixin,
@@ -26,6 +28,7 @@ from .control import (
     JointControllerConfig,
     JointControllerMixin,
     MotionRequest,
+    PlannedMotionMixin,
     TrajectoryPlan,
     TrajectoryWaypoint,
     resolve_command_vector,
@@ -34,6 +37,7 @@ from .control import (
 )
 from .ros2.joint_names import JointNameMap
 from .kinematics import ArmKinematicsConfig, GripperConfig
+from .motion.backend import MotionBackend
 from .status import DriverLifecycleState
 from .cloud import (
     AlertCode,
@@ -97,6 +101,10 @@ __all__ = [
     "ArmCapabilityMixin",
     "EECartesianPoseMixin",
     "EEPose",
+    "CartesianStateMixin",
+    "WorldObstaclesMixin",
+    "PlannedMotionMixin",
+    "MotionBackend",
     "DualArmConfig",
     "DualArmMixin",
     "ArmKinematicsConfig",

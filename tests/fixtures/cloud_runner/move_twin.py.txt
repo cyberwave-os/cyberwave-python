@@ -1,0 +1,123 @@
+"""Generated cloud worker for a workflow.
+
+DO NOT EDIT: this file is regenerated from the workflow definition each time the workflow is compiled.
+"""
+
+
+from __future__ import annotations
+
+from cyberwave.navigation import NavigationPlan
+import logging
+import logging as _logging
+
+WORKFLOW_UUID = 'bcb3fad7-a6c4-4ef0-b85d-8e794aee5816'
+TWIN_UUID = 'af649744-960d-478e-b427-f59957fb1e2b'
+ENVIRONMENT_UUID = '6367786b-327c-4b99-b83d-ad27004d6e72'
+
+_cw_logger = logging.getLogger("cyberwave.workflows." + WORKFLOW_UUID)
+
+def _cw_json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {'type': 'bytes', 'size': len(value)}
+    _shape = getattr(value, 'shape', None)
+    _dtype = getattr(value, 'dtype', None)
+    if _shape is not None and _dtype is not None:
+        try:
+            return {
+                'type': 'ndarray',
+                'shape': list(_shape),
+                'dtype': str(_dtype),
+            }
+        except Exception:
+            pass
+    if isinstance(value, dict):
+        return {str(k): _cw_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_cw_json_safe(item) for item in value]
+    return repr(value)
+
+
+
+def run(_cw_ctx, client, payload):
+    _cw_execution_uuid = _cw_ctx.execution_uuid
+    twin = client.twin(twin_id=TWIN_UUID)
+    _node_outputs: dict[str, dict] = {}
+    _node_outputs['params'] = {
+        **{},
+        **((payload.get('params') if isinstance(payload, dict) else None) or {}),
+    }
+    _node_outputs['a9c45bb7-7b80-4ce3-abb9-578f28767dcc'] = {
+        '_source_summary': {
+            'kind': 'manual_trigger',
+            'twin_uuid': 'af649744-960d-478e-b427-f59957fb1e2b',
+            'invoked_at': (payload.get('requested_at') if isinstance(payload, dict) else None),
+            'inputs': (payload.get('inputs') if isinstance(payload, dict) else {}),
+        },
+    }
+    def _cw_node_a9c45bb77b804ce3abb9578f28767dcc():
+        _cw_output = _node_outputs.get('a9c45bb7-7b80-4ce3-abb9-578f28767dcc') or {}
+        return {
+            'output': _cw_output,
+            'input_data': _cw_json_safe([_node_outputs.get('a9c45bb7-7b80-4ce3-abb9-578f28767dcc') or {}]),
+            'output_data': [_cw_output],
+        }
+    _node_outputs['a9c45bb7-7b80-4ce3-abb9-578f28767dcc'] = _cw_ctx.step('a9c45bb7-7b80-4ce3-abb9-578f28767dcc', _cw_node_a9c45bb77b804ce3abb9578f28767dcc, activation_index=0)['output']
+
+    def _cw_node_0b4e7a6aa4ee4c52bff494b6e118d38c():
+        # Node 1 (node=0b4e7a6a-a4ee-4c52-bff4-94b6e118d38c): move to waypoint 'wp-probe'
+        def _cw_dispatch(_cw_idem):
+            _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_resolve = getattr(client.environments, 'resolve_waypoint_poses', None)
+            if _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_resolve is None:
+                _logging.getLogger(__name__).warning("Move Twin node 0b4e7a6a-a4ee-4c52-bff4-94b6e118d38c: this SDK cannot fetch the waypoints' current poses, so it drives to the poses compiled into this worker, which miss any change since (e.g. by Move Waypoint). Upgrade cyberwave.")
+                _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses = [{'id': 'wp-probe', 'position': {'x': 1.0, 'y': 2.0, 'z': 0.0}, 'rotation': {'w': 1.0, 'x': 0.0, 'y': 0.0, 'z': 0.0}}]
+            else:
+                _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses = _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_resolve(
+                    ENVIRONMENT_UUID,
+                    ['wp-probe'],
+                    mode='environment',
+                    twin_uuid=TWIN_UUID,
+                    link=None,
+                    root_link=None,
+                    tool_offset_position=None,
+                    tool_offset_rotation=None,
+                )
+            plan = NavigationPlan(name='Test Workflow 0-0b4e7a6a-a4ee-4c52-bff4-94b6e118d38c')
+            plan.waypoint(
+                x=_mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses[0]['position']['x'],
+                y=_mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses[0]['position']['y'],
+                z=_mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses[0]['position']['z'],
+                rotation=[_mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses[0]['rotation'][_axis] for _axis in 'wxyz'],
+                waypoint_id='wp-probe',
+            )
+            _nav_response = twin.navigation.follow_path(plan, environment_uuid=ENVIRONMENT_UUID)
+            _nav_action_id = (_nav_response or {}).get('action_id')
+            if not _nav_action_id:
+                raise RuntimeError(
+                    'follow_path did not return an action_id — navigation was not dispatched. '
+                    + f'Response: {_nav_response!r}'
+                )
+            return {'action_id': _nav_action_id, 'response': _nav_response, 'poses': _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses}
+        _cw_dispatched = _cw_ctx.call('dispatch', _cw_dispatch)
+        _nav_action_id = _cw_dispatched['action_id']
+        _nav_response = _cw_dispatched['response']
+        _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses = _cw_dispatched['poses']
+        _nav_result = _cw_ctx.wait_action('nav', _nav_action_id, twin_uuid=TWIN_UUID)
+        _nav_output = {
+            'action_id': _nav_action_id,
+            'navigation_response': _nav_response,
+            'navigation_result': _nav_result,
+            'waypoint_poses': _mt_0b4e7a6aa4ee4c52bff494b6e118d38c_poses,
+        }
+        _node_outputs['0b4e7a6a-a4ee-4c52-bff4-94b6e118d38c'] = _nav_output
+
+        _cw_output = _node_outputs.get('0b4e7a6a-a4ee-4c52-bff4-94b6e118d38c') or {}
+        return {
+            'output': _cw_output,
+            'input_data': _cw_json_safe([{'command': 'path', 'environment_uuid': '6367786b-327c-4b99-b83d-ad27004d6e72', 'twin_uuid': 'af649744-960d-478e-b427-f59957fb1e2b', 'pause_seconds': 0, 'take_picture_on_arrival': False, 'waypoints': [{'id': 'wp-probe', 'position': {'x': 1.0, 'y': 2.0, 'z': 0.0}, 'rotation': {'w': 1.0, 'x': 0.0, 'y': 0.0, 'z': 0.0}}]}]),
+            'output_data': [_cw_output],
+        }
+    _node_outputs['0b4e7a6a-a4ee-4c52-bff4-94b6e118d38c'] = _cw_ctx.step('0b4e7a6a-a4ee-4c52-bff4-94b6e118d38c', _cw_node_0b4e7a6aa4ee4c52bff494b6e118d38c, activation_index=0)['output']
+    return _node_outputs
+

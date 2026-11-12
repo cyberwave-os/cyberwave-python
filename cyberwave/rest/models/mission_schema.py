@@ -32,10 +32,12 @@ class MissionSchema(BaseModel):
     name: StrictStr
     description: StrictStr
     twin_uuid: StrictStr
-    task_sequence: List[Optional[Dict[str, Any]]]
+    environment_uuid: Optional[StrictStr] = None
+    workspace_uuid: Optional[StrictStr] = None
+    task_sequence: List[Dict[str, Any]]
     created_at: datetime
     updated_at: datetime
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "twin_uuid", "task_sequence", "created_at", "updated_at"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "twin_uuid", "environment_uuid", "workspace_uuid", "task_sequence", "created_at", "updated_at"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,6 +78,16 @@ class MissionSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if environment_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.environment_uuid is None and "environment_uuid" in self.model_fields_set:
+            _dict['environment_uuid'] = None
+
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
         return _dict
 
     @classmethod
@@ -92,6 +104,8 @@ class MissionSchema(BaseModel):
             "name": obj.get("name"),
             "description": obj.get("description"),
             "twin_uuid": obj.get("twin_uuid"),
+            "environment_uuid": obj.get("environment_uuid"),
+            "workspace_uuid": obj.get("workspace_uuid"),
             "task_sequence": obj.get("task_sequence"),
             "created_at": obj.get("created_at"),
             "updated_at": obj.get("updated_at")

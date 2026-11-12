@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 from cyberwave.rest.models.joint_schema import JointSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,7 +30,7 @@ class RobotDescriptionSchema(BaseModel):
     """ # noqa: E501
     urdf_content: StrictStr
     joints: List[JointSchema]
-    links: List[Optional[Dict[str, Any]]]
+    links: List[Dict[str, Any]]
     __properties: ClassVar[List[str]] = ["urdf_content", "joints", "links"]
 
     model_config = ConfigDict(

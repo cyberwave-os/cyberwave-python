@@ -107,6 +107,7 @@ def as_detection(det: Any) -> Detection:
             bbox=bbox,
             mask=det.get("mask"),
             keypoints=det.get("keypoints"),
+            track_id=det.get("track_id") if type(det.get("track_id")) is int else None,
             metadata={
                 k: v for k, v in det.items() if k not in _RESERVED_DICT_KEYS
             },

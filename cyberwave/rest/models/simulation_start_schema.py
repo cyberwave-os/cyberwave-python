@@ -34,12 +34,14 @@ class SimulationStartSchema(BaseModel):
     duration: Optional[Union[StrictFloat, StrictInt]] = None
     stream_data: Optional[StrictBool] = None
     backend: Optional[StrictStr] = None
+    execution_profile: Optional[StrictStr] = None
     runtime: Optional[SimulationRuntimeOptionsSchema] = None
     timing: Optional[SimulationTimingOptionsSchema] = None
     online_controllers: Optional[List[OnlineControllerSpecSchema]] = None
     auto_run_controllers: Optional[StrictBool] = False
+    record: Optional[StrictBool] = False
     stream_profile: Optional[Dict[str, SimulationStreamProfileSchema]] = None
-    __properties: ClassVar[List[str]] = ["duration", "stream_data", "backend", "runtime", "timing", "online_controllers", "auto_run_controllers", "stream_profile"]
+    __properties: ClassVar[List[str]] = ["duration", "stream_data", "backend", "execution_profile", "runtime", "timing", "online_controllers", "auto_run_controllers", "record", "stream_profile"]
 
     @field_validator('backend')
     def backend_validate_enum(cls, value):
@@ -47,8 +49,18 @@ class SimulationStartSchema(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['mujoco', 'mujoco_warp']):
-            raise ValueError("must be one of enum values ('mujoco', 'mujoco_warp')")
+        if value not in set(['mujoco', 'mujoco_warp', 'isaac']):
+            raise ValueError("must be one of enum values ('mujoco', 'mujoco_warp', 'isaac')")
+        return value
+
+    @field_validator('execution_profile')
+    def execution_profile_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['isaac-cpu-physics', 'isaac-gpu-physics', 'isaac-newton-physics']):
+            raise ValueError("must be one of enum values ('isaac-cpu-physics', 'isaac-gpu-physics', 'isaac-newton-physics')")
         return value
 
     model_config = ConfigDict(
@@ -125,6 +137,11 @@ class SimulationStartSchema(BaseModel):
         if self.backend is None and "backend" in self.model_fields_set:
             _dict['backend'] = None
 
+        # set to None if execution_profile (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_profile is None and "execution_profile" in self.model_fields_set:
+            _dict['execution_profile'] = None
+
         # set to None if runtime (nullable) is None
         # and model_fields_set contains the field
         if self.runtime is None and "runtime" in self.model_fields_set:
@@ -160,10 +177,12 @@ class SimulationStartSchema(BaseModel):
             "duration": obj.get("duration"),
             "stream_data": obj.get("stream_data"),
             "backend": obj.get("backend"),
+            "execution_profile": obj.get("execution_profile"),
             "runtime": SimulationRuntimeOptionsSchema.from_dict(obj["runtime"]) if obj.get("runtime") is not None else None,
             "timing": SimulationTimingOptionsSchema.from_dict(obj["timing"]) if obj.get("timing") is not None else None,
             "online_controllers": [OnlineControllerSpecSchema.from_dict(_item) for _item in obj["online_controllers"]] if obj.get("online_controllers") is not None else None,
             "auto_run_controllers": obj.get("auto_run_controllers") if obj.get("auto_run_controllers") is not None else False,
+            "record": obj.get("record") if obj.get("record") is not None else False,
             "stream_profile": dict(
                 (_k, SimulationStreamProfileSchema.from_dict(_v))
                 for _k, _v in obj["stream_profile"].items()

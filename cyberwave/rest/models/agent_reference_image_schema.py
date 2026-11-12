@@ -26,7 +26,7 @@ from pydantic_core import to_jsonable_python
 
 class AgentReferenceImageSchema(BaseModel):
     """
-    AgentReferenceImageSchema
+    An image beside a message: the first in image_base64, the rest here.
     """ # noqa: E501
     image_base64: Annotated[str, Field(min_length=1, strict=True, max_length=7000000)]
     image_mime_type: StrictStr

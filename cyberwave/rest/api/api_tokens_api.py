@@ -1099,7 +1099,7 @@ class ApiTokensApi:
     ) -> APITokenSchema:
         """Update Api Token
 
-        Rename a token or change its expiry.  ``metadata`` and ``access_level`` stay read-only: neither is enforced anywhere yet, so letting a caller edit them would suggest a guarantee that does not exist. What a token may *do* is not a field edit either — see ``update_api_token_access``.
+        Rename a token or change its expiry.  ``metadata`` and ``access_level`` stay read-only. ``access_level`` is enforced only in places (READ_ONLY: no MQTT publish, no gateway commands), and ``metadata.scope`` is enforced only for driver tokens (``services/driver_tokens.py``), so letting a caller edit either would suggest a guarantee that does not exist. What a token may *do* is not a field edit either — see ``update_api_token_access``.
 
         :param uuid: (required)
         :type uuid: str
@@ -1170,7 +1170,7 @@ class ApiTokensApi:
     ) -> ApiResponse[APITokenSchema]:
         """Update Api Token
 
-        Rename a token or change its expiry.  ``metadata`` and ``access_level`` stay read-only: neither is enforced anywhere yet, so letting a caller edit them would suggest a guarantee that does not exist. What a token may *do* is not a field edit either — see ``update_api_token_access``.
+        Rename a token or change its expiry.  ``metadata`` and ``access_level`` stay read-only. ``access_level`` is enforced only in places (READ_ONLY: no MQTT publish, no gateway commands), and ``metadata.scope`` is enforced only for driver tokens (``services/driver_tokens.py``), so letting a caller edit either would suggest a guarantee that does not exist. What a token may *do* is not a field edit either — see ``update_api_token_access``.
 
         :param uuid: (required)
         :type uuid: str
@@ -1241,7 +1241,7 @@ class ApiTokensApi:
     ) -> RESTResponseType:
         """Update Api Token
 
-        Rename a token or change its expiry.  ``metadata`` and ``access_level`` stay read-only: neither is enforced anywhere yet, so letting a caller edit them would suggest a guarantee that does not exist. What a token may *do* is not a field edit either — see ``update_api_token_access``.
+        Rename a token or change its expiry.  ``metadata`` and ``access_level`` stay read-only. ``access_level`` is enforced only in places (READ_ONLY: no MQTT publish, no gateway commands), and ``metadata.scope`` is enforced only for driver tokens (``services/driver_tokens.py``), so letting a caller edit either would suggest a guarantee that does not exist. What a token may *do* is not a field edit either — see ``update_api_token_access``.
 
         :param uuid: (required)
         :type uuid: str

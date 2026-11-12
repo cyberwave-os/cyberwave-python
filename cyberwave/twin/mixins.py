@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numbers
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence
 
@@ -161,27 +162,168 @@ class JointsCapableMixin:
 
     def set_pose(
         self,
-        pose: Mapping[str, float],
+        pose: Any,
         *,
         mode: str = "absolute",
-        degrees: bool = False,
+        motion: str = "ptp",
+        reference_frame: Optional[str] = None,
+        backend: Optional[str] = None,
+        expected_joints: Optional[Mapping[str, float]] = None,
+        scene_revision: Optional[str] = None,
+        plan_only: bool = False,
         source_type: Optional[str] = None,
-        timestamp: Optional[float] = None,
-        what_data: str = "position",
+        **joint_options: Any,
     ) -> None:
-        """Set joint-space pose — alias for :meth:`set_joints` (positions by default)."""
-        return self.set_joints(
-            pose,
-            what_data=what_data,
-            mode=mode,
-            degrees=degrees,
-            source_type=source_type,
-            timestamp=timestamp,
+        """Move the tool to a Cartesian pose: the arm's ``set_pose`` command.
+
+        *pose* is a full Cartesian pose -- a position in metres AND a rotation
+        in radians or as a quaternion, never degrees -- in any of these forms:
+
+        * a :class:`~cyberwave.data.state_representation.CartesianPose`, such
+          as ``twin.pose.get()``; its reference frame travels with it;
+        * ``[x, y, z, roll, pitch, yaw]`` -- extrinsic XYZ;
+        * ``[x, y, z, qx, qy, qz, qw]``;
+        * ``(position, rotation)`` -- two arrays, ``[x, y, z]`` and either
+          ``[roll, pitch, yaw]`` or ``[qx, qy, qz, qw]``;
+        * a waypoint ``{"position": ..., "orientation" | "rotation": {x, y, z,
+          w}, "reference_frame": ...}``, e.g. one from
+          :class:`~cyberwave.navigation.NavigationPlan`.
+
+        Every other argument is optional. ``mode="relative"`` moves the tool BY
+        the pose instead of TO it, along its own axes unless
+        ``reference_frame`` says otherwise, starting from the tool's measured
+        pose when the command arrives; ``motion="lin"`` moves it along a
+        straight line; ``reference_frame`` names any frame of the robot
+        description (or ``"base"`` / ``"tool"``); ``backend`` picks a
+        registered planner other than the driver's default; ``plan_only``
+        plans without moving. The driver reports the result on
+        ``state/motion``.
+
+        A mapping of joint names to positions is the old joint-space form of
+        this method and still sets the joints (:meth:`set_joints`), with a
+        ``DeprecationWarning``; ``degrees``, ``timestamp`` and ``what_data``
+        are accepted for that form only.
+        """
+        if _is_joint_mapping(pose):
+            warnings.warn(
+                "set_pose() with joint positions is deprecated; use set_joints() "
+                "for joint space. set_pose() now moves the tool to a Cartesian pose.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return self.set_joints(
+                pose, mode=mode, source_type=source_type, **joint_options
+            )
+        if joint_options:
+            raise TypeError(
+                f"set_pose() got unexpected arguments {sorted(joint_options)}: a "
+                "Cartesian pose is metres plus radians or a quaternion, with no "
+                "degrees, timestamp or what_data"
+            )
+        data: Dict[str, Any] = {"pose": _wire_pose(pose)}
+        options = {
+            "mode": (mode, "absolute"),
+            "motion": (motion, "ptp"),
+            "reference_frame": (reference_frame, None),
+            "backend": (backend, None),
+            "expected_joints": (
+                None if expected_joints is None else dict(expected_joints),
+                None,
+            ),
+            "scene_revision": (scene_revision, None),
+            "plan_only": (plan_only, False),
+        }
+        # Only what differs from the driver's defaults goes on the wire, so a
+        # driver's default stays the driver's to choose.
+        data.update(
+            {
+                key: value
+                for key, (value, default) in options.items()
+                if value != default
+            }
         )
+        self.publish_command("set_pose", data, source_type=source_type)  # type: ignore[attr-defined]
+
+    def move(self, pose: Any, **options: Any) -> None:
+        """Shortcut for :meth:`set_pose`: move the tool to (or by) *pose*."""
+        return self.set_pose(pose, **options)
+
+    #: ``twin.pose.set()`` moves the tool on an arm (see :class:`PoseHandle`).
+    _pose_set_moves_the_tool = True
+
+
+#: Keys that make a mapping a Cartesian waypoint rather than joint positions.
+#: No bare ``x`` / ``y`` / ``z``: those are joint names on a gantry.
+_POSE_KEYS = frozenset(
+    {"position", "orientation", "rotation", "reference_frame", "frame_id"}
+)
+
+
+def _is_joint_mapping(pose: Any) -> bool:
+    return isinstance(pose, Mapping) and not (set(pose) & _POSE_KEYS)
+
+
+def _wire_pose(pose: Any) -> Any:
+    """*pose* as JSON: a flat list of six or seven floats, or a waypoint dict.
+
+    Every form carries a rotation. A waypoint's ``rotation`` list follows the
+    navigation convention (``[w, x, y, z]``) and leaves named; an
+    ``orientation`` must already be a named ``{x, y, z, w}``, because a bare
+    list of four is ambiguous.
+    """
+    from ..data.state_representation import CartesianPose
+
+    if isinstance(pose, CartesianPose):
+        out: Dict[str, Any] = {
+            "position": pose.translation_dict(),
+            "orientation": pose.orientation_dict(),
+        }
+        if pose.frame_id():
+            out["reference_frame"] = pose.frame_id()
+        return out
+    if isinstance(pose, Mapping):
+        if "position" not in pose or not ({"orientation", "rotation"} & set(pose)):
+            raise ValueError(
+                "a pose needs a position and a rotation (orientation or rotation)"
+            )
+        from ..navigation import _normalize_position, _normalize_rotation
+
+        out = {}
+        for key, value in pose.items():
+            if key == "position":
+                out[key] = _normalize_position(value)
+            elif key == "rotation":
+                out[key] = _normalize_rotation(value, None)
+            elif key == "orientation":
+                if not isinstance(value, Mapping):
+                    raise ValueError("orientation must be a named {x, y, z, w}")
+                out[key] = {name: float(v) for name, v in value.items()}
+            elif key in ("reference_frame", "frame_id"):
+                out[key] = value
+        return out
+    parts = list(pose)
+    if len(parts) == 2 and not any(isinstance(part, numbers.Real) for part in parts):
+        position, rotation = ([float(v) for v in part] for part in parts)
+        if len(position) != 3 or len(rotation) not in (3, 4):
+            raise ValueError(
+                "(position, rotation) must be ([x, y, z], [roll, pitch, yaw]) or "
+                "([x, y, z], [qx, qy, qz, qw])"
+            )
+        parts = [*position, *rotation]
+    values = [float(v) for v in parts]
+    if len(values) not in (6, 7):
+        raise ValueError(
+            "pose must be a CartesianPose, [x, y, z, roll, pitch, yaw], "
+            "[x, y, z, qx, qy, qz, qw], (position, rotation) or a waypoint dict"
+        )
+    return values
 
 
 class SpatialPoseCapableMixin:
     """Cartesian pose for locomoting twins (MQTT get/set — not REST editor)."""
+
+    #: ``twin.pose.set()`` places the robot itself, even with an arm on board.
+    _pose_set_moves_the_tool = False
 
     def get_pose(self) -> Optional[Dict[str, Dict[str, float]]]:
         """MQTT pose read — same canonical cache as :attr:`pose`.

@@ -24,6 +24,12 @@ from aiortc import (
 )
 
 from ..utils.time_reference import monotonic_seconds
+from ._reconnect import (
+    FAST_RECONNECT_ATTEMPTS,
+    RECONNECT_BASE_DELAY,
+    reconnect_backoff,
+    signaling_ready,
+)
 from .answer_subscription import answer_topics, wait_for_subscriptions
 from .hw_encoder import apply_h264_hw_patch
 from .ice import DEFAULT_TURN_SERVERS, effective_ice_servers
@@ -796,7 +802,8 @@ class BaseVideoStreamer(abc.ABC):
         if self.frontend_type:
             offer_payload["frontend_type"] = self.frontend_type
 
-        self._publish_message(offer_topic, offer_payload)
+        if self._publish_message(offer_topic, offer_payload) is False:
+            raise ConnectionError("MQTT client refused the offer; not sent")
         logger.debug(f"WebRTC offer sent to {offer_topic}")
 
     async def _wait_for_answer(self, timeout: float = 60.0):
@@ -1043,10 +1050,13 @@ class BaseVideoStreamer(abc.ABC):
 
         self.client.subscribe(command_topic, on_command)
 
-    def _publish_message(self, topic: str, payload: Dict[str, Any]):
-        """Publish a message via MQTT."""
-        self.client.publish(topic, payload, qos=2)
+    def _publish_message(self, topic: str, payload: Dict[str, Any]) -> bool:
+        """Publish a message via MQTT; False when the client refused it."""
+        if self.client.publish(topic, payload, qos=2) is False:
+            logger.warning(f"Not published to {topic}: MQTT client refused it")
+            return False
         logger.info(f"Published to {topic}")
+        return True
 
     # -------------------------------------------------------------------------
     # Command Handlers
@@ -1113,12 +1123,12 @@ class BaseVideoStreamer(abc.ABC):
         The monitor owns every retry after the stream has connected once. A
         failed attempt leaves pc None, so it is tracked in _reconnect_pending:
         otherwise the next pass would see no pc, wait forever, and never reach
-        the backoff and attempt cap below. A cancelled reconnect or the cap
-        parks the monitor rather than ending it, so a later start_video is
-        watched again.
+        the backoff below. Retries never give up on their own, so a stream
+        outlives any uplink outage. A cancelled reconnect parks the monitor
+        rather than ending it, so a later start_video is watched again.
         """
-        reconnect_delay = 2.0
-        max_reconnect_attempts = 10
+        reconnect_delay = RECONNECT_BASE_DELAY
+        max_reconnect_attempts = FAST_RECONNECT_ATTEMPTS
         reconnect_attempt = 0
 
         while not stop_event.is_set() and self._is_running:
@@ -1128,6 +1138,11 @@ class BaseVideoStreamer(abc.ABC):
                 await asyncio.sleep(1.0)
                 continue
 
+            if not signaling_ready(self.client):
+                # An offer can't be answered while MQTT is down; wait for the
+                # broker rather than spend attempts on offers that go nowhere.
+                await asyncio.sleep(1.0)
+                continue
             if self._reconnect_pending or self._is_connection_lost():
                 reconnect_attempt = await self._attempt_reconnect(
                     stop_event,
@@ -1136,8 +1151,8 @@ class BaseVideoStreamer(abc.ABC):
                     max_reconnect_attempts,
                 )
                 if reconnect_attempt < 0:
-                    # Stopped or capped: _should_reconnect is now False, so the
-                    # gate above parks until a start_video re-arms it.
+                    # Stopped: _should_reconnect is now False, so the gate
+                    # above parks until a start_video re-arms it.
                     reconnect_attempt = 0
 
             await asyncio.sleep(1.0)
@@ -1215,19 +1230,15 @@ class BaseVideoStreamer(abc.ABC):
             attempt += 1
             logger.error(f"Reconnection attempt {attempt} failed: {e}", exc_info=True)
 
-            if attempt >= max_attempts:
+            if attempt == max_attempts:
                 logger.error(
-                    f"Max reconnection attempts ({max_attempts}) reached. "
-                    "Stopping reconnection attempts."
+                    f"Camera stream still down after {attempt} reconnection "
+                    f"attempts; retrying every {reconnect_backoff(attempt):.0f}s "
+                    "until it connects or is stopped"
                 )
-                self._should_reconnect = False
-                self._reconnect_pending = False
-                return -1
 
             self._reconnect_pending = True
-
-            backoff_delay = min(base_delay * (2**attempt), 30.0)
-            await asyncio.sleep(backoff_delay)
+            await asyncio.sleep(reconnect_backoff(attempt))
             return attempt
 
     async def _cleanup_run(self):

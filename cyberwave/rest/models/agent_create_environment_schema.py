@@ -30,7 +30,7 @@ class AgentCreateEnvironmentSchema(BaseModel):
     Request schema for agent-created environments.
     """ # noqa: E501
     prompt: StrictStr
-    context_refs: Optional[Annotated[List[Optional[Dict[str, Any]]], Field(max_length=20)]] = None
+    context_refs: Optional[Annotated[List[Dict[str, Any]], Field(max_length=20)]] = None
     cyberwave_api_key: StrictStr
     workspace_uuid: Optional[StrictStr] = None
     project_uuid: Optional[StrictStr] = None

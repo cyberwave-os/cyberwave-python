@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Sequence
 from typing import Any, Mapping
 
 from .geometry.primitives import Quaterniond, Vector3d
@@ -67,6 +69,43 @@ def cartesian_pose_from_rotation_payload(payload: Mapping[str, Any]) -> Cartesia
     )
 
 
+def cartesian_pose_from_direct_payload(payload: Mapping[str, Any]) -> CartesianPose:
+    """Decode canonical ``cyberwave/twin/{uuid}/pose`` feedback.
+
+    ``pose_xyzw`` is exactly ``[x_m, y_m, z_m, qx, qy, qz, qw]``.  This
+    decoder is deliberately strict: accepting a partial vector or inventing a
+    frame would turn malformed measured feedback into plausible robot state.
+    """
+    raw_pose = payload.get("pose_xyzw")
+    if (
+        not isinstance(raw_pose, Sequence)
+        or isinstance(raw_pose, (str, bytes))
+        or len(raw_pose) != 7
+    ):
+        raise ValueError(
+            "pose_xyzw must be a seven-element [x, y, z, qx, qy, qz, qw] array"
+        )
+    try:
+        values = [float(value) for value in raw_pose]
+    except (TypeError, ValueError) as exc:
+        raise ValueError("pose_xyzw must contain only numeric values") from exc
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("pose_xyzw must contain only finite values")
+    frame_id = str(payload.get("frame_id") or payload.get("reference_frame") or "")
+    if not frame_id:
+        raise ValueError("direct pose feedback requires frame_id")
+    quaternion_norm = math.sqrt(sum(value * value for value in values[3:]))
+    if quaternion_norm <= 0.0:
+        raise ValueError("pose_xyzw quaternion must be non-zero")
+    if not math.isclose(quaternion_norm, 1.0, rel_tol=1e-3, abs_tol=1e-3):
+        raise ValueError("pose_xyzw quaternion must be unit length")
+    return CartesianPose(
+        spatial_state=SpatialState(reference_frame=frame_id),
+        position=Vector3d(*values[:3]),
+        orientation=Quaterniond(*values[3:]),
+    )
+
+
 def merge_cartesian_pose(
     base: CartesianPose | None,
     update: CartesianPose,
@@ -126,6 +165,8 @@ def decode_json_payload(
     controllable_names: frozenset[str] | set[str] | None = None,
 ) -> RobotStateMessage | dict[str, float] | CartesianPose:
     """Route catalog slug to the appropriate decoder (v1 JSON only)."""
+    if slug.endswith("/pose"):
+        return cartesian_pose_from_direct_payload(payload)
     if "/position" in slug or slug.endswith("/position"):
         return cartesian_pose_from_position_payload(payload)
     if "/rotation" in slug or slug.endswith("/rotation"):

@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
+from cyberwave.rest.models.agent_reference_image_schema import AgentReferenceImageSchema
 from cyberwave.rest.models.environment_agent_interaction_intent import EnvironmentAgentInteractionIntent
 from typing import Optional, Set
 from typing_extensions import Self
@@ -32,19 +33,21 @@ class EnvironmentAgentRequestSchema(BaseModel):
     message: StrictStr
     assistant_mode: Optional[StrictStr] = 'edit'
     control_mode: Optional[StrictStr] = None
+    control_approval: Optional[StrictStr] = 'ask'
     simulation_backend: Optional[Annotated[str, Field(strict=True, max_length=64)]] = None
     cyberwave_api_key: StrictStr
     assistant_session_id: Optional[Annotated[str, Field(strict=True, max_length=128)]] = None
     interaction_intent: Optional[EnvironmentAgentInteractionIntent] = None
     history: Optional[List[Dict[str, StrictStr]]] = None
     pending_confirmation: Optional[Dict[str, Any]] = None
-    current_twins: Optional[List[Optional[Dict[str, Any]]]] = None
+    current_twins: Optional[List[Dict[str, Any]]] = None
     context_refs: Optional[Annotated[List[Dict[str, Any]], Field(max_length=20)]] = None
     mlmodel_uuid: Optional[StrictStr] = None
     image_base64: Optional[StrictStr] = None
     image_mime_type: Optional[StrictStr] = None
     image_name: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["message", "assistant_mode", "control_mode", "simulation_backend", "cyberwave_api_key", "assistant_session_id", "interaction_intent", "history", "pending_confirmation", "current_twins", "context_refs", "mlmodel_uuid", "image_base64", "image_mime_type", "image_name"]
+    additional_images: Optional[Annotated[List[AgentReferenceImageSchema], Field(max_length=3)]] = None
+    __properties: ClassVar[List[str]] = ["message", "assistant_mode", "control_mode", "control_approval", "simulation_backend", "cyberwave_api_key", "assistant_session_id", "interaction_intent", "history", "pending_confirmation", "current_twins", "context_refs", "mlmodel_uuid", "image_base64", "image_mime_type", "image_name", "additional_images"]
 
     @field_validator('assistant_mode')
     def assistant_mode_validate_enum(cls, value):
@@ -64,6 +67,16 @@ class EnvironmentAgentRequestSchema(BaseModel):
 
         if value not in set(['live', 'simulation']):
             raise ValueError("must be one of enum values ('live', 'simulation')")
+        return value
+
+    @field_validator('control_approval')
+    def control_approval_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['ask', 'auto', 'plan']):
+            raise ValueError("must be one of enum values ('ask', 'auto', 'plan')")
         return value
 
     model_config = ConfigDict(
@@ -105,6 +118,13 @@ class EnvironmentAgentRequestSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in additional_images (list)
+        _items = []
+        if self.additional_images:
+            for _item_additional_images in self.additional_images:
+                if _item_additional_images:
+                    _items.append(_item_additional_images.to_dict())
+            _dict['additional_images'] = _items
         # set to None if control_mode (nullable) is None
         # and model_fields_set contains the field
         if self.control_mode is None and "control_mode" in self.model_fields_set:
@@ -165,6 +185,7 @@ class EnvironmentAgentRequestSchema(BaseModel):
             "message": obj.get("message"),
             "assistant_mode": obj.get("assistant_mode") if obj.get("assistant_mode") is not None else 'edit',
             "control_mode": obj.get("control_mode"),
+            "control_approval": obj.get("control_approval") if obj.get("control_approval") is not None else 'ask',
             "simulation_backend": obj.get("simulation_backend"),
             "cyberwave_api_key": obj.get("cyberwave_api_key"),
             "assistant_session_id": obj.get("assistant_session_id"),
@@ -176,7 +197,8 @@ class EnvironmentAgentRequestSchema(BaseModel):
             "mlmodel_uuid": obj.get("mlmodel_uuid"),
             "image_base64": obj.get("image_base64"),
             "image_mime_type": obj.get("image_mime_type"),
-            "image_name": obj.get("image_name")
+            "image_name": obj.get("image_name"),
+            "additional_images": [AgentReferenceImageSchema.from_dict(_item) for _item in obj["additional_images"]] if obj.get("additional_images") is not None else None
         })
         return _obj
 

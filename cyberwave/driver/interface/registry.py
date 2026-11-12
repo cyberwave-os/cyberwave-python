@@ -32,6 +32,9 @@ _NAMESPACE_PREFIXES: dict[str, str] = {
     "twin": "cyberwave/twin/{twin_uuid}",
     "webrtc": "cyberwave/twin/{twin_uuid}",
     "pose": "cyberwave/twin/{twin_uuid}",
+    # Nested: leaves flatten to cyberwave/twin/{uuid}/state/<leaf>, which is how
+    # TWIN_KINEMATICS_TOPIC_SLUG round-trips through the manifest.
+    "state": "cyberwave/twin/{twin_uuid}/state",
     "environment": "cyberwave/environment/{environment_uuid}",
 }
 
@@ -40,6 +43,34 @@ _WEBRTC_LEAF_ALIASES: dict[str, str] = {
     "answer": "webrtc-answer",
     "candidate": "webrtc-candidate",
 }
+
+
+_TWIN_SLUG_PREFIX = "cyberwave/twin/{twin_uuid}/"
+
+# Namespaces whose prefix is itself nested under the twin prefix (e.g. "state" ->
+# cyberwave/twin/{uuid}/state). Slugs under one of these reverse-map to their own
+# mqtt block instead of folding into "twin", which is what keeps
+# to_cw_driver_dict symmetric with cw_driver._flatten_mqtt_tree.
+_NESTED_TWIN_NAMESPACES: frozenset[str] = frozenset(
+    ns
+    for ns, prefix in _NAMESPACE_PREFIXES.items()
+    if prefix.startswith(_TWIN_SLUG_PREFIX)
+)
+
+
+def _slug_to_ns_leaf(slug: str) -> tuple[str, str] | None:
+    """Reverse a canonical MQTT slug to its ``(namespace, leaf)`` manifest key."""
+    if slug == TWIN_COMMAND_TOPIC_SLUG:
+        return ("twin", "command")
+    if slug.startswith("cyberwave/joint/{twin_uuid}/"):
+        return ("joint", slug.split("/")[-1])
+    if slug.startswith(_TWIN_SLUG_PREFIX):
+        rest = slug[len(_TWIN_SLUG_PREFIX) :]
+        head, _, tail = rest.partition("/")
+        if tail and head in _NESTED_TWIN_NAMESPACES:
+            return (head, tail)
+        return ("twin", rest.split("/")[-1])
+    return None
 
 
 def _leaf_to_slug(namespace: str, leaf: str) -> str:
@@ -64,13 +95,19 @@ def _load_slug_map() -> dict[tuple[str, str], str]:
     from cyberwave.manifest.driver_config import (
         JOINT_UPDATE_TOPIC_SLUG,
         TWIN_COMMAND_TOPIC_SLUG,
+        TWIN_FRAME_POSES_TOPIC_SLUG,
+        TWIN_KINEMATICS_TOPIC_SLUG,
+        TWIN_POSE_TOPIC_SLUG,
         TWIN_TELEMETRY_TOPIC_SLUG,
     )
 
     _TOPIC_SLUG_BY_NS_LEAF = {
         ("twin", "command"): TWIN_COMMAND_TOPIC_SLUG,
+        ("twin", "pose"): TWIN_POSE_TOPIC_SLUG,
         ("twin", "telemetry"): TWIN_TELEMETRY_TOPIC_SLUG,
+        ("twin", "frame_poses"): TWIN_FRAME_POSES_TOPIC_SLUG,
         ("joint", "update"): JOINT_UPDATE_TOPIC_SLUG,
+        ("state", "kinematics"): TWIN_KINEMATICS_TOPIC_SLUG,
     }
     return _TOPIC_SLUG_BY_NS_LEAF
 
@@ -88,7 +125,14 @@ def resolve_topic_path(
         assert topic.namespace is not None and topic.leaf is not None
         template = _load_slug_map().get((topic.namespace, topic.leaf))
         if template is None:
-            slug = _leaf_to_slug(topic.namespace, topic.leaf)
+            # Fallback namespaces (for example ``state/motion``) still use a
+            # canonical template containing ``{twin_uuid}``.  Unlike an entry
+            # in the explicit slug map, it was previously returned verbatim,
+            # publishing to a literal ``.../{twin_uuid}/...`` topic that no
+            # concrete twin subscriber could receive.
+            slug = _leaf_to_slug(topic.namespace, topic.leaf).replace(
+                "{twin_uuid}", twin_uuid
+            )
         else:
             slug = template.replace("{twin_uuid}", twin_uuid)
     return f"{prefix}{slug}"
@@ -408,14 +452,10 @@ class DriverInterfaceRegistry:
             "driver_family": driver_family,
         }
         for slug, entry in self._topic_meta.items():
-            if slug == TWIN_COMMAND_TOPIC_SLUG:
-                ns, leaf = "twin", "command"
-            elif slug.startswith("cyberwave/joint/{twin_uuid}/"):
-                ns, leaf = "joint", slug.split("/")[-1]
-            elif slug.startswith("cyberwave/twin/{twin_uuid}/"):
-                ns, leaf = "twin", slug.split("/")[-1]
-            else:
+            ns_leaf = _slug_to_ns_leaf(slug)
+            if ns_leaf is None:
                 continue
+            ns, leaf = ns_leaf
             mqtt.setdefault(ns, {})[leaf] = dict(entry)
 
         commands_supported: list[Any] = []

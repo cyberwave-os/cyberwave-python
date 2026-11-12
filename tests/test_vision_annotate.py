@@ -1,6 +1,7 @@
 """Tests for cyberwave.vision.annotate."""
 
 import json
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -32,6 +33,21 @@ def _make_det(
 
 
 class TestAnnotateDetections:
+    def test_caption_shows_confirmed_track_id(self, monkeypatch):
+        captions = []
+        original_put_text = cv2.putText
+
+        def capture_caption(image, text, *args, **kwargs):
+            captions.append(text)
+            return original_put_text(image, text, *args, **kwargs)
+
+        monkeypatch.setattr(cv2, "putText", capture_caption)
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        det = _make_det(label="cup")
+        det.track_id = 3
+        annotate_detections(frame, [det])
+        assert captions == ["cup #3 0.90"]
+
     def test_does_not_mutate_input_by_default(self):
         frame = np.zeros((100, 100, 3), dtype=np.uint8)
         det = _make_det()
@@ -266,6 +282,30 @@ class TestBuildOverlayPayload:
         payload = build_overlay_payload([person, car], labels=["person"])
         assert [b["label"] for b in payload["boxes"]] == ["person"]
 
+    def test_tracked_detection_shows_instance_id(self):
+        tracked = _make_det(label="cup", confidence=0.79)
+        tracked.track_id = 0
+        box = build_overlay_payload([tracked])["boxes"][0]
+        assert box["label"] == "cup #0"
+        assert box["track_id"] == 0
+        assert box["conf"] == 0.79
+
+        tracked.track_id = None
+        untracked = build_overlay_payload([tracked])["boxes"][0]
+        assert untracked["label"] == "cup"
+        assert "track_id" not in untracked
+
+    def test_legacy_detection_without_track_id_still_renders(self):
+        det = SimpleNamespace(
+            label="cup",
+            confidence=0.79,
+            bbox=BoundingBox(10, 10, 50, 80),
+            mask=None,
+        )
+        box = build_overlay_payload([det])["boxes"][0]
+        assert box["label"] == "cup"
+        assert "track_id" not in box
+
     def test_labels_empty_iterable_excludes_everything(self):
         # Mirrors the ``annotate_detections`` behaviour — codegen may
         # pass ``target_classes=[]`` and we shouldn't raise or include.
@@ -362,6 +402,12 @@ class TestDictDetectionInputs:
         assert box["label"] == "QRCode"
         assert box["conf"] == 1.0
 
+    def test_dict_detection_preserves_track_id(self):
+        det = {**self._barcode_detection_dict(), "track_id": 12}
+        box = build_overlay_payload([det])["boxes"][0]
+        assert box["label"] == "QRCode #12"
+        assert box["track_id"] == 12
+
     def test_build_overlay_payload_prefers_bbox_pixels_over_bbox(self):
         det = {
             "label": "QRCode",
@@ -392,6 +438,14 @@ class TestDictDetectionInputs:
 
 
 class TestBuildOverlayPayloadMasks:
+    def test_tracked_mask_keeps_polygon_and_instance_id(self):
+        det = _det_with_mask()
+        det.track_id = 5
+        box = build_overlay_payload([det])["boxes"][0]
+        assert box["label"] == "person #5"
+        assert box["track_id"] == 5
+        assert len(box["polygon"]) >= 4
+
     def test_polygon_emitted_per_detection(self):
         payload = build_overlay_payload([_det_with_mask()])
         box = payload["boxes"][0]

@@ -34,6 +34,7 @@ class ContentInput(BaseModel):
     """ # noqa: E501
     content_type: Optional[StrictStr] = 'blog'
     details: Optional[ContentDetails] = None
+    related_partner_uuids: Optional[Annotated[List[UUID], Field(max_length=12)]] = None
     document_attachment_uuid: Optional[UUID] = None
     access_mode: Optional[StrictStr] = 'open'
     capture_workspace_uuid: Optional[UUID] = None
@@ -51,7 +52,7 @@ class ContentInput(BaseModel):
     seo_description: Optional[StrictStr] = ''
     is_published: Optional[StrictBool] = False
     published_at: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["content_type", "details", "document_attachment_uuid", "access_mode", "capture_workspace_uuid", "paper", "slug", "title", "excerpt", "body", "author", "author_avatar", "inline_image_uuids", "cover_attachment_uuid", "cover_url", "seo_title", "seo_description", "is_published", "published_at"]
+    __properties: ClassVar[List[str]] = ["content_type", "details", "related_partner_uuids", "document_attachment_uuid", "access_mode", "capture_workspace_uuid", "paper", "slug", "title", "excerpt", "body", "author", "author_avatar", "inline_image_uuids", "cover_attachment_uuid", "cover_url", "seo_title", "seo_description", "is_published", "published_at"]
 
     @field_validator('content_type')
     def content_type_validate_enum(cls, value):
@@ -59,8 +60,8 @@ class ContentInput(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page']):
-            raise ValueError("must be one of enum values ('blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page')")
+        if value not in set(['blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page', 'partner', 'use_case']):
+            raise ValueError("must be one of enum values ('blog', 'paper', 'customer_story', 'whitepaper', 'ebook', 'one_pager', 'video', 'recording', 'presentation', 'demo_page', 'partner', 'use_case')")
         return value
 
     @field_validator('access_mode')
@@ -169,6 +170,7 @@ class ContentInput(BaseModel):
         _obj = cls.model_validate({
             "content_type": obj.get("content_type") if obj.get("content_type") is not None else 'blog',
             "details": ContentDetails.from_dict(obj["details"]) if obj.get("details") is not None else None,
+            "related_partner_uuids": obj.get("related_partner_uuids"),
             "document_attachment_uuid": obj.get("document_attachment_uuid"),
             "access_mode": obj.get("access_mode") if obj.get("access_mode") is not None else 'open',
             "capture_workspace_uuid": obj.get("capture_workspace_uuid"),

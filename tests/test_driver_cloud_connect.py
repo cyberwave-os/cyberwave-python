@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -165,3 +165,53 @@ def test_connect_cloud_async_reuses_prebound_client_mqtt() -> None:
 
     connect_mqtt.assert_not_called()
     fetch_twin.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reconnect_wait_does_not_leave_event_task_on_shutdown() -> None:
+    driver = _MinimalDriver()
+    existing = asyncio.all_tasks()
+    reconnect = asyncio.create_task(driver._reconnect_loop_async())
+    await asyncio.sleep(0)
+
+    driver.request_shutdown()
+    await reconnect
+
+    leaked = [
+        task
+        for task in asyncio.all_tasks() - existing
+        if not task.done() and task.get_coro().__qualname__ == "Event.wait"
+    ]
+    assert not leaked
+
+
+@pytest.mark.asyncio
+async def test_reconnect_wait_does_not_accumulate_event_tasks() -> None:
+    driver = _MinimalDriver()
+    driver._transition_to = MagicMock()
+    driver.on_reconnect = AsyncMock(return_value=True)
+    driver._unwire_interface_from_registry = AsyncMock()
+    driver._wire_interface_from_registry = AsyncMock()
+    driver._activate_registry_zenoh = AsyncMock()
+    existing = asyncio.all_tasks()
+    reconnect = asyncio.create_task(driver._reconnect_loop_async())
+    await asyncio.sleep(0)
+
+    driver._connection_lost.set()
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if not driver._connection_lost.is_set():
+            break
+    assert driver.on_reconnect.await_count == 1
+    assert not driver._connection_lost.is_set()
+    await asyncio.sleep(0)
+    event_waiters = [
+        task
+        for task in asyncio.all_tasks() - existing
+        if not task.done() and task.get_coro().__qualname__ == "Event.wait"
+    ]
+    assert len(event_waiters) <= 2
+
+    driver.request_shutdown()
+    await reconnect
+    assert not [task for task in event_waiters if not task.done()]

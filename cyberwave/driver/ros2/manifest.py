@@ -15,12 +15,14 @@ from typing import Any, Optional
 
 import yaml
 
+# Ordered, and the same tuple the cw-driver reader uses. Iterating a set here
+# let hash randomization pick the generated key order, so two exports of an
+# unchanged driver could differ.
+from ..interface.cw_driver import _CW_DRIVER_ROOT_KEYS
+
 logger = logging.getLogger(__name__)
 
 DRIVER_MANIFEST_FILE_NAME = "manifest.yaml"
-_CW_DRIVER_ROOT_KEYS = frozenset(
-    {"registry_id", "driver_family", "mqtt", "zenoh", "commands"}
-)
 
 
 class TopicRole(Enum):

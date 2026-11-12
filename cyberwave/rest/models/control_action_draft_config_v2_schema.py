@@ -22,7 +22,6 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from uuid import UUID
 from cyberwave.rest.models.control_action_input_trigger_schema import ControlActionInputTriggerSchema
-from cyberwave.rest.models.control_action_joint_keyboard_schema import ControlActionJointKeyboardSchema
 from cyberwave.rest.models.control_operator_ui_schema import ControlOperatorUISchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -35,12 +34,10 @@ class ControlActionDraftConfigV2Schema(BaseModel):
     version: Optional[StrictInt] = 2
     capability_id: Annotated[str, Field(min_length=1, strict=True, max_length=64)]
     name: Annotated[str, Field(min_length=1, strict=True, max_length=150)]
-    input_policy_uuids: Optional[Annotated[List[UUID], Field(max_length=16)]] = None
     policy_uuid: Optional[UUID] = None
     operator_ui: Optional[ControlOperatorUISchema] = None
     input_trigger: Optional[ControlActionInputTriggerSchema] = None
-    input_mappings: Optional[Dict[str, ControlActionJointKeyboardSchema]] = None
-    __properties: ClassVar[List[str]] = ["version", "capability_id", "name", "input_policy_uuids", "policy_uuid", "operator_ui", "input_trigger", "input_mappings"]
+    __properties: ClassVar[List[str]] = ["version", "capability_id", "name", "policy_uuid", "operator_ui", "input_trigger"]
 
     @field_validator('version')
     def version_validate_enum(cls, value):
@@ -97,13 +94,6 @@ class ControlActionDraftConfigV2Schema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of input_trigger
         if self.input_trigger:
             _dict['input_trigger'] = self.input_trigger.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of each value in input_mappings (dict)
-        _field_dict = {}
-        if self.input_mappings:
-            for _key_input_mappings in self.input_mappings:
-                if self.input_mappings[_key_input_mappings]:
-                    _field_dict[_key_input_mappings] = self.input_mappings[_key_input_mappings].to_dict()
-            _dict['input_mappings'] = _field_dict
         # set to None if policy_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.policy_uuid is None and "policy_uuid" in self.model_fields_set:
@@ -134,16 +124,9 @@ class ControlActionDraftConfigV2Schema(BaseModel):
             "version": obj.get("version") if obj.get("version") is not None else 2,
             "capability_id": obj.get("capability_id"),
             "name": obj.get("name"),
-            "input_policy_uuids": obj.get("input_policy_uuids"),
             "policy_uuid": obj.get("policy_uuid"),
             "operator_ui": ControlOperatorUISchema.from_dict(obj["operator_ui"]) if obj.get("operator_ui") is not None else None,
-            "input_trigger": ControlActionInputTriggerSchema.from_dict(obj["input_trigger"]) if obj.get("input_trigger") is not None else None,
-            "input_mappings": dict(
-                (_k, ControlActionJointKeyboardSchema.from_dict(_v))
-                for _k, _v in obj["input_mappings"].items()
-            )
-            if obj.get("input_mappings") is not None
-            else None
+            "input_trigger": ControlActionInputTriggerSchema.from_dict(obj["input_trigger"]) if obj.get("input_trigger") is not None else None
         })
         return _obj
 

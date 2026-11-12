@@ -32,6 +32,38 @@ def test_get_effective_source_type_prefers_explicit_value(mqtt_client):
     assert mqtt_client._get_effective_source_type(SOURCE_TYPE_EDIT) == SOURCE_TYPE_EDIT
 
 
+def test_disconnect_count_survives_reconnect_and_subscription_restore(mqtt_client):
+    topic = "cyberwave/twin/test/command"
+    mqtt_client._handlers[topic] = MagicMock()
+    mqtt_client.client.subscribe.return_value = (0, 7)
+    assert mqtt_client.disconnect_count == 0
+    for count in (1, 2):
+        mqtt_client._on_disconnect(mqtt_client.client, None, 1)
+        assert not mqtt_client.connected
+        mqtt_client._on_connect(mqtt_client.client, None, {}, 0)
+        assert mqtt_client.connected
+        assert mqtt_client.disconnect_count == count
+    assert mqtt_client.client.subscribe.call_count == 2
+
+
+def test_reconnect_resubscribes_at_the_requested_qos(mqtt_client):
+    command = "cyberwave/twin/test/command"
+    telemetry = "cyberwave/twin/test/telemetry"
+    mqtt_client.client.subscribe.return_value = (0, 7)
+    mqtt_client.subscribe(command, MagicMock(), qos=1)
+    mqtt_client.subscribe(telemetry, MagicMock())
+    mqtt_client.client.subscribe.reset_mock()
+
+    mqtt_client._on_disconnect(mqtt_client.client, None, 1)
+    mqtt_client._on_connect(mqtt_client.client, None, {}, 0)
+
+    qos_by_topic = {
+        call.args[0]: call.kwargs.get("qos")
+        for call in mqtt_client.client.subscribe.call_args_list
+    }
+    assert qos_by_topic == {command: 1, telemetry: 0}
+
+
 def test_get_effective_source_type_falls_back_to_edge_when_not_set():
     with patch("cyberwave.mqtt.mqtt.Client"):
         client = CyberwaveMQTTClient(

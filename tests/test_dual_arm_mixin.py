@@ -66,6 +66,7 @@ class _Driver(DualArmMixin, EECartesianPoseMixin, _TerminalBase):
         self.pose_calls: list[tuple[EEPose, str | None]] = []
         self.failures: list[tuple[str | None, str]] = []
         self.homed = False
+        self.speeds: list[float | None] = []
         self._joints = {
             "left_joint1": 0.5,
             "left_joint2": 0.0,
@@ -90,6 +91,9 @@ class _Driver(DualArmMixin, EECartesianPoseMixin, _TerminalBase):
 
     def request_home(self):
         self.homed = True
+
+    def _set_command_speed(self, scale):
+        self.speeds.append(scale)
 
     def _apply_ee_pose(self, pose, *, arm=None):
         self.pose_calls.append((pose, arm))
@@ -166,3 +170,57 @@ def test_unknown_prefix_is_noop_warning() -> None:
     driver = _Driver()
     driver._on_dual_arm_command({"command": "middle_ee_move", "data": {}})
     assert driver.applied == []
+
+
+def _arg_names(driver, command: str) -> list[str]:
+    iface = DriverInterfaceRegistry()
+    driver.define_interface(iface)
+    supported = iface.to_cw_driver_dict(registry_id="t")["mqtt"]["commands"]["supported"]
+    (entry,) = [c for c in supported if isinstance(c, dict) and c["name"] == command]
+    return [a["name"] for a in entry["args"]]
+
+
+def test_dual_arm_ee_move_declares_speed_like_single_arm() -> None:
+    """The regression that let `speed` skip dual-arm: two hand-rolled arg tables."""
+    assert "speed" in _arg_names(_Driver(), "left_ee_move")
+    assert "speed" in _arg_names(_Driver(), "right_ee_move")
+    assert "speed" in _arg_names(_Driver(), "left_ee_rotate_left")
+
+
+def test_dual_arm_base_rotate_still_has_no_speed() -> None:
+    assert "speed" not in _arg_names(_Driver(), "left_base_rotate_left")
+
+
+def test_dual_arm_forwards_the_speed_scale() -> None:
+    d = _Driver()
+    d._on_dual_arm_command(
+        {"command": "left_ee_move", "data": {"forward": 0.05, "speed": 0.25}}
+    )
+    assert d.speeds == [0.25]
+    assert d.applied
+
+
+def test_dual_arm_speed_absent_passes_none() -> None:
+    d = _Driver()
+    d._on_dual_arm_command({"command": "right_ee_move", "data": {"forward": 0.05}})
+    assert d.speeds == [None]
+
+
+def test_single_and_dual_arm_cartesian_arg_tables_agree() -> None:
+    """One source of truth for cartesian args; drift here is the bug class."""
+    from cyberwave.driver.control.cartesian import cartesian_command_specs
+
+    specs = dict(cartesian_command_specs(_arm_cfg("left"), include_pose=True))
+    assert set(specs) == {
+        "ee_move",
+        "ee_rotate_left",
+        "ee_rotate_right",
+        "ee_rotate_up",
+        "ee_rotate_down",
+        "ee_pose",
+    }
+    assert [a.name for a in specs["ee_move"]] == [
+        "forward", "up", "left", "frame", "speed",
+    ]
+    assert [a.name for a in specs["ee_rotate_left"]] == ["angle", "speed"]
+    assert [a.name for a in specs["ee_pose"]] == ["pose"]

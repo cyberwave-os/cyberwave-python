@@ -5,6 +5,23 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
+
+
+def driver_logger(obj: Any, fallback: Any) -> Any:
+    """*obj*'s ROS logger (``get_logger()``) when it has one, else *fallback*.
+
+    For mixins that log from a driver that may or may not be a ROS node.
+    Logging must never be the failure, so a ``get_logger`` that raises also
+    falls back.
+    """
+    get_logger = getattr(obj, "get_logger", None)
+    if callable(get_logger):
+        try:
+            return get_logger()
+        except Exception:  # noqa: BLE001, S110 - logging must never be the failure
+            pass
+    return fallback
 
 
 def get_sdk_version() -> str | None:

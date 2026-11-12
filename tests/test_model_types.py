@@ -81,6 +81,18 @@ class TestDetection:
         assert det.mask is None
         assert det.keypoints is None
         assert det.metadata == {}
+        assert det.track_id is None
+
+    def test_positional_construction_unchanged_by_track_id(self) -> None:
+        bbox = BoundingBox(x1=0, y1=0, x2=10, y2=10)
+        det = Detection("cat", 0.8, bbox, 0.25, None, None, None, None, {"k": 1})
+        assert det.metadata == {"k": 1}
+        assert det.track_id is None
+
+    def test_describe_line_shows_track_id(self) -> None:
+        bbox = BoundingBox(x1=0, y1=0, x2=10, y2=10)
+        det = Detection(label="cup", confidence=0.5, bbox=bbox, track_id=7)
+        assert "'cup' track=7 conf=0.500" in det.describe_line(0)
 
     def test_area_ratio_set(self) -> None:
         bbox = BoundingBox(x1=0, y1=0, x2=100, y2=100)

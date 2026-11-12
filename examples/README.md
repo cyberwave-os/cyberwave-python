@@ -43,6 +43,7 @@ catalog. Some examples need optional extras (e.g. `cyberwave[camera]`, `cyberwav
 | [realsense_stream.py](realsense_stream.py) | Intel RealSense RGB + depth streaming |
 | [webcam_pose_anonymize.py](webcam_pose_anonymize.py) | Local webcam with frame filters |
 | [notebooks/g1_voice_astra.ipynb](notebooks/g1_voice_astra.ipynb) | Colab voice control for an existing G1 twin using a live camera frame and GPT-6 Astra; preview mode by default |
+| [notebooks/g1_voice_astra_v2.ipynb](notebooks/g1_voice_astra_v2.ipynb) | V2: G1 microphone → Astra with a live camera frame; human-facing replies spoken through the G1 speaker using OpenAI and the same key; motion disabled by default |
 
 ## Streaming & audio
 

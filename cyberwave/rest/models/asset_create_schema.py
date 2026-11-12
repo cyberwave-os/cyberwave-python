@@ -27,6 +27,7 @@ class AssetCreateSchema(BaseModel):
     """
     AssetCreateSchema
     """ # noqa: E501
+    is_edge_device: Optional[StrictBool] = None
     name: StrictStr
     description: StrictStr
     visibility: Optional[StrictStr] = 'private'
@@ -34,13 +35,14 @@ class AssetCreateSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     registry_id: Optional[StrictStr] = None
     registry_id_alias: Optional[StrictStr] = None
+    fixed_base: Optional[StrictBool] = False
     universal_schema: Optional[Dict[str, Any]] = None
     supported_simulation_backends: Optional[List[StrictStr]] = None
     purchase_price: Optional[Union[StrictFloat, StrictInt]] = None
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "registry_id_alias", "universal_schema", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["is_edge_device", "name", "description", "visibility", "workspace_uuid", "metadata", "registry_id", "registry_id_alias", "fixed_base", "universal_schema", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +83,11 @@ class AssetCreateSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if is_edge_device (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_edge_device is None and "is_edge_device" in self.model_fields_set:
+            _dict['is_edge_device'] = None
+
         # set to None if workspace_uuid (nullable) is None
         # and model_fields_set contains the field
         if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
@@ -133,6 +140,7 @@ class AssetCreateSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "is_edge_device": obj.get("is_edge_device"),
             "name": obj.get("name"),
             "description": obj.get("description"),
             "visibility": obj.get("visibility") if obj.get("visibility") is not None else 'private',
@@ -140,6 +148,7 @@ class AssetCreateSchema(BaseModel):
             "metadata": obj.get("metadata"),
             "registry_id": obj.get("registry_id"),
             "registry_id_alias": obj.get("registry_id_alias"),
+            "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False,
             "universal_schema": obj.get("universal_schema"),
             "supported_simulation_backends": obj.get("supported_simulation_backends"),
             "purchase_price": obj.get("purchase_price"),

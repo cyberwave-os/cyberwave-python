@@ -34,7 +34,7 @@ class BindingCreate(BaseModel):
     asset_uuid: UUID
     name: Annotated[str, Field(min_length=1, strict=True, max_length=255)]
     joint_order: Annotated[List[StrictStr], Field(min_length=1, max_length=256)]
-    joint_value_transforms: Dict[str, Optional[Dict[str, Any]]]
+    joint_value_transforms: Dict[str, Dict[str, Any]]
     model_source: Dict[str, Any]
     robot_source: Annotated[str, Field(min_length=64, strict=True, max_length=64)]
     evidence: Annotated[str, Field(min_length=1, strict=True, max_length=4000)]

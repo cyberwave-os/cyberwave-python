@@ -95,6 +95,27 @@ def test_ros_request_transition_sync_skips_activate_when_already_active() -> Non
     driver._trigger_transition_sync.assert_not_called()
 
 
+def test_shutdown_from_ros_thread_wakes_driver_loop() -> None:
+    import asyncio
+    import threading
+
+    driver = _minimal_ros_driver()
+    driver._shutdown = asyncio.Event()
+    loop = asyncio.new_event_loop()
+    driver._driver_loop = loop
+    thread = threading.Thread(target=loop.run_forever)
+    driver._driver_loop_thread = thread
+    thread.start()
+    try:
+        waiting = asyncio.run_coroutine_threadsafe(driver._shutdown.wait(), loop)
+        driver.request_shutdown()
+        assert waiting.result(timeout=1) is True
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=1)
+        loop.close()
+
+
 @pytest.mark.asyncio
 async def test_run_async_connect_log_tolerates_unbound_twin() -> None:
     """Regression: the connect-phase log must use _resolve_twin_uuid(), not
@@ -133,3 +154,62 @@ async def test_run_async_connect_log_tolerates_unbound_twin() -> None:
     driver._connect_cloud_async.assert_awaited_once()
     # finally must mirror BaseDriver.run_async and release the SDK client.
     driver._disconnect_cloud_client.assert_called_once()
+
+
+def _run_async_harness(failure: BaseException):
+    """A driver whose run_async fails with *failure* during connect."""
+    import asyncio
+
+    from cyberwave.driver.base import DriverLifecycleState
+
+    driver = _minimal_ros_driver()
+    driver._twin = None
+    driver._cw = None
+    driver._cloud_connected = False
+    driver._lifecycle_state = DriverLifecycleState.UNCONFIGURED
+    driver._shutdown = asyncio.Event()
+    driver._alert_manager = MagicMock()
+    driver._emit_driver_info = MagicMock()
+    driver._emit_lifecycle_alerts = MagicMock()
+    driver._end_driver_telemetry_session = MagicMock()
+    driver._run_shutdown = AsyncMock()
+    driver._unwire_interface_from_registry = AsyncMock()
+    driver._disconnect_cloud_client = MagicMock()
+    driver._connect_cloud_async = AsyncMock(side_effect=failure)
+    states: list[DriverLifecycleState] = []
+    original = driver._transition_to
+
+    def record(state):
+        states.append(state)
+        original(state)
+
+    driver._transition_to = record
+    return driver, states
+
+
+@pytest.mark.asyncio
+async def test_a_cancellation_during_the_requested_shutdown_is_not_an_error() -> None:
+    """docker stop / SIGINT: the stop was asked for, so no `active -> error`."""
+    import asyncio
+
+    from cyberwave.driver.base import DriverLifecycleState
+
+    driver, states = _run_async_harness(asyncio.CancelledError())
+    driver._shutdown.set()
+    with patch("cyberwave.driver.ros2.base_ros2_driver.unwire_ros_publishers"):
+        await BaseROS2Driver.run_async(driver)
+    assert DriverLifecycleState.ERROR not in states
+    assert states[-1] == DriverLifecycleState.FINALIZED
+
+
+@pytest.mark.asyncio
+async def test_an_unrequested_cancellation_is_still_an_error() -> None:
+    import asyncio
+
+    from cyberwave.driver.base import DriverLifecycleState
+
+    driver, states = _run_async_harness(asyncio.CancelledError())
+    with patch("cyberwave.driver.ros2.base_ros2_driver.unwire_ros_publishers"):
+        with pytest.raises(asyncio.CancelledError):
+            await BaseROS2Driver.run_async(driver)
+    assert DriverLifecycleState.ERROR in states

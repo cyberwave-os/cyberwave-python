@@ -91,3 +91,6 @@ def test_each_ros_publisher_handler_uses_its_own_topic_and_rate() -> None:
     assert len(calls) == 2
     seen = {call.args[0]: call.kwargs["max_hz"] for call in calls}
     assert seen == {"/slow_topic": 5.0, "/fast_topic": 50.0}
+    log = driver.get_logger.return_value
+    assert len([call for call in log.debug.call_args_list if "ROS RX" in call.args[0]]) == 2
+    assert not any("ROS RX" in call.args[0] for call in log.info.call_args_list)

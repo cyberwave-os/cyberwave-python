@@ -11,7 +11,9 @@ applies, but lifecycle hooks differ (sync vs async).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -40,6 +42,24 @@ from .registry import (
 from .source_type_policy import filtered_listener
 
 logger = logging.getLogger(__name__)
+
+
+def _canonical_sha256(value: Any) -> str:
+    """SHA-256 of *value* as canonical JSON (sorted keys)."""
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _twin_metadata(twin: Any) -> dict[str, Any]:
+    """The twin's loaded ``metadata`` dict (empty when absent)."""
+    data = getattr(twin, "_data", None)
+    metadata = (
+        data.get("metadata")
+        if isinstance(data, dict)
+        else getattr(data, "metadata", None)
+    )
+    return metadata if isinstance(metadata, dict) else {}
+
 
 ListenerHandler = Callable[[dict[str, Any]], None | Awaitable[None]]
 
@@ -224,13 +244,71 @@ class InterfaceRegistryMixin:
         logger.info("Wrote %s", target.resolve())
         return target.resolve()
 
-    def register_interface_on_twin(self, *, merge: bool = True) -> dict[str, Any]:
-        """Persist this driver's MQTT catalog on the connected twin."""
+    #: Twin metadata key recording the last registration: ``input`` is
+    #: :meth:`catalog_hash`, ``written`` the digest of the twin's catalog
+    #: blocks right after it, so an unchanged driver does not rewrite them on
+    #: every start, and any other writer (an older driver, an edit) is noticed.
+    CATALOG_HASH_METADATA_KEY = "driver_catalog_sha256"
+
+    #: Twin metadata blocks the catalog registration writes.
+    CATALOG_METADATA_BLOCKS = ("mqtt", "zenoh")
+
+    def catalog_hash(self) -> str:
+        """SHA-256 of :attr:`cw_driver`, canonicalised (sorted keys)."""
+        return _canonical_sha256(self.cw_driver)
+
+    def register_interface_on_twin(
+        self, *, merge: bool = False, force: bool = False
+    ) -> dict[str, Any]:
+        """Update this driver's catalog on the twin, only when it changed.
+
+        Skipped only when the twin still holds what this driver last wrote:
+        its :meth:`catalog_hash` matches the recorded one *and* the twin's
+        catalog blocks hash to what that registration left there. Otherwise
+        (changed, absent, overwritten by another writer, or *force*) the
+        catalog is replaced (merged when *merge*), so commands a newer driver
+        no longer has stop being advertised, and the record is refreshed.
+
+        Not detected: a backend change to how the catalog is compiled, or an
+        asset swap that changes what it compiles to, while the stored catalog
+        stays the same. Pass *force* (or clear the metadata key) after those.
+        """
         twin = self._require_twin()
-        schemas = twin.driver.set_schema(self.cw_driver, merge=merge)
+        digest = self.catalog_hash()
+        metadata = _twin_metadata(twin)
+        stored = metadata.get(type(self).CATALOG_HASH_METADATA_KEY)
+        current = {"input": digest, "written": self._written_catalog_hash(metadata)}
+        if not force and stored == current:
+            logger.info(
+                "Driver catalog unchanged (sha256 %s); not re-registered", digest
+            )
+            schemas = twin.driver.get_schemas()
+        else:
+            schemas = twin.driver.set_schema(self.cw_driver, merge=merge)
+            written = self._written_catalog_hash(_twin_metadata(twin))
+            self._store_catalog_hash(twin, {"input": digest, "written": written})
         mqtt_schema = schemas.get("mqtt") if isinstance(schemas.get("mqtt"), dict) else {}
         self._emit_driver_info_after_schema(mqtt_schema)
         return schemas
+
+    def _written_catalog_hash(self, metadata: dict[str, Any]) -> str:
+        """Digest of the catalog blocks *metadata* holds."""
+        return _canonical_sha256(
+            {key: metadata.get(key) for key in type(self).CATALOG_METADATA_BLOCKS}
+        )
+
+    def _store_catalog_hash(self, twin: Any, record: dict[str, str]) -> None:
+        """Record *record* on the twin; a failure only means a re-write next start."""
+        key = type(self).CATALOG_HASH_METADATA_KEY
+        try:
+            # Shallow-merged into the twin's metadata server-side.
+            twin.client.twins.update(str(twin.uuid), metadata={key: record})
+        except Exception:  # the catalog itself is already written
+            logger.warning(
+                "Could not store the driver catalog hash on the twin; it will be "
+                "re-registered on the next start",
+                exc_info=True,
+            )
 
     @property
     def operation_mode(self) -> DriverOperationMode:
@@ -245,10 +323,16 @@ class InterfaceRegistryMixin:
             await self._unwire_interface_from_registry()
             await self._wire_interface_from_registry()
         if hasattr(self, "_ros_forward_handles"):
-            from ..ros2.ros_publishers import unwire_ros_publishers, wire_ros_publishers
+            desired = self._interface.ros_forward_publishers_for_mode(mode)
+            current = [handle.entry for handle in self._ros_forward_handles]
+            # Keep subscriptions that serve both modes. Destroying them while the
+            # ROS executor is spinning can stall feedback and lifecycle services.
+            if len(current) != len(desired) or any(
+                active is not wanted for active, wanted in zip(current, desired)
+            ):
+                from ..ros2.ros_publishers import wire_ros_publishers
 
-            unwire_ros_publishers(self)
-            wire_ros_publishers(self)
+                wire_ros_publishers(self)
         if mode == DriverOperationMode.TELEOP_LOCAL:
             await self.on_enter_teleop_local()
         elif mode == DriverOperationMode.TELEOP_REMOTE:
@@ -447,7 +531,7 @@ class InterfaceRegistryMixin:
                 )
                 await invoke_command_listener(group.callback, envelope, ctx)
 
-            self._subscribe_mqtt(path, command_dispatch)
+            self._subscribe_mqtt(path, command_dispatch, qos=1)
 
         for entry in self._interface.non_command_listeners_for_mode(mode):
             m = mqtt_spec(entry.topic)
@@ -596,6 +680,7 @@ class InterfaceRegistryMixin:
         handler: ListenerHandler,
         *,
         no_local: bool = False,
+        qos: int = 0,
     ) -> None:
         cw = self._require_client()
         mqtt_handler: ListenerHandler = handler
@@ -611,7 +696,7 @@ class InterfaceRegistryMixin:
                 mqtt_handler = self._adapt_async_mqtt_handler(
                     handler, loop=loop, path=path
                 )
-        cw.mqtt.subscribe(path, mqtt_handler, no_local=no_local)
+        cw.mqtt.subscribe(path, mqtt_handler, qos=qos, no_local=no_local)
         if no_local and getattr(cw.mqtt, "is_mqtt_v5", False):
             logger.info(
                 "MQTT v5 no_local subscribe on %s (edge publish echo filtered)",

@@ -10,6 +10,7 @@ import pytest
 from cyberwave.manifest.driver_config import (
     TWIN_CAMERA_PHOTO_TOPIC_SLUG,
     TWIN_COMMAND_TOPIC_SLUG,
+    TWIN_POSE_TOPIC_SLUG,
     TWIN_POSITION_TOPIC_SLUG,
     TWIN_ROTATION_TOPIC_SLUG,
     TWIN_TELEMETRY_TOPIC_SLUG,
@@ -78,6 +79,21 @@ def test_listen_dry_run_camera_filter_subscribes_photo_slug() -> None:
     specs = twin.listen(dry_run=True, filters=["camera"])
     assert list(specs) == [TWIN_CAMERA_PHOTO_TOPIC_SLUG]
     assert "twin-1" in specs[TWIN_CAMERA_PHOTO_TOPIC_SLUG].topic
+
+
+def test_listen_pose_filter_prefers_direct_pose_stream() -> None:
+    twin = _make_twin()
+    twin._data.metadata = {
+        "mqtt": {
+            "topics": {TWIN_POSE_TOPIC_SLUG: {"direction": "publish"}},
+            "commands": {"supported": []},
+        }
+    }
+
+    specs = twin.listen(dry_run=True, filters=["pose"])
+
+    assert list(specs) == [TWIN_POSE_TOPIC_SLUG]
+    assert specs[TWIN_POSE_TOPIC_SLUG].topic.endswith("/twin-1/pose")
 
 
 def test_listen_dry_run_unknown_filter_raises() -> None:

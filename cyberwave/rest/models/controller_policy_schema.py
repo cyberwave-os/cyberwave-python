@@ -43,7 +43,9 @@ class ControllerPolicySchema(BaseModel):
     can_write: Optional[StrictBool] = False
     command_key_revision: Optional[StrictStr] = None
     device: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "command_key_revision", "device"]
+    category: Optional[StrictStr] = ''
+    deprecated: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "command_key_revision", "device", "category", "deprecated"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -135,7 +137,9 @@ class ControllerPolicySchema(BaseModel):
             "asset_uuids": obj.get("asset_uuids"),
             "can_write": obj.get("can_write") if obj.get("can_write") is not None else False,
             "command_key_revision": obj.get("command_key_revision"),
-            "device": obj.get("device")
+            "device": obj.get("device"),
+            "category": obj.get("category") if obj.get("category") is not None else '',
+            "deprecated": obj.get("deprecated") if obj.get("deprecated") is not None else False
         })
         return _obj
 

@@ -146,6 +146,12 @@ def test_wrapper_forwards_pointcloud_sensor_when_provided() -> None:
     )
 
 
+def test_wrapper_exposes_disconnect_count() -> None:
+    wrapper, base = _make_wrapper_with_mock_base()
+    base.disconnect_count = 2
+    assert wrapper.disconnect_count == 2
+
+
 # Methods on the base client that the wrapper deliberately does not re-export.
 # Anything added here is a conscious decision, not an oversight — see the
 # module docstring for why silent drift is expensive.

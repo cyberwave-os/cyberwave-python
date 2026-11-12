@@ -30,7 +30,7 @@ class AgentWorkflowApplyResponseSchema(BaseModel):
     """ # noqa: E501
     workflow: WorkflowSchema
     workflow_edit: Dict[str, Any]
-    applied_workflow_changes: Optional[List[Optional[Dict[str, Any]]]] = None
+    applied_workflow_changes: Optional[List[Dict[str, Any]]] = None
     execution_readiness: Optional[StrictStr] = 'ready'
     missing_requirements: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["workflow", "workflow_edit", "applied_workflow_changes", "execution_readiness", "missing_requirements"]

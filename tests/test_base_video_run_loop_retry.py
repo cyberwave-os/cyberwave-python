@@ -154,14 +154,16 @@ async def test_the_monitor_retries_after_a_failed_reconnect(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_the_monitor_gives_up_after_the_attempt_cap(monkeypatch):
+async def test_the_monitor_never_gives_up_on_its_own(monkeypatch):
     streamer, starts, real_sleep = _monitored_streamer(monkeypatch, failing_starts=1000)
 
     await _monitor(streamer, real_sleep, passes=2000)
 
-    assert len(starts) == 10
-    assert streamer._should_reconnect is False
-    assert streamer._reconnect_pending is False
+    # Past the fast attempts it keeps retrying (slowly), so a stream comes
+    # back after an uplink outage of any length.
+    assert len(starts) > 10
+    assert streamer._should_reconnect is True
+    assert streamer._reconnect_pending is True
 
 
 @pytest.mark.asyncio
@@ -177,5 +179,5 @@ async def test_a_stop_command_ends_a_pending_reconnect(monkeypatch):
     attempts = len(starts)
     await _monitor(streamer, real_sleep, passes=40)
 
-    assert 0 < attempts < 10
+    assert attempts > 0
     assert len(starts) == attempts

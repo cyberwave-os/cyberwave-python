@@ -12,9 +12,14 @@ Install pinocchio via the ``drivers`` extra::
 
 from __future__ import annotations
 
-from .arm import ArmKinematicsConfig, GripperConfig
+from .arm import ArmKinematicsConfig, GripperConfig, tool_offset_from_xyz_rpy
 
-__all__ = ["ArmKinematicsConfig", "GripperConfig", "BaseKinematicsManipulator"]
+__all__ = [
+    "ArmKinematicsConfig",
+    "GripperConfig",
+    "BaseKinematicsManipulator",
+    "tool_offset_from_xyz_rpy",
+]
 
 
 def __getattr__(name: str):

@@ -9,6 +9,7 @@ from .config_loader import ConfigSection, DriverConfigLoader
 from .throttle import Throttle
 from .utils import (
     check_device_reachable_async,
+    driver_logger,
     get_sdk_version,
     load_driver_manifest,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "DriverConfigLoader",
     "Throttle",
     "check_device_reachable_async",
+    "driver_logger",
     "get_sdk_version",
     "load_driver_manifest",
 ]

@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,7 +29,8 @@ class APITokenAccessSchema(BaseModel):
     """ # noqa: E501
     scope_workspace_uuids: Optional[List[StrictStr]] = None
     service_role: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["scope_workspace_uuids", "service_role"]
+    a2a_enabled: Optional[StrictBool] = None
+    __properties: ClassVar[List[str]] = ["scope_workspace_uuids", "service_role", "a2a_enabled"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -80,6 +81,11 @@ class APITokenAccessSchema(BaseModel):
         if self.service_role is None and "service_role" in self.model_fields_set:
             _dict['service_role'] = None
 
+        # set to None if a2a_enabled (nullable) is None
+        # and model_fields_set contains the field
+        if self.a2a_enabled is None and "a2a_enabled" in self.model_fields_set:
+            _dict['a2a_enabled'] = None
+
         return _dict
 
     @classmethod
@@ -93,7 +99,8 @@ class APITokenAccessSchema(BaseModel):
 
         _obj = cls.model_validate({
             "scope_workspace_uuids": obj.get("scope_workspace_uuids"),
-            "service_role": obj.get("service_role")
+            "service_role": obj.get("service_role"),
+            "a2a_enabled": obj.get("a2a_enabled")
         })
         return _obj
 

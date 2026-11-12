@@ -33,7 +33,7 @@ class AgentControlCapabilityDetailsSchema(BaseModel):
     locomotion_mode: Optional[StrictStr] = None
     can_grip: Optional[StrictBool] = None
     manipulator_count: Optional[StrictInt] = None
-    sensors: Optional[List[Optional[Dict[str, Any]]]] = None
+    sensors: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["has_joints", "can_actuate", "can_locomote", "locomotion_mode", "can_grip", "manipulator_count", "sensors"]
 
     model_config = ConfigDict(

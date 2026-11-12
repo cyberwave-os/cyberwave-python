@@ -31,7 +31,7 @@ class MissionExecutionSchema(BaseModel):
     uuid: StrictStr
     mission_uuid: StrictStr
     twin_uuid: StrictStr
-    task_sequence_snapshot: List[Optional[Dict[str, Any]]]
+    task_sequence_snapshot: List[Dict[str, Any]]
     parameters: Dict[str, Any]
     priority: Optional[StrictInt] = None
     start_at: Optional[datetime] = None

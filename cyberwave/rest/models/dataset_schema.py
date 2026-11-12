@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from uuid import UUID
 from cyberwave.rest.models.processed_dataset_schema import ProcessedDatasetSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,6 +30,7 @@ class DatasetSchema(BaseModel):
     """
     DatasetSchema
     """ # noqa: E501
+    workspace_uuid: Optional[UUID] = None
     uuid: StrictStr
     name: Optional[StrictStr] = None
     episodes: List[StrictStr]
@@ -45,7 +47,7 @@ class DatasetSchema(BaseModel):
     processed_episodes: StrictInt
     failed_episodes: StrictInt
     failed_episode_uuids: List[StrictStr]
-    failed_details: Optional[List[Optional[Dict[str, Any]]]] = None
+    failed_details: Optional[List[Dict[str, Any]]] = None
     skipped_episodes: Optional[StrictInt] = 0
     skipped_episode_uuids: Optional[List[StrictStr]] = None
     waiting_on_recordings_episode_uuids: Optional[List[StrictStr]] = None
@@ -58,7 +60,7 @@ class DatasetSchema(BaseModel):
     updated_at: datetime
     created_by: Optional[StrictStr] = None
     updated_by: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "episodes", "metadata", "processed_datasets", "processing_status", "is_ready", "is_imported", "source", "source_format", "slug", "visibility", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "failed_details", "skipped_episodes", "skipped_episode_uuids", "waiting_on_recordings_episode_uuids", "cameras", "fps", "robot_type", "action_dim", "state_dim", "created_at", "updated_at", "created_by", "updated_by"]
+    __properties: ClassVar[List[str]] = ["workspace_uuid", "uuid", "name", "episodes", "metadata", "processed_datasets", "processing_status", "is_ready", "is_imported", "source", "source_format", "slug", "visibility", "total_episodes", "processed_episodes", "failed_episodes", "failed_episode_uuids", "failed_details", "skipped_episodes", "skipped_episode_uuids", "waiting_on_recordings_episode_uuids", "cameras", "fps", "robot_type", "action_dim", "state_dim", "created_at", "updated_at", "created_by", "updated_by"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -106,6 +108,11 @@ class DatasetSchema(BaseModel):
                 if _item_processed_datasets:
                     _items.append(_item_processed_datasets.to_dict())
             _dict['processed_datasets'] = _items
+        # set to None if workspace_uuid (nullable) is None
+        # and model_fields_set contains the field
+        if self.workspace_uuid is None and "workspace_uuid" in self.model_fields_set:
+            _dict['workspace_uuid'] = None
+
         # set to None if name (nullable) is None
         # and model_fields_set contains the field
         if self.name is None and "name" in self.model_fields_set:
@@ -173,6 +180,7 @@ class DatasetSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "workspace_uuid": obj.get("workspace_uuid"),
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
             "episodes": obj.get("episodes"),

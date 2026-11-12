@@ -31,6 +31,7 @@ class TemplateEnvironmentSchema(BaseModel):
     """ # noqa: E501
     uuid: StrictStr
     name: StrictStr
+    slug: Optional[StrictStr] = None
     description: StrictStr
     thumbnail: Optional[StrictStr] = None
     tags: Optional[List[StrictStr]] = None
@@ -41,7 +42,7 @@ class TemplateEnvironmentSchema(BaseModel):
     workflows: Optional[List[TemplateWorkflowSummarySchema]] = None
     total_monthly_cost: Optional[Union[StrictFloat, StrictInt]] = None
     total_purchase_cost: Optional[Union[StrictFloat, StrictInt]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "thumbnail", "tags", "visibility", "twin_count", "workflow_count", "twins", "workflows", "total_monthly_cost", "total_purchase_cost"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "slug", "description", "thumbnail", "tags", "visibility", "twin_count", "workflow_count", "twins", "workflows", "total_monthly_cost", "total_purchase_cost"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -96,6 +97,11 @@ class TemplateEnvironmentSchema(BaseModel):
                 if _item_workflows:
                     _items.append(_item_workflows.to_dict())
             _dict['workflows'] = _items
+        # set to None if slug (nullable) is None
+        # and model_fields_set contains the field
+        if self.slug is None and "slug" in self.model_fields_set:
+            _dict['slug'] = None
+
         # set to None if thumbnail (nullable) is None
         # and model_fields_set contains the field
         if self.thumbnail is None and "thumbnail" in self.model_fields_set:
@@ -125,6 +131,7 @@ class TemplateEnvironmentSchema(BaseModel):
         _obj = cls.model_validate({
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),
+            "slug": obj.get("slug"),
             "description": obj.get("description"),
             "thumbnail": obj.get("thumbnail"),
             "tags": obj.get("tags"),

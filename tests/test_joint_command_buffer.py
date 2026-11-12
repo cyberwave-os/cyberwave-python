@@ -24,25 +24,44 @@ class _FakeDriver(JointCommandBufferMixin):
 def test_submit_then_pump_publishes() -> None:
     d = _FakeDriver()
     assert d.submit_joint_targets({"joint1": 0.5}) is True
-    d.pump_joint_commands()
+    assert d.pump_joint_commands() == {"joint1": 0.5}
     assert d.published == [{"joint1": 0.5}]
 
 
 def test_pump_with_nothing_pending_does_not_publish() -> None:
     d = _FakeDriver()
-    d.pump_joint_commands()
+    assert d.pump_joint_commands() is None
     assert d.published == []
 
 
-def test_request_home_runs_home_and_discards_queued() -> None:
+def test_pending_home_wins_over_targets_queued_before_it() -> None:
     d = _FakeDriver()
     d.submit_joint_targets({"joint1": 0.5})
     d.request_home()
-    d.pump_joint_commands()  # home branch
+    d.pump_joint_commands()
+    d.pump_joint_commands()
     assert d.homed == 1
-    assert d.published == []  # queued command discarded on home
-    d.pump_joint_commands()  # nothing left
     assert d.published == []
+
+
+def test_pending_home_is_not_lost_to_a_flowing_teleop_stream() -> None:
+    d = _FakeDriver()
+    d.request_home()
+    d.submit_joint_targets({"joint1": 0.5})
+    d.pump_joint_commands()
+    assert d.homed == 1
+    d.submit_joint_targets({"joint1": 0.6})
+    d.pump_joint_commands()
+    assert d.published == [{"joint1": 0.6}]
+
+
+def test_joint_targets_arriving_during_home_survive_for_next_tick() -> None:
+    d = _FakeDriver()
+    d._return_to_home = lambda: d.submit_joint_targets({"joint1": 0.7})
+    d.request_home()
+    d.pump_joint_commands()
+    d.pump_joint_commands()
+    assert d.published == [{"joint1": 0.7}]
 
 
 def test_stale_timestamp_dropped() -> None:

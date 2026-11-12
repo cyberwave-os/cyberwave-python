@@ -2,8 +2,8 @@
 
 A broker that refuses an oversized QoS 1 or 2 publish says so in the PUBACK or
 PUBREC, with MQTT 5 reason code 0x95 (149). mosquitto does exactly this when a
-payload is over its ``message_size_limit``. paho-mqtt 2.1 only knows 149 as a
-CONNACK and DISCONNECT code, so parsing the ack raises ``ValueError``; nothing
+payload is over its ``message_size_limit``. paho-mqtt 2.1 and 2.2 only know 149
+as a CONNACK and DISCONNECT code, so parsing the ack raises ``ValueError``; nothing
 between the parser and ``loop_start``'s thread catches it, and the thread
 exits. The client then neither sends, receives nor reconnects, and
 ``on_disconnect`` never runs to say so -- it stops mid-session without a word.
@@ -77,7 +77,7 @@ def install() -> None:
 def report_refused_pubrecs(client: Any, report: Callable[[int, Any], None]) -> None:
     """Call ``report(mid, reason_code)`` when the broker refuses a QoS 2 publish.
 
-    paho 2.1 parses the PUBREC reason code and then drops it: it sends PUBREL
+    paho 2.1 and 2.2 parse the PUBREC reason code and then drop it: it sends PUBREL
     anyway, the broker completes the flow with a successful PUBCOMP, and
     ``on_publish`` sees only that. A refused QoS 2 publish -- mosquitto refuses
     an oversized one this way -- therefore looks delivered. This wraps the

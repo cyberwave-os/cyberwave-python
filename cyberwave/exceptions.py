@@ -295,8 +295,8 @@ class SimulationBackendError(CyberwaveError):
     when the response carries one of the stable backend-selection codes:
 
     - ``simulation_backend_unsupported`` (HTTP 400): not a backend the server knows.
-    - ``simulation_backend_not_enabled`` (HTTP 403): e.g. Isaac Sim is not enabled
-      for the organization.
+    - ``simulation_backend_not_enabled`` (HTTP 403): reserved by the contract;
+      current servers do not send it (Isaac Sim is open to every organization).
     - ``simulation_backend_incompatible`` (HTTP 409): the environment cannot run on
       that backend; see ``blocking_assets`` and ``reasons``.
     - ``simulation_backend_runtime_mismatch``: the runtime reported a different

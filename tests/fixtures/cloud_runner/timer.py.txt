@@ -1,0 +1,107 @@
+"""Generated cloud worker for a workflow.
+
+DO NOT EDIT: this file is regenerated from the workflow definition each time the workflow is compiled.
+"""
+
+
+from __future__ import annotations
+
+import logging
+
+WORKFLOW_UUID = 'c50a80d9-68e3-4620-84d3-c7502a5f8d29'
+TWIN_UUID = 'f08ae174-da16-4124-9fb6-c42257dc1e20'
+ENVIRONMENT_UUID = 'fb8224f8-ea65-44ee-96f3-6aaa41c2954f'
+
+_cw_logger = logging.getLogger("cyberwave.workflows." + WORKFLOW_UUID)
+
+def _cw_json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {'type': 'bytes', 'size': len(value)}
+    _shape = getattr(value, 'shape', None)
+    _dtype = getattr(value, 'dtype', None)
+    if _shape is not None and _dtype is not None:
+        try:
+            return {
+                'type': 'ndarray',
+                'shape': list(_shape),
+                'dtype': str(_dtype),
+            }
+        except Exception:
+            pass
+    if isinstance(value, dict):
+        return {str(k): _cw_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_cw_json_safe(item) for item in value]
+    return repr(value)
+
+
+
+def run(_cw_ctx, client, payload):
+    _cw_execution_uuid = _cw_ctx.execution_uuid
+    _node_outputs: dict[str, dict] = {}
+    _node_outputs['params'] = {
+        **{},
+        **((payload.get('params') if isinstance(payload, dict) else None) or {}),
+    }
+    _node_outputs['da49b3c0-f17e-4630-b585-8eba43f8fc27'] = {
+        '_source_summary': {
+            'kind': 'manual_trigger',
+            'twin_uuid': 'f08ae174-da16-4124-9fb6-c42257dc1e20',
+            'invoked_at': (payload.get('requested_at') if isinstance(payload, dict) else None),
+            'inputs': (payload.get('inputs') if isinstance(payload, dict) else {}),
+        },
+    }
+    def _cw_node_da49b3c0f17e4630b5858eba43f8fc27():
+        _cw_output = _node_outputs.get('da49b3c0-f17e-4630-b585-8eba43f8fc27') or {}
+        return {
+            'output': _cw_output,
+            'input_data': _cw_json_safe([_node_outputs.get('da49b3c0-f17e-4630-b585-8eba43f8fc27') or {}]),
+            'output_data': [_cw_output],
+        }
+    _node_outputs['da49b3c0-f17e-4630-b585-8eba43f8fc27'] = _cw_ctx.step('da49b3c0-f17e-4630-b585-8eba43f8fc27', _cw_node_da49b3c0f17e4630b5858eba43f8fc27, activation_index=0)['output']
+
+    def _cw_node_9789313215364f16852e7c2a5f73625e():
+        _tm_9789313215364f16852e7c2a5f73625e_input: dict = {}
+        _tm_9789313215364f16852e7c2a5f73625e_input.update(_node_outputs.get('da49b3c0-f17e-4630-b585-8eba43f8fc27') or {})
+        _tm_9789313215364f16852e7c2a5f73625e_input.setdefault('time_unit', 'seconds')
+        _tm_9789313215364f16852e7c2a5f73625e_input.setdefault('duration', 5)
+        _tm_9789313215364f16852e7c2a5f73625e_input['duration'] = 5
+        _tm_9789313215364f16852e7c2a5f73625e_input['time_unit'] = 'seconds'
+        # Node 3 (node=97893132-1536-4f16-852e-7c2a5f73625e)
+        _tm_9789313215364f16852e7c2a5f73625e_unit = _tm_9789313215364f16852e7c2a5f73625e_input.get('time_unit') or 'seconds'
+        _tm_9789313215364f16852e7c2a5f73625e_duration = _tm_9789313215364f16852e7c2a5f73625e_input.get('duration')
+        if _tm_9789313215364f16852e7c2a5f73625e_duration is None:
+            _tm_9789313215364f16852e7c2a5f73625e_duration = 1.0
+        if _tm_9789313215364f16852e7c2a5f73625e_unit not in ('minutes', 'seconds'):
+            raise ValueError("Timer node 97893132-1536-4f16-852e-7c2a5f73625e: time_unit must be one of ['minutes', 'seconds'], got " + repr(_tm_9789313215364f16852e7c2a5f73625e_unit))
+        if isinstance(_tm_9789313215364f16852e7c2a5f73625e_duration, bool) or not isinstance(_tm_9789313215364f16852e7c2a5f73625e_duration, (int, float, str)):
+            raise ValueError('Timer node 97893132-1536-4f16-852e-7c2a5f73625e: duration must be a non-negative number, got ' + repr(_tm_9789313215364f16852e7c2a5f73625e_duration))
+        try:
+            _tm_9789313215364f16852e7c2a5f73625e_duration = float(_tm_9789313215364f16852e7c2a5f73625e_duration)
+        except ValueError:
+            raise ValueError('Timer node 97893132-1536-4f16-852e-7c2a5f73625e: duration must be a non-negative number, got ' + repr(_tm_9789313215364f16852e7c2a5f73625e_duration))
+        if _tm_9789313215364f16852e7c2a5f73625e_duration < 0:
+            raise ValueError('Timer node 97893132-1536-4f16-852e-7c2a5f73625e: duration must be non-negative, got ' + repr(_tm_9789313215364f16852e7c2a5f73625e_duration))
+        _tm_9789313215364f16852e7c2a5f73625e_seconds = _tm_9789313215364f16852e7c2a5f73625e_duration * (60 if _tm_9789313215364f16852e7c2a5f73625e_unit == 'minutes' else 1)
+        if _tm_9789313215364f16852e7c2a5f73625e_seconds > 86400:
+            raise ValueError('Timer node 97893132-1536-4f16-852e-7c2a5f73625e: duration resolves to ' + repr(_tm_9789313215364f16852e7c2a5f73625e_seconds) + 's which exceeds the maximum of 86400s')
+        _cw_ctx.sleep('sleep', _tm_9789313215364f16852e7c2a5f73625e_seconds)
+        _tm_9789313215364f16852e7c2a5f73625e_output = {
+            'waited_seconds': _tm_9789313215364f16852e7c2a5f73625e_seconds,
+            'duration': _tm_9789313215364f16852e7c2a5f73625e_duration,
+            'time_unit': _tm_9789313215364f16852e7c2a5f73625e_unit,
+            'elapsed': True,
+        }
+        _node_outputs['97893132-1536-4f16-852e-7c2a5f73625e'] = _tm_9789313215364f16852e7c2a5f73625e_output
+
+        _cw_output = _node_outputs.get('97893132-1536-4f16-852e-7c2a5f73625e') or {}
+        return {
+            'output': _cw_output,
+            'input_data': _cw_json_safe([_tm_9789313215364f16852e7c2a5f73625e_input]),
+            'output_data': [_cw_output],
+        }
+    _node_outputs['97893132-1536-4f16-852e-7c2a5f73625e'] = _cw_ctx.step('97893132-1536-4f16-852e-7c2a5f73625e', _cw_node_9789313215364f16852e7c2a5f73625e, activation_index=0)['output']
+    return _node_outputs
+

@@ -34,8 +34,8 @@ class AgentEmbodimentContextSchema(BaseModel):
     mode: StrictStr
     simulation_backend: Optional[StrictStr] = None
     capabilities: Optional[Dict[str, Any]] = None
-    waypoints: Optional[List[Optional[Dict[str, Any]]]] = None
-    frames: Optional[List[Optional[Dict[str, Any]]]] = None
+    waypoints: Optional[List[Dict[str, Any]]] = None
+    frames: Optional[List[Dict[str, Any]]] = None
     notes: Optional[List[StrictStr]] = None
     __properties: ClassVar[List[str]] = ["environment_uuid", "twin_uuid", "asset_uuid", "controller_policy_uuid", "mode", "simulation_backend", "capabilities", "waypoints", "frames", "notes"]
 

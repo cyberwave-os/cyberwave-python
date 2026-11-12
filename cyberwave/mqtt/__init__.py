@@ -9,6 +9,7 @@ import functools
 import json
 import logging
 import math
+import numbers
 import os
 import queue
 import threading
@@ -16,7 +17,7 @@ import time
 import uuid
 import re
 import ssl
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion  # type: ignore
@@ -28,6 +29,7 @@ from .. import _payload_limit
 from ..config import DEFAULT_MQTT_USERNAME, resolve_mqtt_credentials
 from ..constants import (
     SOURCE_TYPE_EDGE,
+    SOURCE_TYPE_EDIT,
     SOURCE_TYPE_SIM,
     SOURCE_TYPE_SIM_TELE,
     SOURCE_TYPE_TELE,
@@ -121,6 +123,132 @@ RECORDING_BOUNDARY_KEY = "recording_boundary"
 TELEMETRY_CUT_SENDER = "workflow"
 TELEMETRY_CUT_SOURCE_SUBTYPE = "node_recorder"
 
+#: Longest channel name the backend accepts on ``metrics/{channel}``: the width
+#: of the ``app_twinmetric.metric`` column.
+MAX_METRIC_CHANNEL_LENGTH = 120
+
+#: Characters a metric channel segment may not contain: MQTT's wildcards and
+#: level separator (a channel's levels are its ``.``-separated segments), and
+#: NUL, which MQTT forbids in a topic.
+_METRIC_SEGMENT_FORBIDDEN = frozenset("/+#\x00")
+
+# Proto int64 bounds: metric ints and ``producer_sequence``.
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63 - 1
+
+#: Range a metric ``timestamp`` must be in, in Unix seconds: from 2001 to ten
+#: years ahead, the bounds the backend's history holds a producer time to.
+#: Milliseconds (``time.time() * 1000``) fall past the upper one.
+_METRIC_TIMESTAMP_MIN = 978307200.0
+_METRIC_TIMESTAMP_AHEAD_SECONDS = 315360000.0
+
+
+def _metric_topic_path(channel: str) -> str:
+    """``arm.gripper`` -> ``arm/gripper``, or ``ValueError`` if it names no channel.
+
+    The backend reads the topic ``metrics/arm/gripper`` as channel
+    ``arm.gripper`` -- the channel the bag key ``arm.gripper`` names -- so the
+    dots are the topic levels. An empty segment (``arm..gripper``, ``.arm``)
+    would be an empty level, which the backend rejects. So is the channel
+    ``source_type``, the name of the sample's source stamp.
+    """
+    if not isinstance(channel, str) or not channel:
+        raise ValueError(f"channel must be a non-empty string, got {channel!r}")
+    if len(channel) > MAX_METRIC_CHANNEL_LENGTH:
+        raise ValueError(
+            f"Metric channel {channel[:40]!r}... is {len(channel)} characters; "
+            f"the limit is {MAX_METRIC_CHANNEL_LENGTH}."
+        )
+    if channel == "source_type":
+        raise ValueError(
+            "Invalid metric channel 'source_type': it is the sample's source "
+            "stamp, not a channel."
+        )
+    segments = channel.split(".")
+    for segment in segments:
+        if not segment or _METRIC_SEGMENT_FORBIDDEN.intersection(segment):
+            raise ValueError(
+                f"Invalid metric channel {channel!r}: every '.'-separated "
+                "segment must be non-empty and contain no '/', '+', '#' or NUL."
+            )
+    return "/".join(segments)
+
+
+def _metric_timestamp(timestamp: Optional[float]) -> float:
+    """*timestamp* in Unix seconds, ``time.time()`` if ``None``, or raise.
+
+    The backend keeps a sample whose timestamp is out of range but stamps its
+    history with the time it arrived, so a caller passing milliseconds would
+    get no error and the wrong time; refuse it here instead.
+    """
+    if timestamp is None:
+        return time.time()
+    if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+        raise TypeError(
+            f"timestamp must be a number of Unix seconds, got "
+            f"{type(timestamp).__name__}"
+        )
+    latest = time.time() + _METRIC_TIMESTAMP_AHEAD_SECONDS
+    if not (math.isfinite(timestamp) and _METRIC_TIMESTAMP_MIN <= timestamp <= latest):
+        raise ValueError(
+            f"timestamp {timestamp!r} is not a plausible time in Unix seconds "
+            "(seconds, not milliseconds: from 2001 to ten years from now)"
+        )
+    return float(timestamp)
+
+
+def _metric_value(name: str, value: Any) -> bool | int | float:
+    """The sample as a plain ``bool``, ``int`` or ``float``, or raise.
+
+    Refuses anything the backend would drop: a metric is one float, int or
+    bool. ``bool`` is kept as a bool (not 0/1), an int must fit in 64 bits, and
+    a float must be finite (JSON has no NaN or infinity) and below ``2**63`` in
+    magnitude, the range the backend's history can tell from an int. Other
+    real numbers -- numpy scalars, ``fractions.Fraction`` -- are converted
+    (``.item()`` where they have one), so ``np.float32(1.5)`` publishes as
+    ``1.5`` and ``np.bool_(True)`` as ``true``.
+    """
+    if type(value) not in (bool, int, float):
+        value = _plain_number(value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        if not _INT64_MIN <= value <= _INT64_MAX:
+            raise ValueError(f"Metric {name!r}: int {value} does not fit in 64 bits")
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"Metric {name!r}: value must be finite, got {value!r}")
+        if abs(value) >= 2.0**63:
+            raise ValueError(
+                f"Metric {name!r}: float {value!r} is not below 2**63 in magnitude"
+            )
+        return value
+    raise TypeError(
+        f"Metric {name!r}: value must be a float, int or bool, got "
+        f"{type(value).__name__}. Publish each field of a structure as its own "
+        "channel, e.g. 'arm.gripper.force_n'."
+    )
+
+
+def _plain_number(value: Any) -> Any:
+    """A numpy (or other ``numbers``) scalar as the builtin it stands for.
+
+    Anything else is returned as is, for :func:`_metric_value` to refuse.
+    """
+    item = getattr(value, "item", None)
+    numpy_bool = type(value).__module__ == "numpy" and type(value).__name__ in (
+        "bool_",
+        "bool",
+    )
+    if isinstance(value, bool) or numpy_bool:
+        return bool(value)
+    if isinstance(value, numbers.Integral):
+        return item() if callable(item) else int(value)
+    if isinstance(value, numbers.Real):
+        return item() if callable(item) else float(value)
+    return value
+
 
 def build_client_id(producer: str, runtime_mode: Optional[str]) -> str:
     """Build a self-describing MQTT client id: ``{producer}_{mode}_{uuid4hex}``.
@@ -155,6 +283,139 @@ def _replace_non_finite(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_replace_non_finite(v) for v in value]
     return value
+
+
+#: robot.v1.PoseProvenance values a receiver accepts (common/protobuf). On the
+#: wire a value is its full name; the SDK also takes the lowercase word after
+#: the prefix (``"odometry"``) as input and maps it.
+POSE_PROVENANCES = (
+    "POSE_PROVENANCE_GROUND_TRUTH",
+    "POSE_PROVENANCE_ODOMETRY",
+    "POSE_PROVENANCE_VISUAL_ODOMETRY",
+    "POSE_PROVENANCE_VIO",
+    "POSE_PROVENANCE_SLAM",
+    "POSE_PROVENANCE_LIDAR_LOCALIZATION",
+    "POSE_PROVENANCE_GPS",
+    "POSE_PROVENANCE_DEAD_RECKONING",
+    "POSE_PROVENANCE_CHARUCO",
+    "POSE_PROVENANCE_MOCAP",
+    "POSE_PROVENANCE_FUSED",
+)
+POSE_PROVENANCE_GROUND_TRUTH = "POSE_PROVENANCE_GROUND_TRUTH"
+_POSE_PROVENANCE_INPUTS = {
+    **{name: name for name in POSE_PROVENANCES},
+    **{name[len("POSE_PROVENANCE_") :].lower(): name for name in POSE_PROVENANCES},
+}
+
+SUBSTRATE_SIM = "SUBSTRATE_SIM"
+SUBSTRATE_HARDWARE = "SUBSTRATE_HARDWARE"
+_SUBSTRATE_INPUTS = {
+    "sim": SUBSTRATE_SIM,
+    "hardware": SUBSTRATE_HARDWARE,
+    SUBSTRATE_SIM: SUBSTRATE_SIM,
+    SUBSTRATE_HARDWARE: SUBSTRATE_HARDWARE,
+}
+
+
+def _is_finite_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _frame_vector(
+    index: int, frame: Dict[str, Any], key: str, axes: str
+) -> Dict[str, float]:
+    vector = frame.get(key)
+    if not isinstance(vector, dict):
+        raise ValueError(f"frames[{index}].{key} must be a dict with keys {list(axes)}")
+    out: Dict[str, float] = {}
+    for axis in axes:
+        value = vector.get(axis)
+        if not _is_finite_number(value):
+            raise ValueError(
+                f"frames[{index}].{key}.{axis} must be a finite number, got {value!r}"
+            )
+        out[axis] = float(value)
+    return out
+
+
+def _pose_provenance(where: str, value: Any) -> str:
+    provenance = _POSE_PROVENANCE_INPUTS.get(value) if isinstance(value, str) else None
+    if provenance is None:
+        raise ValueError(
+            f"{where} must be one of {', '.join(POSE_PROVENANCES)} (or the "
+            f"lowercase word after POSE_PROVENANCE_), got {value!r}"
+        )
+    return provenance
+
+
+def _frame_covariance(index: int, value: Any) -> Dict[str, List[float]]:
+    data = value.get("data") if isinstance(value, dict) else value
+    if not isinstance(data, (list, tuple)) or len(data) != 36:
+        raise ValueError(
+            f"frames[{index}].pose_covariance must be 36 numbers (row-major 6x6 "
+            "over x, y, z, rx, ry, rz), or a dict with them under 'data'"
+        )
+    out: List[float] = []
+    for position, entry in enumerate(data):
+        if not _is_finite_number(entry):
+            raise ValueError(
+                f"frames[{index}].pose_covariance[{position}] must be a finite "
+                f"number, got {entry!r}"
+            )
+        out.append(float(entry))
+    return {"data": out}
+
+
+def _frame_pose(
+    index: int, frame: Any, default_provenance: Optional[str]
+) -> Dict[str, Any]:
+    """One frame as the contract has it, or ``ValueError`` naming what is wrong.
+
+    Takes ``child_frame_id`` (or ``frame_name``), and ``position`` plus
+    ``orientation`` (or ``quaternion``), either at the top level or under
+    ``pose`` as the contract nests them.
+    """
+    if not isinstance(frame, dict):
+        raise ValueError(f"frames[{index}] must be a dict, got {type(frame).__name__}")
+    child = frame.get("child_frame_id", frame.get("frame_name"))
+    if not isinstance(child, str) or not child:
+        raise ValueError(f"frames[{index}].child_frame_id must be a non-empty string")
+    pose = frame.get("pose", frame)
+    if not isinstance(pose, dict):
+        raise ValueError(f"frames[{index}].pose must be a dict")
+    orientation_key = (
+        "quaternion"
+        if "quaternion" in pose and "orientation" not in pose
+        else "orientation"
+    )
+    if "pose_provenance" in frame:
+        provenance = _pose_provenance(
+            f"frames[{index}].pose_provenance", frame["pose_provenance"]
+        )
+    elif default_provenance is not None:
+        provenance = default_provenance
+    else:
+        raise ValueError(
+            f"frames[{index}] has no pose_provenance. A hardware pose is an "
+            "estimate; say which (odometry, slam, gps, ...), per frame or with "
+            "the pose_provenance argument."
+        )
+    out: Dict[str, Any] = {
+        "child_frame_id": child,
+        "pose": {
+            "position": _frame_vector(index, pose, "position", "xyz"),
+            "orientation": _frame_vector(index, pose, orientation_key, "xyzw"),
+        },
+        "pose_provenance": provenance,
+    }
+    covariance = frame.get("pose_covariance")
+    if covariance is not None:
+        out["pose_covariance"] = _frame_covariance(index, covariance)
+    return out
 
 
 class CyberwaveMQTTClient:
@@ -323,6 +584,13 @@ class CyberwaveMQTTClient:
 
         # Connection state
         self.connected = False
+        self.disconnect_count = 0
+        # Set by connect_in_background(): paho's network thread owns
+        # connecting, so another connect() would race it.
+        self.connecting_in_background = False
+        # True between loop_start() and loop_stop(). While it runs, paho
+        # reconnects on its own after a drop, so connect() must not race it.
+        self._network_loop_running = False
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
 
@@ -378,6 +646,8 @@ class CyberwaveMQTTClient:
         # Topics whose latest SUBACK on this connection refused them.
         self._rejected_subscriptions: set[str] = set()
         self._subscribe_options: Dict[str, Any] = {}
+        # Requested QoS per topic, so a resubscribe on (re)connect keeps it.
+        self._subscribe_qos: Dict[str, int] = {}
         self.source_type = source_type
 
         # MQTT v5 request/response: replies are routed to the waiting request
@@ -728,7 +998,9 @@ class CyberwaveMQTTClient:
                     if options is not None:
                         result = client.subscribe(topic, options=options)
                     else:
-                        result = client.subscribe(topic)
+                        result = client.subscribe(
+                            topic, qos=self._subscribe_qos.get(topic, 0)
+                        )
                     if result[0] == mqtt.MQTT_ERR_SUCCESS:
                         self._pending_subscriptions[result[1]] = topic
                         logger.debug(
@@ -740,6 +1012,10 @@ class CyberwaveMQTTClient:
                         logger.error(
                             "Failed to resubscribe to %s: %s", topic, result[0]
                         )
+            # Nobody may call connect() again after a background connect, so
+            # open the sessions of twins registered while offline here.
+            if self.connecting_in_background:
+                self._announce_twin_sessions()
         else:
             logger.error(
                 f"Failed to connect to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}, return code: {rc}"
@@ -859,6 +1135,7 @@ class CyberwaveMQTTClient:
     def _on_disconnect(self, client, userdata, rc, *args, **kwargs):
         """Callback when disconnected from MQTT broker."""
         self.connected = False
+        self.disconnect_count += 1
         # Negotiated per connection; the next CONNACK sets it again.
         self._adopt_broker_max_packet_size()
         self._reset_topic_aliases()
@@ -973,6 +1250,20 @@ class CyberwaveMQTTClient:
         ``CYBERWAVE_MQTT_CONNECT_TIMEOUT`` (per-attempt seconds) and
         ``CYBERWAVE_MQTT_CONNECT_ATTEMPTS``.
         """
+        if self.connecting_in_background or self._network_loop_running:
+            # paho's network thread owns connecting, and keeps reconnecting
+            # after a drop; a second attempt would race it, and its failure
+            # path (loop_stop) would end that thread. Wait for it instead, so
+            # a caller still gets "connected or raised".
+            deadline = time.time() + self._connect_timeout
+            while not self.connected and time.time() < deadline:
+                time.sleep(0.5)
+            if not self.connected:
+                raise Exception(
+                    "MQTT broker not reachable yet; still retrying in the background"
+                )
+            self._announce_twin_sessions()
+            return
         logger.warning(
             "MQTT connection settings: tls=%s, broker=%s, port=%s, custom_ca=%s",
             self.use_tls,
@@ -984,6 +1275,7 @@ class CyberwaveMQTTClient:
         timeout = self._connect_timeout
         max_attempts = self._connect_max_attempts
         self.client.loop_start()
+        self._network_loop_running = True
 
         last_error: Optional[Exception] = None
         for attempt in range(1, max_attempts + 1):
@@ -1031,6 +1323,12 @@ class CyberwaveMQTTClient:
 
         if not self.connected:
             self.client.loop_stop()
+            self._network_loop_running = False
+            # A CONNACK read while loop_stop() let the last cycle finish would
+            # leave ``connected`` True with no network thread, and
+            # connect_in_background() would then skip starting one.
+            with self._subscription_lock:
+                self.connected = False
             logger.error(
                 "Failed to connect to MQTT broker: %s%s",
                 last_error,
@@ -1043,6 +1341,9 @@ class CyberwaveMQTTClient:
             )
             raise last_error or Exception("Failed to connect to MQTT broker")
 
+        self._announce_twin_sessions()
+
+    def _announce_twin_sessions(self) -> None:
         # Send telemetry start message only for twins that haven't received one yet
         # This prevents duplicate telemetry_start messages on reconnection
         # Thread-safe: Uses lock to coordinate with _handle_twin_update_with_telemetry
@@ -1053,6 +1354,38 @@ class CyberwaveMQTTClient:
                     self.twin_uuids_with_telemetry_start.append(twin_uuid)
                     self._publish_connect_message(twin_uuid)
                     self._publish_telemetry_start_message(twin_uuid, None)
+
+    def connect_in_background(self) -> None:
+        """Keep connecting from paho's network thread until the broker answers.
+
+        For a long-running caller that must not stay offline after
+        :meth:`connect` gives up: paho retries with its reconnect backoff, and
+        ``_on_connect`` subscribes every handler registered in the meantime.
+        """
+        # After a dropped connect() paho's thread is already reconnecting.
+        if self.connected or self.connecting_in_background or self._network_loop_running:
+            return
+        self.connecting_in_background = True
+        # paho's default backoff grows to 120 s; a broker that comes back
+        # after a long outage should be picked up sooner.
+        self.client.reconnect_delay_set(min_delay=1, max_delay=30)
+        self.client.on_connect_fail = self._on_background_connect_fail
+        try:
+            self.client.connect_async(self.mqtt_broker, self.mqtt_port, keepalive=60)
+            self.client.loop_start()
+            self._network_loop_running = True
+        except Exception:
+            # Without a network thread nothing would ever clear the flag, and
+            # connect() would keep waiting on a retry that isn't running.
+            self.connecting_in_background = False
+            raise
+
+    def _on_background_connect_fail(self, _client, _userdata) -> None:
+        logger.warning(
+            "MQTT broker %s:%s still unreachable; retrying in the background",
+            self.mqtt_broker,
+            self.mqtt_port,
+        )
 
     def disconnect(self):
         """Disconnect from MQTT broker."""
@@ -1067,11 +1400,15 @@ class CyberwaveMQTTClient:
         for twin_uuid in twin_uuids:
             self._publish_disconnect_message(twin_uuid)
             self.publish_telemetry_end(twin_uuid)
-        if self.connected:
+        # After a drop paho's thread is still reconnecting with ``connected``
+        # False; it has to be stopped too, or the client comes back online.
+        if self.connected or self.connecting_in_background or self._network_loop_running:
             logger.info("Disconnecting from MQTT broker")
             self.client.loop_stop()
             self.client.disconnect()
             self.connected = False
+            self.connecting_in_background = False
+            self._network_loop_running = False
 
     def publish(
         self,
@@ -1171,6 +1508,11 @@ class CyberwaveMQTTClient:
         will not deliver this client's own publications on *topic* (useful
         when publishing and subscribing to ``cyberwave/joint/.../update``).
         """
+        # Checked before anything is stored: a bad QoS kept for the
+        # resubscribe in ``_on_connect`` would raise on paho's network thread.
+        # ``1.0 in (0, 1, 2)`` and ``True in (0, 1, 2)`` hold, so check the type too.
+        if type(qos) is not int or qos not in (0, 1, 2):
+            raise ValueError(f"Invalid MQTT QoS {qos!r}; expected 0, 1 or 2")
         is_new_topic = True
         if handler:
             is_new_topic = self._add_handler(topic, handler, subscriber_key)
@@ -1178,6 +1520,7 @@ class CyberwaveMQTTClient:
         if not is_new_topic:
             return
 
+        self._subscribe_qos[topic] = qos
         options = self._build_subscribe_options(qos=qos, no_local=no_local)
         if options is not None:
             self._subscribe_options[topic] = options
@@ -1416,6 +1759,52 @@ class CyberwaveMQTTClient:
         self.publish(topic, end_message)
         self.publish(topic, start_message)
 
+    def publish_recording_boundary(
+        self,
+        twin_uuid: str,
+        state: str,
+        *,
+        stream_source: str,
+        stream_instance_id: str,
+        observations: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Open (``state="start"``) or close (``"end"``) one recording window.
+
+        For a publisher that switches recording on and off while its streams
+        keep running -- a simulator's recording toggle. Sent unconditionally and
+        without touching this client's session tracking, like
+        :meth:`publish_telemetry_cut`, but one half at a time: turning recording
+        off must close the window without reopening it.
+
+        Marked ``recording_boundary`` so media-service keeps the twin's streams
+        up (camera recording follows the ``start_recording`` /
+        ``stop_recording`` webrtc-commands instead), and stamped with the
+        stream identity so the backend scopes and tags the recording.
+        ``observations`` (start only) is the state at the window's start, the
+        recording's first frame.
+        """
+        if state not in ("start", "end"):
+            raise ValueError(f"state must be 'start' or 'end', got {state!r}")
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/telemetry"
+        message: Dict[str, Any] = {
+            "type": f"telemetry_{state}",
+            "timestamp": time.time(),
+            RECORDING_BOUNDARY_KEY: True,
+            "stream_source": stream_source,
+            "stream_instance_id": stream_instance_id,
+            "source_type": self.source_type,
+        }
+        if state == "start" and observations:
+            message["observations"] = observations
+        logger.info(
+            "Publishing recording %s for twin %s (stream_source=%s, instance=%s)",
+            state,
+            twin_uuid,
+            stream_source,
+            stream_instance_id,
+        )
+        self.publish(topic, message)
+
     def publish_connected(self, twin_uuid: str):
         """Publish connected message via MQTT.
 
@@ -1479,6 +1868,307 @@ class CyberwaveMQTTClient:
             "timestamp": time.time(),
         }
         self.publish(topic, message)
+
+    def publish_metric(
+        self,
+        twin_uuid: str,
+        channel: str,
+        value: Any,
+        *,
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> bool:
+        """Publish one sample of a structured metric on ``metrics/{channel}``.
+
+        A metric channel is a timeseries of one scalar: a float, an int or a
+        bool. The backend stores every sample as a row (``app_twinmetric``) and
+        serves the latest value of each channel under ``channels`` in
+        ``GET /twins/{uuid}/metrics/latest``. Nothing is sampled, so publish at
+        the rate the signal needs. It is the same channel the key ``<channel>``
+        of :meth:`publish_metrics` names, so a signal can move between the two
+        forms.
+
+        Unlike the bag, a channel sample does not trigger ``metrics``
+        workflows, and is not written to the twin's metadata: this form is
+        meant for signals too fast for either.
+
+        Args:
+            twin_uuid: Twin the metric belongs to.
+            channel: ``.``-separated name, e.g. ``"arm.gripper"``; published on
+                ``metrics/arm/gripper``. Every segment must be non-empty and
+                free of ``/``, ``+`` and ``#``; at most 120 characters.
+            value: The sample: a float, an int or a bool. A numpy scalar is
+                converted to the builtin it stands for.
+            timestamp: When the value was measured, in Unix seconds (not
+                milliseconds), from 2001 to ten years ahead. Defaults to now.
+            source_type: Override the client's default source type.
+
+        Returns:
+            Whether the local MQTT client accepted the message.
+
+        Raises:
+            ValueError: ``channel`` names no channel, ``value`` is a
+                non-finite float, a float of ``2**63`` or more in magnitude, or
+                an int outside 64 bits, or ``timestamp`` is out of range.
+            TypeError: ``value`` is not a float, int or bool, or ``timestamp``
+                is not a number.
+        """
+        path = _metric_topic_path(channel)
+        value = _metric_value(channel, value)
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/metrics/{path}"
+        message: Dict[str, Any] = {
+            "source_type": self._get_effective_source_type(source_type),
+            "timestamp": _metric_timestamp(timestamp),
+            "value": value,
+        }
+        return self.publish(topic, message)
+
+    def publish_metrics(
+        self,
+        twin_uuid: str,
+        metrics: Dict[str, Any],
+        *,
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> bool:
+        """Publish several structured metrics in one message, the ``metrics`` bag.
+
+        Each key is a channel, as with :meth:`publish_metric`; each value one
+        float, int or bool. A key left out means "unchanged", never zero. The
+        backend stores every key as a metric row, keeps the bag as one telemetry
+        row and fires ``metrics`` workflow triggers on it; only the platform keys
+        (``battery``, ...) are also merged into the twin's metadata. For a
+        signal with its own rate, prefer :meth:`publish_metric`.
+
+        Args:
+            twin_uuid: Twin the metrics belong to.
+            metrics: Channel name -> sample. Each name follows the rules of
+                :meth:`publish_metric`'s ``channel``, so ``"arm.gripper"`` here
+                and there are one channel.
+            timestamp: When the values were measured, in Unix seconds (not
+                milliseconds), from 2001 to ten years ahead. Defaults to now.
+            source_type: Override the client's default source type.
+
+        Returns:
+            Whether the local MQTT client accepted the message.
+
+        Raises:
+            ValueError: ``metrics`` is empty, a key names no channel, a value
+                is out of range (see :meth:`publish_metric`), or ``timestamp``
+                is out of range.
+            TypeError: A value is not a float, int or bool, or ``timestamp`` is
+                not a number.
+        """
+        if not metrics:
+            raise ValueError("metrics cannot be empty")
+        for key in metrics:
+            _metric_topic_path(key)
+        samples = {key: _metric_value(key, value) for key, value in metrics.items()}
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/metrics"
+        message: Dict[str, Any] = {
+            "source_type": self._get_effective_source_type(source_type),
+            "timestamp": _metric_timestamp(timestamp),
+            "metrics": samples,
+        }
+        return self.publish(topic, message)
+
+    def publish_frame_poses(
+        self,
+        twin_uuid: str,
+        frames: List[Dict[str, Any]],
+        *,
+        substrate: Optional[str] = None,
+        pose_provenance: Optional[str] = None,
+        frame_id: str = "environment",
+        source_subtype: Optional[str] = None,
+        producer_instance: Optional[str] = None,
+        producer_sequence: Optional[Union[int, str]] = None,
+        workload_uuid: Optional[str] = None,
+        simulation_time_s: Optional[float] = None,
+    ) -> bool:
+        """Publish environment-frame poses for one or more robot frames.
+
+        Optional, for a driver or simulator that knows where its frames are
+        (a camera mount, an end effector) better than the base pose and joint
+        state alone say. Each message is recorded as one ``twin_frame_poses``
+        telemetry event, so publish at the rate you want stored, not at your
+        control loop's frequency: the backend keeps at most five messages per
+        second per twin and drops the rest.
+
+        The message is the ``cyberwave.mqtt.twin.v1.TwinFramePosesPayload``
+        contract: a ``header`` (wall-clock stamp, frame, twin, substrate) and
+        one entry per pose, each saying how the pose was obtained. The backend
+        drops a message that breaks any rule whole, so this checks them all
+        and raises instead of sending.
+
+        Args:
+            twin_uuid: Twin the poses belong to.
+            frames: One or more entries, each ``{"child_frame_id": str,
+                "position": {"x","y","z"}, "orientation": {"x","y","z","w"}}``
+                with finite numbers for every component. ``frame_name`` is
+                accepted for ``child_frame_id``, ``quaternion`` for
+                ``orientation``, and both may sit under ``pose`` as on the
+                wire. An entry may carry its own ``pose_provenance`` and a
+                ``pose_covariance`` (36 numbers, row-major over x, y, z, rx,
+                ry, rz; leave it out when you do not estimate it). The same
+                frame may appear once per provenance.
+            substrate: ``"sim"`` or ``"hardware"`` (or ``SUBSTRATE_SIM`` /
+                ``SUBSTRATE_HARDWARE``). Defaults from the client's source
+                type: ``sim``/``sim_tele`` is a simulator, ``edit`` has to say,
+                anything else is hardware.
+            pose_provenance: How the poses were obtained, for every entry that
+                does not say: a ``POSE_PROVENANCE_*`` name or its lowercase word
+                (``"odometry"``, ``"slam"``, ``"gps"``...). Defaults to
+                ground truth for a simulator; hardware has to say, and may not
+                claim ground truth.
+            frame_id: Must be ``"environment"``. A local or navigation-frame
+                pose would place the frame in a visibly wrong world, so the
+                backend drops anything else rather than assuming -- and this
+                fails at the call site instead.
+            source_subtype: Component that produced the poses, e.g. ``mujoco``.
+            producer_instance: Stable for one process boot. Defaults to the
+                MQTT client id; also the stamp's ``clock_id``.
+            producer_sequence: Monotonic counter per (producer, twin), so loss
+                is measurable: a signed 64-bit int, or its decimal string
+                without leading zeros.
+            workload_uuid: Simulation workload the poses belong to.
+            simulation_time_s: Simulation clock at the sample, in seconds.
+
+        Returns:
+            Whether the local MQTT client accepted the message.
+
+        Raises:
+            ValueError: ``twin_uuid`` is not a UUID, ``frames`` is empty, a
+                frame is malformed, a provenance or substrate is unknown, an
+                envelope field has the wrong type, ``producer_sequence`` is
+                outside int64, or the frames break a contract rule. Nothing is
+                sent.
+        """
+        try:
+            uuid.UUID(str(twin_uuid))
+        except ValueError:
+            raise ValueError(f"twin_uuid must be a UUID, got {twin_uuid!r}") from None
+        if frame_id != "environment":
+            raise ValueError(
+                f"frame_id must be 'environment', got {frame_id!r}. "
+                "Convert local or navigation-frame poses before publishing, or "
+                "use the position/rotation topics and let the backend apply the "
+                "environment's own transform."
+            )
+        if substrate is None:
+            source_type = self._get_effective_source_type(None)
+            if source_type in (SOURCE_TYPE_SIM, SOURCE_TYPE_SIM_TELE):
+                substrate = SUBSTRATE_SIM
+            elif source_type == SOURCE_TYPE_EDIT:
+                raise ValueError(
+                    "substrate is required for an 'edit' client: pass 'sim' or "
+                    "'hardware'"
+                )
+            else:
+                substrate = SUBSTRATE_HARDWARE
+        wire_substrate = (
+            _SUBSTRATE_INPUTS.get(substrate) if isinstance(substrate, str) else None
+        )
+        if wire_substrate is None:
+            raise ValueError(
+                "substrate must be 'sim', 'hardware', 'SUBSTRATE_SIM' or "
+                f"'SUBSTRATE_HARDWARE', got {substrate!r}"
+            )
+        if pose_provenance is not None:
+            default_provenance: Optional[str] = _pose_provenance(
+                "pose_provenance", pose_provenance
+            )
+        elif wire_substrate == SUBSTRATE_SIM:
+            default_provenance = POSE_PROVENANCE_GROUND_TRUTH
+        else:
+            default_provenance = None
+        if not frames:
+            raise ValueError("frames must contain at least one frame pose")
+        wire_frames = [
+            _frame_pose(i, frame, default_provenance) for i, frame in enumerate(frames)
+        ]
+        seen = set()
+        for index, frame in enumerate(wire_frames):
+            key = (frame["child_frame_id"], frame["pose_provenance"])
+            if key in seen:
+                raise ValueError(
+                    f"frames[{index}] repeats {key[0]!r} as {key[1]}: report a "
+                    "frame once per provenance"
+                )
+            seen.add(key)
+            if (
+                frame["pose_provenance"] == POSE_PROVENANCE_GROUND_TRUTH
+                and wire_substrate != SUBSTRATE_SIM
+            ):
+                raise ValueError(
+                    f"frames[{index}] claims POSE_PROVENANCE_GROUND_TRUTH on "
+                    "hardware. Only a simulator knows its exact state; say how "
+                    "the pose was estimated."
+                )
+        for name, value in (
+            ("source_subtype", source_subtype),
+            ("producer_instance", producer_instance),
+            ("workload_uuid", workload_uuid),
+        ):
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"{name} must be a string, got {value!r}")
+        if producer_sequence is not None:
+            # Vector takes an int64 or its decimal string; a JSON number past
+            # int64 decodes as a float there and the message is dropped. A
+            # string such as "009" would be stored as 9, so only the canonical
+            # decimal spelling is sent and every producer agrees on one form.
+            if isinstance(producer_sequence, bool) or not isinstance(
+                producer_sequence, (int, str)
+            ):
+                sequence = None
+            elif isinstance(producer_sequence, str):
+                sequence = (
+                    int(producer_sequence)
+                    if re.fullmatch(r"-?(0|[1-9][0-9]*)", producer_sequence)
+                    else None
+                )
+            else:
+                sequence = producer_sequence
+            if sequence is None or not _INT64_MIN <= sequence <= _INT64_MAX:
+                raise ValueError(
+                    "producer_sequence must be a signed 64-bit int or its "
+                    f"decimal string, got {producer_sequence!r}"
+                )
+        if simulation_time_s is not None and (
+            isinstance(simulation_time_s, bool)
+            or not isinstance(simulation_time_s, (int, float))
+            or not math.isfinite(simulation_time_s)
+            or simulation_time_s < 0
+        ):
+            raise ValueError(
+                "simulation_time_s must be a finite, non-negative number, got "
+                f"{simulation_time_s!r}"
+            )
+
+        instance = producer_instance or self.client_id
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/frame_poses"
+        message: Dict[str, Any] = {
+            "header": {
+                "stamp": {
+                    "value_nanos": str(time.time_ns()),
+                    "clock": "CLOCK_DOMAIN_REALTIME",
+                    "clock_id": instance,
+                },
+                "frame_id": frame_id,
+                "twin_uuid": str(twin_uuid),
+                "substrate": wire_substrate,
+            },
+            "frames": wire_frames,
+            "producer_instance": instance,
+        }
+        optional = {
+            "source_subtype": source_subtype,
+            "producer_sequence": producer_sequence,
+            "workload_uuid": workload_uuid,
+            "simulation_time_s": simulation_time_s,
+        }
+        message.update({k: v for k, v in optional.items() if v is not None})
+        return self.publish(topic, message)
 
     def update_twin_rotation(self, twin_uuid: str, rotation: Dict[str, float]):
         """Update twin rotation via MQTT."""

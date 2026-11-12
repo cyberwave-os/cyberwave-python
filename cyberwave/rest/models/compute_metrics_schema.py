@@ -28,7 +28,7 @@ from pydantic_core import to_jsonable_python
 
 class ComputeMetricsSchema(BaseModel):
     """
-    Workspace-/org-scoped roll-up of billed compute workloads.  Mirrors the pricing rate-card COMPUTE split: ``by_class`` always carries a ``cloud`` and a ``simulation`` bucket (simulation = ``cyberwave-sim`` / ``mujoco-sim`` profiles). ``by_profile`` and ``by_command_type`` give the finer breakdown; ``by_day`` is a per-(day, class) series for charting.
+    Workspace-/org-scoped roll-up of billed compute workloads.  Mirrors the pricing rate-card COMPUTE split: ``by_class`` always carries a ``cloud`` and a ``simulation`` bucket (simulation = ``mujoco-sim`` / ``cyberwave-sim`` / ``isaac-sim`` profiles). ``by_profile`` and ``by_command_type`` give the finer breakdown; ``by_day`` is a per-(day, class) series for charting.
     """ # noqa: E501
     workspace_uuid: Optional[StrictStr] = None
     organization_uuid: Optional[StrictStr] = None

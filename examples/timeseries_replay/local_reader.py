@@ -110,14 +110,19 @@ class LocalRows:
         return ann
 
     def fetch(self, start: float, end: float) -> tuple[list[tuple[float, str, float]], bool]:
-        """Rows (epoch seconds, channel_id, value) of [start, end) sorted by time; never truncated."""
+        """Rows (epoch seconds, channel_id, value) of [start, end) sorted by time; never truncated.
+
+        Like the import, a channel keeps one reading per time: the last in file order.
+        """
         rows: list[tuple[float, str, float]] = []
         for signal, wanted in self.wanted.items():
             ann = self.annotation(signal)
             for path in self.files[signal]:
                 rows += self._read(path, start, end, wanted, ann)
-        rows.sort()
-        return rows, False
+        # Stable: readings of one channel at one time stay in file order.
+        rows.sort(key=lambda row: (row[0], row[1]))
+        last = {(t, channel_id): i for i, (t, channel_id, _) in enumerate(rows)}
+        return [row for i, row in enumerate(rows) if last[(row[0], row[1])] == i], False
 
     def _read(self, path: Path, start: float, end: float, wanted: dict, ann: dict) -> list:
         schema = pq.read_schema(path)

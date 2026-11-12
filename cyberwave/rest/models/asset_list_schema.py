@@ -28,6 +28,7 @@ class AssetListSchema(BaseModel):
     """
     AssetListSchema
     """ # noqa: E501
+    is_edge_device: Optional[StrictBool] = None
     is_kit: Optional[StrictBool] = False
     uuid: StrictStr
     name: StrictStr
@@ -53,7 +54,7 @@ class AssetListSchema(BaseModel):
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["is_kit", "uuid", "name", "description", "created_at", "updated_at", "visibility", "registry_id", "registry_id_alias", "slug", "metadata", "capabilities", "thumbnail", "urdf_file", "glb_file", "splat_file", "has_universal_schema", "build_status", "universal_schema_source", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["is_edge_device", "is_kit", "uuid", "name", "description", "created_at", "updated_at", "visibility", "registry_id", "registry_id_alias", "slug", "metadata", "capabilities", "thumbnail", "urdf_file", "glb_file", "splat_file", "has_universal_schema", "build_status", "universal_schema_source", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -94,6 +95,11 @@ class AssetListSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if is_edge_device (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_edge_device is None and "is_edge_device" in self.model_fields_set:
+            _dict['is_edge_device'] = None
+
         # set to None if visibility (nullable) is None
         # and model_fields_set contains the field
         if self.visibility is None and "visibility" in self.model_fields_set:
@@ -176,6 +182,7 @@ class AssetListSchema(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "is_edge_device": obj.get("is_edge_device"),
             "is_kit": obj.get("is_kit") if obj.get("is_kit") is not None else False,
             "uuid": obj.get("uuid"),
             "name": obj.get("name"),

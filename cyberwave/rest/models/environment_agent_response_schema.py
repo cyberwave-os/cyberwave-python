@@ -30,7 +30,7 @@ class EnvironmentAgentResponseSchema(BaseModel):
     answer: StrictStr
     assistant_session_id: StrictStr
     tool_calls: Optional[List[StrictStr]] = None
-    structured_results: Optional[List[Optional[Dict[str, Any]]]] = None
+    structured_results: Optional[List[Dict[str, Any]]] = None
     scene_changes: Optional[Dict[str, Any]] = None
     __properties: ClassVar[List[str]] = ["answer", "assistant_session_id", "tool_calls", "structured_results", "scene_changes"]
 

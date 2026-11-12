@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.workflow_connection_schema import WorkflowConnectionSchema
 from cyberwave.rest.models.workflow_node_schema import WorkflowNodeSchema
@@ -43,6 +43,7 @@ class WorkflowTemplateSchema(BaseModel):
     allow_concurrent_executions: Optional[StrictBool] = False
     concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: StrictStr
+    cyberwave_log: StrictStr
     simulation_backend: Optional[StrictStr] = None
     visibility: StrictStr
     tags: Optional[List[StrictStr]] = None
@@ -56,7 +57,14 @@ class WorkflowTemplateSchema(BaseModel):
     nodes: Optional[List[WorkflowNodeSchema]] = None
     connections: Optional[List[WorkflowConnectionSchema]] = None
     node_count: Optional[StrictInt] = 0
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "simulation_backend", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections", "node_count"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "cyberwave_log", "simulation_backend", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections", "node_count"]
+
+    @field_validator('cyberwave_log')
+    def cyberwave_log_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['all', 'errors', 'none']):
+            raise ValueError("must be one of enum values ('all', 'errors', 'none')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -176,6 +184,7 @@ class WorkflowTemplateSchema(BaseModel):
             "allow_concurrent_executions": obj.get("allow_concurrent_executions") if obj.get("allow_concurrent_executions") is not None else False,
             "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
+            "cyberwave_log": obj.get("cyberwave_log"),
             "simulation_backend": obj.get("simulation_backend"),
             "visibility": obj.get("visibility"),
             "tags": obj.get("tags"),

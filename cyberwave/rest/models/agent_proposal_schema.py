@@ -30,8 +30,8 @@ class AgentProposalSchema(BaseModel):
     kind: StrictStr
     status: StrictStr
     summary: StrictStr
-    actions: Optional[List[Optional[Dict[str, Any]]]] = None
-    requirements: Optional[List[Optional[Dict[str, Any]]]] = None
+    actions: Optional[List[Dict[str, Any]]] = None
+    requirements: Optional[List[Dict[str, Any]]] = None
     __properties: ClassVar[List[str]] = ["kind", "status", "summary", "actions", "requirements"]
 
     @field_validator('kind')

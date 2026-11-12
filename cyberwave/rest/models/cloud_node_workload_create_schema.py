@@ -32,9 +32,7 @@ class CloudNodeWorkloadCreateSchema(BaseModel):
     instance_uuid: Optional[StrictStr] = None
     command_type: Optional[StrictStr] = None
     command_params: Optional[Dict[str, Any]] = None
-    callback_task: Optional[StrictStr] = None
-    callback_kwargs: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["profile_slug", "workspace_uuid", "instance_uuid", "command_type", "command_params", "callback_task", "callback_kwargs"]
+    __properties: ClassVar[List[str]] = ["profile_slug", "workspace_uuid", "instance_uuid", "command_type", "command_params"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -95,16 +93,6 @@ class CloudNodeWorkloadCreateSchema(BaseModel):
         if self.command_params is None and "command_params" in self.model_fields_set:
             _dict['command_params'] = None
 
-        # set to None if callback_task (nullable) is None
-        # and model_fields_set contains the field
-        if self.callback_task is None and "callback_task" in self.model_fields_set:
-            _dict['callback_task'] = None
-
-        # set to None if callback_kwargs (nullable) is None
-        # and model_fields_set contains the field
-        if self.callback_kwargs is None and "callback_kwargs" in self.model_fields_set:
-            _dict['callback_kwargs'] = None
-
         return _dict
 
     @classmethod
@@ -121,9 +109,7 @@ class CloudNodeWorkloadCreateSchema(BaseModel):
             "workspace_uuid": obj.get("workspace_uuid"),
             "instance_uuid": obj.get("instance_uuid"),
             "command_type": obj.get("command_type"),
-            "command_params": obj.get("command_params"),
-            "callback_task": obj.get("callback_task"),
-            "callback_kwargs": obj.get("callback_kwargs")
+            "command_params": obj.get("command_params")
         })
         return _obj
 

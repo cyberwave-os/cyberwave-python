@@ -928,15 +928,30 @@ class WorkerRuntime:
             )
             return
 
-        if not getattr(mqtt_client, "connected", False):
+        if not getattr(mqtt_client, "connected", False) and not getattr(
+            mqtt_client, "connecting_in_background", False
+        ):
             try:
                 mqtt_client.connect()
             except Exception:
+                # Returning here left a running worker with no subscription
+                # for good: a broker that was unreachable at startup (a
+                # tunnel not up yet) dropped every later run command. Keep
+                # connecting instead; the handler registered below is
+                # subscribed as soon as the broker answers.
                 logger.exception(
-                    "Failed to connect MQTT client for hook '%s'",
+                    "Failed to connect MQTT client for hook '%s'; "
+                    "retrying in the background",
                     hook.callback.__name__,
                 )
-                return
+                try:
+                    mqtt_client.connect_in_background()
+                except Exception:
+                    logger.exception(
+                        "Skipping MQTT hook '%s': cannot reconnect",
+                        hook.callback.__name__,
+                    )
+                    return
 
         prefix = getattr(mqtt_client, "topic_prefix", "") or ""
         if scope == "workflow":
