@@ -1070,9 +1070,12 @@ class Cyberwave:
             self, for method chaining.
 
         Note:
-            Locomotion, flight, and driver commands (``twin.locomote.*``,
-            ``twin.flying.*``, ``twin.commands.*``) are live/driver-only and raise
-            ``NotSimulatedError`` in any simulation runtime.
+            Locomotion and flight methods (``twin.move_forward()``, ``twin.takeoff()``,
+            ``twin.locomotion.*``, ``twin.flight.*``) run in every simulation runtime,
+            ``"playground"`` included. A catalog command on ``twin.commands.*`` runs in
+            simulation when it maps to one of those methods, or when the twin's
+            controller policy marks it playground-drivable; otherwise it raises
+            ``NotSimulatedError``, as do live-only sensors such as the IMU and compass.
 
         Example:
             >>> cw = Cyberwave(environment_id="acme/envs/floor")
