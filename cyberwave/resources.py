@@ -2551,11 +2551,28 @@ class AssetManager(BaseResourceManager):
         as a URL path segment would be ambiguous with the path's own segment
         boundaries.
         """
+        return self._query_registry_id(registry_id, [])
+
+    def _list_by_registry_id_catalog_wide(self, registry_id: str) -> List[AssetSchema]:
+        """Like :meth:`list_by_registry_id`, but not limited to the configured workspace.
+
+        The client adds the configured workspace (``CYBERWAVE_WORKSPACE_ID``, or the
+        one ``get_or_create_quickstart_environment`` saves) to every request as
+        ``workspace_uuid``. On ``/api/v1/assets`` that limits results to the
+        workspace's own assets, so public catalog assets such as ``"dji/tello"`` are
+        not found. An explicit (empty) ``workspace_uuid`` on the call wins over the
+        ambient one, which lifts that limit for this lookup only.
+        """
+        return self._query_registry_id(registry_id, [("workspace_uuid", "")])
+
+    def _query_registry_id(
+        self, registry_id: str, extra_params: List[Tuple[str, str]]
+    ) -> List[AssetSchema]:
         try:
             _param = self.api.api_client.param_serialize(
                 method="GET",
                 resource_path="/api/v1/assets",
-                query_params=[("registry_id", registry_id)],
+                query_params=[("registry_id", registry_id)] + extra_params,
             )
 
             _response_types_map = {
@@ -2606,6 +2623,16 @@ class AssetManager(BaseResourceManager):
         # path parameter.
         try:
             results = self.list_by_registry_id(normalized_identifier)
+            if results:
+                return results[0]
+        except Exception:
+            pass
+
+        # Not in the configured workspace: look in the whole catalog (public
+        # assets are hidden by the ambient workspace filter; see
+        # _list_by_registry_id_catalog_wide). Workspace assets still win above.
+        try:
+            results = self._list_by_registry_id_catalog_wide(normalized_identifier)
             if results:
                 return results[0]
         except Exception:
