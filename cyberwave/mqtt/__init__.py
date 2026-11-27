@@ -264,6 +264,25 @@ def build_client_id(producer: str, runtime_mode: Optional[str]) -> str:
     return f"{producer}_{mode}_{uuid.uuid4().hex}"
 
 
+def _is_numpy(value: Any) -> bool:
+    return type(value).__module__ == "numpy" and hasattr(value, "tolist")
+
+
+def _json_default(value: Any) -> Any:
+    """``json.dumps`` hook for numpy values, which ``json`` cannot encode.
+
+    Callers often compute command arguments with numpy/OpenCV (e.g. a distance
+    from detected image corners), so a ``numpy.float32`` easily reaches
+    ``move_forward()``. Without this hook ``json.dumps`` raises ``TypeError``,
+    ``publish()`` logs it and returns False, and the caller only sees "the MQTT
+    client refused it". numpy scalars become Python numbers; arrays become lists.
+    Detected by module rather than ``isinstance`` so this module never imports numpy.
+    """
+    if _is_numpy(value):
+        return value.tolist()  # scalar -> Python number, array -> (nested) list
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _replace_non_finite(value: Any) -> Any:
     """Recursively replace non-finite floats (``NaN`` / ``inf``) with ``None``.
 
@@ -276,6 +295,8 @@ def _replace_non_finite(value: Any) -> Any:
     wire boundary maps them to ``null`` (a valid JSON marker for "no value")
     rather than letting an invalid document reach subscribers.
     """
+    if _is_numpy(value):
+        value = value.tolist()
     if isinstance(value, float):
         return value if math.isfinite(value) else None
     if isinstance(value, dict):
@@ -1442,9 +1463,11 @@ class CyberwaveMQTTClient:
                 # Only pay the recursive-sanitize cost when a non-finite value is
                 # actually present, so the wire never carries invalid-JSON tokens.
                 try:
-                    payload = json.dumps(message, allow_nan=False)
+                    payload = json.dumps(message, allow_nan=False, default=_json_default)
                 except ValueError:
-                    payload = json.dumps(_replace_non_finite(message), allow_nan=False)
+                    payload = json.dumps(
+                        _replace_non_finite(message), allow_nan=False, default=_json_default
+                    )
             else:
                 payload = message
             oversize = self._oversize_reason(topic, payload, properties)
