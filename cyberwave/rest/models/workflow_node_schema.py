@@ -31,6 +31,7 @@ class WorkflowNodeSchema(BaseModel):
     uuid: StrictStr
     workflow_uuid: StrictStr
     name: StrictStr
+    handle: Optional[StrictStr] = ''
     node_type: StrictStr
     node_subtype: StrictStr
     trigger_type: Optional[StrictStr]
@@ -43,7 +44,7 @@ class WorkflowNodeSchema(BaseModel):
     updated_at: StrictStr
     metadata: Dict[str, Any]
     supports_model_task_binding: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "workflow_uuid", "name", "node_type", "node_subtype", "trigger_type", "parameters", "position_x", "position_y", "notes", "is_disabled", "created_at", "updated_at", "metadata", "supports_model_task_binding"]
+    __properties: ClassVar[List[str]] = ["uuid", "workflow_uuid", "name", "handle", "node_type", "node_subtype", "trigger_type", "parameters", "position_x", "position_y", "notes", "is_disabled", "created_at", "updated_at", "metadata", "supports_model_task_binding"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -104,6 +105,7 @@ class WorkflowNodeSchema(BaseModel):
             "uuid": obj.get("uuid"),
             "workflow_uuid": obj.get("workflow_uuid"),
             "name": obj.get("name"),
+            "handle": obj.get("handle") if obj.get("handle") is not None else '',
             "node_type": obj.get("node_type"),
             "node_subtype": obj.get("node_subtype"),
             "trigger_type": obj.get("trigger_type"),

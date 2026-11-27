@@ -56,6 +56,7 @@ class TwinSchema(BaseModel):
     joint_calibration: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any]
     warnings: Optional[List[Dict[str, Any]]] = None
+    pose_warnings: Optional[List[Dict[str, StrictStr]]] = None
     capabilities: Dict[str, Any]
     configuration_feedback: Optional[List[ConfigurationFeedbackSchema]] = None
     universal_schema: Optional[Dict[str, Any]] = None
@@ -79,7 +80,7 @@ class TwinSchema(BaseModel):
     export_warnings: Optional[List[Dict[str, StrictStr]]] = None
     mqtt_command_schema: Optional[Dict[str, Any]] = None
     controllable_joint_names: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "visual_asset_status", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "warnings", "capabilities", "configuration_feedback", "universal_schema", "model_frame", "schema_hash", "controller_policy_uuid", "resolved_controller_settings", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "asset_uuid", "environment_uuid", "created_at", "updated_at", "glb_file", "splat_file", "urdf_file", "visual_asset_status", "position_x", "position_y", "position_z", "rotation_w", "rotation_x", "rotation_y", "rotation_z", "scale_x", "scale_y", "scale_z", "joint_states", "kinematics_override", "joint_calibration", "metadata", "warnings", "pose_warnings", "capabilities", "configuration_feedback", "universal_schema", "model_frame", "schema_hash", "controller_policy_uuid", "resolved_controller_settings", "visibility", "attach_to_twin_uuid", "attach_to_link", "child_twin_uuids", "attach_offset_x", "attach_offset_y", "attach_offset_z", "attach_offset_rotation_w", "attach_offset_rotation_x", "attach_offset_rotation_y", "attach_offset_rotation_z", "fixed_base", "supported_simulation_backends", "export_warnings", "mqtt_command_schema", "controllable_joint_names"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -167,6 +168,11 @@ class TwinSchema(BaseModel):
         if self.warnings is None and "warnings" in self.model_fields_set:
             _dict['warnings'] = None
 
+        # set to None if pose_warnings (nullable) is None
+        # and model_fields_set contains the field
+        if self.pose_warnings is None and "pose_warnings" in self.model_fields_set:
+            _dict['pose_warnings'] = None
+
         # set to None if universal_schema (nullable) is None
         # and model_fields_set contains the field
         if self.universal_schema is None and "universal_schema" in self.model_fields_set:
@@ -241,6 +247,7 @@ class TwinSchema(BaseModel):
             "joint_calibration": obj.get("joint_calibration"),
             "metadata": obj.get("metadata"),
             "warnings": obj.get("warnings"),
+            "pose_warnings": obj.get("pose_warnings"),
             "capabilities": obj.get("capabilities"),
             "configuration_feedback": [ConfigurationFeedbackSchema.from_dict(_item) for _item in obj["configuration_feedback"]] if obj.get("configuration_feedback") is not None else None,
             "universal_schema": obj.get("universal_schema"),

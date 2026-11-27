@@ -1,7 +1,8 @@
 """Camera stream manager for running multiple camera streams with threading support.
 
-Provides CameraStreamManager for teleoperation and edge scripts that need to run
-camera streaming in background threads with run_with_auto_reconnect (command handling).
+Provides CameraStreamManager (deprecated, removed in cyberwave 1.0.0) for
+teleoperation and edge scripts that run camera streaming in background threads
+with run_with_auto_reconnect (command handling).
 
 Also exposes :func:`run_streamer_in_background`, a low-level helper that runs any
 pre-built :class:`~cyberwave.sensor.BaseVideoStreamer` in a daemon thread with its
@@ -13,6 +14,7 @@ import asyncio
 import logging
 import threading
 import time
+import warnings
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .peer_close import PEER_CONNECTION_CLOSE_TIMEOUT_S, PEER_CONNECTION_SETTLE_S
@@ -358,6 +360,13 @@ TwinOrWithOverrides = Union[
 class CameraStreamManager:
     """Manages multiple camera streams in background threads.
 
+    .. deprecated::
+        Will be removed in cyberwave 1.0.0. It runs several cameras in one
+        process so their frames can be correlated in-process, which predates
+        the Zenoh data bus. Run each camera as its own edge driver on
+        :class:`cyberwave.driver.BaseCameraDriver` and read frames from the bus
+        (``frames/<sensor>``); every frame carries video sync data for recordings.
+
     Accepts twins directly; config is inferred from twin type and capabilities.
     Use (twin, overrides) for per-twin overrides (camera_id, fps, etc.).
 
@@ -405,6 +414,13 @@ class CameraStreamManager:
             time_reference: Time reference for sync
             command_callback: Optional callback(status, message) for command responses
         """
+        warnings.warn(
+            "CameraStreamManager is deprecated and will be removed in cyberwave 1.0.0; "
+            "run each camera as an edge driver on cyberwave.driver.BaseCameraDriver and "
+            "read its frames from the Zenoh data bus (frames/<sensor>).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.client = client
         self._configs: List[Dict[str, Any]] = []
         for item in twins:

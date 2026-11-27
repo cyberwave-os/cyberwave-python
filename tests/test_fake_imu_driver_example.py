@@ -37,10 +37,11 @@ def test_imu_payload_is_six_dof() -> None:
     )
     assert "type" not in payload
     assert payload["dof"] == 6
-    assert payload["gyro"]["z"] == pytest.approx(0.3)
-    assert payload["accel"]["z"] == pytest.approx(9.81)
-    assert "angular_velocity" not in payload
-    assert "linear_acceleration" not in payload
+    assert payload["angular_velocity"]["z"] == pytest.approx(0.3)
+    assert payload["linear_acceleration"]["z"] == pytest.approx(9.81)
+    assert "gyro" not in payload
+    assert "accel" not in payload
+    assert "orientation" not in payload
 
 
 def test_manifest_property_matches_cw_driver_root(imu_twin: SimpleNamespace) -> None:
@@ -159,7 +160,10 @@ def test_publish_imu_sample_uses_random_values(imu_twin: SimpleNamespace) -> Non
     a = driver._publish_imu_sample()
     b = driver._publish_imu_sample()
     assert "type" not in a and a["dof"] == 6
-    assert (a["gyro"], a["accel"]) != (b["gyro"], b["accel"])
+    assert (a["angular_velocity"], a["linear_acceleration"]) != (
+        b["angular_velocity"],
+        b["linear_acceleration"],
+    )
 
 
 def test_random_imu_vectors_jitters_around_base() -> None:

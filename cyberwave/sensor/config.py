@@ -6,18 +6,21 @@ These classes are shared between the SDK and Edge service.
 
 import logging
 import os
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
-# Make pyrealsense2 optional
+# Make pyrealsense2 optional. Any exception, not only ImportError: a wheel
+# whose native librealsense is missing or mismatched raises OSError (or worse)
+# at import, which must not break plain-camera users of this module.
 try:
     import pyrealsense2 as rs
 
     _has_realsense = True
-except ImportError:
+except Exception:
     rs = None
     _has_realsense = False
 
@@ -251,6 +254,9 @@ class EdgeCameraConfig:
     """
     Full-featured camera configuration for Edge service.
 
+    Deprecated: removed in cyberwave 1.0.0. Edge camera drivers read their camera
+    from twin metadata with :class:`cyberwave.driver.CameraSourceConfig`.
+
     Supports:
     - Local cameras: source=0, source=1 (device index)
     - IP cameras: source="http://192.168.1.100/snapshot.jpg"
@@ -309,6 +315,15 @@ class EdgeCameraConfig:
 
     # Streaming settings
     keyframe_interval: Optional[int] = None  # Force keyframe every N frames
+
+    def __post_init__(self) -> None:
+        warnings.warn(
+            "EdgeCameraConfig is deprecated and will be removed in cyberwave 1.0.0; "
+            "edge camera drivers resolve their camera from twin metadata with "
+            "cyberwave.driver.CameraSourceConfig.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
     @property
     def width(self) -> int:

@@ -89,17 +89,21 @@ class ImuPayload(TypedDict, total=False):
 
     The topic slug identifies the stream; no ``type`` field on the wire.
 
-    - ``gyro`` — angular rate (rad/s), body frame
-    - ``accel`` — linear acceleration (m/s²), including gravity when stationary
+    The keys follow the ``telemetry.imu.v1`` contract, the same message
+    ``MqttClient.publish_imu`` builds:
 
-    Inbound samples may use legacy ``angular_velocity`` / ``linear_acceleration``;
-    readers normalize those to ``gyro`` / ``accel`` without duplicating on the wire.
+    - ``angular_velocity`` — angular rate (rad/s), sensor frame
+    - ``linear_acceleration`` — linear acceleration (m/s²), including gravity
+      when stationary
+
+    No ``orientation``: a synthetic IMU does not know its environment pose.
+    Readers (``twin.imu.get()``) present the vectors as ``gyro`` / ``accel``.
     """
 
     source_type: Literal["edge"]
     timestamp: float
-    gyro: Vector3
-    accel: Vector3
+    angular_velocity: Vector3
+    linear_acceleration: Vector3
     sensor_id: str
     dof: Literal[6]
 
@@ -114,8 +118,8 @@ def build_imu_payload(
         source_type=IMU_SOURCE_TYPE,
         timestamp=time.time(),
         dof=6,
-        gyro=gyro,
-        accel=accel,
+        angular_velocity=gyro,
+        linear_acceleration=accel,
         sensor_id=sensor_id,
     )
 

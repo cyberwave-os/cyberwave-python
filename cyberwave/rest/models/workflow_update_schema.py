@@ -37,12 +37,23 @@ class WorkflowUpdateSchema(BaseModel):
     allow_concurrent_executions: Optional[StrictBool] = None
     concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: Optional[StrictStr] = None
+    execution_engine: Optional[StrictStr] = None
     params_schema: Optional[List[Dict[str, Any]]] = None
     cyberwave_log: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
     tags: Optional[List[StrictStr]] = None
     is_template: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "environment_uuid", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "params_schema", "cyberwave_log", "metadata", "tags", "is_template"]
+    __properties: ClassVar[List[str]] = ["name", "slug", "description", "is_active", "visibility", "environment_uuid", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "execution_engine", "params_schema", "cyberwave_log", "metadata", "tags", "is_template"]
+
+    @field_validator('execution_engine')
+    def execution_engine_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['interpreter', 'cloud_runner']):
+            raise ValueError("must be one of enum values ('interpreter', 'cloud_runner')")
+        return value
 
     @field_validator('cyberwave_log')
     def cyberwave_log_validate_enum(cls, value):
@@ -143,6 +154,11 @@ class WorkflowUpdateSchema(BaseModel):
         if self.execution_target is None and "execution_target" in self.model_fields_set:
             _dict['execution_target'] = None
 
+        # set to None if execution_engine (nullable) is None
+        # and model_fields_set contains the field
+        if self.execution_engine is None and "execution_engine" in self.model_fields_set:
+            _dict['execution_engine'] = None
+
         # set to None if params_schema (nullable) is None
         # and model_fields_set contains the field
         if self.params_schema is None and "params_schema" in self.model_fields_set:
@@ -190,6 +206,7 @@ class WorkflowUpdateSchema(BaseModel):
             "allow_concurrent_executions": obj.get("allow_concurrent_executions"),
             "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
+            "execution_engine": obj.get("execution_engine"),
             "params_schema": obj.get("params_schema"),
             "cyberwave_log": obj.get("cyberwave_log"),
             "metadata": obj.get("metadata"),

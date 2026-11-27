@@ -29,21 +29,39 @@ def _is_imu_type(sensor_type: str) -> bool:
     return sensor_type.lower() == "imu"
 
 
+def _xyz_object(value: Any, axes: str = "xyz") -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, (list, tuple)) and len(value) == len(axes):
+        return dict(zip(axes, value))
+    return None
+
+
 def normalize_imu_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Map legacy alias keys to canonical ``gyro`` / ``accel`` (no duplicates)."""
+    """Present an inbound sample under the ``gyro`` / ``accel`` keys readers use.
+
+    The wire contract names the vectors ``angular_velocity`` and
+    ``linear_acceleration`` and accepts ``gyro`` / ``accel`` as aliases; the
+    contract name wins when a sample carries both, even when its value is
+    unusable, as in Vector and the frontend; a ``null`` contract name counts as
+    absent. A vector sent as an
+    ``[x, y, z]`` array, or an ``orientation`` as ``[w, x, y, z]``, becomes an
+    object.
+    """
     out = dict(payload)
-    gyro = out.get("gyro")
-    if not isinstance(gyro, dict):
-        gyro = out.get("angular_velocity")
-    accel = out.get("accel")
-    if not isinstance(accel, dict):
-        accel = out.get("linear_acceleration")
-    if isinstance(gyro, dict):
-        out["gyro"] = dict(gyro)
-    if isinstance(accel, dict):
-        out["accel"] = dict(accel)
-    out.pop("angular_velocity", None)
-    out.pop("linear_acceleration", None)
+    for alias, name in (("gyro", "angular_velocity"), ("accel", "linear_acceleration")):
+        contract = out.pop(name, None)
+        vector = _xyz_object(contract if contract is not None else out.get(alias))
+        if vector is None:
+            out.pop(alias, None)
+        else:
+            out[alias] = vector
+    if "orientation" in out:
+        orientation = _xyz_object(out["orientation"], "wxyz")
+        if orientation is None:
+            out.pop("orientation")
+        else:
+            out["orientation"] = orientation
     return out
 
 

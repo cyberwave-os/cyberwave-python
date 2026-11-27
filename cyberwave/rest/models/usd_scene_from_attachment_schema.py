@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from typing import Optional, Set
@@ -31,7 +31,8 @@ class USDSceneFromAttachmentSchema(BaseModel):
     attachment_uuid: StrictStr
     main_file_path: Optional[Annotated[str, Field(strict=True, max_length=512)]] = None
     max_texture_size: Optional[Annotated[int, Field(le=4096, strict=True, ge=256)]] = 2048
-    __properties: ClassVar[List[str]] = ["attachment_uuid", "main_file_path", "max_texture_size"]
+    preserve_physics: Optional[StrictBool] = True
+    __properties: ClassVar[List[str]] = ["attachment_uuid", "main_file_path", "max_texture_size", "preserve_physics"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -91,7 +92,8 @@ class USDSceneFromAttachmentSchema(BaseModel):
         _obj = cls.model_validate({
             "attachment_uuid": obj.get("attachment_uuid"),
             "main_file_path": obj.get("main_file_path"),
-            "max_texture_size": obj.get("max_texture_size") if obj.get("max_texture_size") is not None else 2048
+            "max_texture_size": obj.get("max_texture_size") if obj.get("max_texture_size") is not None else 2048,
+            "preserve_physics": obj.get("preserve_physics") if obj.get("preserve_physics") is not None else True
         })
         return _obj
 

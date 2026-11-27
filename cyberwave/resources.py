@@ -41,6 +41,7 @@ from typing import (
     Literal,
     NoReturn,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
@@ -92,6 +93,7 @@ from cyberwave.rest.models.twin_joint_calibration_schema import (
     TwinJointCalibrationSchema,
 )
 
+from ._rest import api_error, decode_json
 from .exceptions import CyberwaveAPIError, CyberwaveError
 
 #: Times ``export_usd_scene`` requests a bundle build before giving up.
@@ -457,6 +459,12 @@ def _json_request(
             raise _api_error(exc, error_body, operation) from exc
         manager._handle_error(exc, operation)
         raise  # For type checker
+
+
+def _sensor_of(body: Any) -> Dict[str, Any]:
+    """The ``sensor`` of a ``/twins/{uuid}/sensors`` response, or ``{}``."""
+    sensor = body.get("sensor") if isinstance(body, dict) else None
+    return sensor if isinstance(sensor, dict) else {}
 
 
 def _iso_utc(value: Union[str, datetime]) -> str:
@@ -1054,6 +1062,9 @@ class EnvironmentManager(BaseResourceManager):
     ) -> List[Dict[str, Any]]:
         """Append a single waypoint to an environment.
 
+        ``rotation`` is a unit quaternion ``{w, x, y, z}``: the API renormalizes
+        a near-unit one and refuses any other with 400.
+
         Returns the full normalized waypoint list after creation.
         """
         waypoint: Dict[str, Any] = {"position": position}
@@ -1086,7 +1097,9 @@ class EnvironmentManager(BaseResourceManager):
         Only ``position``/``rotation`` can be changed — never the
         waypoint's reference frame. Fields left as ``None`` are untouched
         server-side (a true partial update), so e.g. passing only
-        ``position`` leaves the current rotation as-is.
+        ``position`` leaves the current rotation as-is. ``rotation`` is a unit
+        quaternion ``{w, x, y, z}``: the API renormalizes a near-unit one and
+        refuses any other with 400.
 
         ``reference_frame`` names the frame ``position``/``rotation`` are
         expressed in, and the server converts them into the frame the
@@ -1394,6 +1407,10 @@ class EnvironmentManager(BaseResourceManager):
         the API's response size limit and a large scene exports the same way a
         small one does. The first call for a given environment revision pays
         the build; later calls are served from cache.
+
+        Loading exported scenes requires MuJoCo 3.2.5 or newer. Mesh assets use
+        the ``inertia`` attribute introduced in that release so MuJoCo and
+        Isaac derive matching inertial properties.
 
         Args:
             environment_id: UUID of the environment
@@ -3044,9 +3061,10 @@ class TwinManager(BaseResourceManager):
             ``return_headers`` is ``False``; otherwise a ``(bytes, meta)`` tuple.
 
         Raises:
-            CyberwaveAPIError: with ``status_code=404`` when ``frame_bucket``
-                is ``"policy_depth"`` and no policy-resolution depth frame is
-                being rendered (no RGB fallback).
+            CyberwaveAPIError: carrying ``status_code`` for any error response,
+                e.g. 404 when no frame is cached for the twin, or when
+                ``frame_bucket`` is ``"policy_depth"`` and no policy-resolution
+                depth frame is being rendered (no RGB fallback).
         """
         try:
             query_params = []
@@ -3079,6 +3097,14 @@ class TwinManager(BaseResourceManager):
                 *_param, _request_timeout=_request_timeout
             )
             response_data.read()
+            # call_api raises only on transport failures; the generated client
+            # checks the status in response_deserialize, which this path skips.
+            if response_data.status >= 400:
+                raise api_error(
+                    "GET /api/v1/twins/{uuid}/latest-frame",
+                    response_data.status,
+                    decode_json(getattr(response_data, "data", None)),
+                )
 
             payload = getattr(response_data, "data", None)
             frame_bytes: Optional[bytes] = None
@@ -3294,6 +3320,136 @@ class TwinManager(BaseResourceManager):
             return ranges
         ranges[slot] = dict(OPERATING_RANGE_OFF)
         return self._write_operating_ranges(twin_id, ranges)
+
+    # --- Sensors of the twin's own schema (``/api/v1/twins/{uuid}/sensors``) ---
+
+    def list_sensors(self, twin_id: str) -> List[Dict[str, Any]]:
+        """The twin's sensors, each with ``origin``: ``"asset"`` (inherited from
+        the asset) or ``"twin"`` (added on this twin)."""
+        body = _json_request(
+            self,
+            "GET",
+            "/api/v1/twins/{uuid}/sensors",
+            operation=f"list sensors of twin {twin_id}",
+            path_params={"uuid": twin_id},
+        )
+        return list(body.get("sensors") or []) if isinstance(body, dict) else []
+
+    def add_sensor(
+        self,
+        twin_id: str,
+        name: str,
+        sensor_type: str,
+        *,
+        parent_link: Optional[str] = None,
+        position: Optional[Sequence[float]] = None,
+        orientation: Optional[Sequence[float]] = None,
+        unit: Optional[str] = None,
+        operating_range: Optional[Tuple[Optional[float], Optional[float]]] = None,
+        update_rate: Optional[float] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Add a sensor to the twin's own schema; returns the stored sensor.
+
+        The sensor has no body: it is a slot on one of the twin's links, kept
+        through sync-with-asset and an asset swap while that link exists. Send
+        its values with ``cw.mqtt.publish_readings`` (or ``twin.publish_reading``)
+        under ``name``, which is also its slot id.
+
+        Args:
+            twin_id: UUID of the twin
+            name: Sensor name and slot id, unique on the twin
+            sensor_type: A scalar type (``"temperature"``, ``"humidity"``, ``"power"``,
+                ``"generic"``, ...) or a sensor type such as ``"camera"``
+            parent_link: Link it sits on; defaults to the root link when the
+                twin has exactly one
+            position: ``(x, y, z)`` in metres from the link origin
+            orientation: Quaternion ``(x, y, z, w)``
+            unit: Unit of its readings, e.g. ``"°C"``; free text, not converted
+            operating_range: ``(min, max)`` in ``unit``; a reading outside is
+                flagged. ``None`` on one side leaves it open
+            update_rate: Expected readings per second, if relevant
+            parameters: Further sensor parameters (merged with the above)
+        """
+        params: Dict[str, Any] = dict(parameters or {})
+        if unit is not None:
+            params["unit"] = unit
+        if operating_range is not None:
+            low, high = operating_range
+            params["operating_range"] = {"min": low, "max": high}
+        sensor: Dict[str, Any] = {
+            "name": name,
+            "type": sensor_type,
+            "parameters": params,
+        }
+        if parent_link is not None:
+            sensor["parent_link"] = parent_link
+        if position is not None or orientation is not None:
+            x, y, z = position if position is not None else (0.0, 0.0, 0.0)
+            qx, qy, qz, qw = (
+                orientation if orientation is not None else (0.0, 0.0, 0.0, 1.0)
+            )
+            sensor["pose"] = {
+                "position": {"x": float(x), "y": float(y), "z": float(z)},
+                "orientation": {
+                    "x": float(qx),
+                    "y": float(qy),
+                    "z": float(qz),
+                    "w": float(qw),
+                },
+            }
+        if update_rate is not None:
+            sensor["update_rate"] = float(update_rate)
+        body = _json_request(
+            self,
+            "POST",
+            "/api/v1/twins/{uuid}/sensors",
+            operation=f"add sensor {name!r} to twin {twin_id}",
+            path_params={"uuid": twin_id},
+            body={"sensor": sensor},
+        )
+        return _sensor_of(body)
+
+    def update_sensor(
+        self, twin_id: str, name: str, patch: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Merge-patch one sensor of the twin (RFC 7386: ``None`` removes a key);
+        returns the stored sensor. Changed fields count as set on this twin, so
+        sync-with-asset keeps them. Renaming is not allowed.
+
+        Example: ``cw.twins.update_sensor(twin_id, "value",
+        {"parameters": {"operating_range": {"min": 0, "max": 30}}})``
+        """
+        body = _json_request(
+            self,
+            "PATCH",
+            "/api/v1/twins/{uuid}/sensors/{name}",
+            operation=f"update sensor {name!r} of twin {twin_id}",
+            path_params={"uuid": twin_id, "name": name},
+            body={"patch": patch},
+        )
+        return _sensor_of(body)
+
+    def set_sensor_unit(
+        self, twin_id: str, name: str, unit: Optional[str]
+    ) -> Dict[str, Any]:
+        """Set the unit a sensor's readings are in (``None`` removes it); returns
+        the stored sensor. Works on inherited sensors too, e.g. a Generic
+        Sensor's ``"value"``."""
+        return self.update_sensor(twin_id, name, {"parameters": {"unit": unit}})
+
+    def remove_sensor(self, twin_id: str, name: str) -> None:
+        """Remove a sensor added on the twin, with its data source binding,
+        range override and last reading. A sensor inherited from the asset
+        cannot be removed here (the next sync with the asset would bring it
+        back)."""
+        _json_request(
+            self,
+            "DELETE",
+            "/api/v1/twins/{uuid}/sensors/{name}",
+            operation=f"remove sensor {name!r} from twin {twin_id}",
+            path_params={"uuid": twin_id, "name": name},
+        )
 
     def sensor_status(self, twin_id: str) -> Optional[Dict[str, Any]]:
         """``metadata.sensor_status`` as the backend last wrote it, or None.

@@ -19,13 +19,15 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyberwave.rest.models.marker_id_conflict_schema import MarkerIdConflictSchema
+from cyberwave.rest.models.marker_id_reserved_overlap_schema import MarkerIdReservedOverlapSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class FiducialMarkerSchema(BaseModel):
     """
-    Detection ground-truth for one AprilTag/ArUco marker in an environment.  Flat view over a compiled ``cyberwave/fiducial_marker`` primitive: the family, id, and physical size a detector needs to score against, plus the marker's true world pose. ``marker_size_m`` is the detectable side (the black square, border included); ``plate_side_m`` is the full plate including the white quiet zone.
+    Detection ground-truth for one AprilTag/ArUco marker in an environment.  Flat view over a compiled ``cyberwave/fiducial_marker`` primitive: the family, id, and physical size a detector needs to score against, plus the marker's true world pose. ``marker_size_m`` is the detectable side (the black square, border included); ``plate_side_m`` is the full plate including the white quiet zone.  ``position`` is the plate centre (the primitive's stored position, its bbox centre): half the 2 mm plate thickness, about 1 mm, *behind* the printed face along the marker's +z. This differs from ``/charuco-boards``, whose ``position`` is on the printed face. ``rotation`` is the plate's rotation.  ``attached_to`` has the same shape, chain resolution and meaning as on ``CharucoBoardSchema``: ``null`` (static), ``{\"type\": \"primitive\", \"primitive_id\"}`` (chain ends on a static primitive, pose kept current), ``{\"type\": \"twin\" | \"twin_link\", ..., \"via_primitive_id\"?}`` (chain ends on a twin, pose of the last edit, stale once the robot moves), or ``{\"type\": \"invalid\", \"raw\", \"reason\"}``. For localization use only ``null`` and ``primitive``.  Marker id registry (every board and tag, see ``fiducials/registry.py``): ``marker_family`` is the physical codeword family (``aruco_4x4``, ``aruco_5x5``, ``aruco_6x6``, ``aruco_7x7``, ``aruco_original``, or the AprilTag family, e.g. ``tag36h11``); OpenCV's ``DICT_NxN_{50,100,250,1000}`` are prefixes of each other, so all sizes of one grid are one family. ``marker_id_range`` is the inclusive ``[first, last]`` range the object prints. ``marker_family`` is the canonical family key for matching detections across boards and tags (``family`` / ``dictionary`` keep the template's own spelling, e.g. ``apriltag_36h11`` next to ``tag36h11``). ``id_conflicts`` lists every other object of the environment a detector can confuse with this one (same ids, hidden objects included, or an ``aruco_original``/``aruco_5x5`` pair one bit apart). ``reserved_overlap`` reports reserved ids it prints (a warning, see ``MarkerIdReservedOverlapSchema``).  World anchoring MUST skip an entry whose ``use_for_localization`` is false; that is all the flag does, so the entry stays a valid hold or precision-landing target (e.g. a portable landing pad). Every consumer MUST skip an entry whose ``id_conflicts`` is non-empty (a detection of those ids is ambiguous), for boards and tags alike. New writes refuse clashes or number new objects around them; legacy data and copies (``/clone``, snapshot restores, ``?marker_id_conflicts=flag``) are flagged here, never renumbered.
     """ # noqa: E501
     id: StrictStr
     name: StrictStr
@@ -36,8 +38,14 @@ class FiducialMarkerSchema(BaseModel):
     position: Dict[str, Union[StrictFloat, StrictInt]]
     rotation: Dict[str, Union[StrictFloat, StrictInt]]
     plate_side_m: Optional[Union[StrictFloat, StrictInt]] = None
+    attached_to: Optional[Dict[str, Any]] = None
     visible: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["id", "name", "family", "marker_id", "marker_size_m", "grid_bits", "position", "rotation", "plate_side_m", "visible"]
+    marker_family: Optional[StrictStr] = ''
+    marker_id_range: Optional[List[StrictInt]] = None
+    use_for_localization: Optional[StrictBool] = True
+    id_conflicts: Optional[List[MarkerIdConflictSchema]] = None
+    reserved_overlap: Optional[MarkerIdReservedOverlapSchema] = None
+    __properties: ClassVar[List[str]] = ["id", "name", "family", "marker_id", "marker_size_m", "grid_bits", "position", "rotation", "plate_side_m", "attached_to", "visible", "marker_family", "marker_id_range", "use_for_localization", "id_conflicts", "reserved_overlap"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -78,10 +86,35 @@ class FiducialMarkerSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in id_conflicts (list)
+        _items = []
+        if self.id_conflicts:
+            for _item_id_conflicts in self.id_conflicts:
+                if _item_id_conflicts:
+                    _items.append(_item_id_conflicts.to_dict())
+            _dict['id_conflicts'] = _items
+        # override the default output from pydantic by calling `to_dict()` of reserved_overlap
+        if self.reserved_overlap:
+            _dict['reserved_overlap'] = self.reserved_overlap.to_dict()
         # set to None if plate_side_m (nullable) is None
         # and model_fields_set contains the field
         if self.plate_side_m is None and "plate_side_m" in self.model_fields_set:
             _dict['plate_side_m'] = None
+
+        # set to None if attached_to (nullable) is None
+        # and model_fields_set contains the field
+        if self.attached_to is None and "attached_to" in self.model_fields_set:
+            _dict['attached_to'] = None
+
+        # set to None if marker_id_range (nullable) is None
+        # and model_fields_set contains the field
+        if self.marker_id_range is None and "marker_id_range" in self.model_fields_set:
+            _dict['marker_id_range'] = None
+
+        # set to None if reserved_overlap (nullable) is None
+        # and model_fields_set contains the field
+        if self.reserved_overlap is None and "reserved_overlap" in self.model_fields_set:
+            _dict['reserved_overlap'] = None
 
         return _dict
 
@@ -104,7 +137,13 @@ class FiducialMarkerSchema(BaseModel):
             "position": obj.get("position"),
             "rotation": obj.get("rotation"),
             "plate_side_m": obj.get("plate_side_m"),
-            "visible": obj.get("visible") if obj.get("visible") is not None else True
+            "attached_to": obj.get("attached_to"),
+            "visible": obj.get("visible") if obj.get("visible") is not None else True,
+            "marker_family": obj.get("marker_family") if obj.get("marker_family") is not None else '',
+            "marker_id_range": obj.get("marker_id_range"),
+            "use_for_localization": obj.get("use_for_localization") if obj.get("use_for_localization") is not None else True,
+            "id_conflicts": [MarkerIdConflictSchema.from_dict(_item) for _item in obj["id_conflicts"]] if obj.get("id_conflicts") is not None else None,
+            "reserved_overlap": MarkerIdReservedOverlapSchema.from_dict(obj["reserved_overlap"]) if obj.get("reserved_overlap") is not None else None
         })
         return _obj
 

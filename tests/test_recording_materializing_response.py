@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import pytest
 
+import cyberwave.managers.recordings as recordings_module
 from cyberwave.exceptions import CyberwaveError
 from cyberwave.managers.recordings import (
     DEFAULT_MATERIALIZING_RETRY_SECONDS,
+    RecordingListItem,
     RecordingManager,
 )
 from cyberwave.rest.models.recording_materializing_schema import (
@@ -48,19 +50,22 @@ MATERIALIZING_BODY = {
 
 
 class _StubApi:
-    def __init__(self, result: object) -> None:
-        self._result = result
+    """Answers with ``results`` in order, repeating the last one."""
+
+    def __init__(self, *results: object) -> None:
+        self._results = list(results)
         self.calls: list[tuple[str, str]] = []
 
     def src_app_api_environments_recordings_get_recording_data(
         self, environment_uuid: str, recording_uuid: str, return_flatbuffers: bool = True
     ) -> object:
         self.calls.append((environment_uuid, recording_uuid))
-        return self._result
+        index = min(len(self.calls), len(self._results)) - 1
+        return self._results[index]
 
 
-def _manager(result: object) -> RecordingManager:
-    return RecordingManager(_StubApi(result))
+def _manager(*results: object) -> RecordingManager:
+    return RecordingManager(_StubApi(*results))
 
 
 def test_get_raises_with_the_202_reason_and_retry_interval() -> None:
@@ -150,3 +155,155 @@ def test_a_missing_body_still_reports_a_retryable_condition() -> None:
 def test_environment_id_is_required_for_a_uuid_lookup() -> None:
     with pytest.raises(CyberwaveError, match="environment_id is required"):
         _manager(None).get("rec-1")
+
+
+def _empty_envelope() -> RecordingSourcesEnvelopeSchema:
+    return RecordingSourcesEnvelopeSchema(
+        items=RecordingSourcesSchema(
+            is_combined=False,
+            twin_uuids=[],
+            twin_data={},
+            start_timestamp_us=0,
+            end_timestamp_us=0,
+        ),
+    )
+
+
+class _FakeClock:
+    """``time`` stand-in for the polling loop: ``sleep`` advances ``monotonic``."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> _FakeClock:
+    fake = _FakeClock()
+    monkeypatch.setattr(recordings_module, "time", fake)
+    return fake
+
+
+def test_wait_polls_through_202_until_the_envelope_arrives(clock: _FakeClock) -> None:
+    """``wait`` honours the 202's retry interval and returns once assets exist."""
+    body = RecordingMaterializingSchema.from_dict(MATERIALIZING_BODY)
+    manager = _manager(body, body, _empty_envelope())
+
+    recording = manager.get("rec-1", environment_id="env-1", wait=120)
+
+    assert len(manager.api.calls) == 3
+    assert clock.sleeps == [30, 30]
+    recording.close()
+
+
+def test_wait_never_sleeps_past_its_deadline(clock: _FakeClock) -> None:
+    """A 30 s retry hint on a 5 s wait costs the caller 5 s, not 30."""
+    body = RecordingMaterializingSchema.from_dict(MATERIALIZING_BODY)
+    manager = _manager(body)
+
+    with pytest.raises(CyberwaveError, match="~30s"):
+        manager.get("rec-1", environment_id="env-1", wait=5)
+
+    assert clock.sleeps == [5]
+    assert len(manager.api.calls) == 2
+
+
+def _failed_body(**readiness: object) -> RecordingMaterializingSchema:
+    body = RecordingMaterializingSchema.from_dict(
+        {
+            "detail": "Progressive recording assets are still materializing",
+            "playback_readiness": {"state": "failed", **readiness},
+            "retry_after_seconds": 5,
+        }
+    )
+    assert body is not None
+    return body
+
+
+def test_a_failed_readiness_is_polled_until_the_recording_recovers(
+    clock: _FakeClock,
+) -> None:
+    """A live recording reports ``failed`` while its first part is retried.
+
+    ``missing_source`` counts as terminal on the server, but the camera MP4 task
+    retries it ~10 s later, and one ready part turns the rollup ``ready``. The
+    wait must ride that out rather than give up on the first poll.
+    """
+    failed = _failed_body(reason="camera_parts_failed")
+    manager = _manager(failed, failed, _empty_envelope())
+
+    recording = manager.get("rec-1", environment_id="env-1", wait=60)
+
+    assert len(manager.api.calls) == 3
+    assert clock.sleeps == [5, 5]
+    recording.close()
+
+
+def test_a_failed_readiness_without_wait_raises_without_promising_finality() -> None:
+    manager = _manager(_failed_body(reason="camera_parts_failed"))
+
+    with pytest.raises(CyberwaveError) as excinfo:
+        manager.get("rec-1", environment_id="env-1")
+
+    message = str(excinfo.value)
+    assert "camera_parts_failed" in message
+    assert "~5s" in message
+    assert "will not help" not in message
+
+
+def test_a_failed_message_names_the_failed_streams_reason() -> None:
+    """The server can overwrite the top-level reason with a pending one."""
+    body = _failed_body(
+        reason="camera_mp4_pending",
+        streams=[
+            {
+                "type": "robot",
+                "state": "ready",
+                "required": True,
+                "reason": None,
+                "ready_until_us": None,
+            },
+            {
+                "type": "camera",
+                "state": "failed",
+                "required": True,
+                "reason": "camera_sync_failed",
+                "ready_until_us": None,
+            },
+        ],
+    )
+
+    with pytest.raises(CyberwaveError) as excinfo:
+        _manager(body).get("rec-1", environment_id="env-1")
+
+    message = str(excinfo.value)
+    assert "camera_sync_failed" in message
+    assert "camera_mp4_pending" not in message
+
+
+def test_list_item_reports_only_a_finalized_failed_recording_as_never_playable() -> (
+    None
+):
+    def item(state: str | None, **metadata: object) -> RecordingListItem:
+        return RecordingListItem(
+            uuid="rec-1",
+            twin_uuid=None,
+            environment_uuid="env-1",
+            metadata=dict(metadata),
+            readiness=None if state is None else {"state": state},
+        )
+
+    assert item("failed").will_never_be_playable
+    assert not item("materializing").will_never_be_playable
+    assert not item("ready").will_never_be_playable
+    assert not item(None).will_never_be_playable
+    # A recording still being captured can recover from ``failed``.
+    assert not item("failed", is_final=False).will_never_be_playable
+    assert not item("failed", recording_type="active").will_never_be_playable

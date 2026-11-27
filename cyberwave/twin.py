@@ -1683,6 +1683,81 @@ class Twin:
         """
         return self.client.twins.patch_universal_schema(self.uuid, path, value, op)
 
+    # --- Sensor slots: live values and the twin's own sensors ---
+
+    def publish_reading(
+        self,
+        slot: str,
+        value: float,
+        *,
+        unit: Optional[str] = None,
+        at: Optional[float] = None,
+    ) -> bool:
+        """Send one live value to a sensor slot of this twin.
+
+        ``slot`` is the sensor's slot id (a Generic Sensor's is ``"value"``).
+        Leave ``unit`` out to use the unit declared on the sensor. The backend
+        drops a second metrics message for the same twin within 5 ms, so for
+        several slots use :meth:`publish_readings`, which sends them in one.
+
+        Example:
+            twin.publish_reading("value", 21.5)
+        """
+        reading: Dict[str, Any] = {"value": value}
+        if unit is not None:
+            reading["unit"] = unit
+        if at is not None:
+            reading["at"] = at
+        return self.publish_readings({slot: reading})
+
+    def publish_readings(
+        self, readings: Dict[str, Any], *, timestamp: Optional[float] = None
+    ) -> bool:
+        """Send live values to several sensor slots of this twin in one message.
+
+        ``readings`` maps slot id to a number or ``{"value", "unit", "at"}``;
+        see ``cyberwave.mqtt.CyberwaveMQTTClient.publish_readings``.
+
+        Example:
+            twin.publish_readings({"temperature": 21.5, "humidity": 40})
+        """
+        self._connect_to_mqtt_if_not_connected()
+        return self.client.mqtt.publish_readings(
+            self.uuid, readings, timestamp=timestamp
+        )
+
+    def list_sensors(self) -> List[Dict[str, Any]]:
+        """This twin's sensors, each with ``origin`` ``"asset"`` or ``"twin"``."""
+        return self.client.twins.list_sensors(self.uuid)
+
+    def add_sensor(self, name: str, sensor_type: str, **kwargs: Any) -> Dict[str, Any]:
+        """Add a sensor to this twin (no body, on one of its links).
+
+        Keyword arguments as ``cw.twins.add_sensor``: ``parent_link``,
+        ``position``, ``orientation``, ``unit``, ``operating_range``,
+        ``update_rate``, ``parameters``.
+
+        Example:
+            twin.add_sensor("body_temperature", "temperature",
+                            parent_link="base", unit="°C",
+                            operating_range=(0, 60))
+            twin.publish_reading("body_temperature", 41.2)
+        """
+        return self.client.twins.add_sensor(self.uuid, name, sensor_type, **kwargs)
+
+    def update_sensor(self, name: str, patch: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge-patch one of this twin's sensors (``None`` removes a key)."""
+        return self.client.twins.update_sensor(self.uuid, name, patch)
+
+    def set_sensor_unit(self, name: str, unit: Optional[str]) -> Dict[str, Any]:
+        """Set the unit of a sensor's readings, e.g. ``"°C"`` (``None`` removes it)."""
+        return self.client.twins.set_sensor_unit(self.uuid, name, unit)
+
+    def remove_sensor(self, name: str) -> None:
+        """Remove a sensor added on this twin, with its binding, range and last
+        reading."""
+        self.client.twins.remove_sensor(self.uuid, name)
+
     def get_calibration(
         self, robot_type: Optional[str] = None
     ) -> "TwinJointCalibrationSchema":

@@ -232,27 +232,44 @@ _RUNTIME_MODE_MAP = {
     "sim": "simulation",
     "sim_tele": "simulation",
     "mujoco": "simulation",
+    "isaac": "simulation",
     "playground": "simulation",
 }
 
-# Simulation profiles that spin up a MuJoCo cloud instance when selected via
-# ``affect(...)``. ``playground`` is a simulation runtime too, but a lightweight
-# kinematic one with no MuJoCo instance to start (level-0 only), so it is absent.
+# Simulation profiles that spin up a cloud simulation when selected via
+# ``affect(...)``, and the backend each one starts. ``playground`` is a
+# simulation runtime too, but a lightweight kinematic one with no plant to start
+# (level-0 only), so it is absent.
 #
 # *Profile* names, not MQTT source types, despite ``sim``/``sim_tele`` being spelled
 # the same in both — a namespace collision, not a gate. Nothing here gates
-# actuation, so ``simulation`` and ``mujoco`` are legitimate members.
-_AFFECT_MUJOCO_PROFILES = frozenset({"sim", "simulation", "sim_tele", "mujoco"})
+# actuation, so ``simulation``, ``mujoco`` and ``isaac`` are legitimate members.
+_AFFECT_SIMULATION_BACKENDS = {
+    "sim": "mujoco",
+    "simulation": "mujoco",
+    "sim_tele": "mujoco",
+    "mujoco": "mujoco",
+    "isaac": "isaac",
+}
+
+_SIMULATION_BACKEND_LABELS = {"mujoco": "MuJoCo", "isaac": "Isaac Sim"}
+#: The active runs an ``affect`` profile reuses, by the backend it starts. A
+#: MuJoCo Warp run is a MuJoCo plant, so the MuJoCo profiles keep it; only an
+#: Isaac run serves ``affect("isaac")``.
+_AFFECT_REUSABLE_BACKENDS = {
+    "mujoco": frozenset({"mujoco", "mujoco_warp"}),
+    "isaac": frozenset({"isaac"}),
+}
 
 
 def _affect_autostart_backend(mode: Optional[str]) -> Optional[str]:
     """Backend to auto-start for an ``affect(...)`` profile, or ``None``.
 
-    Returns ``"mujoco"`` for MuJoCo simulation profiles; ``None`` for
-    ``playground`` and every live profile (nothing to start).
+    Returns ``"mujoco"`` for the MuJoCo profiles, ``"isaac"`` for ``"isaac"``,
+    and ``None`` for ``playground`` and every live profile (nothing to start).
     """
     normalized = (mode or "").lower().strip()
-    return "mujoco" if normalized in _AFFECT_MUJOCO_PROFILES else None
+    return _AFFECT_SIMULATION_BACKENDS.get(normalized)
 
 
 def _resolve_runtime_mode(mode: Optional[str]) -> str:
@@ -1053,12 +1070,16 @@ class Cyberwave:
 
         Selecting a MuJoCo simulation profile (``"sim"`` / ``"simulation"`` /
         ``"mujoco"``) **auto-starts** a MuJoCo simulation for the resolved
-        environment — a billable cloud instance. The lighter ``"playground"``
-        profile is a simulation runtime with no MuJoCo instance to start.
+        environment, and ``"isaac"`` an Isaac Sim one (on the server's default
+        execution profile) — each a billable cloud instance. An active run on
+        the same backend is reused; one on another backend is replaced (the
+        server stops it when the new run starts). The lighter ``"playground"``
+        profile is a simulation runtime with no plant to start.
 
         Args:
             mode: ``"sim"`` / ``"simulation"`` / ``"mujoco"`` to target (and start)
-                  a MuJoCo simulation, ``"playground"`` for the lightweight
+                  a MuJoCo simulation, ``"isaac"`` to target (and start) an
+                  Isaac Sim simulation, ``"playground"`` for the lightweight
                   kinematic simulation runtime, ``"live"`` / ``"real-world"``
                   (or ``"real"`` / ``"tele"``) to target the real robot.
             environment_id: Environment to start the simulation for. Falls back to
@@ -1079,6 +1100,8 @@ class Cyberwave:
             >>> cw.affect("simulation")        # starts a MuJoCo sim (logs the cost)
             >>> frame = robot.get_frame()      # reads from the running sim
 
+            >>> cw.affect("isaac")             # starts an Isaac Sim run instead
+
             >>> cw.affect("real-world")
             >>> rover.move_forward(1.0)        # moves the real robot
         """
@@ -1096,10 +1119,15 @@ class Cyberwave:
                 self._mqtt_client.disconnect()
                 self._mqtt_client = None
 
-        # A MuJoCo profile spins up a billable cloud instance; playground/live do not.
-        if _affect_autostart_backend(mode) == "mujoco":
+        # A MuJoCo or Isaac profile spins up a billable cloud instance;
+        # playground/live do not.
+        backend = _affect_autostart_backend(mode)
+        if backend is not None:
             self._autostart_simulation(
-                backend="mujoco", environment_id=environment_id, duration=duration
+                mode=mode,
+                backend=backend,
+                environment_id=environment_id,
+                duration=duration,
             )
 
         return self
@@ -1107,6 +1135,7 @@ class Cyberwave:
     def _autostart_simulation(
         self,
         *,
+        mode: str,
         backend: str,
         environment_id: Optional[str],
         duration: Optional[float],
@@ -1119,19 +1148,32 @@ class Cyberwave:
         the simulation reports ``running`` (mirrors every other simulation-start
         path in the SDK) so that a getter called right after ``affect()`` returns
         never races a still-``loading`` instance.
+
+        A run on the engine ``mode`` asked for is reused: a MuJoCo or MuJoCo
+        Warp run for the MuJoCo profiles, an Isaac run for ``"isaac"``. A run on
+        any other engine, including one this SDK does not know, is not what
+        ``mode`` asked for, so a new run starts and the server stops the old
+        one. A listed run without a ``backend`` is the server's MuJoCo default
+        (``workload_simulation_engine``).
         """
         from cyberwave.managers.simulations import (
-            SIMULATION_CREDITS_PER_HOUR,
-            SIMULATION_CREDITS_PER_MINUTE,
+            SIMULATION_BACKEND_ALIASES,
+            SIMULATION_CREDITS_PER_MINUTE_BY_BACKEND,
         )
+
+        label = _SIMULATION_BACKEND_LABELS[backend]
+        per_minute = SIMULATION_CREDITS_PER_MINUTE_BY_BACKEND[backend]
+        per_hour = round(per_minute * 60, 2)
 
         env_id = environment_id or self.config.environment_id
         if not env_id:
             logger.warning(
-                "affect(%r) selected a MuJoCo simulation runtime, but no environment "
+                "affect(%r) selected the %s simulation runtime, but no environment "
                 "is set — no simulation was started. Pass environment_id=... to "
                 "affect(), set CYBERWAVE_ENVIRONMENT_ID, or start one explicitly with "
-                "cw.environments.simulations.start(environment_id, backend='mujoco').",
+                "cw.environments.simulations.start(environment_id, backend=%r).",
+                mode,
+                label,
                 backend,
             )
             return None
@@ -1140,24 +1182,42 @@ class Cyberwave:
         simulations = self.environments.simulations
 
         sim = simulations.get_active(env_id)
+        active_backend = None
         if sim is not None:
+            active_backend = (sim.backend or "mujoco").strip().lower()
+            active_backend = SIMULATION_BACKEND_ALIASES.get(
+                active_backend, active_backend
+            )
+        if sim is not None and active_backend in _AFFECT_REUSABLE_BACKENDS[backend]:
             logger.info(
-                "Reusing active simulation %s for environment %s "
-                "(MuJoCo simulations are billed at ~%.2f credits/hour).",
+                "Reusing active %s simulation %s for environment %s "
+                "(billed at ~%.2f credits/hour).",
+                label,
                 sim.simulation_id,
                 env_id,
-                SIMULATION_CREDITS_PER_HOUR,
+                per_hour,
             )
         else:
+            if sim is not None:
+                logger.warning(
+                    "Simulation %s for environment %s runs on %s, not %s; "
+                    "starting a %s run replaces it.",
+                    sim.simulation_id,
+                    env_id,
+                    sim.backend or "mujoco",
+                    backend,
+                    label,
+                )
             sim = simulations.start(env_id, backend=backend, duration=duration)
             logger.warning(
-                "Started MuJoCo simulation %s for environment %s — this is a billable "
+                "Started %s simulation %s for environment %s — this is a billable "
                 "cloud instance consuming credits at ~%.2f credits/hour "
                 "(%.2f credits/min). Stop it with sim.stop() when done.",
+                label,
                 sim.simulation_id,
                 env_id,
-                SIMULATION_CREDITS_PER_HOUR,
-                SIMULATION_CREDITS_PER_MINUTE,
+                per_hour,
+                per_minute,
             )
 
         if sim.status != "running":
@@ -1239,8 +1299,68 @@ class Cyberwave:
         fourcc: Optional[str] = None,
         serial_number: Optional[str] = None,
     ):
+        """Create a camera streamer for a twin.
+
+        .. deprecated::
+            Will be removed in cyberwave 1.0.0. Stream from the twin
+            (``twin.stream_video_background()`` / ``twin.start_streaming()``),
+            or build an edge camera driver on
+            :class:`cyberwave.driver.BaseCameraDriver`.
+
+        Arguments and return value are those of the streamer factory below.
         """
-        Create a camera streamer for the specified twin. DEPRECATED: Use the TwinCamera instead
+        warnings.warn(
+            "Cyberwave.video_stream() is deprecated and will be removed in cyberwave "
+            "1.0.0; use twin.stream_video_background() / twin.start_streaming(), or "
+            "cyberwave.driver.BaseCameraDriver for edge camera drivers.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._build_video_streamer(
+            twin_uuid=twin_uuid,
+            camera_type=camera_type,
+            camera_id=camera_id,
+            fps=fps,
+            resolution=resolution,
+            enable_depth=enable_depth,
+            depth_fps=depth_fps,
+            depth_resolution=depth_resolution,
+            auto_detect=auto_detect,
+            turn_servers=turn_servers,
+            time_reference=time_reference,
+            keyframe_interval=keyframe_interval,
+            frame_callback=frame_callback,
+            depth_callback=depth_callback,
+            camera_name=camera_name,
+            fourcc=fourcc,
+            serial_number=serial_number,
+        )
+
+    def _build_video_streamer(
+        self,
+        twin_uuid: str,
+        camera_type: str = "cv2",
+        camera_id: int | str = 0,
+        fps: int = 30,
+        resolution: Optional[tuple] = None,
+        enable_depth: bool = False,
+        depth_fps: int = 30,
+        depth_resolution: Optional[tuple] = None,
+        auto_detect: bool = True,
+        turn_servers: Optional[list] = None,
+        time_reference: Optional[TimeReference] = None,
+        keyframe_interval: Optional[int] = None,
+        frame_callback: Optional[Callable] = None,
+        depth_callback: Optional[Callable] = None,
+        camera_name: Optional[str] = None,
+        fourcc: Optional[str] = None,
+        serial_number: Optional[str] = None,
+    ):
+        """
+        Create a camera streamer for the specified twin (internal factory).
+
+        Used by the twin camera classes and :class:`cyberwave.driver.BaseCameraDriver`;
+        the public :meth:`video_stream` is a deprecated alias.
 
         This method creates a camera streamer instance that's pre-configured with
         the client's MQTT connection, providing a seamless experience for streaming

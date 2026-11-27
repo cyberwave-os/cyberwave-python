@@ -217,14 +217,14 @@ class CyberwaveMQTTClient:
         source_type: Optional[str] = None,
     ) -> bool:
         """
-        Publish one float, int or bool sample on ``metrics/{channel}``.
+        Publish one float, int, bool or short string sample on ``metrics/{channel}``.
 
         See ``cyberwave.mqtt.CyberwaveMQTTClient.publish_metric``.
 
         Args:
             twin_uuid: UUID of the twin
             channel: ``.``-separated name, e.g. ``"arm.gripper"``
-            value: A float, an int or a bool
+            value: A float, an int, a bool or a string of up to 256 characters
             timestamp: Measurement time in Unix seconds, not ms (default: now)
             source_type: Override the default source type
         """
@@ -241,7 +241,7 @@ class CyberwaveMQTTClient:
         source_type: Optional[str] = None,
     ) -> bool:
         """
-        Publish several float, int or bool samples in one ``metrics`` bag.
+        Publish several float, int, bool or short string samples in one ``metrics`` bag.
 
         See ``cyberwave.mqtt.CyberwaveMQTTClient.publish_metrics``.
 
@@ -253,6 +253,29 @@ class CyberwaveMQTTClient:
         """
         return self._client.publish_metrics(
             twin_uuid, metrics, timestamp=timestamp, source_type=source_type
+        )
+
+    def publish_readings(
+        self,
+        twin_uuid: str,
+        readings: Dict[str, Any],
+        *,
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> bool:
+        """
+        Publish live values of a twin's sensor slots (``metrics.readings``).
+
+        See ``cyberwave.mqtt.CyberwaveMQTTClient.publish_readings``.
+
+        Args:
+            twin_uuid: UUID of the twin
+            readings: Slot id -> number, or ``{"value", "unit", "at"}``
+            timestamp: Send time in Unix seconds, not ms (default: now)
+            source_type: Override the default source type
+        """
+        return self._client.publish_readings(
+            twin_uuid, readings, timestamp=timestamp, source_type=source_type
         )
 
     def update_twin_scale(self, twin_uuid: str, scale: Dict[str, float]):
@@ -383,6 +406,7 @@ class CyberwaveMQTTClient:
         effort: Optional[float] = None,
         timestamp: Optional[float] = None,
         source_type: Optional[str] = None,
+        acceleration: Optional[float] = None,
     ):
         """
         Update joint state via MQTT.
@@ -392,12 +416,14 @@ class CyberwaveMQTTClient:
             joint_name: Name of the joint
             position: Joint position (radians for revolute, meters for prismatic)
             velocity: Joint velocity
-            effort: Joint effort/torque
+            effort: Joint effort (N·m for revolute, N for prismatic)
             timestamp: Unix timestamp (defaults to current time)
             source_type: Source type for the message. Must be one of:
                 SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, SOURCE_TYPE_SIM.
                 Defaults to SOURCE_TYPE_EDGE (SDKs run on edge devices by default).
                 Users can override this to use any source type they need.
+            acceleration: Joint acceleration (rad/s² for revolute, m/s² for
+                prismatic). Omitted from the message when None.
         """
         return self._client.update_joint_state(
             twin_uuid,
@@ -407,6 +433,7 @@ class CyberwaveMQTTClient:
             effort,
             timestamp,
             source_type=source_type,
+            acceleration=acceleration,
         )
 
     def update_joints_state(
@@ -422,6 +449,7 @@ class CyberwaveMQTTClient:
         session_id: Optional[str] = None,
         camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
         as_targets: bool = False,
+        accelerations: Optional[Dict[str, float]] = None,
     ):
         """
         Update multiple joints at once via MQTT.
@@ -431,7 +459,8 @@ class CyberwaveMQTTClient:
         1. **Flat format** (joint_positions only):
            Simple and lightweight, sends positions as top-level keys.
 
-        2. **Aggregated format** (with velocities, efforts, timestamp, or metadata):
+        2. **Aggregated format** (with velocities, accelerations, efforts, timestamp,
+           or metadata):
            Sends structured payload with nested objects and full telemetry metadata.
 
         Args:
@@ -447,9 +476,12 @@ class CyberwaveMQTTClient:
             camera_frame_counters: Optional dict mapping track_id to frame info used
                 for robot-camera synchronization.
             as_targets: When True, publish as a *command* using ``target_*`` field
-                names (target_positions/target_velocities/target_efforts) instead
-                of the measured names. Used by controllers so the plant and viewers
-                never confuse a commanded setpoint with measured robot state.
+                names (target_positions/target_velocities/target_accelerations/
+                target_efforts) instead of the measured names. Used by controllers
+                so the plant and viewers never confuse a commanded setpoint with
+                measured robot state.
+            accelerations: Optional dict of joint names to accelerations, rad/s²
+                or m/s² (triggers aggregated format). Never derived from efforts.
         """
         return self._client.update_joints_state(
             twin_uuid,
@@ -463,6 +495,7 @@ class CyberwaveMQTTClient:
             session_id,
             camera_frame_counters,
             as_targets,
+            accelerations=accelerations,
         )
 
     def update_aggregated_joints_state(
@@ -477,6 +510,7 @@ class CyberwaveMQTTClient:
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
         camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
+        accelerations: Optional[Dict[str, float]] = None,
     ):
         """
         Alias for update_joints_state with aggregated format.
@@ -494,6 +528,7 @@ class CyberwaveMQTTClient:
             workload_uuid,
             session_id,
             camera_frame_counters,
+            accelerations=accelerations,
         )
 
     def subscribe_environment(
@@ -567,6 +602,63 @@ class CyberwaveMQTTClient:
             substrate=substrate,
             pose_provenance=pose_provenance,
             frame_id=frame_id,
+            source_subtype=source_subtype,
+            producer_instance=producer_instance,
+            producer_sequence=producer_sequence,
+            workload_uuid=workload_uuid,
+            simulation_time_s=simulation_time_s,
+        )
+
+    def publish_imu(
+        self,
+        twin_uuid: str,
+        *,
+        angular_velocity: Optional[Any] = None,
+        linear_acceleration: Optional[Any] = None,
+        orientation: Optional[Any] = None,
+        sensor_id: Optional[str] = None,
+        coordinate_frame: str = "environment",
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+        source_subtype: Optional[str] = None,
+        producer_instance: Optional[str] = None,
+        producer_sequence: Optional[Union[int, str]] = None,
+        workload_uuid: Optional[str] = None,
+        simulation_time_s: Optional[float] = None,
+    ) -> bool:
+        """
+        Publish one IMU sample.
+
+        Args:
+            twin_uuid: UUID of the twin
+            angular_velocity: Gyro, rad/s, ``{x,y,z}`` or ``(x, y, z)``
+            linear_acceleration: Accelerometer, m/s^2 with gravity,
+                ``{x,y,z}`` or ``(x, y, z)``
+            orientation: Environment-frame ``{w,x,y,z}`` or ``(w, x, y, z)``,
+                only if known
+            sensor_id: The IMU's capability id
+            coordinate_frame: Must be ``"environment"``.
+            timestamp: Sample time, Unix seconds; defaults to now
+            source_type: Override the default source type.
+            source_subtype, producer_instance, producer_sequence,
+            workload_uuid, simulation_time_s: Envelope fields, as
+                :meth:`cyberwave.mqtt.CyberwaveMQTTClient.publish_imu`
+                takes them.
+
+        Raises:
+            ValueError: ``twin_uuid`` is not a UUID, neither vector is given,
+                a component is not a finite number, or an envelope field is
+                malformed.
+        """
+        return self._client.publish_imu(
+            twin_uuid,
+            angular_velocity=angular_velocity,
+            linear_acceleration=linear_acceleration,
+            orientation=orientation,
+            sensor_id=sensor_id,
+            coordinate_frame=coordinate_frame,
+            timestamp=timestamp,
+            source_type=source_type,
             source_subtype=source_subtype,
             producer_instance=producer_instance,
             producer_sequence=producer_sequence,

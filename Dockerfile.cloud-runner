@@ -1,0 +1,38 @@
+# The image a cloud workflow run executes in: the SDK alone, no robotics or ML stack.
+#
+#   docker build -f Dockerfile.cloud-runner -t cyberwave-cloud-runner:local .
+#
+# or, from cyberwave-backend/, `docker compose --profile cloud-runner build cloud-runner`.
+# The backend's Docker launcher (src/app/services/job_launchers/docker.py) starts it with
+# the command `timeout <limit> python -m cyberwave.workers.cloud_runner`, so this image
+# sets only a default CMD, never an ENTRYPOINT.
+#
+# CW_SDK_SOURCE picks where the SDK comes from:
+#   local  (default) the checkout this Dockerfile sits in. The runner must match the
+#          compile contract of the backend it runs against, and a published wheel only
+#          has the runner once a release carries it. The checkout needs its generated
+#          REST client (`cyberwave-sdks/python-sdk-gen.sh sdk --host <backend>`).
+#   wheel  a published SDK: --build-arg CW_SDK_SOURCE=wheel --build-arg CW_SDK_SPEC='cyberwave==X.Y.Z'
+ARG CW_SDK_SOURCE=local
+ARG PYTHON_VERSION=3.12
+
+FROM python:${PYTHON_VERSION}-slim AS base
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+FROM base AS sdk-wheel
+ARG CW_SDK_SPEC=cyberwave
+RUN pip install "${CW_SDK_SPEC}"
+
+FROM base AS sdk-local
+COPY . /src
+RUN pip install /src && rm -rf /src
+
+FROM sdk-${CW_SDK_SOURCE} AS runtime
+# Not root: the job needs no privilege, and the launcher also drops every capability.
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin runner
+USER 10001
+WORKDIR /tmp
+CMD ["python", "-m", "cyberwave.workers.cloud_runner"]

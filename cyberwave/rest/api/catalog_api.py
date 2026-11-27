@@ -18,6 +18,7 @@ from typing_extensions import Annotated
 from pydantic import Field, StrictStr
 from typing import Any, Dict, Optional
 from typing_extensions import Annotated
+from uuid import UUID
 
 from cyberwave.rest.api_client import ApiClient, RequestSerialized
 from cyberwave.rest.api_response import ApiResponse
@@ -43,6 +44,7 @@ class CatalogApi:
         query: StrictStr,
         limit: Optional[Annotated[int, Field(le=50, strict=True, ge=1)]] = None,
         offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None,
+        environment_uuid: Optional[UUID] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -58,7 +60,7 @@ class CatalogApi:
     ) -> Dict[str, object]:
         """Search Catalog
 
-        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50).
+        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50). ``environment_uuid`` also searches the assets generated for that environment, when the caller can read it; otherwise it is ignored.
 
         :param query: (required)
         :type query: str
@@ -66,6 +68,8 @@ class CatalogApi:
         :type limit: int
         :param offset:
         :type offset: int
+        :param environment_uuid:
+        :type environment_uuid: UUID
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -92,6 +96,7 @@ class CatalogApi:
             query=query,
             limit=limit,
             offset=offset,
+            environment_uuid=environment_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -118,6 +123,7 @@ class CatalogApi:
         query: StrictStr,
         limit: Optional[Annotated[int, Field(le=50, strict=True, ge=1)]] = None,
         offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None,
+        environment_uuid: Optional[UUID] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -133,7 +139,7 @@ class CatalogApi:
     ) -> ApiResponse[Dict[str, object]]:
         """Search Catalog
 
-        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50).
+        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50). ``environment_uuid`` also searches the assets generated for that environment, when the caller can read it; otherwise it is ignored.
 
         :param query: (required)
         :type query: str
@@ -141,6 +147,8 @@ class CatalogApi:
         :type limit: int
         :param offset:
         :type offset: int
+        :param environment_uuid:
+        :type environment_uuid: UUID
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -167,6 +175,7 @@ class CatalogApi:
             query=query,
             limit=limit,
             offset=offset,
+            environment_uuid=environment_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -193,6 +202,7 @@ class CatalogApi:
         query: StrictStr,
         limit: Optional[Annotated[int, Field(le=50, strict=True, ge=1)]] = None,
         offset: Optional[Annotated[int, Field(le=1000000, strict=True, ge=0)]] = None,
+        environment_uuid: Optional[UUID] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -208,7 +218,7 @@ class CatalogApi:
     ) -> RESTResponseType:
         """Search Catalog
 
-        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50).
+        Search procedural templates and catalog assets as one ranked list.  ``limit`` caps each candidate list before ranking (default 20, max 50). ``environment_uuid`` also searches the assets generated for that environment, when the caller can read it; otherwise it is ignored.
 
         :param query: (required)
         :type query: str
@@ -216,6 +226,8 @@ class CatalogApi:
         :type limit: int
         :param offset:
         :type offset: int
+        :param environment_uuid:
+        :type environment_uuid: UUID
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -242,6 +254,7 @@ class CatalogApi:
             query=query,
             limit=limit,
             offset=offset,
+            environment_uuid=environment_uuid,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -263,6 +276,7 @@ class CatalogApi:
         query,
         limit,
         offset,
+        environment_uuid,
         _request_auth,
         _content_type,
         _headers,
@@ -296,6 +310,10 @@ class CatalogApi:
         if offset is not None:
             
             _query_params.append(('offset', offset))
+            
+        if environment_uuid is not None:
+            
+            _query_params.append(('environment_uuid', environment_uuid))
             
         # process the header parameters
         # process the form parameters

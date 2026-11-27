@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -37,7 +37,8 @@ class ReleaseSubmission(BaseModel):
     min_edge_core_version: Optional[StrictStr] = ''
     ci_run_url: Optional[StrictStr] = ''
     ci_actor: Optional[StrictStr] = ''
-    __properties: ClassVar[List[str]] = ["package", "package_type", "repository", "version", "manifest", "git_sha", "changelog", "min_edge_core_version", "ci_run_url", "ci_actor"]
+    auto_ga: Optional[StrictBool] = True
+    __properties: ClassVar[List[str]] = ["package", "package_type", "repository", "version", "manifest", "git_sha", "changelog", "min_edge_core_version", "ci_run_url", "ci_actor", "auto_ga"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -104,7 +105,8 @@ class ReleaseSubmission(BaseModel):
             "changelog": obj.get("changelog") if obj.get("changelog") is not None else '',
             "min_edge_core_version": obj.get("min_edge_core_version") if obj.get("min_edge_core_version") is not None else '',
             "ci_run_url": obj.get("ci_run_url") if obj.get("ci_run_url") is not None else '',
-            "ci_actor": obj.get("ci_actor") if obj.get("ci_actor") is not None else ''
+            "ci_actor": obj.get("ci_actor") if obj.get("ci_actor") is not None else '',
+            "auto_ga": obj.get("auto_ga") if obj.get("auto_ga") is not None else True
         })
         return _obj
 

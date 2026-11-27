@@ -83,7 +83,18 @@ from .interface import (
     reset_provenance_drop_counts,
     resolve_topic_path,
 )
-from .sensors import AudioStreamMixin, VideoStreamMixin
+from .sensors import (
+    AudioStreamMixin,
+    BaseCameraDriver,
+    CameraConfigurationError,
+    CameraHardwareError,
+    CameraSourceConfig,
+    CameraStatus,
+    CameraStream,
+    CameraStreamMixin,
+    VideoStreamMixin,
+    VideoSyncRequiredError,
+)
 from .support import (
     ColoredFormatter,
     check_device_reachable_async,
@@ -92,7 +103,12 @@ from .support import (
     load_driver_manifest,
     setup_colored_logging,
 )
-from .transports import CommandContext, ZenohPublisherMixin, ZenohSubscriberMixin
+from .transports import (
+    CommandContext,
+    ZenohFramePublisher,
+    ZenohPublisherMixin,
+    ZenohSubscriberMixin,
+)
 from .command_response import CommandOutcome, CommandRequest, current_command
 
 __all__ = [
@@ -146,6 +162,16 @@ __all__ = [
     "reset_provenance_drop_counts",
     "AudioStreamMixin",
     "VideoStreamMixin",
+    # Camera drivers
+    "BaseCameraDriver",
+    "CameraStreamMixin",
+    "CameraSourceConfig",
+    "CameraStatus",
+    "CameraStream",
+    "CameraHardwareError",
+    "CameraConfigurationError",
+    "VideoSyncRequiredError",
+    "ZenohFramePublisher",
     "ZenohPublisherMixin",
     "ZenohSubscriberMixin",
     "CommandContext",

@@ -89,6 +89,22 @@ def test_request_on_an_arbitrary_topic_pair() -> None:
     assert client._pending_requests == {}
 
 
+def test_twin_commands_have_stable_distinct_publisher_ids() -> None:
+    first = _client()
+    second = _client()
+    topic = f"devcyberwave/twin/{TWIN}/command"
+    first.publish(topic, {"command": "stop"})
+    first.publish(topic, {"command": "land"})
+    second.publish(topic, {"command": "stop"})
+    sent = [json.loads(call.args[1]) for call in first.client.publish.call_args_list]
+    other = json.loads(second.client.publish.call_args.args[1])
+    assert sent[0]["publisher_id"] == sent[1]["publisher_id"] == first.publisher_id
+    assert other["publisher_id"] == second.publisher_id
+    assert first.publisher_id != second.publisher_id
+    first.publish("devcyberwave/twin/telemetry", {"x": 1})
+    assert "publisher_id" not in json.loads(first.client.publish.call_args.args[1])
+
+
 def test_a_reply_for_another_request_is_ignored() -> None:
     client = _client()
     _responder(client, {"mine": True}, noise=True)

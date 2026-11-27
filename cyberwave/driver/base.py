@@ -134,7 +134,8 @@ class BaseDriver(
       ``twin/telemetry``, capped at ``TELEMETRY_PUBLISH_RATE_HZ`` (default 1 Hz)
     - :class:`~cyberwave.edge.health.EdgeHealthCheck` — ``edge_health`` twin liveness heartbeat,
       started after MQTT wiring and stopped on shutdown; override :meth:`edge_health_extras` /
-      :meth:`edge_health_streams` to add driver-specific fields/streams
+      :meth:`edge_health_streams` to add driver-specific fields/streams, or set
+      :attr:`EDGE_HEALTH_ENABLED` to ``False`` when a streamer already publishes it
     - Default management commands in :meth:`~cyberwave.driver.interface.registry_mixin.InterfaceRegistryMixin.define_interface_defaults`
       (``stop``, ``teleoperate``, ``remoteoperate``, ``controller-changed``)
     - Stream/interface publish-rate governance: :meth:`stream_publish_max_hz` resolves
@@ -360,6 +361,8 @@ class BaseDriver(
         return []
 
     def _start_edge_health(self) -> None:
+        if not type(self).EDGE_HEALTH_ENABLED:
+            return
         if getattr(self, "_edge_health", None) is not None:
             return
         twin_uuid = self.twin_uuid
@@ -473,6 +476,13 @@ class BaseDriver(
 
     EDGE_HEALTH_INTERVAL_S: int = 5
     """``edge_health`` MQTT heartbeat interval in seconds (:class:`~cyberwave.edge.health.EdgeHealthCheck`)."""
+
+    EDGE_HEALTH_ENABLED: bool = True
+    """Start the driver's own ``edge_health`` heartbeat.
+
+    Set ``False`` when another component already publishes it for this twin, e.g.
+    a WebRTC camera streamer, whose heartbeat also carries the stream's config.
+    """
 
     RECONNECT_MAX_ATTEMPTS: int = 5
     """Maximum number of reconnection attempts before the driver enters ERROR state.

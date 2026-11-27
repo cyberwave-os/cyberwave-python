@@ -78,8 +78,6 @@ class CloudConnectionMixin:
         sdk_version = get_sdk_version()
         logger.info("Cyberwave Python SDK version: %s", sdk_version or "unknown")
 
-        from cyberwave.constants import SOURCE_TYPE_EDGE
-
         max_attempts = 3
         timeout = 10.0
         last_error: Exception | None = None
@@ -87,12 +85,17 @@ class CloudConnectionMixin:
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.info(
-                    "Attempt %d/%d: Cyberwave MQTT connect (source_type=edge)...",
-                    attempt,
-                    max_attempts,
+                    "Attempt %d/%d: Cyberwave MQTT connect...", attempt, max_attempts
                 )
                 # Same defaults as notebooks/CLI: CyberwaveConfig reads CYBERWAVE_* env.
-                cyberwave = Cyberwave(source_type=SOURCE_TYPE_EDGE)
+                # No ``source_type=``: pinning ``edge`` here overrode
+                # CYBERWAVE_SOURCE_TYPE, so a driver told it was ``sim`` still
+                # stamped ``edge`` on everything it published. This call passes no
+                # ``mode`` and the client does not read CYBERWAVE_RUNTIME_MODE, so
+                # runtime_mode is always "live" here: CYBERWAVE_SOURCE_TYPE is the
+                # only way to change the label, and a driver that sets nothing
+                # (CYBERWAVE_RUNTIME_MODE=simulation included) still gets ``edge``.
+                cyberwave = Cyberwave()
                 cyberwave.mqtt.connect()
                 deadline = time.monotonic() + timeout
                 while not cyberwave.mqtt.connected and time.monotonic() < deadline:

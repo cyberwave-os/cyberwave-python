@@ -40,7 +40,9 @@ class AssetControlRuntimeRouteSchema(BaseModel):
     status: Optional[StrictStr] = 'missing'
     available: StrictBool
     reason: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["id", "label", "assignment_kind", "runtime_kind", "backend", "selected_option_id", "selected_controller_ref", "recommended_option_id", "recommended_controller_ref", "status", "available", "reason"]
+    inherited: Optional[StrictBool] = False
+    follows_mujoco: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["id", "label", "assignment_kind", "runtime_kind", "backend", "selected_option_id", "selected_controller_ref", "recommended_option_id", "recommended_controller_ref", "status", "available", "reason", "inherited", "follows_mujoco"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -150,7 +152,9 @@ class AssetControlRuntimeRouteSchema(BaseModel):
             "recommended_controller_ref": ControllerRefSchema.from_dict(obj["recommended_controller_ref"]) if obj.get("recommended_controller_ref") is not None else None,
             "status": obj.get("status") if obj.get("status") is not None else 'missing',
             "available": obj.get("available"),
-            "reason": obj.get("reason")
+            "reason": obj.get("reason"),
+            "inherited": obj.get("inherited") if obj.get("inherited") is not None else False,
+            "follows_mujoco": obj.get("follows_mujoco") if obj.get("follows_mujoco") is not None else False
         })
         return _obj
 

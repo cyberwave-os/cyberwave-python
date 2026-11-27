@@ -458,6 +458,7 @@ def test_request_command_on_a_v5_client() -> None:
     assert envelope["command"] == "arm"
     assert envelope["data"] == {"force": False}
     assert envelope["source_type"] == "tele"
+    assert envelope["publisher_id"] == mqtt.publisher_id
     assert command_call.kwargs["qos"] == 1
     assert command_call.kwargs["properties"].ResponseTopic == inbox
     # A second request reuses the inbox subscription.

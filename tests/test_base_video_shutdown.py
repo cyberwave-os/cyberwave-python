@@ -46,10 +46,13 @@ async def test_stop_drains_sync_waiter_before_reconnect(monkeypatch):
         await streamer.start()
         await sleep(0)
         waiters = asyncio.all_tasks() - before
+        # The event-loop lag probe is a timer, not a task: only the waiter.
         assert len(waiters) == 1
         assert not next(iter(waiters)).done()
+        assert streamer._loop_lag_probe is not None and streamer._loop_lag_probe.running
         await streamer.stop()
         assert all(task.done() for task in waiters)
+        assert not streamer._loop_lag_probe.running
         assert streamer.streamer is None
     await streamer.stop()  # Already stopped is harmless.
     publish.assert_not_called()

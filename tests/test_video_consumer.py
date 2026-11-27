@@ -212,9 +212,16 @@ def patch_pc(monkeypatch):
     return _FakePC
 
 
-def test_start_publishes_offer_then_answer_connects(patch_pc):
+@pytest.mark.parametrize("ice_lite", [False, True])
+def test_start_publishes_offer_then_answer_connects(patch_pc, ice_lite):
     mqtt = _FakeMqtt(prefix="")
     s = IncomingVideoStream(mqtt, "twin-1", sensor_id="cam", timeout=3.0)
+    answer_sdp = "v=0\r\nanswer"
+    if ice_lite:
+        answer_sdp = (
+            "v=0\r\na=ice-lite\r\nm=video 9 UDP/TLS/RTP/SAVPF 102\r\n"
+            "a=candidate:1 1 udp 2130706431 192.0.2.1 9 typ host\r\n"
+        )
 
     # Deliver the answer shortly after start() subscribes+publishes.
     def deliver():
@@ -224,7 +231,7 @@ def test_start_publishes_offer_then_answer_connects(patch_pc):
                 break
             time.sleep(0.01)
         s._reply_handler(
-            {"type": "answer", "sdp": "v=0\r\nanswer", "session_id": s._session_id}
+            {"type": "answer", "sdp": answer_sdp, "session_id": s._session_id}
         )
 
     t = threading.Thread(target=deliver)
@@ -240,6 +247,9 @@ def test_start_publishes_offer_then_answer_connects(patch_pc):
     assert (s._answer_topic, s._subscriber_key) in mqtt.subscribed
     # recvonly video transceiver was added
     assert ("video", "recvonly") in patch_pc.instances[0].transceivers
+    assert patch_pc.instances[0].remote.sdp == (
+        answer_sdp + "a=end-of-candidates\r\n" if ice_lite else answer_sdp
+    )
     s.stop()
 
 

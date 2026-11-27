@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validat
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.simulation_blocking_asset_schema import SimulationBlockingAssetSchema
 from cyberwave.rest.models.simulation_capacity_schema import SimulationCapacitySchema
+from cyberwave.rest.models.simulation_preflight_warning_schema import SimulationPreflightWarningSchema
 from cyberwave.rest.models.simulation_scene_bundle_status_schema import SimulationSceneBundleStatusSchema
 from typing import Optional, Set
 from typing_extensions import Self
@@ -42,7 +43,8 @@ class SimulationPreflightSchema(BaseModel):
     bundle: SimulationSceneBundleStatusSchema
     environment_revision: Optional[StrictStr] = None
     capacity: Optional[SimulationCapacitySchema] = None
-    __properties: ClassVar[List[str]] = ["backend", "execution_profile", "enabled", "eligible", "available_backends", "execution_profiles", "experimental_execution_profiles", "blocking_assets", "reasons", "bundle", "environment_revision", "capacity"]
+    warnings: Optional[List[SimulationPreflightWarningSchema]] = None
+    __properties: ClassVar[List[str]] = ["backend", "execution_profile", "enabled", "eligible", "available_backends", "execution_profiles", "experimental_execution_profiles", "blocking_assets", "reasons", "bundle", "environment_revision", "capacity", "warnings"]
 
     @field_validator('backend')
     def backend_validate_enum(cls, value):
@@ -113,6 +115,13 @@ class SimulationPreflightSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of capacity
         if self.capacity:
             _dict['capacity'] = self.capacity.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each item in warnings (list)
+        _items = []
+        if self.warnings:
+            for _item_warnings in self.warnings:
+                if _item_warnings:
+                    _items.append(_item_warnings.to_dict())
+            _dict['warnings'] = _items
         # set to None if execution_profile (nullable) is None
         # and model_fields_set contains the field
         if self.execution_profile is None and "execution_profile" in self.model_fields_set:
@@ -151,7 +160,8 @@ class SimulationPreflightSchema(BaseModel):
             "reasons": obj.get("reasons"),
             "bundle": SimulationSceneBundleStatusSchema.from_dict(obj["bundle"]) if obj.get("bundle") is not None else None,
             "environment_revision": obj.get("environment_revision"),
-            "capacity": SimulationCapacitySchema.from_dict(obj["capacity"]) if obj.get("capacity") is not None else None
+            "capacity": SimulationCapacitySchema.from_dict(obj["capacity"]) if obj.get("capacity") is not None else None,
+            "warnings": [SimulationPreflightWarningSchema.from_dict(_item) for _item in obj["warnings"]] if obj.get("warnings") is not None else None
         })
         return _obj
 

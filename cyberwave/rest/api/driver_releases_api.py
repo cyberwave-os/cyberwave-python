@@ -20,9 +20,12 @@ from typing import List, Optional
 from cyberwave.rest.models.asset_link_in import AssetLinkIn
 from cyberwave.rest.models.asset_link_out import AssetLinkOut
 from cyberwave.rest.models.fleet_twin_out import FleetTwinOut
+from cyberwave.rest.models.mirror_out import MirrorOut
+from cyberwave.rest.models.mirrored_release import MirroredRelease
 from cyberwave.rest.models.package_out import PackageOut
 from cyberwave.rest.models.package_rollout_out import PackageRolloutOut
 from cyberwave.rest.models.previous_release_out import PreviousReleaseOut
+from cyberwave.rest.models.release_detail_out import ReleaseDetailOut
 from cyberwave.rest.models.release_out import ReleaseOut
 from cyberwave.rest.models.release_submission import ReleaseSubmission
 from cyberwave.rest.models.release_update_in import ReleaseUpdateIn
@@ -2506,6 +2509,7 @@ class DriverReleasesApi:
         organization_uuid: Optional[StrictStr] = None,
         flavor: Optional[StrictStr] = None,
         all: Optional[StrictBool] = None,
+        include_manifest: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2518,10 +2522,10 @@ class DriverReleasesApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> List[ReleaseOut]:
+    ) -> List[ReleaseDetailOut]:
         """List Releases
 
-        Releases of ``slug`` visible to the organization, newest first.  Staff also see ``published`` releases; with ``all=true`` they see every release, including ``rollout`` and ``yanked`` ones for any organization.
+        Releases of ``slug`` visible to the organization, newest first.  Staff also see ``published`` releases; with ``all=true`` they see every release, including ``rollout`` and ``yanked`` ones for any organization. ``include_manifest=true`` (staff) adds each release's manifest.
 
         :param slug: (required)
         :type slug: str
@@ -2531,6 +2535,8 @@ class DriverReleasesApi:
         :type flavor: str
         :param all:
         :type all: bool
+        :param include_manifest:
+        :type include_manifest: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2558,6 +2564,7 @@ class DriverReleasesApi:
             organization_uuid=organization_uuid,
             flavor=flavor,
             all=all,
+            include_manifest=include_manifest,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2565,7 +2572,7 @@ class DriverReleasesApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "List[ReleaseOut]",
+            '200': "List[ReleaseDetailOut]",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -2585,6 +2592,7 @@ class DriverReleasesApi:
         organization_uuid: Optional[StrictStr] = None,
         flavor: Optional[StrictStr] = None,
         all: Optional[StrictBool] = None,
+        include_manifest: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2597,10 +2605,10 @@ class DriverReleasesApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[List[ReleaseOut]]:
+    ) -> ApiResponse[List[ReleaseDetailOut]]:
         """List Releases
 
-        Releases of ``slug`` visible to the organization, newest first.  Staff also see ``published`` releases; with ``all=true`` they see every release, including ``rollout`` and ``yanked`` ones for any organization.
+        Releases of ``slug`` visible to the organization, newest first.  Staff also see ``published`` releases; with ``all=true`` they see every release, including ``rollout`` and ``yanked`` ones for any organization. ``include_manifest=true`` (staff) adds each release's manifest.
 
         :param slug: (required)
         :type slug: str
@@ -2610,6 +2618,8 @@ class DriverReleasesApi:
         :type flavor: str
         :param all:
         :type all: bool
+        :param include_manifest:
+        :type include_manifest: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2637,6 +2647,7 @@ class DriverReleasesApi:
             organization_uuid=organization_uuid,
             flavor=flavor,
             all=all,
+            include_manifest=include_manifest,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2644,7 +2655,7 @@ class DriverReleasesApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "List[ReleaseOut]",
+            '200': "List[ReleaseDetailOut]",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -2664,6 +2675,7 @@ class DriverReleasesApi:
         organization_uuid: Optional[StrictStr] = None,
         flavor: Optional[StrictStr] = None,
         all: Optional[StrictBool] = None,
+        include_manifest: Optional[StrictBool] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2679,7 +2691,7 @@ class DriverReleasesApi:
     ) -> RESTResponseType:
         """List Releases
 
-        Releases of ``slug`` visible to the organization, newest first.  Staff also see ``published`` releases; with ``all=true`` they see every release, including ``rollout`` and ``yanked`` ones for any organization.
+        Releases of ``slug`` visible to the organization, newest first.  Staff also see ``published`` releases; with ``all=true`` they see every release, including ``rollout`` and ``yanked`` ones for any organization. ``include_manifest=true`` (staff) adds each release's manifest.
 
         :param slug: (required)
         :type slug: str
@@ -2689,6 +2701,8 @@ class DriverReleasesApi:
         :type flavor: str
         :param all:
         :type all: bool
+        :param include_manifest:
+        :type include_manifest: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2716,6 +2730,7 @@ class DriverReleasesApi:
             organization_uuid=organization_uuid,
             flavor=flavor,
             all=all,
+            include_manifest=include_manifest,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2723,7 +2738,7 @@ class DriverReleasesApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "List[ReleaseOut]",
+            '200': "List[ReleaseDetailOut]",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -2738,6 +2753,7 @@ class DriverReleasesApi:
         organization_uuid,
         flavor,
         all,
+        include_manifest,
         _request_auth,
         _content_type,
         _headers,
@@ -2774,6 +2790,10 @@ class DriverReleasesApi:
             
             _query_params.append(('all', all))
             
+        if include_manifest is not None:
+            
+            _query_params.append(('include_manifest', include_manifest))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -2796,6 +2816,280 @@ class DriverReleasesApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/api/v1/driver-packages/{slug}/releases',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def src_app_api_driver_releases_mirror_release(
+        self,
+        mirrored_release: MirroredRelease,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> MirrorOut:
+        """Mirror Release
+
+        Copy one production release here, or bring its stage in line (dev and staging).
+
+        :param mirrored_release: (required)
+        :type mirrored_release: MirroredRelease
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_driver_releases_mirror_release_serialize(
+            mirrored_release=mirrored_release,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MirrorOut",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def src_app_api_driver_releases_mirror_release_with_http_info(
+        self,
+        mirrored_release: MirroredRelease,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[MirrorOut]:
+        """Mirror Release
+
+        Copy one production release here, or bring its stage in line (dev and staging).
+
+        :param mirrored_release: (required)
+        :type mirrored_release: MirroredRelease
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_driver_releases_mirror_release_serialize(
+            mirrored_release=mirrored_release,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MirrorOut",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def src_app_api_driver_releases_mirror_release_without_preload_content(
+        self,
+        mirrored_release: MirroredRelease,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Mirror Release
+
+        Copy one production release here, or bring its stage in line (dev and staging).
+
+        :param mirrored_release: (required)
+        :type mirrored_release: MirroredRelease
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._src_app_api_driver_releases_mirror_release_serialize(
+            mirrored_release=mirrored_release,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "MirrorOut",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _src_app_api_driver_releases_mirror_release_serialize(
+        self,
+        mirrored_release,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if mirrored_release is not None:
+            _body_params = mirrored_release
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'CustomTokenAuthentication'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/api/v1/driver-releases/mirror',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

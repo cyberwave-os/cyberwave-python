@@ -30,6 +30,8 @@ class FleetTwinOut(BaseModel):
     package: StrictStr
     twin_uuid: StrictStr
     twin_name: StrictStr
+    environment_slug: StrictStr
+    flavor: StrictStr
     organization_uuid: Optional[StrictStr]
     organization_name: Optional[StrictStr]
     release: Optional[StrictStr]
@@ -40,7 +42,7 @@ class FleetTwinOut(BaseModel):
     error: Optional[StrictStr]
     image: Optional[StrictStr] = None
     pinning_enabled: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["package", "twin_uuid", "twin_name", "organization_uuid", "organization_name", "release", "release_stage", "target", "state", "unmanaged", "error", "image", "pinning_enabled"]
+    __properties: ClassVar[List[str]] = ["package", "twin_uuid", "twin_name", "environment_slug", "flavor", "organization_uuid", "organization_name", "release", "release_stage", "target", "state", "unmanaged", "error", "image", "pinning_enabled"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -136,6 +138,8 @@ class FleetTwinOut(BaseModel):
             "package": obj.get("package"),
             "twin_uuid": obj.get("twin_uuid"),
             "twin_name": obj.get("twin_name"),
+            "environment_slug": obj.get("environment_slug"),
+            "flavor": obj.get("flavor"),
             "organization_uuid": obj.get("organization_uuid"),
             "organization_name": obj.get("organization_name"),
             "release": obj.get("release"),

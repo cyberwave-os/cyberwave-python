@@ -17,9 +17,10 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.simulation_scene_bundle_error_schema import SimulationSceneBundleErrorSchema
+from cyberwave.rest.models.simulation_scene_bundle_finding_schema import SimulationSceneBundleFindingSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,7 +32,11 @@ class SimulationSceneBundleStatusSchema(BaseModel):
     status: StrictStr
     digest: Optional[StrictStr] = None
     error: Optional[SimulationSceneBundleErrorSchema] = None
-    __properties: ClassVar[List[str]] = ["status", "digest", "error"]
+    warnings: Optional[List[SimulationSceneBundleFindingSchema]] = None
+    warnings_count: Optional[StrictInt] = 0
+    rejected_features: Optional[List[SimulationSceneBundleFindingSchema]] = None
+    rejected_features_count: Optional[StrictInt] = 0
+    __properties: ClassVar[List[str]] = ["status", "digest", "error", "warnings", "warnings_count", "rejected_features", "rejected_features_count"]
 
     @field_validator('status')
     def status_validate_enum(cls, value):
@@ -82,6 +87,20 @@ class SimulationSceneBundleStatusSchema(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of error
         if self.error:
             _dict['error'] = self.error.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each item in warnings (list)
+        _items = []
+        if self.warnings:
+            for _item_warnings in self.warnings:
+                if _item_warnings:
+                    _items.append(_item_warnings.to_dict())
+            _dict['warnings'] = _items
+        # override the default output from pydantic by calling `to_dict()` of each item in rejected_features (list)
+        _items = []
+        if self.rejected_features:
+            for _item_rejected_features in self.rejected_features:
+                if _item_rejected_features:
+                    _items.append(_item_rejected_features.to_dict())
+            _dict['rejected_features'] = _items
         # set to None if digest (nullable) is None
         # and model_fields_set contains the field
         if self.digest is None and "digest" in self.model_fields_set:
@@ -106,7 +125,11 @@ class SimulationSceneBundleStatusSchema(BaseModel):
         _obj = cls.model_validate({
             "status": obj.get("status"),
             "digest": obj.get("digest"),
-            "error": SimulationSceneBundleErrorSchema.from_dict(obj["error"]) if obj.get("error") is not None else None
+            "error": SimulationSceneBundleErrorSchema.from_dict(obj["error"]) if obj.get("error") is not None else None,
+            "warnings": [SimulationSceneBundleFindingSchema.from_dict(_item) for _item in obj["warnings"]] if obj.get("warnings") is not None else None,
+            "warnings_count": obj.get("warnings_count") if obj.get("warnings_count") is not None else 0,
+            "rejected_features": [SimulationSceneBundleFindingSchema.from_dict(_item) for _item in obj["rejected_features"]] if obj.get("rejected_features") is not None else None,
+            "rejected_features_count": obj.get("rejected_features_count") if obj.get("rejected_features_count") is not None else 0
         })
         return _obj
 

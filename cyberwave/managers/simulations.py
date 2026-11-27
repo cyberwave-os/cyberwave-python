@@ -25,10 +25,18 @@ from ..twin.runtime_state import RUNTIME_MODE_SIMULATION, active_runtime_mode
 
 logger = logging.getLogger(__name__)
 
-# A running MuJoCo simulation is a billable cloud instance. Surfaced to users
-# whenever the SDK starts one so the cost is never hidden.
+# A running simulation is a billable cloud instance. Surfaced to users
+# whenever the SDK starts one so the cost is never hidden. The rates are the
+# backend's rate card (``credit_rate_card_catalog.py``): MuJoCo bills as
+# ``mujoco-sim`` (CPU), Isaac as ``isaac-sim`` (RTX GPU node).
 SIMULATION_CREDITS_PER_MINUTE = 0.01
 SIMULATION_CREDITS_PER_HOUR = round(SIMULATION_CREDITS_PER_MINUTE * 60, 2)  # 0.6
+ISAAC_SIMULATION_CREDITS_PER_MINUTE = 0.05
+#: Credits per minute of each backend ``cw.affect(...)`` can start.
+SIMULATION_CREDITS_PER_MINUTE_BY_BACKEND: Dict[str, float] = {
+    "mujoco": SIMULATION_CREDITS_PER_MINUTE,
+    "isaac": ISAAC_SIMULATION_CREDITS_PER_MINUTE,
+}
 
 _JSON_HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 

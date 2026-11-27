@@ -38,6 +38,7 @@ from ..constants import (
 from ..exceptions import (
     CommandResponseTimeoutError,
     CyberwaveMQTTError,
+    MQTTCredentialsRejectedError,
     RequestTimeoutError,
 )
 from .command_response import command_topic, reply_inbox_topic
@@ -68,6 +69,13 @@ _PASS_MESSAGE_ATTR = "__cyberwave_pass_message__"
 _REPLY_INBOX_SUBSCRIBER = "cyberwave.request"
 # How long ``request`` waits for the inbox SUBACK before publishing.
 _REPLY_INBOX_SUBACK_TIMEOUT_S = 2.0
+
+# CONNACK reason codes that blame the credentials: bad user name or password
+# and not authorized. paho reports MQTT 3.1.1's return codes 4 and 5 as these.
+_CREDENTIALS_REFUSALS = frozenset({0x86, 0x87})
+# Reconnect waits after 1, 2 and 3+ credential refusals in a row. Never a stop:
+# a broker misconfiguration refuses valid credentials too.
+_CREDENTIALS_RETRY_DELAYS = (60, 300, 900)
 
 
 def pass_message(handler: Callable) -> Callable:
@@ -126,6 +134,10 @@ TELEMETRY_CUT_SOURCE_SUBTYPE = "node_recorder"
 #: Longest channel name the backend accepts on ``metrics/{channel}``: the width
 #: of the ``app_twinmetric.metric`` column.
 MAX_METRIC_CHANNEL_LENGTH = 120
+
+#: Longest string the backend stores as a metric value, in characters: a longer
+#: one is dropped, so it is refused here instead.
+MAX_METRIC_STRING_LENGTH = 256
 
 #: Characters a metric channel segment may not contain: MQTT's wildcards and
 #: level separator (a channel's levels are its ``.``-separated segments), and
@@ -197,20 +209,28 @@ def _metric_timestamp(timestamp: Optional[float]) -> float:
     return float(timestamp)
 
 
-def _metric_value(name: str, value: Any) -> bool | int | float:
-    """The sample as a plain ``bool``, ``int`` or ``float``, or raise.
+def _metric_value(name: str, value: Any) -> bool | int | float | str:
+    """The sample as a plain ``bool``, ``int``, ``float`` or ``str``, or raise.
 
-    Refuses anything the backend would drop: a metric is one float, int or
-    bool. ``bool`` is kept as a bool (not 0/1), an int must fit in 64 bits, and
+    Refuses anything the backend would drop: a metric is one float, int, bool or
+    a string of at most ``MAX_METRIC_STRING_LENGTH`` characters. ``bool`` is
+    kept as a bool (not 0/1), an int must fit in 64 bits, and
     a float must be finite (JSON has no NaN or infinity) and below ``2**63`` in
     magnitude, the range the backend's history can tell from an int. Other
     real numbers -- numpy scalars, ``fractions.Fraction`` -- are converted
     (``.item()`` where they have one), so ``np.float32(1.5)`` publishes as
     ``1.5`` and ``np.bool_(True)`` as ``true``.
     """
-    if type(value) not in (bool, int, float):
+    if type(value) not in (bool, int, float, str):
         value = _plain_number(value)
     if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        if len(value) > MAX_METRIC_STRING_LENGTH:
+            raise ValueError(
+                f"Metric {name!r}: string of {len(value)} characters is over the "
+                f"limit of {MAX_METRIC_STRING_LENGTH}."
+            )
         return value
     if isinstance(value, int):
         if not _INT64_MIN <= value <= _INT64_MAX:
@@ -225,7 +245,7 @@ def _metric_value(name: str, value: Any) -> bool | int | float:
             )
         return value
     raise TypeError(
-        f"Metric {name!r}: value must be a float, int or bool, got "
+        f"Metric {name!r}: value must be a float, int, bool or str, got "
         f"{type(value).__name__}. Publish each field of a structure as its own "
         "channel, e.g. 'arm.gripper.force_n'."
     )
@@ -418,6 +438,97 @@ def _frame_pose(
     return out
 
 
+def _imu_component(name: str, value: Any) -> Dict[str, float]:
+    """An IMU vector or quaternion as the contract has it, or ``ValueError``.
+
+    Takes the contract's object (``{"x","y","z"}``, or ``{"w","x","y","z"}``
+    for ``orientation``) or a sequence in that order, as drivers usually hold
+    them.
+    """
+    axes = "wxyz" if name == "orientation" else "xyz"
+    if isinstance(value, (list, tuple)):
+        if len(value) != len(axes):
+            raise ValueError(f"{name} must have {len(axes)} components, got {len(value)}")
+        value = dict(zip(axes, value))
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be a dict with keys {list(axes)} or a sequence")
+    out: Dict[str, float] = {}
+    for axis in axes:
+        component = value.get(axis)
+        if (
+            isinstance(component, bool)
+            or not isinstance(component, (int, float))
+            or not math.isfinite(component)
+        ):
+            raise ValueError(
+                f"{name}.{axis} must be a finite number, got {component!r}"
+            )
+        out[axis] = float(component)
+    return out
+
+
+def _recorded_envelope(
+    *,
+    source_subtype: Optional[str],
+    producer_instance: Optional[str],
+    producer_sequence: Optional[Union[int, str]],
+    workload_uuid: Optional[str],
+    simulation_time_s: Optional[float],
+) -> Dict[str, Any]:
+    """The envelope fields of a recorded topic that are set, or ``ValueError``.
+
+    Shared by ``frame_poses`` and ``imu``: Vector reads them the same way on
+    both and drops a message whose envelope it cannot read.
+    """
+    for name, value in (
+        ("source_subtype", source_subtype),
+        ("producer_instance", producer_instance),
+        ("workload_uuid", workload_uuid),
+    ):
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{name} must be a string, got {value!r}")
+    if producer_sequence is not None:
+        # Vector takes an int64 or its decimal string; a JSON number past
+        # int64 decodes as a float there and the message is dropped. A
+        # string such as "009" would be stored as 9, so only the canonical
+        # decimal spelling is sent and every producer agrees on one form.
+        if isinstance(producer_sequence, bool) or not isinstance(
+            producer_sequence, (int, str)
+        ):
+            sequence = None
+        elif isinstance(producer_sequence, str):
+            sequence = (
+                int(producer_sequence)
+                if re.fullmatch(r"-?(0|[1-9][0-9]*)", producer_sequence)
+                else None
+            )
+        else:
+            sequence = producer_sequence
+        if sequence is None or not _INT64_MIN <= sequence <= _INT64_MAX:
+            raise ValueError(
+                "producer_sequence must be a signed 64-bit int or its "
+                f"decimal string, got {producer_sequence!r}"
+            )
+    if simulation_time_s is not None and (
+        isinstance(simulation_time_s, bool)
+        or not isinstance(simulation_time_s, (int, float))
+        or not math.isfinite(simulation_time_s)
+        or simulation_time_s < 0
+    ):
+        raise ValueError(
+            "simulation_time_s must be a finite, non-negative number, got "
+            f"{simulation_time_s!r}"
+        )
+    fields = {
+        "source_subtype": source_subtype,
+        "producer_instance": producer_instance,
+        "producer_sequence": producer_sequence,
+        "workload_uuid": workload_uuid,
+        "simulation_time_s": simulation_time_s,
+    }
+    return {k: v for k, v in fields.items() if v is not None}
+
+
 class CyberwaveMQTTClient:
     """
     Client for Cyberwave MQTT API interactions.
@@ -536,6 +647,9 @@ class CyberwaveMQTTClient:
             self.client_id = f"{client_id_prefix}{uuid.uuid4().hex[:12]}"
         else:
             self.client_id = build_client_id(producer, runtime_mode)
+        # Command ordering must not pool unrelated SDK clients that use the same
+        # source_type. Keep this identity across reconnects, but not processes.
+        self.publisher_id = f"python-sdk:{uuid.uuid4().hex}"
 
         self._protocol = protocol if protocol is not None else mqtt.MQTTv5
         # MQTT 5 topic aliases. A telemetry topic is ~65 bytes on the wire and a
@@ -593,6 +707,12 @@ class CyberwaveMQTTClient:
         self._network_loop_running = False
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
+        # paho's reconnect backoff before the first credential refusal, restored
+        # once the credentials are accepted.
+        self._reconnect_delays: dict[str, int] = {}
+        # Credential refusals since the last accepted connection, and the last reason.
+        self._credential_refusals = 0
+        self._credential_refusal_reason = ""
 
         # Initial-connect resilience. The first CONNACK can be delayed when the
         # broker is briefly overloaded (e.g. a reconnect storm from other
@@ -970,7 +1090,11 @@ class CyberwaveMQTTClient:
 
     def _on_connect(self, client, userdata, flags, rc, *args, **kwargs):
         """Callback when connected to MQTT broker."""
+        if getattr(rc, "value", rc) in _CREDENTIALS_REFUSALS:
+            self._on_credentials_refused(client, rc)
+            return
         if rc == 0:
+            self._end_credential_refusals()
             logger.info(
                 f"Connected to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}"
             )
@@ -1021,6 +1145,41 @@ class CyberwaveMQTTClient:
                 f"Failed to connect to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}, return code: {rc}"
             )
             self.connected = False
+
+    def _on_credentials_refused(self, client, rc) -> None:
+        """Slow paho's reconnects, which would get the same answer, and say why once."""
+        self.connected = False
+        if not self._credential_refusals:
+            # From paho itself: a caller may have set it there (edge-core does).
+            self._reconnect_delays = {
+                "min_delay": client._reconnect_min_delay,
+                "max_delay": client._reconnect_max_delay,
+            }
+        self._credential_refusals += 1
+        self._credential_refusal_reason = str(rc)
+        delay = _CREDENTIALS_RETRY_DELAYS[
+            min(self._credential_refusals, len(_CREDENTIALS_RETRY_DELAYS)) - 1
+        ]
+        client.reconnect_delay_set(min_delay=delay, max_delay=delay)
+        if self._credential_refusals == 1:
+            logger.error("%s", self._credentials_rejected_error())
+
+    def _end_credential_refusals(self) -> None:
+        """Give paho back the backoff it had before the refusals began."""
+        if self._credential_refusals:
+            self._credential_refusals = 0
+            self.client.reconnect_delay_set(**self._reconnect_delays)
+
+    def _credentials_rejected_error(self) -> MQTTCredentialsRejectedError:
+        credential = (
+            "MQTT password (CYBERWAVE_MQTT_PASSWORD)"
+            if self.mqtt_password
+            else "API key (CYBERWAVE_API_KEY)"
+        )
+        return MQTTCredentialsRejectedError(
+            f"MQTT broker {self.mqtt_broker}:{self.mqtt_port} rejected the "
+            f"credentials ({self._credential_refusal_reason}): check the {credential}"
+        )
 
     def _adopt_broker_max_packet_size(self, properties: Any = None) -> None:
         """Take the Maximum Packet Size from an MQTT 5 CONNACK, if it has one.
@@ -1248,7 +1407,8 @@ class CyberwaveMQTTClient:
         briefly-overloaded broker (delayed CONNACK) does not fail the whole
         process on the first short window. Tunable via
         ``CYBERWAVE_MQTT_CONNECT_TIMEOUT`` (per-attempt seconds) and
-        ``CYBERWAVE_MQTT_CONNECT_ATTEMPTS``.
+        ``CYBERWAVE_MQTT_CONNECT_ATTEMPTS``. A broker that refuses the
+        credentials raises :class:`MQTTCredentialsRejectedError` at once.
         """
         if self.connecting_in_background or self._network_loop_running:
             # paho's network thread owns connecting, and keeps reconnecting
@@ -1256,9 +1416,15 @@ class CyberwaveMQTTClient:
             # path (loop_stop) would end that thread. Wait for it instead, so
             # a caller still gets "connected or raised".
             deadline = time.time() + self._connect_timeout
-            while not self.connected and time.time() < deadline:
+            while (
+                not self.connected
+                and not self._credential_refusals
+                and time.time() < deadline
+            ):
                 time.sleep(0.5)
             if not self.connected:
+                if self._credential_refusals:
+                    raise self._credentials_rejected_error()
                 raise Exception(
                     "MQTT broker not reachable yet; still retrying in the background"
                 )
@@ -1278,6 +1444,7 @@ class CyberwaveMQTTClient:
         self._network_loop_running = True
 
         last_error: Optional[Exception] = None
+        refusals = self._credential_refusals
         for attempt in range(1, max_attempts + 1):
             try:
                 # paho's first call must be connect(); subsequent retries reuse
@@ -1303,10 +1470,18 @@ class CyberwaveMQTTClient:
             else:
                 # CONNACK arrives asynchronously; _on_connect flips self.connected.
                 start_time = time.time()
-                while not self.connected and (time.time() - start_time) < timeout:
+                while (
+                    not self.connected
+                    and self._credential_refusals <= refusals
+                    and (time.time() - start_time) < timeout
+                ):
                     time.sleep(0.5)
                 if self.connected:
                     logger.debug("Successfully connected to MQTT broker")
+                    break
+                if self._credential_refusals > refusals:
+                    # Another attempt would get the same answer.
+                    last_error = self._credentials_rejected_error()
                     break
                 last_error = Exception(
                     "Failed to connect to MQTT broker within timeout"
@@ -1329,6 +1504,11 @@ class CyberwaveMQTTClient:
             # connect_in_background() would then skip starting one.
             with self._subscription_lock:
                 self.connected = False
+            # Nothing reconnects now, so a later connect_in_background() starts
+            # a new episode from its own backoff.
+            self._end_credential_refusals()
+            if isinstance(last_error, MQTTCredentialsRejectedError):
+                raise last_error  # _on_connect logged it
             logger.error(
                 "Failed to connect to MQTT broker: %s%s",
                 last_error,
@@ -1409,6 +1589,7 @@ class CyberwaveMQTTClient:
             self.connected = False
             self.connecting_in_background = False
             self._network_loop_running = False
+            self._end_credential_refusals()
 
     def publish(
         self,
@@ -1437,6 +1618,10 @@ class CyberwaveMQTTClient:
         try:
             if isinstance(message, dict):
                 message.setdefault("session_id", self.client_id)
+                if topic.startswith(
+                    f"{self.topic_prefix}cyberwave/twin/"
+                ) and topic.endswith("/command"):
+                    message.setdefault("publisher_id", self.publisher_id)
             if isinstance(message, dict):
                 # Fast path: emit strict JSON (allow_nan=False rejects NaN/inf).
                 # Only pay the recursive-sanitize cost when a non-finite value is
@@ -1880,8 +2065,9 @@ class CyberwaveMQTTClient:
     ) -> bool:
         """Publish one sample of a structured metric on ``metrics/{channel}``.
 
-        A metric channel is a timeseries of one scalar: a float, an int or a
-        bool. The backend stores every sample as a row (``app_twinmetric``) and
+        A metric channel is a timeseries of one scalar: a float, an int, a
+        bool or a string of at most ``MAX_METRIC_STRING_LENGTH`` characters.
+        The backend stores every sample as a row (``app_twinmetric``) and
         serves the latest value of each channel under ``channels`` in
         ``GET /twins/{uuid}/metrics/latest``. Nothing is sampled, so publish at
         the rate the signal needs. It is the same channel the key ``<channel>``
@@ -1897,7 +2083,8 @@ class CyberwaveMQTTClient:
             channel: ``.``-separated name, e.g. ``"arm.gripper"``; published on
                 ``metrics/arm/gripper``. Every segment must be non-empty and
                 free of ``/``, ``+`` and ``#``; at most 120 characters.
-            value: The sample: a float, an int or a bool. A numpy scalar is
+            value: The sample: a float, an int, a bool or a string of at most
+                ``MAX_METRIC_STRING_LENGTH`` characters. A numpy scalar is
                 converted to the builtin it stands for.
             timestamp: When the value was measured, in Unix seconds (not
                 milliseconds), from 2001 to ten years ahead. Defaults to now.
@@ -1908,10 +2095,11 @@ class CyberwaveMQTTClient:
 
         Raises:
             ValueError: ``channel`` names no channel, ``value`` is a
-                non-finite float, a float of ``2**63`` or more in magnitude, or
-                an int outside 64 bits, or ``timestamp`` is out of range.
-            TypeError: ``value`` is not a float, int or bool, or ``timestamp``
-                is not a number.
+                non-finite float, a float of ``2**63`` or more in magnitude, an
+                int outside 64 bits or a string over the limit, or ``timestamp``
+                is out of range.
+            TypeError: ``value`` is not a float, int, bool or str, or
+                ``timestamp`` is not a number.
         """
         path = _metric_topic_path(channel)
         value = _metric_value(channel, value)
@@ -1934,9 +2122,10 @@ class CyberwaveMQTTClient:
         """Publish several structured metrics in one message, the ``metrics`` bag.
 
         Each key is a channel, as with :meth:`publish_metric`; each value one
-        float, int or bool. A key left out means "unchanged", never zero. The
-        backend stores every key as a metric row, keeps the bag as one telemetry
-        row and fires ``metrics`` workflow triggers on it; only the platform keys
+        float, int, bool or short string. A key left out means "unchanged",
+        never zero. The backend stores every numeric, boolean or short-string
+        key as a metric row, keeps the
+        bag as one telemetry row and fires ``metrics`` workflow triggers on it; only the platform keys
         (``battery``, ...) are also merged into the twin's metadata. For a
         signal with its own rate, prefer :meth:`publish_metric`.
 
@@ -1956,8 +2145,8 @@ class CyberwaveMQTTClient:
             ValueError: ``metrics`` is empty, a key names no channel, a value
                 is out of range (see :meth:`publish_metric`), or ``timestamp``
                 is out of range.
-            TypeError: A value is not a float, int or bool, or ``timestamp`` is
-                not a number.
+            TypeError: A value is not a float, int, bool or str, or
+                ``timestamp`` is not a number.
         """
         if not metrics:
             raise ValueError("metrics cannot be empty")
@@ -1969,6 +2158,93 @@ class CyberwaveMQTTClient:
             "source_type": self._get_effective_source_type(source_type),
             "timestamp": _metric_timestamp(timestamp),
             "metrics": samples,
+        }
+        return self.publish(topic, message)
+
+    def publish_readings(
+        self,
+        twin_uuid: str,
+        readings: Dict[str, Any],
+        *,
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+    ) -> bool:
+        """Publish live values of a twin's sensor slots, the ``metrics.readings`` bag.
+
+        Each key is a slot: the ``parameters.id`` of one of the twin's sensors
+        (a Generic Sensor's slot is ``"value"``). Each value is a number, or a
+        dict ``{"value": number, "unit"?: str, "at"?: Unix seconds}``. The backend
+        keeps the latest reading of each slot on the twin, checks it against the
+        slot's operating range and shows it in Live values. Leave ``unit`` out to
+        use the unit declared on the sensor; a reading's own unit is shown as is,
+        never converted.
+
+        Unlike :meth:`publish_metrics`, which stores free-form channels as metric
+        rows, this fills the twin's declared sensor slots. The backend drops a
+        second metrics message for the same twin that arrives within 5 ms of the
+        first, so send every slot that changed in one call rather than one call
+        per slot.
+
+        Args:
+            twin_uuid: Twin the readings belong to.
+            readings: Slot id -> number, or ``{"value", "unit", "at"}``.
+            timestamp: When the message is sent, in Unix seconds. Defaults to
+                now; also the ``at`` of a reading that gives none.
+            source_type: Override the client's default source type (``"edge"``
+                for the real device, ``"sim"`` next to a running simulation).
+
+        Returns:
+            Whether the local MQTT client accepted the message.
+
+        Raises:
+            ValueError: ``readings`` is empty, a slot id is empty, a reading has
+                no ``value`` or an unknown key, or a value or time is out of range.
+            TypeError: A value is not a number or a unit is not a string.
+        """
+        if not readings:
+            raise ValueError("readings cannot be empty")
+        sent_at = _metric_timestamp(timestamp)
+        bag: Dict[str, Dict[str, Any]] = {}
+        for slot, reading in readings.items():
+            if not isinstance(slot, str) or not slot.strip():
+                raise ValueError(f"Each reading needs a slot id, got {slot!r}")
+            unit: Any = None
+            at: Any = None
+            if isinstance(reading, dict):
+                unknown = set(reading) - {"value", "unit", "at"}
+                if unknown:
+                    raise ValueError(
+                        f"Reading {slot!r}: unknown key(s) {sorted(unknown)}; "
+                        "a reading has value, unit and at"
+                    )
+                if "value" not in reading:
+                    raise ValueError(f"Reading {slot!r} needs a 'value'")
+                value, unit, at = reading["value"], reading.get("unit"), reading.get("at")
+            else:
+                value = reading
+            # A metric may be a string, a reading may not: float() would parse "21.5".
+            # Checked first so a string over the metric length limit is a TypeError too.
+            if isinstance(value, str):
+                raise TypeError(f"Reading {slot!r}: value must be a number, got str")
+            entry: Dict[str, Any] = {
+                "value": float(_metric_value(slot, value)),
+                "at": sent_at if at is None else _metric_timestamp(at),
+            }
+            if unit is not None:
+                if not isinstance(unit, str):
+                    raise TypeError(
+                        f"Reading {slot!r}: unit must be a string, got "
+                        f"{type(unit).__name__}"
+                    )
+                # An empty unit is no unit: the sensor's declared one applies.
+                if unit.strip():
+                    entry["unit"] = unit
+            bag[slot] = entry
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/metrics"
+        message: Dict[str, Any] = {
+            "source_type": self._get_effective_source_type(source_type),
+            "timestamp": sent_at,
+            "metrics": {"readings": bag},
         }
         return self.publish(topic, message)
 
@@ -2105,45 +2381,13 @@ class CyberwaveMQTTClient:
                     "hardware. Only a simulator knows its exact state; say how "
                     "the pose was estimated."
                 )
-        for name, value in (
-            ("source_subtype", source_subtype),
-            ("producer_instance", producer_instance),
-            ("workload_uuid", workload_uuid),
-        ):
-            if value is not None and not isinstance(value, str):
-                raise ValueError(f"{name} must be a string, got {value!r}")
-        if producer_sequence is not None:
-            # Vector takes an int64 or its decimal string; a JSON number past
-            # int64 decodes as a float there and the message is dropped. A
-            # string such as "009" would be stored as 9, so only the canonical
-            # decimal spelling is sent and every producer agrees on one form.
-            if isinstance(producer_sequence, bool) or not isinstance(
-                producer_sequence, (int, str)
-            ):
-                sequence = None
-            elif isinstance(producer_sequence, str):
-                sequence = (
-                    int(producer_sequence)
-                    if re.fullmatch(r"-?(0|[1-9][0-9]*)", producer_sequence)
-                    else None
-                )
-            else:
-                sequence = producer_sequence
-            if sequence is None or not _INT64_MIN <= sequence <= _INT64_MAX:
-                raise ValueError(
-                    "producer_sequence must be a signed 64-bit int or its "
-                    f"decimal string, got {producer_sequence!r}"
-                )
-        if simulation_time_s is not None and (
-            isinstance(simulation_time_s, bool)
-            or not isinstance(simulation_time_s, (int, float))
-            or not math.isfinite(simulation_time_s)
-            or simulation_time_s < 0
-        ):
-            raise ValueError(
-                "simulation_time_s must be a finite, non-negative number, got "
-                f"{simulation_time_s!r}"
-            )
+        envelope = _recorded_envelope(
+            source_subtype=source_subtype,
+            producer_instance=producer_instance,
+            producer_sequence=producer_sequence,
+            workload_uuid=workload_uuid,
+            simulation_time_s=simulation_time_s,
+        )
 
         instance = producer_instance or self.client_id
         topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/frame_poses"
@@ -2159,15 +2403,117 @@ class CyberwaveMQTTClient:
                 "substrate": wire_substrate,
             },
             "frames": wire_frames,
-            "producer_instance": instance,
         }
-        optional = {
-            "source_subtype": source_subtype,
-            "producer_sequence": producer_sequence,
-            "workload_uuid": workload_uuid,
-            "simulation_time_s": simulation_time_s,
+        message.update(envelope)
+        message["producer_instance"] = instance
+        return self.publish(topic, message)
+
+    def publish_imu(
+        self,
+        twin_uuid: str,
+        *,
+        angular_velocity: Optional[Any] = None,
+        linear_acceleration: Optional[Any] = None,
+        orientation: Optional[Any] = None,
+        sensor_id: Optional[str] = None,
+        coordinate_frame: str = "environment",
+        timestamp: Optional[float] = None,
+        source_type: Optional[str] = None,
+        source_subtype: Optional[str] = None,
+        producer_instance: Optional[str] = None,
+        producer_sequence: Optional[Union[int, str]] = None,
+        workload_uuid: Optional[str] = None,
+        simulation_time_s: Optional[float] = None,
+    ) -> bool:
+        """Publish one IMU sample.
+
+        Each message is recorded as one ``twin_imu_update`` telemetry event and
+        the backend keeps at most ten per second per twin, dropping the rest, so
+        publish at the rate you want stored; ``twin.imu`` readers see every
+        message regardless.
+
+        Args:
+            twin_uuid: Twin the IMU is on.
+            angular_velocity: Gyro reading in the sensor frame, rad/s, as
+                ``{"x","y","z"}`` or ``(x, y, z)``.
+            linear_acceleration: Accelerometer reading in the sensor frame,
+                m/s^2 with gravity included (about +9.81 up at rest), as
+                ``{"x","y","z"}`` or ``(x, y, z)``.
+            orientation: The sensor's orientation in the environment frame, as
+                ``{"w","x","y","z"}`` or ``(w, x, y, z)``. Leave it out unless
+                you know it: a fused estimate whose yaw starts at the boot
+                heading is not an environment orientation.
+            sensor_id: Which of the twin's IMUs this is (its capability ``id``).
+            coordinate_frame: Must be ``"environment"``; the backend drops
+                anything else.
+            timestamp: Unix seconds the sample was taken, if the hardware
+                stamps it; defaults to now.
+            source_type: Override the client's default source type.
+            source_subtype: Component that produced the sample, e.g. ``mujoco``.
+            producer_instance: Stable for one process boot, so a restart reads
+                as a new producer rather than a gap. Sent only when given.
+            producer_sequence: Monotonic counter per (producer, twin), shared by
+                the twin's IMUs, so loss is measurable from the recorded rows: a
+                signed 64-bit int, or its decimal string without leading zeros.
+            workload_uuid: Simulation workload the sample belongs to.
+            simulation_time_s: Simulation clock at the sample, in seconds.
+
+        Returns:
+            Whether the local MQTT client accepted the message.
+
+        Raises:
+            ValueError: ``twin_uuid`` is not a UUID, neither vector is given,
+                a component is not a finite number, or an envelope field has the
+                wrong type or range. The backend would drop or mark the sample,
+                so nothing is sent.
+        """
+        try:
+            uuid.UUID(str(twin_uuid))
+        except ValueError:
+            raise ValueError(f"twin_uuid must be a UUID, got {twin_uuid!r}") from None
+        if coordinate_frame != "environment":
+            raise ValueError(
+                f"coordinate_frame must be 'environment', got {coordinate_frame!r}. "
+                "Leave orientation out if it is not in the environment frame."
+            )
+        if angular_velocity is None and linear_acceleration is None:
+            raise ValueError(
+                "an IMU sample needs angular_velocity, linear_acceleration or both"
+            )
+        if timestamp is not None and (
+            isinstance(timestamp, bool)
+            or not isinstance(timestamp, (int, float))
+            or not math.isfinite(timestamp)
+        ):
+            raise ValueError(f"timestamp must be a finite number, got {timestamp!r}")
+        envelope = _recorded_envelope(
+            source_subtype=source_subtype,
+            producer_instance=producer_instance,
+            producer_sequence=producer_sequence,
+            workload_uuid=workload_uuid,
+            simulation_time_s=simulation_time_s,
+        )
+        effective_source_type = self._get_effective_source_type(source_type)
+
+        message: Dict[str, Any] = {
+            "source_type": effective_source_type,
+            "timestamp": float(timestamp) if timestamp is not None else time.time(),
+            **envelope,
         }
-        message.update({k: v for k, v in optional.items() if v is not None})
+        if sensor_id is not None:
+            message["sensor_id"] = str(sensor_id)
+        if angular_velocity is not None:
+            message["angular_velocity"] = _imu_component(
+                "angular_velocity", angular_velocity
+            )
+        if linear_acceleration is not None:
+            message["linear_acceleration"] = _imu_component(
+                "linear_acceleration", linear_acceleration
+            )
+        if orientation is not None:
+            message["orientation"] = _imu_component("orientation", orientation)
+            message["coordinate_frame"] = coordinate_frame
+        topic = f"{self.topic_prefix}cyberwave/twin/{twin_uuid}/imu"
         return self.publish(topic, message)
 
     def update_twin_rotation(self, twin_uuid: str, rotation: Dict[str, float]):
@@ -2296,6 +2642,7 @@ class CyberwaveMQTTClient:
         effort: Optional[float] = None,
         timestamp: Optional[float] = None,
         source_type: Optional[str] = None,
+        acceleration: Optional[float] = None,
     ):
         """
         Update joint state via MQTT.
@@ -2305,12 +2652,14 @@ class CyberwaveMQTTClient:
             joint_name: Name of the joint
             position: Joint position (radians for revolute, meters for prismatic)
             velocity: Joint velocity
-            effort: Joint effort/torque
+            effort: Joint effort (N·m for revolute, N for prismatic)
             timestamp: Unix timestamp (defaults to current time)
             source_type: Source type for the message. Must be one of:
                 SOURCE_TYPE_EDGE, SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, SOURCE_TYPE_SIM.
                 Defaults to SOURCE_TYPE_EDGE (SDKs run on edge devices by default).
                 Users can override this to use any source type they need.
+            acceleration: Joint acceleration (rad/s² for revolute, m/s² for
+                prismatic). Omitted from the message when None.
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
@@ -2325,6 +2674,8 @@ class CyberwaveMQTTClient:
             joint_state["position"] = position
         if velocity is not None:
             joint_state["velocity"] = velocity
+        if acceleration is not None:
+            joint_state["acceleration"] = acceleration
         if effort is not None:
             joint_state["effort"] = effort
 
@@ -2357,19 +2708,21 @@ class CyberwaveMQTTClient:
         as_targets: bool = False,
         stream_instance_id: Optional[str] = None,
         applied_position_targets: Optional[Dict[str, float]] = None,
+        accelerations: Optional[Dict[str, float]] = None,
     ):
         """
         Update multiple joints at once via MQTT.
 
         When ``as_targets`` is True the payload is published as a *command*
         using the ``target_positions`` / ``target_velocities`` /
-        ``target_efforts`` fields (always aggregated). These describe a desired
-        setpoint a plant should track and must never be rendered as measured
-        robot state. When False (default) the payload describes measured state
-        and uses ``positions`` / ``velocities`` / ``efforts``.
+        ``target_accelerations`` / ``target_efforts`` fields (always aggregated).
+        These describe a desired setpoint a plant should track and must never be
+        rendered as measured robot state. When False (default) the payload
+        describes measured state and uses ``positions`` / ``velocities`` /
+        ``accelerations`` / ``efforts``.
 
         Commands may omit positions (pass ``joint_positions={}``) when sending
-        only velocity or effort targets. Unspecified channels are not filled
+        only velocity, acceleration or effort targets. Unspecified channels are not filled
         with zeros. Measured-state updates still require positions.
 
         Targets do not start or take ownership of a telemetry session. The
@@ -2384,7 +2737,8 @@ class CyberwaveMQTTClient:
            {"source_type": "edge", "_1": 0.5, "_2": 0.3}
            ```
 
-        2. **Aggregated format** (with velocities, efforts, timestamp, or metadata):
+        2. **Aggregated format** (with velocities, accelerations, efforts,
+           timestamp, or metadata):
            Sends structured payload with nested objects. Supports full joint state
            and additional metadata for telemetry tracking.
            ```json
@@ -2392,6 +2746,7 @@ class CyberwaveMQTTClient:
                "source_type": "edge_follower",
                "positions": {"_1": 0.5, "_2": 0.3},
                "velocities": {"_1": 0.0, "_2": 0.0},
+               "accelerations": {"_1": 0.0, "_2": 0.0},
                "efforts": {"_1": 0.0, "_2": 0.0},
                "timestamp": 1709123456.789,
                "source_subtype": "openvla",
@@ -2410,7 +2765,8 @@ class CyberwaveMQTTClient:
             joint_positions: Dict of joint names to positions (e.g., {"_1": 0.5, "_2": 0.3})
             source_type: SOURCE_TYPE_EDGE (default), SOURCE_TYPE_TELE, SOURCE_TYPE_EDIT, etc.
             velocities: Optional dict of joint names to velocities (triggers aggregated format)
-            efforts: Optional dict of joint names to efforts (triggers aggregated format)
+            efforts: Optional dict of joint names to efforts, N·m or N (triggers
+                aggregated format)
             timestamp: Optional timestamp in seconds (triggers aggregated format)
             source_subtype: Optional subtype (e.g., "openvla" for inference workloads)
             workload_uuid: Optional UUID of the workload generating this update
@@ -2425,13 +2781,19 @@ class CyberwaveMQTTClient:
                 the plant alongside measured state, in the same joint units. These
                 are recording evidence, never a new command or measured position.
                 Omit unsupported joints; do not substitute velocity/effort controls.
+            accelerations: Optional dict of joint names to accelerations, rad/s²
+                or m/s² (triggers aggregated format). Its own channel: never
+                derive it from efforts, and omit it when the source does not
+                measure or command acceleration.
         """
         effective_source_type = self._get_effective_source_type(source_type)
 
         if applied_position_targets is not None and as_targets:
             raise ValueError("applied_position_targets belong to measured-state updates")
 
-        if not joint_positions and not (as_targets and (velocities or efforts)):
+        if not joint_positions and not (
+            as_targets and (velocities or accelerations or efforts)
+        ):
             raise ValueError("joint_positions cannot be empty")
 
         if not as_targets:
@@ -2445,6 +2807,7 @@ class CyberwaveMQTTClient:
         use_aggregated = (
             as_targets
             or velocities is not None
+            or accelerations is not None
             or efforts is not None
             or timestamp is not None
             or source_subtype is not None
@@ -2458,6 +2821,9 @@ class CyberwaveMQTTClient:
         if use_aggregated:
             positions_key = "target_positions" if as_targets else "positions"
             velocities_key = "target_velocities" if as_targets else "velocities"
+            accelerations_key = (
+                "target_accelerations" if as_targets else "accelerations"
+            )
             efforts_key = "target_efforts" if as_targets else "efforts"
             message: Dict[str, Any] = {
                 "source_type": effective_source_type,
@@ -2467,6 +2833,8 @@ class CyberwaveMQTTClient:
                 message[positions_key] = joint_positions
             if velocities:
                 message[velocities_key] = velocities
+            if accelerations:
+                message[accelerations_key] = accelerations
             if efforts:
                 message[efforts_key] = efforts
             if source_subtype:
@@ -2516,6 +2884,7 @@ class CyberwaveMQTTClient:
         workload_uuid: Optional[str] = None,
         session_id: Optional[str] = None,
         camera_frame_counters: Optional[Dict[str, Dict[str, Any]]] = None,
+        accelerations: Optional[Dict[str, float]] = None,
     ):
         """
         Alias for update_joints_state with aggregated format.
@@ -2538,6 +2907,7 @@ class CyberwaveMQTTClient:
             workload_uuid=workload_uuid,
             session_id=session_id,
             camera_frame_counters=camera_frame_counters,
+            accelerations=accelerations,
         )
 
     def publish_initial_observation(

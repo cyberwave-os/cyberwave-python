@@ -28,9 +28,10 @@ class DriverPinUpdateSchema(BaseModel):
     Fields left out are not changed; ``null`` clears the target or a setting.
     """ # noqa: E501
     target_version: Optional[StrictStr] = None
+    flavor: Optional[StrictStr] = None
     deploy_policy: Optional[StrictStr] = None
     auto_update_scope: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["target_version", "deploy_policy", "auto_update_scope"]
+    __properties: ClassVar[List[str]] = ["target_version", "flavor", "deploy_policy", "auto_update_scope"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -76,6 +77,11 @@ class DriverPinUpdateSchema(BaseModel):
         if self.target_version is None and "target_version" in self.model_fields_set:
             _dict['target_version'] = None
 
+        # set to None if flavor (nullable) is None
+        # and model_fields_set contains the field
+        if self.flavor is None and "flavor" in self.model_fields_set:
+            _dict['flavor'] = None
+
         # set to None if deploy_policy (nullable) is None
         # and model_fields_set contains the field
         if self.deploy_policy is None and "deploy_policy" in self.model_fields_set:
@@ -99,6 +105,7 @@ class DriverPinUpdateSchema(BaseModel):
 
         _obj = cls.model_validate({
             "target_version": obj.get("target_version"),
+            "flavor": obj.get("flavor"),
             "deploy_policy": obj.get("deploy_policy"),
             "auto_update_scope": obj.get("auto_update_scope")
         })

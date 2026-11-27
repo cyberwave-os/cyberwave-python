@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyberwave.rest.models.controller_ref_schema import ControllerRefSchema
 from typing import Optional, Set
@@ -43,7 +43,8 @@ class AgentControlAction(BaseModel):
     controller_policy_uuid: Optional[StrictStr] = None
     asset_uuid: Optional[StrictStr] = None
     trajectory_preview: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["action_id", "display_label", "payload_summary", "kind", "dispatchability", "execution_channel", "transport", "target_twin_uuid", "payload", "requires_confirmation", "controller_ref", "policy_ref", "controller_policy_uuid", "asset_uuid", "trajectory_preview"]
+    stage: Optional[StrictInt] = None
+    __properties: ClassVar[List[str]] = ["action_id", "display_label", "payload_summary", "kind", "dispatchability", "execution_channel", "transport", "target_twin_uuid", "payload", "requires_confirmation", "controller_ref", "policy_ref", "controller_policy_uuid", "asset_uuid", "trajectory_preview", "stage"]
 
     @field_validator('kind')
     def kind_validate_enum(cls, value):
@@ -147,6 +148,11 @@ class AgentControlAction(BaseModel):
         if self.trajectory_preview is None and "trajectory_preview" in self.model_fields_set:
             _dict['trajectory_preview'] = None
 
+        # set to None if stage (nullable) is None
+        # and model_fields_set contains the field
+        if self.stage is None and "stage" in self.model_fields_set:
+            _dict['stage'] = None
+
         return _dict
 
     @classmethod
@@ -173,7 +179,8 @@ class AgentControlAction(BaseModel):
             "policy_ref": ControllerRefSchema.from_dict(obj["policy_ref"]) if obj.get("policy_ref") is not None else None,
             "controller_policy_uuid": obj.get("controller_policy_uuid"),
             "asset_uuid": obj.get("asset_uuid"),
-            "trajectory_preview": obj.get("trajectory_preview")
+            "trajectory_preview": obj.get("trajectory_preview"),
+            "stage": obj.get("stage")
         })
         return _obj
 

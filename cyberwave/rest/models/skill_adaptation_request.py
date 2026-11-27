@@ -17,9 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
-from typing_extensions import Annotated
+from pydantic import BaseModel, ConfigDict, StrictBool
+from typing import Any, ClassVar, Dict, List, Optional
 from uuid import UUID
 from typing import Optional, Set
 from typing_extensions import Self
@@ -31,10 +30,7 @@ class SkillAdaptationRequest(BaseModel):
     """ # noqa: E501
     twin_uuid: UUID
     execute: Optional[StrictBool] = False
-    place_object: Optional[StrictStr] = None
-    place_target: Optional[StrictStr] = None
-    place_at: Optional[Annotated[List[Union[StrictFloat, StrictInt]], Field(min_length=2, max_length=2)]] = None
-    __properties: ClassVar[List[str]] = ["twin_uuid", "execute", "place_object", "place_target", "place_at"]
+    __properties: ClassVar[List[str]] = ["twin_uuid", "execute"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -75,21 +71,6 @@ class SkillAdaptationRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if place_object (nullable) is None
-        # and model_fields_set contains the field
-        if self.place_object is None and "place_object" in self.model_fields_set:
-            _dict['place_object'] = None
-
-        # set to None if place_target (nullable) is None
-        # and model_fields_set contains the field
-        if self.place_target is None and "place_target" in self.model_fields_set:
-            _dict['place_target'] = None
-
-        # set to None if place_at (nullable) is None
-        # and model_fields_set contains the field
-        if self.place_at is None and "place_at" in self.model_fields_set:
-            _dict['place_at'] = None
-
         return _dict
 
     @classmethod
@@ -103,10 +84,7 @@ class SkillAdaptationRequest(BaseModel):
 
         _obj = cls.model_validate({
             "twin_uuid": obj.get("twin_uuid"),
-            "execute": obj.get("execute") if obj.get("execute") is not None else False,
-            "place_object": obj.get("place_object"),
-            "place_target": obj.get("place_target"),
-            "place_at": obj.get("place_at")
+            "execute": obj.get("execute") if obj.get("execute") is not None else False
         })
         return _obj
 

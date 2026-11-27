@@ -34,7 +34,9 @@ class ConfigurationFeedbackSchema(BaseModel):
     message: StrictStr
     path: StrictStr
     fallback: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["code", "severity", "scope", "title", "message", "path", "fallback"]
+    resolution: Optional[StrictStr] = 'edit'
+    missing: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["code", "severity", "scope", "title", "message", "path", "fallback", "resolution", "missing"]
 
     @field_validator('severity')
     def severity_validate_enum(cls, value):
@@ -48,6 +50,16 @@ class ConfigurationFeedbackSchema(BaseModel):
         """Validates the enum"""
         if value not in set(['asset', 'instance']):
             raise ValueError("must be one of enum values ('asset', 'instance')")
+        return value
+
+    @field_validator('resolution')
+    def resolution_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['edit', 'attest', 'runtime']):
+            raise ValueError("must be one of enum values ('edit', 'attest', 'runtime')")
         return value
 
     model_config = ConfigDict(
@@ -112,7 +124,9 @@ class ConfigurationFeedbackSchema(BaseModel):
             "title": obj.get("title"),
             "message": obj.get("message"),
             "path": obj.get("path"),
-            "fallback": obj.get("fallback")
+            "fallback": obj.get("fallback"),
+            "resolution": obj.get("resolution") if obj.get("resolution") is not None else 'edit',
+            "missing": obj.get("missing")
         })
         return _obj
 

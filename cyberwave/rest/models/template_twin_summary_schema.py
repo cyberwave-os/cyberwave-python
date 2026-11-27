@@ -31,7 +31,7 @@ class TemplateTwinSummarySchema(BaseModel):
     position_x: Optional[Union[StrictFloat, StrictInt]] = None
     position_y: Optional[Union[StrictFloat, StrictInt]] = None
     name: StrictStr
-    asset_name: StrictStr
+    asset_name: Optional[StrictStr] = None
     asset_uuid: Optional[StrictStr] = None
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     purchase_price: Optional[Union[StrictFloat, StrictInt]] = None
@@ -92,6 +92,11 @@ class TemplateTwinSummarySchema(BaseModel):
         # and model_fields_set contains the field
         if self.position_y is None and "position_y" in self.model_fields_set:
             _dict['position_y'] = None
+
+        # set to None if asset_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.asset_name is None and "asset_name" in self.model_fields_set:
+            _dict['asset_name'] = None
 
         # set to None if asset_uuid (nullable) is None
         # and model_fields_set contains the field

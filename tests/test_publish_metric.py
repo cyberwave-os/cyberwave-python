@@ -1,8 +1,8 @@
-"""``publish_metric`` / ``publish_metrics``: structured float/int/bool metrics.
+"""``publish_metric`` / ``publish_metrics``: structured float/int/bool/str metrics.
 
 The backend reads ``twin/{uuid}/metrics/a/b`` as channel ``a.b`` -- the
 channel the bag key ``"a.b"`` names -- and drops any sample that is not one
-finite float, int or bool. So these pin what the backend cannot fix up if the
+finite float, int, bool or short string. So these pin what the backend cannot fix up if the
 SDK gets it wrong: the topic path, the one-``value`` body, and refusing a
 sample the backend would drop before it is ever sent.
 """
@@ -20,7 +20,11 @@ import paho.mqtt.client as mqtt
 import pytest
 
 from cyberwave.config import CyberwaveConfig
-from cyberwave.mqtt import MAX_METRIC_CHANNEL_LENGTH, CyberwaveMQTTClient
+from cyberwave.mqtt import (
+    MAX_METRIC_CHANNEL_LENGTH,
+    MAX_METRIC_STRING_LENGTH,
+    CyberwaveMQTTClient,
+)
 from cyberwave.mqtt_client import CyberwaveMQTTClient as WrapperMQTTClient
 
 TWIN = "8f1c2d3e-0000-4000-8000-000000000001"
@@ -113,7 +117,21 @@ def test_a_channel_that_names_no_topic_is_refused_before_publishing(
 # -- publish_metric: the sample ---------------------------------------------------
 
 
-@pytest.mark.parametrize("value", [12.5, -3, 0, True, False, 2**63 - 1, -(2**63)])
+@pytest.mark.parametrize(
+    "value",
+    [
+        12.5,
+        -3,
+        0,
+        True,
+        False,
+        2**63 - 1,
+        -(2**63),
+        "operational",
+        "",
+        "k" * MAX_METRIC_STRING_LENGTH,
+    ],
+)
 def test_a_scalar_is_the_one_value_beside_the_envelope(
     mqtt_client: MagicMock, value: Any
 ) -> None:
@@ -134,7 +152,7 @@ def test_a_scalar_is_the_one_value_beside_the_envelope(
 @pytest.mark.parametrize(
     ("value", "error"),
     [
-        ("12.5", TypeError),
+        ("k" * (MAX_METRIC_STRING_LENGTH + 1), ValueError),
         (None, TypeError),
         ([1, 2], TypeError),
         ({"force_n": 1.0}, TypeError),
@@ -285,7 +303,7 @@ def test_the_bag_nests_its_samples_under_metrics(mqtt_client: MagicMock) -> None
     [
         {},
         {"": 1},
-        {"n": "1"},
+        {"n": "k" * (MAX_METRIC_STRING_LENGTH + 1)},
         {"n": {"force_n": 1.0}},
         {"n": math.nan},
         # Named as ``publish_metric`` names a channel, or not at all.

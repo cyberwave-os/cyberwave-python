@@ -560,8 +560,20 @@ class TestIntegrationRegressions:
             )
 
             # Use mock=True so the server always returns a deterministic JPEG
-            # without needing a real camera stream to be active.
-            frame_bytes = client.twins.get_latest_frame(twin_data.uuid, mock=True)
+            # without needing a real camera stream to be active. The GET may
+            # reach a read replica that has not replayed the create yet; until
+            # it does, the backend answers 404.
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    frame_bytes = client.twins.get_latest_frame(
+                        twin_data.uuid, mock=True
+                    )
+                    break
+                except CyberwaveAPIError as exc:
+                    if exc.status_code != 404 or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.25)
 
             assert isinstance(
                 frame_bytes, bytes

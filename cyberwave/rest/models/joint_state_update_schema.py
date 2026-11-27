@@ -30,8 +30,9 @@ class JointStateUpdateSchema(BaseModel):
     position: Optional[Union[StrictFloat, StrictInt]] = None
     velocity: Optional[Union[StrictFloat, StrictInt]] = None
     effort: Optional[Union[StrictFloat, StrictInt]] = None
+    acceleration: Optional[Union[StrictFloat, StrictInt]] = None
     as_home_position: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["position", "velocity", "effort", "as_home_position"]
+    __properties: ClassVar[List[str]] = ["position", "velocity", "effort", "acceleration", "as_home_position"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -87,6 +88,11 @@ class JointStateUpdateSchema(BaseModel):
         if self.effort is None and "effort" in self.model_fields_set:
             _dict['effort'] = None
 
+        # set to None if acceleration (nullable) is None
+        # and model_fields_set contains the field
+        if self.acceleration is None and "acceleration" in self.model_fields_set:
+            _dict['acceleration'] = None
+
         return _dict
 
     @classmethod
@@ -102,6 +108,7 @@ class JointStateUpdateSchema(BaseModel):
             "position": obj.get("position"),
             "velocity": obj.get("velocity"),
             "effort": obj.get("effort"),
+            "acceleration": obj.get("acceleration"),
             "as_home_position": obj.get("as_home_position") if obj.get("as_home_position") is not None else False
         })
         return _obj

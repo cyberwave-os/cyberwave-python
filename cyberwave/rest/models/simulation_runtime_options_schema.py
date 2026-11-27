@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class SimulationRuntimeOptionsSchema(BaseModel):
     """
-    Runtime options for non-playground simulation backends.  ``device`` is kept for backward compatibility; when present it sets both physics and controller device.  The explicit ``physics_device`` and ``controller_device`` fields take precedence over the legacy ``device``.
+    Runtime options for non-playground simulation backends.  ``device`` is the legacy name of ``physics_device``; the explicit field takes precedence. ``interface`` (other than ``\"basic\"``), ``num_envs`` (other than 1), ``task_id``, ``checkpoint_uuid`` and ``controller_device`` configured the retired in-plant mjlab runner. They stay declared so a start that sends them is refused with ``simulation_parameter_unsupported`` instead of being silently dropped (see ``UNSUPPORTED_RUNTIME_OPTIONS``).
     """ # noqa: E501
     interface: Optional[StrictStr] = None
     device: Optional[StrictStr] = None

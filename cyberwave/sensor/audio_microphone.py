@@ -40,7 +40,7 @@ from ._reconnect import (
     signaling_ready,
 )
 from .answer_subscription import answer_topics, wait_for_subscriptions
-from .ice import DEFAULT_TURN_SERVERS, effective_ice_servers
+from .ice import complete_ice_lite_answer, DEFAULT_TURN_SERVERS, effective_ice_servers
 from . import peer_close
 from .peer_close import close_peer_connection
 
@@ -513,7 +513,9 @@ class BaseAudioStreamer:
             else self._answer_data
         )
         await self.pc.setRemoteDescription(
-            RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
+            RTCSessionDescription(
+                sdp=complete_ice_lite_answer(answer["sdp"]), type=answer["type"]
+            )
         )
 
     def _subscribe_to_answer(self) -> None:

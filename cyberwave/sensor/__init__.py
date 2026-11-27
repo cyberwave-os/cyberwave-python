@@ -81,6 +81,10 @@ __all__ = [
     "RtpPacket",
     "RtpH264Packetizer",
     "AccessUnit",
+    # Pre-encoded H.264 from a GStreamer pipeline (``cyberwave[gstreamer]``)
+    "GStreamerH264CameraStreamer",
+    "GstH264Source",
+    "h264_source_for_url",
     # RealSense implementations
     "RealSenseVideoTrack",
     "RealSenseStreamer",
@@ -175,6 +179,9 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "H264PacketVideoTrack": (".camera_h264", "H264PacketVideoTrack"),
     "H264PacketCameraStreamer": (".camera_h264", "H264PacketCameraStreamer"),
     "RtpH264CameraStreamer": (".camera_h264", "RtpH264CameraStreamer"),
+    "GStreamerH264CameraStreamer": (".camera_gstreamer", "GStreamerH264CameraStreamer"),
+    "GstH264Source": (".camera_gstreamer", "GstH264Source"),
+    "h264_source_for_url": (".gst_sources", "h264_source_for_url"),
     "UdpRtpReceiver": (".rtp_h264", "UdpRtpReceiver"),
     "H264Depayloader": (".rtp_h264", "H264Depayloader"),
     "RtpPacket": (".rtp_h264", "RtpPacket"),

@@ -32,7 +32,9 @@ from ._reconnect import (
 )
 from .answer_subscription import answer_topics, wait_for_subscriptions
 from .hw_encoder import apply_h264_hw_patch
-from .ice import DEFAULT_TURN_SERVERS, effective_ice_servers
+from .ice import DEFAULT_TURN_SERVERS, complete_ice_lite_answer, effective_ice_servers
+from .ice_consent import ConsentWatch, apply_ice_consent_patch, watch_consent_expiry
+from .loop_lag import EventLoopLagProbe
 from .peer_close import close_peer_connection
 
 if TYPE_CHECKING:
@@ -405,6 +407,10 @@ class BaseVideoStreamer(abc.ABC):
         self._health_check: Optional[Any] = None
         self._health_monitor_task: Optional[asyncio.Task] = None
         self._last_frame_count = 0
+        # Spontaneous-close diagnostics: ICE consent expiry on the current
+        # peer connection, and how late the event loop wakes.
+        self._consent_watch: Optional[ConsentWatch] = None
+        self._loop_lag_probe: Optional[EventLoopLagProbe] = None
         self._bad_connection_checks = 0
 
     @abc.abstractmethod
@@ -554,6 +560,8 @@ class BaseVideoStreamer(abc.ABC):
         except Exception:
             logger.exception("H264 hardware encoder setup failed; using aiortc default")
             self._video_encoder_name = None
+        # One lost STUN consent answer must not close the stream (see ice_consent).
+        apply_ice_consent_patch()
 
         self._subscribe_to_answer()
         await self._wait_for_answer_subscription()
@@ -585,6 +593,20 @@ class BaseVideoStreamer(abc.ABC):
 
         if self.enable_health_check:
             self._start_health_check()
+        self._start_loop_lag_probe()
+
+    def _stream_label(self) -> str:
+        """Names this stream in diagnostics: twin and camera."""
+        return f"twin {self.twin_uuid} camera {self.camera_name or 'default'}"
+
+    def _start_loop_lag_probe(self) -> None:
+        if self._loop_lag_probe is None:
+            self._loop_lag_probe = EventLoopLagProbe(self._stream_label())
+        self._loop_lag_probe.start()
+
+    async def _stop_loop_lag_probe(self) -> None:
+        if self._loop_lag_probe is not None:
+            await self._loop_lag_probe.stop()
 
     async def stop(self):
         """Stop streaming and cleanup resources.
@@ -605,6 +627,7 @@ class BaseVideoStreamer(abc.ABC):
             finally:
                 self._sync_frame_task = None
         self._stop_health_check()
+        await self._stop_loop_lag_probe()
 
         if self.pc:
             try:
@@ -738,6 +761,7 @@ class BaseVideoStreamer(abc.ABC):
 
         self._setup_pc_handlers()
         self.sender = self.pc.addTrack(self.streamer)
+        self._consent_watch = watch_consent_expiry(self.pc, self._stream_label())
 
     def _setup_pc_handlers(self):
         """Set up peer connection event handlers."""
@@ -841,7 +865,9 @@ class BaseVideoStreamer(abc.ABC):
             return
 
         await self.pc.setRemoteDescription(
-            RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
+            RTCSessionDescription(
+                sdp=complete_ice_lite_answer(answer["sdp"]), type=answer["type"]
+            )
         )
 
     def _filter_sdp(self, sdp: str) -> str:
@@ -1179,10 +1205,15 @@ class BaseVideoStreamer(abc.ABC):
                 )
                 return False
 
+            consent = (
+                self._consent_watch.describe_close()
+                if self._consent_watch is not None
+                else "ICE consent expiry not tracked"
+            )
             logger.warning(
                 f"WebRTC connection lost after {self._bad_connection_checks} consecutive checks "
                 f"(connectionState={connection_state}, "
-                f"iceConnectionState={ice_connection_state})"
+                f"iceConnectionState={ice_connection_state}; {consent})"
             )
             return True
 
@@ -1261,6 +1292,7 @@ class BaseVideoStreamer(abc.ABC):
             except asyncio.CancelledError:
                 pass
         self._stop_health_check()
+        await self._stop_loop_lag_probe()
 
         if self.pc is not None:
             try:

@@ -22,7 +22,7 @@ from aiortc import (
 )
 
 from ..exceptions import NoOngoingVideoStreamAvailable
-from ..sensor.ice import effective_ice_servers
+from ..sensor.ice import complete_ice_lite_answer, effective_ice_servers
 from ..sensor import peer_close
 from ..sensor.peer_close import close_peer_connection
 
@@ -224,7 +224,7 @@ class IncomingVideoStream:
             )
         logger.info("Video consumer: answer received, setting remote description")
         await self._pc.setRemoteDescription(
-            RTCSessionDescription(sdp=data, type="answer")
+            RTCSessionDescription(sdp=complete_ice_lite_answer(data), type="answer")
         )
         # Belt-and-suspenders: the "track" event is the primary path, but for an
         # offerer with a recvonly transceiver we also start decoding directly

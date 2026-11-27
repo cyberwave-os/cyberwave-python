@@ -105,8 +105,10 @@ class LoadedModel:
                 warning is logged. ``"botsort"`` compensates camera motion only
                 when *input_data* is a 3-channel image array.
             stream: The camera the frame came from (e.g. a sensor name).
-                Tracker state is kept per ``(twin_uuid, stream)``, so cameras
-                sharing this model never share ids. Defaults to ``"default"``.
+                Published as the detections' ``sensor``, so a driver with
+                several cameras draws them on that camera. Tracker state is
+                kept per ``(twin_uuid, stream)``, so cameras sharing this model
+                never share ids. Defaults to ``"default"`` when tracking.
             track_scope: Keeps separate tracker state for callers that share
                 this model and stream, such as two workflow nodes; it is not
                 published.
@@ -154,7 +156,8 @@ class LoadedModel:
                     result,
                     input_data,
                     twin_uuid=twin_uuid,
-                    sensor=(stream or "default") if tracker is not None else None,
+                    # A named stream routes the boxes to that camera's overlay.
+                    sensor=stream or ("default" if tracker is not None else None),
                 )
             elif tracker is not None:
                 self._warn_once(
@@ -332,8 +335,8 @@ class LoadedModel:
     ) -> None:
         """Publish detection results via Zenoh so the driver can draw overlays.
 
-        With tracking on (*sensor* set), each entry carries its ``track_id``
-        when confirmed, and the payload names the ``model`` and ``sensor``.
+        With *sensor* set, the payload names the ``model`` and ``sensor``;
+        with tracking on, each entry also carries its ``track_id`` when confirmed.
         """
         if self._data_bus is None:
             return

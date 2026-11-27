@@ -283,8 +283,13 @@ class TwinTransportMixin:
         mode = str(data.get("mode", "absolute"))
         timestamp = data.get("timestamp")
         positions = data.get("positions")
-        velocities = data.get("velocities")
-        efforts = data.get("efforts")
+        # Optional rate channels, each on its own wire key. Empty maps are dropped
+        # rather than published, so an unset channel is never sent as zeros.
+        rates = {
+            key: data[key]
+            for key in ("velocities", "accelerations", "efforts")
+            if isinstance(data.get(key), dict) and data[key]
+        }
 
         if mode != "absolute":
             message: dict[str, Any] = {
@@ -293,10 +298,7 @@ class TwinTransportMixin:
             }
             if isinstance(positions, dict) and positions:
                 message["positions"] = positions
-            if isinstance(velocities, dict) and velocities:
-                message["velocities"] = velocities
-            if isinstance(efforts, dict) and efforts:
-                message["efforts"] = efforts
+            message.update(rates)
             if timestamp is not None:
                 message["timestamp"] = timestamp
             return message
@@ -304,20 +306,13 @@ class TwinTransportMixin:
         if not isinstance(positions, dict) or not positions:
             raise ValueError("joint_update requires a non-empty positions map")
 
-        if (
-            timestamp is not None
-            or (isinstance(velocities, dict) and velocities)
-            or (isinstance(efforts, dict) and efforts)
-        ):
+        if timestamp is not None or rates:
             message = {
                 "source_type": source_type,
                 "positions": positions,
                 "timestamp": timestamp if timestamp is not None else time.time(),
             }
-            if isinstance(velocities, dict) and velocities:
-                message["velocities"] = velocities
-            if isinstance(efforts, dict) and efforts:
-                message["efforts"] = efforts
+            message.update(rates)
             return message
 
         return {"source_type": source_type, **positions}

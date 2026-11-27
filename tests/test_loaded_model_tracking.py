@@ -236,3 +236,18 @@ def test_botsort_tracks_grayscale_frames(frame: Any) -> None:
     results = [model.predict(frame, tracker="botsort", stream="ir") for _ in range(4)]
     last = [d.track_id for d in results[-1]]
     assert None not in last and last[0] != last[1]
+
+
+def test_a_named_stream_names_the_sensor_without_tracking() -> None:
+    """A driver with several cameras draws the boxes on the camera the payload names."""
+    data_bus = MagicMock()
+    model = _model(data_bus)
+    model._runtime.predict.return_value = _detections(0)
+
+    model.predict(FRAME, stream="wrist_camera")
+    payload = json.loads(data_bus.publish_raw.call_args.args[1].decode())
+    assert payload["sensor"] == "wrist_camera"
+
+    model.predict(FRAME)
+    payload = json.loads(data_bus.publish_raw.call_args.args[1].decode())
+    assert "sensor" not in payload, "an unnamed, untracked stream stays unrouted"

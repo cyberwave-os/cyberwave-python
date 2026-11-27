@@ -6,10 +6,11 @@ USB) so a new driver starts from a working bus instead of hand-rolling read loop
 the device-specific *parsing* stays in the driver's callbacks.
 """
 
-from .zenoh_publisher import ZenohPublisherMixin
+from .zenoh_publisher import ZenohFramePublisher, ZenohPublisherMixin
 from .zenoh_subscriber import CommandContext, ZenohSubscriberMixin
 
 __all__ = [
+    "ZenohFramePublisher",
     "ZenohPublisherMixin",
     "ZenohSubscriberMixin",
     "CommandContext",

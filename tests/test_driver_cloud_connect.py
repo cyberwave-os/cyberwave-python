@@ -11,7 +11,7 @@ import pytest
 
 import cyberwave.config as config_module
 from cyberwave.config import CyberwaveConfig
-from cyberwave.constants import SOURCE_TYPE_EDGE
+from cyberwave.constants import SOURCE_TYPE_EDGE, SOURCE_TYPE_SIM
 from cyberwave.driver.base import BaseDriver
 
 
@@ -94,9 +94,10 @@ def test_registry_id_returns_class_constant() -> None:
     assert _MinimalDriver().registry_id == "vendor/robot"
 
 
-def test_connect_mqtt_async_uses_cyberwave_with_edge_source_type(
+def test_connect_mqtt_async_lets_the_client_resolve_source_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """No ``source_type=`` kwarg: the client's own precedence decides it."""
     monkeypatch.setenv("CYBERWAVE_API_KEY", "test-api-key")
     driver = _MinimalDriver()
 
@@ -107,8 +108,42 @@ def test_connect_mqtt_async_uses_cyberwave_with_edge_source_type(
     with patch("cyberwave.Cyberwave", return_value=mock_client) as mock_cw:
         result = asyncio.run(driver._connect_mqtt_async())
 
-    mock_cw.assert_called_once_with(source_type=SOURCE_TYPE_EDGE)
+    mock_cw.assert_called_once_with()
     assert result is mock_client
+
+
+@pytest.mark.parametrize(
+    ("env_source_type", "expected"),
+    [(None, SOURCE_TYPE_EDGE), (SOURCE_TYPE_SIM, SOURCE_TYPE_SIM)],
+)
+def test_connect_mqtt_async_source_type_follows_env(
+    monkeypatch: pytest.MonkeyPatch, env_source_type: str | None, expected: str
+) -> None:
+    """A simulated driver (CYBERWAVE_SOURCE_TYPE=sim) must not publish as ``edge``.
+
+    Uses the real client so the precedence under test is the client's, not a
+    mock's; only the MQTT connection is faked.
+    """
+    import cyberwave
+
+    monkeypatch.setenv("CYBERWAVE_API_KEY", "test-api-key")
+    monkeypatch.setenv("CYBERWAVE_BASE_URL", "http://localhost:8000")
+    if env_source_type is None:
+        monkeypatch.delenv("CYBERWAVE_SOURCE_TYPE", raising=False)
+    else:
+        monkeypatch.setenv("CYBERWAVE_SOURCE_TYPE", env_source_type)
+    driver = _MinimalDriver()
+    real_cyberwave = cyberwave.Cyberwave
+
+    def _client_with_fake_mqtt(*args, **kwargs):
+        client = real_cyberwave(*args, **kwargs)
+        client._mqtt_client = MagicMock(connected=True)
+        return client
+
+    with patch("cyberwave.Cyberwave", side_effect=_client_with_fake_mqtt):
+        result = asyncio.run(driver._connect_mqtt_async())
+
+    assert result.config.source_type == expected
 
 
 def test_connect_mqtt_async_raises_system_exit_after_retries(

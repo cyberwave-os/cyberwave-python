@@ -46,6 +46,70 @@ def test_normalize_imu_payload_aliases() -> None:
     assert out["accel"]["z"] == pytest.approx(9.81)
 
 
+def test_normalize_imu_payload_contract_names_win_over_aliases() -> None:
+    out = normalize_imu_payload(
+        {
+            "angular_velocity": {"x": 1.0, "y": 0.0, "z": 0.0},
+            "gyro": {"x": 9.0, "y": 9.0, "z": 9.0},
+            "accel": {"x": 0.0, "y": 0.0, "z": 9.81},
+        }
+    )
+    assert out["gyro"] == {"x": 1.0, "y": 0.0, "z": 0.0}
+    assert out["accel"]["z"] == pytest.approx(9.81)
+    assert "angular_velocity" not in out
+    assert "linear_acceleration" not in out
+
+
+def test_normalize_imu_payload_malformed_contract_name_shadows_the_alias() -> None:
+    # Vector and the frontend read only the contract name when it is present,
+    # so a usable alias beside an unusable one is not shown either.
+    out = normalize_imu_payload(
+        {
+            "angular_velocity": [0.1, 0.2],
+            "gyro": {"x": 9.0, "y": 9.0, "z": 9.0},
+            "accel": {"x": 0.0, "y": 0.0, "z": 9.81},
+        }
+    )
+    assert "gyro" not in out
+    assert out["accel"]["z"] == pytest.approx(9.81)
+
+
+def test_normalize_imu_payload_null_contract_name_falls_back_to_the_alias() -> None:
+    # Vector and the frontend treat a null contract name as absent.
+    out = normalize_imu_payload(
+        {"angular_velocity": None, "gyro": {"x": 0.1, "y": 0.2, "z": 0.3}}
+    )
+    assert out["gyro"]["x"] == pytest.approx(0.1)
+    assert "angular_velocity" not in out
+
+
+def test_normalize_imu_payload_reads_arrays_and_orientation() -> None:
+    out = normalize_imu_payload(
+        {
+            "angular_velocity": [0.1, 0.2, 0.3],
+            "linear_acceleration": (0.0, 0.0, 9.81),
+            "orientation": [1.0, 0.0, 0.0, 0.0],
+            "sensor_id": "imu",
+        }
+    )
+    assert out["gyro"] == {"x": 0.1, "y": 0.2, "z": 0.3}
+    assert out["accel"] == {"x": 0.0, "y": 0.0, "z": 9.81}
+    assert out["orientation"] == {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+    assert out["sensor_id"] == "imu"
+
+
+def test_normalize_imu_payload_drops_malformed_vectors() -> None:
+    out = normalize_imu_payload(
+        {
+            "angular_velocity": [0.1, 0.2],
+            "gyro": "fast",
+            "orientation": [0.0, 0.0, 1.0],
+        }
+    )
+    assert "gyro" not in out
+    assert "orientation" not in out
+
+
 def test_imu_get_returns_latest_sample() -> None:
     twin = _twin_with_imu(
         catalog={

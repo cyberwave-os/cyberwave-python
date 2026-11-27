@@ -57,13 +57,14 @@ class AssetSchema(BaseModel):
     build_status: Optional[StrictStr] = None
     universal_schema_source: Optional[StrictStr] = None
     universal_schema: Optional[Dict[str, Any]] = None
+    is_usd_sourced: Optional[StrictBool] = False
     fixed_base: Optional[StrictBool] = False
     supported_simulation_backends: Optional[List[StrictStr]] = None
     purchase_price: Optional[Union[StrictFloat, StrictInt]] = None
     monthly_price: Optional[Union[StrictFloat, StrictInt]] = None
     is_purchasable: Optional[StrictBool] = True
     is_rentable: Optional[StrictBool] = True
-    __properties: ClassVar[List[str]] = ["is_edge_device", "is_kit", "warnings", "uuid", "name", "description", "created_at", "updated_at", "visibility", "origin_environment_uuid", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "configuration_feedback", "thumbnail", "has_universal_schema", "build_status", "universal_schema_source", "universal_schema", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
+    __properties: ClassVar[List[str]] = ["is_edge_device", "is_kit", "warnings", "uuid", "name", "description", "created_at", "updated_at", "visibility", "origin_environment_uuid", "owner_uuid", "registry_id", "registry_id_alias", "slug", "glb_file", "splat_file", "urdf_file", "zip_file", "workspace_uuid", "metadata", "kinematics", "capabilities", "configuration_feedback", "thumbnail", "has_universal_schema", "build_status", "universal_schema_source", "universal_schema", "is_usd_sourced", "fixed_base", "supported_simulation_backends", "purchase_price", "monthly_price", "is_purchasable", "is_rentable"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -261,6 +262,7 @@ class AssetSchema(BaseModel):
             "build_status": obj.get("build_status"),
             "universal_schema_source": obj.get("universal_schema_source"),
             "universal_schema": obj.get("universal_schema"),
+            "is_usd_sourced": obj.get("is_usd_sourced") if obj.get("is_usd_sourced") is not None else False,
             "fixed_base": obj.get("fixed_base") if obj.get("fixed_base") is not None else False,
             "supported_simulation_backends": obj.get("supported_simulation_backends"),
             "purchase_price": obj.get("purchase_price"),

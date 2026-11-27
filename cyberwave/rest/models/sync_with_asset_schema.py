@@ -34,7 +34,9 @@ class SyncWithAssetSchema(BaseModel):
     message: StrictStr
     preserved_home_positions: Optional[StrictInt] = 0
     dropped_home_positions: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["synced_fields", "synced", "preserved", "overwritten", "message", "preserved_home_positions", "dropped_home_positions"]
+    kept_sensors: Optional[List[StrictStr]] = None
+    dropped_sensors: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["synced_fields", "synced", "preserved", "overwritten", "message", "preserved_home_positions", "dropped_home_positions", "kept_sensors", "dropped_sensors"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -93,7 +95,9 @@ class SyncWithAssetSchema(BaseModel):
             "overwritten": obj.get("overwritten"),
             "message": obj.get("message"),
             "preserved_home_positions": obj.get("preserved_home_positions") if obj.get("preserved_home_positions") is not None else 0,
-            "dropped_home_positions": obj.get("dropped_home_positions")
+            "dropped_home_positions": obj.get("dropped_home_positions"),
+            "kept_sensors": obj.get("kept_sensors"),
+            "dropped_sensors": obj.get("dropped_sensors")
         })
         return _obj
 

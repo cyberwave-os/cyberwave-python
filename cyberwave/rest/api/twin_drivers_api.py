@@ -60,7 +60,7 @@ class TwinDriversApi:
     ) -> DriverPinSchema:
         """Activate Twin Driver
 
-        Write the target into the twin's metadata, then wait for a restart or cause one.  ``next_restart``: the edge starts the new images the next time it starts the twin's drivers. ``now``: edge-core is restarted too, which restarts every driver on that edge; it needs write access to the edge. Either way the pin is confirmed later from the driver logs.
+        Write the target into the twin's metadata, then wait for a restart or cause one.  A twin with no edge (simulation only) has nothing to restart: the target is written and the pin is in sync at once, whichever mode is sent.  ``next_restart``: the edge starts the new images the next time it starts the twin's drivers. ``now``: edge-core is restarted too, which restarts every driver on that edge; it needs write access to the edge. Either way the pin is confirmed later from the driver logs.
 
         :param uuid: (required)
         :type uuid: str
@@ -135,7 +135,7 @@ class TwinDriversApi:
     ) -> ApiResponse[DriverPinSchema]:
         """Activate Twin Driver
 
-        Write the target into the twin's metadata, then wait for a restart or cause one.  ``next_restart``: the edge starts the new images the next time it starts the twin's drivers. ``now``: edge-core is restarted too, which restarts every driver on that edge; it needs write access to the edge. Either way the pin is confirmed later from the driver logs.
+        Write the target into the twin's metadata, then wait for a restart or cause one.  A twin with no edge (simulation only) has nothing to restart: the target is written and the pin is in sync at once, whichever mode is sent.  ``next_restart``: the edge starts the new images the next time it starts the twin's drivers. ``now``: edge-core is restarted too, which restarts every driver on that edge; it needs write access to the edge. Either way the pin is confirmed later from the driver logs.
 
         :param uuid: (required)
         :type uuid: str
@@ -210,7 +210,7 @@ class TwinDriversApi:
     ) -> RESTResponseType:
         """Activate Twin Driver
 
-        Write the target into the twin's metadata, then wait for a restart or cause one.  ``next_restart``: the edge starts the new images the next time it starts the twin's drivers. ``now``: edge-core is restarted too, which restarts every driver on that edge; it needs write access to the edge. Either way the pin is confirmed later from the driver logs.
+        Write the target into the twin's metadata, then wait for a restart or cause one.  A twin with no edge (simulation only) has nothing to restart: the target is written and the pin is in sync at once, whichever mode is sent.  ``next_restart``: the edge starts the new images the next time it starts the twin's drivers. ``now``: edge-core is restarted too, which restarts every driver on that edge; it needs write access to the edge. Either way the pin is confirmed later from the driver logs.
 
         :param uuid: (required)
         :type uuid: str

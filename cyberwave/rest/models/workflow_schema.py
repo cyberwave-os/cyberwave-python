@@ -43,6 +43,8 @@ class WorkflowSchema(BaseModel):
     allow_concurrent_executions: Optional[StrictBool] = False
     concurrency_blocked_by_workflow_uuids: Optional[List[StrictStr]] = None
     execution_target: StrictStr
+    execution_engine: Optional[StrictStr] = 'interpreter'
+    cloud_runner_available: Optional[StrictBool] = False
     cyberwave_log: StrictStr
     simulation_backend: Optional[StrictStr] = None
     visibility: StrictStr
@@ -54,9 +56,20 @@ class WorkflowSchema(BaseModel):
     updated_by: Optional[StrictStr] = None
     metadata: Dict[str, Any]
     has_worker_source_override: Optional[StrictBool] = False
+    manual_shortcut: Optional[StrictStr] = None
     nodes: Optional[List[WorkflowNodeSchema]] = None
     connections: Optional[List[WorkflowConnectionSchema]] = None
-    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "cyberwave_log", "simulation_backend", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "nodes", "connections"]
+    __properties: ClassVar[List[str]] = ["uuid", "slug", "name", "description", "is_active", "workspace_uuid", "workspace_name", "environment_uuid", "environment_name", "run_on_edge", "allow_concurrent_executions", "concurrency_blocked_by_workflow_uuids", "execution_target", "execution_engine", "cloud_runner_available", "cyberwave_log", "simulation_backend", "visibility", "tags", "is_template", "created_at", "updated_at", "created_by", "updated_by", "metadata", "has_worker_source_override", "manual_shortcut", "nodes", "connections"]
+
+    @field_validator('execution_engine')
+    def execution_engine_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['interpreter', 'cloud_runner']):
+            raise ValueError("must be one of enum values ('interpreter', 'cloud_runner')")
+        return value
 
     @field_validator('cyberwave_log')
     def cyberwave_log_validate_enum(cls, value):
@@ -148,6 +161,11 @@ class WorkflowSchema(BaseModel):
         if self.updated_by is None and "updated_by" in self.model_fields_set:
             _dict['updated_by'] = None
 
+        # set to None if manual_shortcut (nullable) is None
+        # and model_fields_set contains the field
+        if self.manual_shortcut is None and "manual_shortcut" in self.model_fields_set:
+            _dict['manual_shortcut'] = None
+
         # set to None if nodes (nullable) is None
         # and model_fields_set contains the field
         if self.nodes is None and "nodes" in self.model_fields_set:
@@ -183,6 +201,8 @@ class WorkflowSchema(BaseModel):
             "allow_concurrent_executions": obj.get("allow_concurrent_executions") if obj.get("allow_concurrent_executions") is not None else False,
             "concurrency_blocked_by_workflow_uuids": obj.get("concurrency_blocked_by_workflow_uuids"),
             "execution_target": obj.get("execution_target"),
+            "execution_engine": obj.get("execution_engine") if obj.get("execution_engine") is not None else 'interpreter',
+            "cloud_runner_available": obj.get("cloud_runner_available") if obj.get("cloud_runner_available") is not None else False,
             "cyberwave_log": obj.get("cyberwave_log"),
             "simulation_backend": obj.get("simulation_backend"),
             "visibility": obj.get("visibility"),
@@ -194,6 +214,7 @@ class WorkflowSchema(BaseModel):
             "updated_by": obj.get("updated_by"),
             "metadata": obj.get("metadata"),
             "has_worker_source_override": obj.get("has_worker_source_override") if obj.get("has_worker_source_override") is not None else False,
+            "manual_shortcut": obj.get("manual_shortcut"),
             "nodes": [WorkflowNodeSchema.from_dict(_item) for _item in obj["nodes"]] if obj.get("nodes") is not None else None,
             "connections": [WorkflowConnectionSchema.from_dict(_item) for _item in obj["connections"]] if obj.get("connections") is not None else None
         })

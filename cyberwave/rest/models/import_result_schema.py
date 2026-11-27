@@ -31,7 +31,8 @@ class ImportResultSchema(BaseModel):
     skipped_count: StrictInt
     created_twin_uuids: List[StrictStr]
     skipped_reasons: List[StrictStr]
-    __properties: ClassVar[List[str]] = ["created_count", "skipped_count", "created_twin_uuids", "skipped_reasons"]
+    pose_warnings: List[Dict[str, StrictStr]]
+    __properties: ClassVar[List[str]] = ["created_count", "skipped_count", "created_twin_uuids", "skipped_reasons", "pose_warnings"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -87,7 +88,8 @@ class ImportResultSchema(BaseModel):
             "created_count": obj.get("created_count"),
             "skipped_count": obj.get("skipped_count"),
             "created_twin_uuids": obj.get("created_twin_uuids"),
-            "skipped_reasons": obj.get("skipped_reasons")
+            "skipped_reasons": obj.get("skipped_reasons"),
+            "pose_warnings": obj.get("pose_warnings")
         })
         return _obj
 

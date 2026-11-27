@@ -22,6 +22,7 @@ def _make_manager() -> tuple[TwinManager, MagicMock]:
     api = MagicMock()
     api.api_client.param_serialize.return_value = ("GET", "url", {}, None, [])
     resp = MagicMock()
+    resp.status = 200
     resp.data = b"png-bytes"
     api.api_client.call_api.return_value = resp
     mgr.api = api  # type: ignore[attr-defined]

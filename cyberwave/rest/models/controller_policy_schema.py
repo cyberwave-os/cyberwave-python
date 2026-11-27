@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.skill_setup_schema import SkillSetupSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -45,7 +46,8 @@ class ControllerPolicySchema(BaseModel):
     device: Optional[StrictStr] = None
     category: Optional[StrictStr] = ''
     deprecated: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "command_key_revision", "device", "category", "deprecated"]
+    adapted_for: Optional[SkillSetupSchema] = None
+    __properties: ClassVar[List[str]] = ["uuid", "name", "description", "slug", "controller_type", "metadata", "visibility", "created_at", "updated_at", "created_by", "workspace_uuid", "asset_uuids", "can_write", "command_key_revision", "device", "category", "deprecated", "adapted_for"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -86,6 +88,9 @@ class ControllerPolicySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of adapted_for
+        if self.adapted_for:
+            _dict['adapted_for'] = self.adapted_for.to_dict()
         # set to None if slug (nullable) is None
         # and model_fields_set contains the field
         if self.slug is None and "slug" in self.model_fields_set:
@@ -110,6 +115,11 @@ class ControllerPolicySchema(BaseModel):
         # and model_fields_set contains the field
         if self.device is None and "device" in self.model_fields_set:
             _dict['device'] = None
+
+        # set to None if adapted_for (nullable) is None
+        # and model_fields_set contains the field
+        if self.adapted_for is None and "adapted_for" in self.model_fields_set:
+            _dict['adapted_for'] = None
 
         return _dict
 
@@ -139,7 +149,8 @@ class ControllerPolicySchema(BaseModel):
             "command_key_revision": obj.get("command_key_revision"),
             "device": obj.get("device"),
             "category": obj.get("category") if obj.get("category") is not None else '',
-            "deprecated": obj.get("deprecated") if obj.get("deprecated") is not None else False
+            "deprecated": obj.get("deprecated") if obj.get("deprecated") is not None else False,
+            "adapted_for": SkillSetupSchema.from_dict(obj["adapted_for"]) if obj.get("adapted_for") is not None else None
         })
         return _obj
 

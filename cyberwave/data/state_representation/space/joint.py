@@ -2,12 +2,17 @@
 
 MQTT joint contract (see also the controller / sim handlers):
 
-- Measured-state fields (``positions`` / ``velocities`` / ``efforts``) always
-  describe *observed* joint state. Any ``source_type`` may publish them.
+- Measured-state fields (``positions`` / ``velocities`` / ``accelerations`` /
+  ``efforts``) always describe *observed* joint state. Any ``source_type`` may
+  publish them.
 - Target/command fields (``target_positions`` / ``target_velocities`` /
-  ``target_efforts``) always describe a *desired* setpoint the plant is asked
-  to track (or the setpoint it is currently tracking). They must never be
-  rendered as measured robot state.
+  ``target_accelerations`` / ``target_efforts``) always describe a *desired*
+  setpoint the plant is asked to track (or the setpoint it is currently
+  tracking). They must never be rendered as measured robot state.
+- Every channel is optional. An absent map or joint key means "not measured /
+  not commanded" and is never filled with a default. ``accelerations`` (rad/s²
+  or m/s²) and ``efforts`` (N·m or N) are independent channels; one is never
+  derived from the other.
 
 A single payload may legitimately carry both buckets (e.g. a plant reporting
 both measured ``positions`` and its current ``target_positions``); the parser
@@ -20,11 +25,18 @@ from dataclasses import dataclass, field
 from typing import Mapping
 
 # Measured-state field names (observed joint state).
-MEASURED_JOINT_FIELDS = frozenset({"positions", "velocities", "efforts"})
+MEASURED_JOINT_FIELDS = frozenset(
+    {"positions", "velocities", "accelerations", "efforts"}
+)
 
 # Target/command field names (desired setpoints a plant tracks).
 TARGET_JOINT_FIELDS = frozenset(
-    {"target_positions", "target_velocities", "target_efforts"}
+    {
+        "target_positions",
+        "target_velocities",
+        "target_accelerations",
+        "target_efforts",
+    }
 )
 
 # Metadata keys excluded from flat multi-joint payloads.
@@ -47,10 +59,12 @@ _JOINT_MQTT_METADATA_KEYS = frozenset(
         "mode",
         "update_mode",
         "velocities",
+        "accelerations",
         "efforts",
         "positions",
         "target_positions",
         "target_velocities",
+        "target_accelerations",
         "target_efforts",
         "target_joint_state",
         "joint_name",
@@ -74,9 +88,9 @@ class JointState:
 class ParsedJointMqttUpdate:
     """Normalized joint kinematics from an MQTT ``/update`` payload.
 
-    Measured state (``positions`` / ``velocities`` / ``efforts``) and commanded
-    targets (``target_positions`` / ``target_velocities`` / ``target_efforts``)
-    are kept in separate buckets so a consumer never confuses one for the other.
+    Measured state (``positions`` / ``velocities`` / ``accelerations`` /
+    ``efforts``) and commanded targets (``target_*``) are kept in separate
+    buckets so a consumer never confuses one for the other.
     """
 
     positions: dict[str, float]
@@ -85,15 +99,23 @@ class ParsedJointMqttUpdate:
     target_positions: dict[str, float] = field(default_factory=dict)
     target_velocities: dict[str, float] = field(default_factory=dict)
     target_efforts: dict[str, float] = field(default_factory=dict)
+    # Declared after the original fields so positional construction keeps working.
+    accelerations: dict[str, float] = field(default_factory=dict)
+    target_accelerations: dict[str, float] = field(default_factory=dict)
 
     @property
     def has_measured(self) -> bool:
-        return bool(self.positions or self.velocities or self.efforts)
+        return bool(
+            self.positions or self.velocities or self.accelerations or self.efforts
+        )
 
     @property
     def has_targets(self) -> bool:
         return bool(
-            self.target_positions or self.target_velocities or self.target_efforts
+            self.target_positions
+            or self.target_velocities
+            or self.target_accelerations
+            or self.target_efforts
         )
 
 
@@ -148,18 +170,36 @@ def _single_joint_from_payload(payload: Mapping[str, object]) -> ParsedJointMqtt
         return ParsedJointMqttUpdate(positions={}, velocities={}, efforts={})
 
     velocity = _to_float(joint_state.get("velocity"))
+    acceleration = _to_float(joint_state.get("acceleration"))
     effort = _to_float(joint_state.get("effort"))
     return ParsedJointMqttUpdate(
         positions={name: position},
         velocities={name: velocity} if velocity is not None else {},
         efforts={name: effort} if effort is not None else {},
+        accelerations={name: acceleration} if acceleration is not None else {},
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _Targets:
+    target_positions: dict[str, float]
+    target_velocities: dict[str, float]
+    target_accelerations: dict[str, float]
+    target_efforts: dict[str, float]
+
+    def as_kwargs(self) -> dict[str, dict[str, float]]:
+        return {
+            "target_positions": self.target_positions,
+            "target_velocities": self.target_velocities,
+            "target_accelerations": self.target_accelerations,
+            "target_efforts": self.target_efforts,
+        }
 
 
 def _parse_targets(
     payload: Mapping[str, object],
     controllable_names: frozenset[str] | set[str] | None,
-) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
+) -> _Targets:
     """Parse target/command buckets (``target_*``) from a payload.
 
     Target fields are always aggregated dicts. ``target_joint_state`` (single
@@ -167,6 +207,7 @@ def _parse_targets(
     """
     target_positions = _float_map(payload.get("target_positions"))
     target_velocities = _float_map(payload.get("target_velocities"))
+    target_accelerations = _float_map(payload.get("target_accelerations"))
     target_efforts = _float_map(payload.get("target_efforts"))
 
     joint_name = payload.get("joint_name")
@@ -179,14 +220,20 @@ def _parse_targets(
         velocity = _to_float(target_state.get("velocity"))
         if velocity is not None:
             target_velocities[name] = velocity
+        acceleration = _to_float(target_state.get("acceleration"))
+        if acceleration is not None:
+            target_accelerations[name] = acceleration
         effort = _to_float(target_state.get("effort"))
         if effort is not None:
             target_efforts[name] = effort
 
-    return (
-        _filter_controllable(target_positions, controllable_names),
-        _filter_controllable(target_velocities, controllable_names),
-        _filter_controllable(target_efforts, controllable_names),
+    return _Targets(
+        target_positions=_filter_controllable(target_positions, controllable_names),
+        target_velocities=_filter_controllable(target_velocities, controllable_names),
+        target_accelerations=_filter_controllable(
+            target_accelerations, controllable_names
+        ),
+        target_efforts=_filter_controllable(target_efforts, controllable_names),
     )
 
 
@@ -199,7 +246,8 @@ def parse_joint_mqtt_payload(
 
     Measured-state shapes:
 
-    - Aggregated: ``{"positions": {...}, "velocities": {...}, "efforts": {...}}``
+    - Aggregated: ``{"positions": {...}, "velocities": {...}, "accelerations": {...},
+      "efforts": {...}}``
     - Flat multi-joint: ``{"j1": 0.1, "j2": 0.2, "source_type": "edge", ...}``
     - Single joint: ``{"joint_name": "j1", "joint_state": {"position": ..., ...}}``
 
@@ -211,9 +259,7 @@ def parse_joint_mqtt_payload(
     A payload may contain both measured and target fields; they are routed into
     separate buckets and never merged.
     """
-    target_positions, target_velocities, target_efforts = _parse_targets(
-        payload, controllable_names
-    )
+    targets = _parse_targets(payload, controllable_names)
 
     single = _single_joint_from_payload(payload)
     if single is not None:
@@ -221,23 +267,24 @@ def parse_joint_mqtt_payload(
             positions=_filter_controllable(single.positions, controllable_names),
             velocities=_filter_controllable(single.velocities, controllable_names),
             efforts=_filter_controllable(single.efforts, controllable_names),
-            target_positions=target_positions,
-            target_velocities=target_velocities,
-            target_efforts=target_efforts,
+            accelerations=_filter_controllable(
+                single.accelerations, controllable_names
+            ),
+            **targets.as_kwargs(),
         )
 
     positions_raw = payload.get("positions")
     if isinstance(positions_raw, dict):
         positions = _float_map(positions_raw)
         velocities = _float_map(payload.get("velocities"))
+        accelerations = _float_map(payload.get("accelerations"))
         efforts = _float_map(payload.get("efforts"))
         return ParsedJointMqttUpdate(
             positions=_filter_controllable(positions, controllable_names),
             velocities=_filter_controllable(velocities, controllable_names),
             efforts=_filter_controllable(efforts, controllable_names),
-            target_positions=target_positions,
-            target_velocities=target_velocities,
-            target_efforts=target_efforts,
+            accelerations=_filter_controllable(accelerations, controllable_names),
+            **targets.as_kwargs(),
         )
 
     positions = _flat_positions_from_payload(payload)
@@ -245,9 +292,7 @@ def parse_joint_mqtt_payload(
         positions=_filter_controllable(positions, controllable_names),
         velocities={},
         efforts={},
-        target_positions=target_positions,
-        target_velocities=target_velocities,
-        target_efforts=target_efforts,
+        **targets.as_kwargs(),
     )
 
 

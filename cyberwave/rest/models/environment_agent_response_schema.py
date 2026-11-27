@@ -29,10 +29,11 @@ class EnvironmentAgentResponseSchema(BaseModel):
     """ # noqa: E501
     answer: StrictStr
     assistant_session_id: StrictStr
+    assistant_message_id: Optional[StrictStr] = None
     tool_calls: Optional[List[StrictStr]] = None
     structured_results: Optional[List[Dict[str, Any]]] = None
     scene_changes: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["answer", "assistant_session_id", "tool_calls", "structured_results", "scene_changes"]
+    __properties: ClassVar[List[str]] = ["answer", "assistant_session_id", "assistant_message_id", "tool_calls", "structured_results", "scene_changes"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -73,6 +74,11 @@ class EnvironmentAgentResponseSchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if assistant_message_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.assistant_message_id is None and "assistant_message_id" in self.model_fields_set:
+            _dict['assistant_message_id'] = None
+
         # set to None if scene_changes (nullable) is None
         # and model_fields_set contains the field
         if self.scene_changes is None and "scene_changes" in self.model_fields_set:
@@ -92,6 +98,7 @@ class EnvironmentAgentResponseSchema(BaseModel):
         _obj = cls.model_validate({
             "answer": obj.get("answer"),
             "assistant_session_id": obj.get("assistant_session_id"),
+            "assistant_message_id": obj.get("assistant_message_id"),
             "tool_calls": obj.get("tool_calls"),
             "structured_results": obj.get("structured_results"),
             "scene_changes": obj.get("scene_changes")

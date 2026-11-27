@@ -25,13 +25,14 @@ from pydantic_core import to_jsonable_python
 
 class JointStateSchema(BaseModel):
     """
-    Single-joint state.  ``velocity`` / ``effort`` are optional: ``None`` means \"not measured / not commanded\". An explicit ``0.0`` is a real measurement and preserved.
+    Single-joint state.  ``velocity`` / ``effort`` / ``acceleration`` are optional: ``None`` means \"not measured / not commanded\". An explicit ``0.0`` is a real measurement and preserved. ``acceleration`` is rad/s^2 (revolute/continuous) or m/s^2 (prismatic) and is never derived from ``effort``.
     """ # noqa: E501
     name: StrictStr
     position: Optional[Union[StrictFloat, StrictInt]] = None
     velocity: Optional[Union[StrictFloat, StrictInt]] = None
     effort: Optional[Union[StrictFloat, StrictInt]] = None
-    __properties: ClassVar[List[str]] = ["name", "position", "velocity", "effort"]
+    acceleration: Optional[Union[StrictFloat, StrictInt]] = None
+    __properties: ClassVar[List[str]] = ["name", "position", "velocity", "effort", "acceleration"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -87,6 +88,11 @@ class JointStateSchema(BaseModel):
         if self.effort is None and "effort" in self.model_fields_set:
             _dict['effort'] = None
 
+        # set to None if acceleration (nullable) is None
+        # and model_fields_set contains the field
+        if self.acceleration is None and "acceleration" in self.model_fields_set:
+            _dict['acceleration'] = None
+
         return _dict
 
     @classmethod
@@ -102,7 +108,8 @@ class JointStateSchema(BaseModel):
             "name": obj.get("name"),
             "position": obj.get("position"),
             "velocity": obj.get("velocity"),
-            "effort": obj.get("effort")
+            "effort": obj.get("effort"),
+            "acceleration": obj.get("acceleration")
         })
         return _obj
 

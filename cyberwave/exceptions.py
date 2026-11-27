@@ -304,8 +304,10 @@ class SimulationBackendError(CyberwaveError):
     - ``simulation_backend_capacity_unavailable`` (HTTP 503): no qualified Isaac
       Sim GPU node is available right now; retry later.
     - ``simulation_parameter_unsupported`` (HTTP 400): a start parameter the
-      backend cannot honour (e.g. ``timing.range_self_hit_fallback`` or mjlab
-      ``runtime`` options on Isaac, or a device that contradicts the profile).
+      backend cannot honour (e.g. ``timing.range_self_hit_fallback`` on Isaac,
+      a device that contradicts the profile, or the retired ``runtime``
+      options ``interface``, ``task_id``, ``checkpoint_uuid``,
+      ``controller_device`` and ``num_envs`` other than 1, which no plant reads).
     - ``simulation_parameter_invalid`` (HTTP 400): a start parameter outside its
       valid range.
 
@@ -469,6 +471,15 @@ class CommandResponseTimeoutError(RequestTimeoutError):
 
 class TwinStateUnavailableError(CyberwaveMQTTError):
     """Raised when MQTT is required for state read but cannot connect."""
+
+
+class MQTTCredentialsRejectedError(CyberwaveMQTTError):
+    """Raised when the MQTT broker refuses this client's credentials.
+
+    The broker answered "bad user name or password" or "not authorized": the
+    API key is wrong, revoked or deleted, and retrying with it gets the same
+    answer.
+    """
 
 
 class DepthTransportNotMQTTError(CyberwaveMQTTError):

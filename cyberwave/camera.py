@@ -1,7 +1,7 @@
 """Camera streaming functionality for Cyberwave SDK.
 
 This module provides backwards compatibility imports from the new sensor module.
-For new code, prefer importing directly from cyberwave.sensor.
+Deprecated: removed in cyberwave 1.0.0. Import from cyberwave.sensor.
 
 Example (new style):
     >>> from cyberwave.sensor import CV2CameraStreamer, RealSenseStreamer
@@ -9,6 +9,15 @@ Example (new style):
 Example (legacy style - still supported):
     >>> from cyberwave.camera import CameraStreamer, RealSenseStreamer
 """
+
+import warnings
+
+warnings.warn(
+    "cyberwave.camera is deprecated and will be removed in cyberwave 1.0.0; "
+    "import from cyberwave.sensor instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 # Re-export everything from the sensor module for backwards compatibility
 from .sensor import (

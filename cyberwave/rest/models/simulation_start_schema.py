@@ -32,6 +32,7 @@ class SimulationStartSchema(BaseModel):
     Schema for starting a simulation via the API.
     """ # noqa: E501
     duration: Optional[Union[StrictFloat, StrictInt]] = None
+    duration_clock: Optional[StrictStr] = None
     stream_data: Optional[StrictBool] = None
     backend: Optional[StrictStr] = None
     execution_profile: Optional[StrictStr] = None
@@ -41,7 +42,17 @@ class SimulationStartSchema(BaseModel):
     auto_run_controllers: Optional[StrictBool] = False
     record: Optional[StrictBool] = False
     stream_profile: Optional[Dict[str, SimulationStreamProfileSchema]] = None
-    __properties: ClassVar[List[str]] = ["duration", "stream_data", "backend", "execution_profile", "runtime", "timing", "online_controllers", "auto_run_controllers", "record", "stream_profile"]
+    __properties: ClassVar[List[str]] = ["duration", "duration_clock", "stream_data", "backend", "execution_profile", "runtime", "timing", "online_controllers", "auto_run_controllers", "record", "stream_profile"]
+
+    @field_validator('duration_clock')
+    def duration_clock_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['sim_time', 'wall_time']):
+            raise ValueError("must be one of enum values ('sim_time', 'wall_time')")
+        return value
 
     @field_validator('backend')
     def backend_validate_enum(cls, value):
@@ -127,6 +138,11 @@ class SimulationStartSchema(BaseModel):
         if self.duration is None and "duration" in self.model_fields_set:
             _dict['duration'] = None
 
+        # set to None if duration_clock (nullable) is None
+        # and model_fields_set contains the field
+        if self.duration_clock is None and "duration_clock" in self.model_fields_set:
+            _dict['duration_clock'] = None
+
         # set to None if stream_data (nullable) is None
         # and model_fields_set contains the field
         if self.stream_data is None and "stream_data" in self.model_fields_set:
@@ -175,6 +191,7 @@ class SimulationStartSchema(BaseModel):
 
         _obj = cls.model_validate({
             "duration": obj.get("duration"),
+            "duration_clock": obj.get("duration_clock"),
             "stream_data": obj.get("stream_data"),
             "backend": obj.get("backend"),
             "execution_profile": obj.get("execution_profile"),

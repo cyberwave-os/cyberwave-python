@@ -35,10 +35,12 @@ if TYPE_CHECKING:
 
 _JOINT_DATA_KINDS = frozenset({"position", "velocity", "acceleration", "effort"})
 _CONTROLLABLE_JOINT_TYPES = frozenset({"revolute", "prismatic", "continuous"})
+# Write-side channel per ``what_data`` kind. Each kind has its own wire channel;
+# ``acceleration`` (rad/s² or m/s²) and ``effort`` (N·m or N) are never aliased.
 _MQTT_SET_KEY = {
     "position": "positions",
     "velocity": "velocities",
-    "acceleration": "efforts",
+    "acceleration": "accelerations",
     "effort": "efforts",
 }
 
@@ -264,7 +266,7 @@ class JointsHandle:
             client=self._twin.client,
         )
         batch = parse_joint_mqtt_payload(payload)
-        if not batch.positions and not batch.velocities and not batch.efforts:
+        if not batch.has_measured:
             return
 
         schema = set(self._names())
@@ -274,27 +276,24 @@ class JointsHandle:
                 return values
             return {k: v for k, v in values.items() if k in schema}
 
-        positions = _apply(batch.positions)
-        velocities = _apply(batch.velocities)
-        efforts = _apply(batch.efforts)
-        if not positions and not velocities and not efforts:
+        # Each measured channel fills only its own field; a channel the payload does
+        # not carry leaves the cached value untouched.
+        channels = {
+            "position": _apply(batch.positions),
+            "velocity": _apply(batch.velocities),
+            "acceleration": _apply(batch.accelerations),
+            "effort": _apply(batch.efforts),
+        }
+        if not any(channels.values()):
             return
 
         with self._joint_lock:
             curr = self._ensure_curr_joints(mode)
-            for name, val in positions.items():
-                if name not in curr:
-                    curr[name] = self._zero_joint_entry()
-                curr[name]["position"] = val
-            for name, val in velocities.items():
-                if name not in curr:
-                    curr[name] = self._zero_joint_entry()
-                curr[name]["velocity"] = val
-            for name, val in efforts.items():
-                if name not in curr:
-                    curr[name] = self._zero_joint_entry()
-                curr[name]["effort"] = val
-                curr[name]["acceleration"] = val
+            for kind, values in channels.items():
+                for name, val in values.items():
+                    if name not in curr:
+                        curr[name] = self._zero_joint_entry()
+                    curr[name][kind] = val
             self._merge_list_joints_into(curr)
             self._received_mqtt_by_mode[mode].set()
             snapshot = {name: vals.get("position", 0.0) for name, vals in curr.items()}
@@ -358,7 +357,11 @@ class JointsHandle:
         and freeze the dict at its last-known values.
 
         *what_data* selects which fields each joint exposes: ``position``
-        (default), ``velocity``, ``acceleration``, and ``effort`` (effort/torque).
+        (default), ``velocity``, ``acceleration`` and ``effort``. Each kind is read
+        from its own wire channel (``positions`` / ``velocities`` /
+        ``accelerations`` / ``efforts``). A kind the source never reports reads as
+        0.0; that 0.0 is a placeholder, not a reading. Many drivers do not publish
+        ``accelerations``, so a 0.0 acceleration does not mean the joint is still.
         A single kind yields ``{joint_name: value}``; multiple kinds yield
         ``{kind: {joint_name: value}}``.
 
@@ -404,8 +407,11 @@ class JointsHandle:
     ) -> None:
         """Publish joint command(s) on the catalog joint-update topic.
 
-        *what_data* is one of ``position``, ``velocity``, ``acceleration``, or
-        ``effort`` (effort/torque). Twin shortcuts :meth:`~cyberwave.twin.mixins.JointsCapableMixin.set_joints`
+        *what_data* is one of ``position``, ``velocity``, ``acceleration`` or
+        ``effort``, published on the ``positions`` / ``velocities`` /
+        ``accelerations`` / ``efforts`` channel respectively (rad or m, rad/s or
+        m/s, rad/s² or m/s², N·m or N). A driver that does not implement a channel
+        ignores it. Twin shortcuts :meth:`~cyberwave.twin.mixins.JointsCapableMixin.set_joints`
         / :meth:`~cyberwave.twin.mixins.JointsCapableMixin.set_pose` delegate here.
         ``joint_name`` is accepted as a backwards-compatible alias for ``joint``.
         """
@@ -443,7 +449,7 @@ class JointsHandle:
         kind = str(what_data).strip().lower()
         if kind not in _JOINT_DATA_KINDS:
             raise ValueError(
-                f"Unknown what_data {what_data!r}. Use: {sorted(_JOINT_DATA_KINDS)}"
+                f"Unknown what_data {what_data!r}. Use: {sorted(_MQTT_SET_KEY)}"
             )
 
         if isinstance(values, (int, float)):

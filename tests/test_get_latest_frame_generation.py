@@ -19,6 +19,8 @@ from cyberwave.twin import Twin
 
 
 class _RespGetheaders:
+    status = 200
+
     def __init__(self, data: bytes, headers: dict[str, str]) -> None:
         self.data = data
         self._headers = headers
@@ -31,6 +33,8 @@ class _RespGetheaders:
 
 
 class _RespGetheader:
+    status = 200
+
     def __init__(self, data: bytes, value: str | None) -> None:
         self.data = data
         self._value = value
@@ -43,6 +47,8 @@ class _RespGetheader:
 
 
 class _RespHeadersMapping:
+    status = 200
+
     def __init__(self, data: bytes, headers: dict[str, str]) -> None:
         self.data = data
         self.headers = headers

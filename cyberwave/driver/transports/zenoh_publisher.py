@@ -69,6 +69,83 @@ class _FrameSlot:
         return frame
 
 
+_ENCODINGS = ("raw", "jpeg")
+
+
+def _validate_encoding(encoding: str) -> str:
+    value = (encoding or "raw").lower()
+    if value not in _ENCODINGS:
+        logger.warning("Unknown frame encoding %r; using 'raw'", encoding)
+        return "raw"
+    return value
+
+
+def encode_jpeg(frame: np.ndarray, quality: int = 90) -> bytes:
+    """JPEG-encode a BGR frame."""
+    import cv2
+
+    ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        raise RuntimeError("cv2.imencode failed")
+    return buf.tobytes()
+
+
+class ZenohFramePublisher:
+    """One frame channel on a :class:`~cyberwave.data.api.DataBus`, published from its own thread.
+
+    :meth:`put` is a non-blocking pointer swap (latest frame wins), safe from
+    any thread. Metadata is bound on the first raw publish. ``"jpeg"`` publishes
+    encoded bytes; never use it for depth, it corrupts millimetre values.
+    """
+
+    def __init__(
+        self,
+        data_bus: Any,
+        channel: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        encoding: str = "raw",
+        jpeg_quality: int = 90,
+    ) -> None:
+        self.channel = channel
+        self._data_bus = data_bus
+        self._metadata = metadata
+        self._encoding = _validate_encoding(encoding)
+        self._jpeg_quality = jpeg_quality
+        self._slot = _FrameSlot()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name=f"zenoh-{channel.replace('/', '-')}"
+        )
+        self._thread.start()
+
+    def put(self, frame: np.ndarray) -> None:
+        self._slot.put(frame)
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=3.0)
+
+    def _run(self) -> None:
+        first = True
+        while not self._stop.is_set():
+            frame = self._slot.take(timeout=1.0)
+            if frame is None:
+                continue
+            try:
+                if self._encoding == "jpeg":
+                    self._data_bus.publish_raw(
+                        self.channel, encode_jpeg(frame, self._jpeg_quality)
+                    )
+                elif first:
+                    self._data_bus.publish(self.channel, frame, metadata=self._metadata)
+                    first = False
+                else:
+                    self._data_bus.publish(self.channel, frame)
+            except Exception as exc:
+                logger.warning("[ZENOH] Frame publish failed on %s: %s", self.channel, exc)
+
+
 class ZenohPublisherMixin:
     """Mixin for imperative Zenoh publish via the SDK :class:`~cyberwave.data.api.DataBus`.
 
@@ -92,6 +169,9 @@ class ZenohPublisherMixin:
         cw_client: Any = None,
         frame_channel: str = "frames/default",
         frame_metadata: dict[str, Any] | None = {"color_format": "rgb24"},
+        frame_encoding: str = "raw",
+        jpeg_quality: int = 90,
+        required: bool = False,
     ) -> None:
         """Initialize the Zenoh data bus and frame publisher thread.
 
@@ -109,6 +189,12 @@ class ZenohPublisherMixin:
                             the first publish). Defaults to ``rgb24`` for camera
                             callers; pass ``None`` (or a suitable dict) for
                             non-RGB frames such as uint16 depth.
+            frame_encoding: ``"raw"`` publishes numpy arrays (zero-copy over
+                            shared memory on the same host); ``"jpeg"`` publishes
+                            JPEG bytes for remote or bridged subscribers.
+            jpeg_quality:   JPEG quality when ``frame_encoding="jpeg"``.
+            required:       Re-raise when the data bus cannot be opened instead
+                            of continuing without Zenoh (``zenoh_only`` deployments).
         """
         self._zenoh_data_bus: DataBus | None = None
         self._zenoh_frame_slot: _FrameSlot | None = None
@@ -116,6 +202,9 @@ class ZenohPublisherMixin:
         self._zenoh_thread: threading.Thread | None = None
         self._zenoh_channel: str = frame_channel
         self._zenoh_frame_metadata: dict[str, Any] | None = frame_metadata
+        self._zenoh_frame_encoding: str = _validate_encoding(frame_encoding)
+        self._zenoh_jpeg_quality: int = jpeg_quality
+        self._zenoh_extra_publishers: list[ZenohFramePublisher] = []
 
         if not os.getenv("CYBERWAVE_DATA_BACKEND"):
             return
@@ -156,6 +245,9 @@ class ZenohPublisherMixin:
                 backend_name,
             )
         except Exception as exc:
+            if required:
+                logger.error("[ZENOH] Failed to init data bus and it is required: %s", exc)
+                raise
             logger.warning("[ZENOH] Failed to init data bus (continuing without): %s", exc)
             self._zenoh_data_bus = None
             self._zenoh_frame_slot = None
@@ -171,7 +263,12 @@ class ZenohPublisherMixin:
             if frame is None:
                 continue
             try:
-                if _first:
+                if getattr(self, "_zenoh_frame_encoding", "raw") == "jpeg":
+                    self._zenoh_data_bus.publish_raw(
+                        self._zenoh_channel,
+                        encode_jpeg(frame, getattr(self, "_zenoh_jpeg_quality", 90)),
+                    )
+                elif _first:
                     self._zenoh_data_bus.publish(
                         self._zenoh_channel,
                         frame,
@@ -193,6 +290,32 @@ class ZenohPublisherMixin:
         """
         if self._zenoh_frame_slot is not None:
             self._zenoh_frame_slot.put(frame)
+
+    def open_zenoh_frame_channel(
+        self,
+        channel: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        encoding: str = "raw",
+        jpeg_quality: int = 90,
+    ) -> ZenohFramePublisher | None:
+        """Open another frame channel on the same bus (e.g. ``depth/<sensor>``).
+
+        Returns ``None`` when Zenoh is not configured. Closed by
+        :meth:`_close_zenoh_bus`.
+        """
+        data_bus = getattr(self, "_zenoh_data_bus", None)
+        if data_bus is None:
+            return None
+        publisher = ZenohFramePublisher(
+            data_bus,
+            channel,
+            metadata=metadata,
+            encoding=encoding,
+            jpeg_quality=jpeg_quality,
+        )
+        self._zenoh_extra_publishers.append(publisher)
+        return publisher
 
     def zenoh_publish(
         self,
@@ -222,6 +345,10 @@ class ZenohPublisherMixin:
 
         Call from :meth:`~cyberwave.driver.BaseDriver.on_shutdown`. Idempotent.
         """
+        for publisher in getattr(self, "_zenoh_extra_publishers", []):
+            publisher.close()
+        if hasattr(self, "_zenoh_extra_publishers"):
+            self._zenoh_extra_publishers = []
         if hasattr(self, "_zenoh_stop"):
             self._zenoh_stop.set()
         if hasattr(self, "_zenoh_thread") and self._zenoh_thread is not None:

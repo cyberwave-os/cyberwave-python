@@ -103,9 +103,12 @@ class JointsCapableMixin:
         Returns a live :class:`~cyberwave.twin.capabilities.joints.JointStateView`
         that auto-updates (default ``{joint_name: position}`` in radians). Pass
         ``what_data`` to read additional fields — ``position``, ``velocity``,
-        ``acceleration``, and ``effort`` (effort/torque) — either one kind or
-        several (nested dict keyed by kind). Pass *after_update_callback* to run a
-        function on every update (cancel via the view's ``stop()``).
+        ``acceleration``, and ``effort`` — either one kind or several (nested dict
+        keyed by kind). Each kind comes from its own wire channel. A kind the
+        source never reports reads as 0.0; that 0.0 is a placeholder, not a
+        reading (many drivers do not publish ``accelerations``). Pass
+        *after_update_callback* to run a function on every update (cancel via the
+        view's ``stop()``).
         """
         return self.joints.get(
             what_joints=what_joints,
@@ -146,7 +149,9 @@ class JointsCapableMixin:
         """Shortcut for :meth:`joints.set` (stable twin-level API).
 
         Supports the same ``what_data`` kinds as :meth:`get_joints` (default
-        ``position``). Use ``degrees=True`` when setting positions in degrees.
+        ``position``): ``position``, ``velocity``, ``acceleration`` or ``effort``,
+        each published on its own channel. Use ``degrees=True`` when setting
+        positions in degrees.
         """
         return self.joints.set(
             values,

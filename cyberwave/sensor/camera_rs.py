@@ -19,12 +19,14 @@ if TYPE_CHECKING:
     from ..mqtt_client import CyberwaveMQTTClient
     from ..utils import TimeReference
 
-# Make pyrealsense2 optional
+# Make pyrealsense2 optional. Any exception, not only ImportError: a wheel
+# whose native librealsense is missing or mismatched raises OSError (or worse)
+# at import, which must not break plain-camera users of this module.
 try:
     import pyrealsense2 as rs
 
     _has_realsense = True
-except ImportError:
+except Exception:
     rs = None
     _has_realsense = False
 

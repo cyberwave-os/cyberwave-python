@@ -121,6 +121,7 @@ __all__ = [
     "AmountCredits",
     "ApiTokenContextSchema",
     "ApplySetup",
+    "AssetBasicSimulationBackendSchema",
     "AssetBasicSimulationCapabilitySchema",
     "AssetControlCapabilitySchema",
     "AssetControlOptionSchema",
@@ -134,6 +135,7 @@ __all__ = [
     "AssetControlRuntimeRouteSchema",
     "AssetCreateSchema",
     "AssetCreateWithURDFSchema",
+    "AssetDriverLinkIn",
     "AssetDriverSchema",
     "AssetGLBFromAttachmentSchema",
     "AssetGenerationCancelSchema",
@@ -161,6 +163,7 @@ __all__ = [
     "AutoBindTwinSchema",
     "AutoTopupConfigSchema",
     "AutoTopupUpdateSchema",
+    "AvailableDriverSchema",
     "AvailableFeaturesSchema",
     "BatchDeleteRecordingsSchema",
     "BillingDetailsSchema",
@@ -180,6 +183,7 @@ __all__ = [
     "CaptureSetup",
     "ChargeSavedCardRequestSchema",
     "ChargeSavedCardResponseSchema",
+    "CharucoBoardSchema",
     "ClaimAmazonRequest",
     "ClaimGoogleMarketplaceRequest",
     "ClaimMicrosoftMarketplaceRequest",
@@ -328,6 +332,7 @@ __all__ = [
     "EnvironmentCreateSchema",
     "EnvironmentGeoSettingsPatchSchema",
     "EnvironmentModeSchema",
+    "EnvironmentMoveDestinationSchema",
     "EnvironmentNavigationSettingsPatchSchema",
     "EnvironmentOccupancyMapGenerateSchema",
     "EnvironmentOccupancyMapResultSchema",
@@ -479,9 +484,13 @@ __all__ = [
     "MapStreamFinalizeSchema",
     "MapStreamStartSchema",
     "MapStreamStopSchema",
+    "MarkerIdConflictSchema",
+    "MarkerIdReservedOverlapSchema",
     "MarketplaceOrganizationSchema",
     "MetricsWindowSchema",
     "MimicJointSchema",
+    "MirrorOut",
+    "MirroredRelease",
     "MissionExecutionSchema",
     "MissionSchema",
     "ModelTaskContractSchema",
@@ -557,6 +566,12 @@ __all__ = [
     "Position",
     "PreviewPoseSchema",
     "PreviousReleaseOut",
+    "PrimitiveLibraryEntrySchema",
+    "PrimitiveLibraryPageSchema",
+    "PrimitiveLibraryTextureSchema",
+    "PrimitiveTexturePresetSchema",
+    "PrimitiveTexturePresetUploadSchema",
+    "PrimitiveTextureUploadSchema",
     "ProceduralPrimitiveCatalogPreviewSchema",
     "ProceduralPrimitiveTemplateSchema",
     "ProcessedDatasetSchema",
@@ -638,6 +653,7 @@ __all__ = [
     "RedeemLinkSchema",
     "RegisterModemSchema",
     "RelativeTranslation",
+    "ReleaseDetailOut",
     "ReleaseOut",
     "ReleaseSubmission",
     "ReleaseUpdateIn",
@@ -712,8 +728,11 @@ __all__ = [
     "SimulationPoseCommitItemSchema",
     "SimulationPoseCommitSchema",
     "SimulationPreflightSchema",
+    "SimulationPreflightWarningSchema",
+    "SimulationResetSchema",
     "SimulationRuntimeOptionsSchema",
     "SimulationSceneBundleErrorSchema",
+    "SimulationSceneBundleFindingSchema",
     "SimulationSceneBundleRequestSchema",
     "SimulationSceneBundleRequestedSchema",
     "SimulationSceneBundleSchema",
@@ -726,6 +745,7 @@ __all__ = [
     "SkillAuthoringSchema",
     "SkillMilestone",
     "SkillProposalRequest",
+    "SkillSetupSchema",
     "SkillTeachingRequestConfirmSchema",
     "SkillTeachingRequestCreateSchema",
     "SkillTeachingRequestPublishPolicySchema",
@@ -805,6 +825,8 @@ __all__ = [
     "TwinManualInputSettingsSchema",
     "TwinMetricsQuerySchema",
     "TwinMotionResponseSchema",
+    "TwinMoveDestinationSchema",
+    "TwinMoveSchema",
     "TwinNavigationCaptureUploadResponseSchema",
     "TwinNavigationCommandSchema",
     "TwinNavigationMapSchema",
@@ -814,9 +836,12 @@ __all__ = [
     "TwinPoseProofSchema",
     "TwinRuntimeStateSchema",
     "TwinSchema",
+    "TwinSensorCreateSchema",
     "TwinSensorStatusChangeSchema",
     "TwinSensorStatusSchema",
     "TwinSensorStatusWindowSchema",
+    "TwinSimTeleportRequestSchema",
+    "TwinSimTeleportResponseSchema",
     "TwinStateUpdateSchema",
     "TwinSyncWorkflowsResponseSchema",
     "TwinTelemetryMetadataSchema",
@@ -1012,6 +1037,7 @@ from cyberwave.rest.models.allocation_input import AllocationInput as Allocation
 from cyberwave.rest.models.amount_credits import AmountCredits as AmountCredits
 from cyberwave.rest.models.api_token_context_schema import ApiTokenContextSchema as ApiTokenContextSchema
 from cyberwave.rest.models.apply_setup import ApplySetup as ApplySetup
+from cyberwave.rest.models.asset_basic_simulation_backend_schema import AssetBasicSimulationBackendSchema as AssetBasicSimulationBackendSchema
 from cyberwave.rest.models.asset_basic_simulation_capability_schema import AssetBasicSimulationCapabilitySchema as AssetBasicSimulationCapabilitySchema
 from cyberwave.rest.models.asset_control_capability_schema import AssetControlCapabilitySchema as AssetControlCapabilitySchema
 from cyberwave.rest.models.asset_control_option_schema import AssetControlOptionSchema as AssetControlOptionSchema
@@ -1025,6 +1051,7 @@ from cyberwave.rest.models.asset_control_route_patch_schema import AssetControlR
 from cyberwave.rest.models.asset_control_runtime_route_schema import AssetControlRuntimeRouteSchema as AssetControlRuntimeRouteSchema
 from cyberwave.rest.models.asset_create_schema import AssetCreateSchema as AssetCreateSchema
 from cyberwave.rest.models.asset_create_with_urdf_schema import AssetCreateWithURDFSchema as AssetCreateWithURDFSchema
+from cyberwave.rest.models.asset_driver_link_in import AssetDriverLinkIn as AssetDriverLinkIn
 from cyberwave.rest.models.asset_driver_schema import AssetDriverSchema as AssetDriverSchema
 from cyberwave.rest.models.asset_glb_from_attachment_schema import AssetGLBFromAttachmentSchema as AssetGLBFromAttachmentSchema
 from cyberwave.rest.models.asset_generation_cancel_schema import AssetGenerationCancelSchema as AssetGenerationCancelSchema
@@ -1052,6 +1079,7 @@ from cyberwave.rest.models.auto_bind_skipped_schema import AutoBindSkippedSchema
 from cyberwave.rest.models.auto_bind_twin_schema import AutoBindTwinSchema as AutoBindTwinSchema
 from cyberwave.rest.models.auto_topup_config_schema import AutoTopupConfigSchema as AutoTopupConfigSchema
 from cyberwave.rest.models.auto_topup_update_schema import AutoTopupUpdateSchema as AutoTopupUpdateSchema
+from cyberwave.rest.models.available_driver_schema import AvailableDriverSchema as AvailableDriverSchema
 from cyberwave.rest.models.available_features_schema import AvailableFeaturesSchema as AvailableFeaturesSchema
 from cyberwave.rest.models.batch_delete_recordings_schema import BatchDeleteRecordingsSchema as BatchDeleteRecordingsSchema
 from cyberwave.rest.models.billing_details_schema import BillingDetailsSchema as BillingDetailsSchema
@@ -1071,6 +1099,7 @@ from cyberwave.rest.models.capability_skill import CapabilitySkill as Capability
 from cyberwave.rest.models.capture_setup import CaptureSetup as CaptureSetup
 from cyberwave.rest.models.charge_saved_card_request_schema import ChargeSavedCardRequestSchema as ChargeSavedCardRequestSchema
 from cyberwave.rest.models.charge_saved_card_response_schema import ChargeSavedCardResponseSchema as ChargeSavedCardResponseSchema
+from cyberwave.rest.models.charuco_board_schema import CharucoBoardSchema as CharucoBoardSchema
 from cyberwave.rest.models.claim_amazon_request import ClaimAmazonRequest as ClaimAmazonRequest
 from cyberwave.rest.models.claim_google_marketplace_request import ClaimGoogleMarketplaceRequest as ClaimGoogleMarketplaceRequest
 from cyberwave.rest.models.claim_microsoft_marketplace_request import ClaimMicrosoftMarketplaceRequest as ClaimMicrosoftMarketplaceRequest
@@ -1219,6 +1248,7 @@ from cyberwave.rest.models.environment_clone_schema import EnvironmentCloneSchem
 from cyberwave.rest.models.environment_create_schema import EnvironmentCreateSchema as EnvironmentCreateSchema
 from cyberwave.rest.models.environment_geo_settings_patch_schema import EnvironmentGeoSettingsPatchSchema as EnvironmentGeoSettingsPatchSchema
 from cyberwave.rest.models.environment_mode_schema import EnvironmentModeSchema as EnvironmentModeSchema
+from cyberwave.rest.models.environment_move_destination_schema import EnvironmentMoveDestinationSchema as EnvironmentMoveDestinationSchema
 from cyberwave.rest.models.environment_navigation_settings_patch_schema import EnvironmentNavigationSettingsPatchSchema as EnvironmentNavigationSettingsPatchSchema
 from cyberwave.rest.models.environment_occupancy_map_generate_schema import EnvironmentOccupancyMapGenerateSchema as EnvironmentOccupancyMapGenerateSchema
 from cyberwave.rest.models.environment_occupancy_map_result_schema import EnvironmentOccupancyMapResultSchema as EnvironmentOccupancyMapResultSchema
@@ -1370,9 +1400,13 @@ from cyberwave.rest.models.map_stream_abort_schema import MapStreamAbortSchema a
 from cyberwave.rest.models.map_stream_finalize_schema import MapStreamFinalizeSchema as MapStreamFinalizeSchema
 from cyberwave.rest.models.map_stream_start_schema import MapStreamStartSchema as MapStreamStartSchema
 from cyberwave.rest.models.map_stream_stop_schema import MapStreamStopSchema as MapStreamStopSchema
+from cyberwave.rest.models.marker_id_conflict_schema import MarkerIdConflictSchema as MarkerIdConflictSchema
+from cyberwave.rest.models.marker_id_reserved_overlap_schema import MarkerIdReservedOverlapSchema as MarkerIdReservedOverlapSchema
 from cyberwave.rest.models.marketplace_organization_schema import MarketplaceOrganizationSchema as MarketplaceOrganizationSchema
 from cyberwave.rest.models.metrics_window_schema import MetricsWindowSchema as MetricsWindowSchema
 from cyberwave.rest.models.mimic_joint_schema import MimicJointSchema as MimicJointSchema
+from cyberwave.rest.models.mirror_out import MirrorOut as MirrorOut
+from cyberwave.rest.models.mirrored_release import MirroredRelease as MirroredRelease
 from cyberwave.rest.models.mission_execution_schema import MissionExecutionSchema as MissionExecutionSchema
 from cyberwave.rest.models.mission_schema import MissionSchema as MissionSchema
 from cyberwave.rest.models.model_task_contract_schema import ModelTaskContractSchema as ModelTaskContractSchema
@@ -1448,6 +1482,12 @@ from cyberwave.rest.models.pose_proof_tree_schema import PoseProofTreeSchema as 
 from cyberwave.rest.models.position import Position as Position
 from cyberwave.rest.models.preview_pose_schema import PreviewPoseSchema as PreviewPoseSchema
 from cyberwave.rest.models.previous_release_out import PreviousReleaseOut as PreviousReleaseOut
+from cyberwave.rest.models.primitive_library_entry_schema import PrimitiveLibraryEntrySchema as PrimitiveLibraryEntrySchema
+from cyberwave.rest.models.primitive_library_page_schema import PrimitiveLibraryPageSchema as PrimitiveLibraryPageSchema
+from cyberwave.rest.models.primitive_library_texture_schema import PrimitiveLibraryTextureSchema as PrimitiveLibraryTextureSchema
+from cyberwave.rest.models.primitive_texture_preset_schema import PrimitiveTexturePresetSchema as PrimitiveTexturePresetSchema
+from cyberwave.rest.models.primitive_texture_preset_upload_schema import PrimitiveTexturePresetUploadSchema as PrimitiveTexturePresetUploadSchema
+from cyberwave.rest.models.primitive_texture_upload_schema import PrimitiveTextureUploadSchema as PrimitiveTextureUploadSchema
 from cyberwave.rest.models.procedural_primitive_catalog_preview_schema import ProceduralPrimitiveCatalogPreviewSchema as ProceduralPrimitiveCatalogPreviewSchema
 from cyberwave.rest.models.procedural_primitive_template_schema import ProceduralPrimitiveTemplateSchema as ProceduralPrimitiveTemplateSchema
 from cyberwave.rest.models.processed_dataset_schema import ProcessedDatasetSchema as ProcessedDatasetSchema
@@ -1529,6 +1569,7 @@ from cyberwave.rest.models.redeem_coupon_response_schema import RedeemCouponResp
 from cyberwave.rest.models.redeem_link_schema import RedeemLinkSchema as RedeemLinkSchema
 from cyberwave.rest.models.register_modem_schema import RegisterModemSchema as RegisterModemSchema
 from cyberwave.rest.models.relative_translation import RelativeTranslation as RelativeTranslation
+from cyberwave.rest.models.release_detail_out import ReleaseDetailOut as ReleaseDetailOut
 from cyberwave.rest.models.release_out import ReleaseOut as ReleaseOut
 from cyberwave.rest.models.release_submission import ReleaseSubmission as ReleaseSubmission
 from cyberwave.rest.models.release_update_in import ReleaseUpdateIn as ReleaseUpdateIn
@@ -1603,8 +1644,11 @@ from cyberwave.rest.models.simulation_enrichment_create_schema import Simulation
 from cyberwave.rest.models.simulation_pose_commit_item_schema import SimulationPoseCommitItemSchema as SimulationPoseCommitItemSchema
 from cyberwave.rest.models.simulation_pose_commit_schema import SimulationPoseCommitSchema as SimulationPoseCommitSchema
 from cyberwave.rest.models.simulation_preflight_schema import SimulationPreflightSchema as SimulationPreflightSchema
+from cyberwave.rest.models.simulation_preflight_warning_schema import SimulationPreflightWarningSchema as SimulationPreflightWarningSchema
+from cyberwave.rest.models.simulation_reset_schema import SimulationResetSchema as SimulationResetSchema
 from cyberwave.rest.models.simulation_runtime_options_schema import SimulationRuntimeOptionsSchema as SimulationRuntimeOptionsSchema
 from cyberwave.rest.models.simulation_scene_bundle_error_schema import SimulationSceneBundleErrorSchema as SimulationSceneBundleErrorSchema
+from cyberwave.rest.models.simulation_scene_bundle_finding_schema import SimulationSceneBundleFindingSchema as SimulationSceneBundleFindingSchema
 from cyberwave.rest.models.simulation_scene_bundle_request_schema import SimulationSceneBundleRequestSchema as SimulationSceneBundleRequestSchema
 from cyberwave.rest.models.simulation_scene_bundle_requested_schema import SimulationSceneBundleRequestedSchema as SimulationSceneBundleRequestedSchema
 from cyberwave.rest.models.simulation_scene_bundle_schema import SimulationSceneBundleSchema as SimulationSceneBundleSchema
@@ -1617,6 +1661,7 @@ from cyberwave.rest.models.skill_adaptation_request import SkillAdaptationReques
 from cyberwave.rest.models.skill_authoring_schema import SkillAuthoringSchema as SkillAuthoringSchema
 from cyberwave.rest.models.skill_milestone import SkillMilestone as SkillMilestone
 from cyberwave.rest.models.skill_proposal_request import SkillProposalRequest as SkillProposalRequest
+from cyberwave.rest.models.skill_setup_schema import SkillSetupSchema as SkillSetupSchema
 from cyberwave.rest.models.skill_teaching_request_confirm_schema import SkillTeachingRequestConfirmSchema as SkillTeachingRequestConfirmSchema
 from cyberwave.rest.models.skill_teaching_request_create_schema import SkillTeachingRequestCreateSchema as SkillTeachingRequestCreateSchema
 from cyberwave.rest.models.skill_teaching_request_publish_policy_schema import SkillTeachingRequestPublishPolicySchema as SkillTeachingRequestPublishPolicySchema
@@ -1696,6 +1741,8 @@ from cyberwave.rest.models.twin_manual_input_settings_result_schema import TwinM
 from cyberwave.rest.models.twin_manual_input_settings_schema import TwinManualInputSettingsSchema as TwinManualInputSettingsSchema
 from cyberwave.rest.models.twin_metrics_query_schema import TwinMetricsQuerySchema as TwinMetricsQuerySchema
 from cyberwave.rest.models.twin_motion_response_schema import TwinMotionResponseSchema as TwinMotionResponseSchema
+from cyberwave.rest.models.twin_move_destination_schema import TwinMoveDestinationSchema as TwinMoveDestinationSchema
+from cyberwave.rest.models.twin_move_schema import TwinMoveSchema as TwinMoveSchema
 from cyberwave.rest.models.twin_navigation_capture_upload_response_schema import TwinNavigationCaptureUploadResponseSchema as TwinNavigationCaptureUploadResponseSchema
 from cyberwave.rest.models.twin_navigation_command_schema import TwinNavigationCommandSchema as TwinNavigationCommandSchema
 from cyberwave.rest.models.twin_navigation_map_schema import TwinNavigationMapSchema as TwinNavigationMapSchema
@@ -1705,9 +1752,12 @@ from cyberwave.rest.models.twin_odometry_anchor_request_schema import TwinOdomet
 from cyberwave.rest.models.twin_pose_proof_schema import TwinPoseProofSchema as TwinPoseProofSchema
 from cyberwave.rest.models.twin_runtime_state_schema import TwinRuntimeStateSchema as TwinRuntimeStateSchema
 from cyberwave.rest.models.twin_schema import TwinSchema as TwinSchema
+from cyberwave.rest.models.twin_sensor_create_schema import TwinSensorCreateSchema as TwinSensorCreateSchema
 from cyberwave.rest.models.twin_sensor_status_change_schema import TwinSensorStatusChangeSchema as TwinSensorStatusChangeSchema
 from cyberwave.rest.models.twin_sensor_status_schema import TwinSensorStatusSchema as TwinSensorStatusSchema
 from cyberwave.rest.models.twin_sensor_status_window_schema import TwinSensorStatusWindowSchema as TwinSensorStatusWindowSchema
+from cyberwave.rest.models.twin_sim_teleport_request_schema import TwinSimTeleportRequestSchema as TwinSimTeleportRequestSchema
+from cyberwave.rest.models.twin_sim_teleport_response_schema import TwinSimTeleportResponseSchema as TwinSimTeleportResponseSchema
 from cyberwave.rest.models.twin_state_update_schema import TwinStateUpdateSchema as TwinStateUpdateSchema
 from cyberwave.rest.models.twin_sync_workflows_response_schema import TwinSyncWorkflowsResponseSchema as TwinSyncWorkflowsResponseSchema
 from cyberwave.rest.models.twin_telemetry_metadata_schema import TwinTelemetryMetadataSchema as TwinTelemetryMetadataSchema

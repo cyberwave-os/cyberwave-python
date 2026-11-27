@@ -299,6 +299,24 @@ the tables and skips `.mp4` video, which is usually most of a camera recording's
 bytes. A reader whose artifact was filtered out raises rather than returning
 empty.
 
+A recording asked for moments after it was captured has no derived MP4 or parquet
+yet, and the server answers with a retry interval rather than a file. Pass `wait`
+(seconds) to have that polled for you:
+
+```python
+rec = cw.environments.recordings.get(items[0], wait=120)
+```
+
+`wait` takes effect only on a server that sends these retry answers, which not
+every deployment does yet. Without them, a finalized recording that is not ready
+answers "not found" and `get` raises at once, and a recording still being
+captured returns only the parts converted so far, without waiting.
+
+A `failed` answer is polled like any other, because a recording that is still
+being captured can report `failed` while its first parts are retried and recover
+once one converts. To skip a finalized recording whose assets are never coming,
+check `item.will_never_be_playable` before calling `get`.
+
 ## Governed commands: the command gateway
 
 `POST /api/v1/twins/{uuid}/commands` is the platform's one server-side ingress
@@ -418,7 +436,8 @@ payload builder and topic rules for drivers that do not use `BaseDriver`.
 
 ## Structured metrics
 
-A metric channel is a timeseries of one float, int or bool. Publish one sample
+A metric channel is a timeseries of one float, int, bool or short string (at most
+256 characters). Publish one sample
 per call, on its own topic (`cyberwave/twin/<uuid>/metrics/arm/gripper/force_n`):
 
 ```python

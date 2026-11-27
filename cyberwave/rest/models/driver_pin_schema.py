@@ -44,8 +44,9 @@ class DriverPinSchema(BaseModel):
     activated_at: Optional[StrictStr]
     error: Optional[StrictStr]
     edge_capabilities: List[StrictStr]
+    has_edge: StrictBool
     deployment: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["package", "flavor", "current", "previous", "target", "recommended", "update_offer", "update_offer_changelog", "policy", "scope", "effective_policy", "effective_scope", "state", "unmanaged", "activated_at", "error", "edge_capabilities", "deployment"]
+    __properties: ClassVar[List[str]] = ["package", "flavor", "current", "previous", "target", "recommended", "update_offer", "update_offer_changelog", "policy", "scope", "effective_policy", "effective_scope", "state", "unmanaged", "activated_at", "error", "edge_capabilities", "has_edge", "deployment"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -165,6 +166,7 @@ class DriverPinSchema(BaseModel):
             "activated_at": obj.get("activated_at"),
             "error": obj.get("error"),
             "edge_capabilities": obj.get("edge_capabilities"),
+            "has_edge": obj.get("has_edge"),
             "deployment": obj.get("deployment")
         })
         return _obj

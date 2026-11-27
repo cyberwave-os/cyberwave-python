@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class SimulationTimingOptionsSchema(BaseModel):
     """
-    Per-simulation timing overrides.  All fields are optional; the sim service falls back to its env/config defaults for any field not supplied.  Unknown keys are kept (``extra=\"allow\"``) so the start handler can judge them per backend: ``isaac`` refuses them with ``simulation_parameter_unsupported`` (as it does ``range_self_hit_fallback``, which has no Isaac equivalent), while MuJoCo keeps dropping them.
+    Per-simulation timing overrides.  All fields are optional; the sim service falls back to its env/config defaults for any field not supplied.  Unknown keys are kept (``extra=\"allow\"``) so the start handler can judge them per backend: ``isaac`` refuses them with ``simulation_parameter_unsupported``, while MuJoCo keeps dropping them.
     """ # noqa: E501
     dt: Optional[Union[StrictFloat, StrictInt]] = None
     realtime: Optional[StrictBool] = None

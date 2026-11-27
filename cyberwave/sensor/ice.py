@@ -119,3 +119,47 @@ def effective_ice_servers(
 
 def is_lan_ice_mode(environ: Optional[Mapping[str, str]] = None) -> bool:
     return ice_mode(environ) == ICE_MODE_LAN
+
+
+def complete_ice_lite_answer(sdp: str) -> str:
+    """Mark an ICE-lite answer's candidates as complete.
+
+    An ICE-lite agent (the media service's mediasoup SFU) gathers its
+    candidates before it answers and never trickles more (RFC 8445 section
+    2.5), but its answer has no ``a=end-of-candidates``. aioice 0.11 and
+    later wait for that signal before declaring ICE failed, so without it a
+    connection whose checks all fail stays ``checking`` forever, and the
+    reconnect monitor, which reacts to ``failed``, never re-offers. aioice
+    before 0.11 treats the signal the same way, so adding it changes nothing
+    there.
+
+    Adds ``a=end-of-candidates`` to every media section that lists
+    candidates, unless that section already says end-of-candidates.
+    Leaves non-ICE-lite SDP unchanged.
+    """
+    if "a=ice-lite" not in sdp:
+        return sdp
+    newline = "\r\n" if "\r\n" in sdp else "\n"
+    lines = sdp.split(newline)
+    trailing = lines and lines[-1] == ""
+    if trailing:
+        lines.pop()
+
+    out: list[str] = []
+    in_media = has_candidates = complete = False
+
+    def close_section() -> None:
+        if in_media and has_candidates and not complete:
+            out.append("a=end-of-candidates")
+
+    for line in lines:
+        if line.startswith("m="):
+            close_section()
+            in_media, has_candidates, complete = True, False, False
+        elif in_media and line.startswith("a=candidate:"):
+            has_candidates = True
+        elif in_media and line == "a=end-of-candidates":
+            complete = True
+        out.append(line)
+    close_section()
+    return newline.join(out) + (newline if trailing else "")

@@ -44,7 +44,8 @@ from ._reconnect import (
     signaling_ready,
 )
 from .answer_subscription import answer_topics, wait_for_subscriptions
-from .ice import DEFAULT_TURN_SERVERS, effective_ice_servers
+from .ice import DEFAULT_TURN_SERVERS, complete_ice_lite_answer, effective_ice_servers
+from .ice_consent import ConsentWatch, apply_ice_consent_patch, watch_consent_expiry
 from . import peer_close
 from .peer_close import close_peer_connection
 
@@ -542,6 +543,7 @@ class BaseAudioStreamer:
         self._monitor_task: asyncio.Task | None = None
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self._bad_connection_checks = 0
+        self._consent_watch: ConsentWatch | None = None
         self._session_id: int = 0  # incremented each _start_webrtc
         self._current_offer_session: int = 0  # session ID of the pending offer; gates stale answer callbacks
         self._subscribed_to_answer: bool = False  # answer topic is subscribed only once
@@ -777,9 +779,14 @@ class BaseAudioStreamer:
         ice_servers = [
             RTCIceServer(**s) for s in effective_ice_servers(self.turn_servers)
         ]
+        # One lost STUN consent answer must not close the stream (see ice_consent).
+        apply_ice_consent_patch()
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
         self._setup_pc_handlers()
         self.pc.addTrack(self.streamer)
+        self._consent_watch = watch_consent_expiry(
+            self.pc, f"twin {self.twin_uuid} mic {self.mic_name or 'default'}"
+        )
 
     def _setup_pc_handlers(self) -> None:
         @self.pc.on("connectionstatechange")
@@ -868,7 +875,9 @@ class BaseAudioStreamer:
             else self._answer_data
         )
         await self.pc.setRemoteDescription(
-            RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
+            RTCSessionDescription(
+                sdp=complete_ice_lite_answer(answer["sdp"]), type=answer["type"]
+            )
         )
 
     def _subscribe_to_answer(self) -> None:
@@ -1099,7 +1108,12 @@ class BaseAudioStreamer:
             self._bad_connection_checks += 1
             if self._bad_connection_checks < _CONNECTION_LOSS_CONFIRMATION_CHECKS:
                 return False
-            logger.warning("WebRTC audio connection lost")
+            logger.warning(
+                "WebRTC audio connection lost (%s)",
+                self._consent_watch.describe_close()
+                if self._consent_watch is not None
+                else "ICE consent expiry not tracked",
+            )
             return True
         if self._bad_connection_checks > 0:
             self._bad_connection_checks = 0

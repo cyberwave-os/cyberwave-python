@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyberwave.rest.models.asset_basic_simulation_backend_schema import AssetBasicSimulationBackendSchema
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -30,6 +31,7 @@ class AssetBasicSimulationCapabilitySchema(BaseModel):
     id: StrictStr
     label: StrictStr
     backend: StrictStr
+    backends: Optional[List[AssetBasicSimulationBackendSchema]] = None
     capability_kind: StrictStr
     adapter: StrictStr
     quality: StrictStr
@@ -40,7 +42,7 @@ class AssetBasicSimulationCapabilitySchema(BaseModel):
     output_contract: Optional[StrictStr] = None
     commands: Optional[List[StrictStr]] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "label", "backend", "capability_kind", "adapter", "quality", "source", "available", "reason", "input_contract", "output_contract", "commands", "metadata"]
+    __properties: ClassVar[List[str]] = ["id", "label", "backend", "backends", "capability_kind", "adapter", "quality", "source", "available", "reason", "input_contract", "output_contract", "commands", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -81,6 +83,13 @@ class AssetBasicSimulationCapabilitySchema(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in backends (list)
+        _items = []
+        if self.backends:
+            for _item_backends in self.backends:
+                if _item_backends:
+                    _items.append(_item_backends.to_dict())
+            _dict['backends'] = _items
         # set to None if reason (nullable) is None
         # and model_fields_set contains the field
         if self.reason is None and "reason" in self.model_fields_set:
@@ -111,6 +120,7 @@ class AssetBasicSimulationCapabilitySchema(BaseModel):
             "id": obj.get("id"),
             "label": obj.get("label"),
             "backend": obj.get("backend"),
+            "backends": [AssetBasicSimulationBackendSchema.from_dict(_item) for _item in obj["backends"]] if obj.get("backends") is not None else None,
             "capability_kind": obj.get("capability_kind"),
             "adapter": obj.get("adapter"),
             "quality": obj.get("quality"),

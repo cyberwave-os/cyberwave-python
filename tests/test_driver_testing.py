@@ -952,6 +952,9 @@ def simulated():
 
 def test_every_section_passes_on_a_simulated_twin(simulated):
     harness, arm, profile = simulated
+    # The fake arm advances on a wall-clock tick, so a busy runner can stretch a
+    # phase past the 2 s that keeps the failure-path tests quick.
+    harness.args.phase_timeout_s = 10
     plan = resolve_plan(profile)
     with contextlib.redirect_stdout(io.StringIO()):
         cli.run_plan(harness, plan)

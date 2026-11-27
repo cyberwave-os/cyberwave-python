@@ -52,7 +52,8 @@ from ._reconnect import (
 )
 from .answer_subscription import answer_topics, wait_for_subscriptions
 from .base_video import _strip_vp8_video, read_liveness_counter
-from .ice import effective_ice_servers
+from .ice import complete_ice_lite_answer, effective_ice_servers
+from .ice_consent import ConsentWatch, apply_ice_consent_patch, watch_consent_expiry
 from .microphone import BaseAudioTrack, _strip_non_opus_audio
 from . import peer_close
 from .peer_close import close_peer_connection
@@ -143,6 +144,7 @@ class MultimediaStreamer:
         self._monitor_task: Optional[asyncio.Task] = None
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
         self._bad_connection_checks = 0
+        self._consent_watch: Optional[ConsentWatch] = None
 
         # Session tracking
         self._session_id: int = 0
@@ -297,10 +299,15 @@ class MultimediaStreamer:
         ice_servers = [
             RTCIceServer(**s) for s in effective_ice_servers(self.turn_servers)
         ]
+        # One lost STUN consent answer must not close the stream (see ice_consent).
+        apply_ice_consent_patch()
         self.pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
         self._setup_pc_handlers()
         self.pc.addTrack(self.video_track)
         self.pc.addTrack(self.audio_track)
+        self._consent_watch = watch_consent_expiry(
+            self.pc, f"twin {self.twin_uuid} camera {self.camera_name} mic {self.mic_name}"
+        )
 
     def _setup_pc_handlers(self) -> None:
         @self.pc.on("connectionstatechange")
@@ -380,7 +387,9 @@ class MultimediaStreamer:
             else self._answer_data
         )
         await self.pc.setRemoteDescription(
-            RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
+            RTCSessionDescription(
+                sdp=complete_ice_lite_answer(answer["sdp"]), type=answer["type"]
+            )
         )
 
     def _subscribe_to_answer(self) -> None:
@@ -539,7 +548,12 @@ class MultimediaStreamer:
             self._bad_connection_checks += 1
             if self._bad_connection_checks < CONNECTION_LOSS_CONFIRMATION_CHECKS:
                 return False
-            logger.warning("Multimedia WebRTC connection lost")
+            logger.warning(
+                "Multimedia WebRTC connection lost (%s)",
+                self._consent_watch.describe_close()
+                if self._consent_watch is not None
+                else "ICE consent expiry not tracked",
+            )
             return True
         if self._bad_connection_checks > 0:
             self._bad_connection_checks = 0

@@ -3,6 +3,8 @@
 Simulates a [SO-101](https://github.com/TheRobotStudio/SO-ARM100) arm in MuJoCo,
 streaming joint state and camera feeds to the Cyberwave frontend.
 
+Exported scenes require MuJoCo 3.2.5 or newer.
+
 ## Quick start
 
 ```bash

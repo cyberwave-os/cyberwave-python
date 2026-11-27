@@ -154,7 +154,7 @@ class Workflow:
         Args:
             inputs: Payload passed to the workflow trigger.
             params: Arbitrary JSON (nested objects/arrays allowed) for this
-                run. Nodes read it as ``{{params.x}}``.
+                run. Nodes read it as ``{params.x}``.
 
         Returns:
             A :class:`WorkflowRun` representing the started execution.
@@ -510,7 +510,7 @@ class WorkflowManager:
                 resolves the workflow UUID via the ``/by-slug`` endpoint.
             inputs: Payload passed to the workflow.
             params: Arbitrary JSON for this run, read in the workflow as
-                ``{{params.x}}``. Validated against the params the workflow
+                ``{params.x}``. Validated against the params the workflow
                 declares (if any); the backend answers 400 on a mismatch.
 
         Returns:

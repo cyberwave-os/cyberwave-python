@@ -721,7 +721,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cyberwave", extras = ["camera"], editable = "../../" },
-    { name = "mujoco", specifier = ">=3.0.0" },
+    { name = "mujoco", specifier = ">=3.2.5" },
     { name = "numpy", specifier = ">=1.24.0" },
 ]
 

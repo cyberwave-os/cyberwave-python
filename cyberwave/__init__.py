@@ -47,6 +47,7 @@ from .exceptions import (
     CyberwaveTimeoutError,
     CyberwaveValidationError,
     DepthTransportNotMQTTError,
+    MQTTCredentialsRejectedError,
     NoOngoingVideoStreamAvailable,
     RecordingPayloadTooLargeError,
     SimulationBackendError,
@@ -371,6 +372,7 @@ __all__ = [
     "CyberwaveValidationError",
     "SimulationBackendError",
     "DepthTransportNotMQTTError",
+    "MQTTCredentialsRejectedError",
     "RecordingPayloadTooLargeError",
     # Compact API
     "configure",

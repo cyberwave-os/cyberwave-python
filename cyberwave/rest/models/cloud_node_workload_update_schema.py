@@ -40,12 +40,16 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
     simulation_elapsed_s: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
     runtime_backend: Optional[Annotated[str, Field(strict=True, max_length=32)]] = None
     runtime_execution_profile: Optional[Annotated[str, Field(strict=True, max_length=64)]] = None
+    in_plant_control: Optional[Annotated[int, Field(strict=True, ge=1)]] = None
     scene_warnings: Optional[Annotated[List[Dict[str, Any]], Field(max_length=50)]] = None
     simulation_progress_sim_time_s: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
     simulation_progress_steps: Optional[Annotated[int, Field(strict=True, ge=0)]] = None
     simulation_progress_real_time_factor: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
     simulation_progress_target_real_time_factor: Optional[Union[Annotated[float, Field(strict=True, ge=0)], Annotated[int, Field(strict=True, ge=0)]]] = None
-    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid", "simulation_ready", "simulation_elapsed_s", "runtime_backend", "runtime_execution_profile", "scene_warnings", "simulation_progress_sim_time_s", "simulation_progress_steps", "simulation_progress_real_time_factor", "simulation_progress_target_real_time_factor"]
+    in_plant_reset: Optional[Annotated[int, Field(strict=True, ge=1)]] = None
+    fixed_base_pose: Optional[Annotated[int, Field(strict=True, ge=1)]] = None
+    simulation_reset_applied: Optional[Annotated[List[Annotated[str, Field(min_length=1, strict=True, max_length=64)]], Field(max_length=8)]] = None
+    __properties: ClassVar[List[str]] = ["status", "instance_uuid", "error", "failure_detail", "stderr", "exit_code", "rejection_reason", "rejecting_instance_uuid", "simulation_ready", "simulation_elapsed_s", "runtime_backend", "runtime_execution_profile", "in_plant_control", "scene_warnings", "simulation_progress_sim_time_s", "simulation_progress_steps", "simulation_progress_real_time_factor", "simulation_progress_target_real_time_factor", "in_plant_reset", "fixed_base_pose", "simulation_reset_applied"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -146,6 +150,11 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
         if self.runtime_execution_profile is None and "runtime_execution_profile" in self.model_fields_set:
             _dict['runtime_execution_profile'] = None
 
+        # set to None if in_plant_control (nullable) is None
+        # and model_fields_set contains the field
+        if self.in_plant_control is None and "in_plant_control" in self.model_fields_set:
+            _dict['in_plant_control'] = None
+
         # set to None if scene_warnings (nullable) is None
         # and model_fields_set contains the field
         if self.scene_warnings is None and "scene_warnings" in self.model_fields_set:
@@ -171,6 +180,21 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
         if self.simulation_progress_target_real_time_factor is None and "simulation_progress_target_real_time_factor" in self.model_fields_set:
             _dict['simulation_progress_target_real_time_factor'] = None
 
+        # set to None if in_plant_reset (nullable) is None
+        # and model_fields_set contains the field
+        if self.in_plant_reset is None and "in_plant_reset" in self.model_fields_set:
+            _dict['in_plant_reset'] = None
+
+        # set to None if fixed_base_pose (nullable) is None
+        # and model_fields_set contains the field
+        if self.fixed_base_pose is None and "fixed_base_pose" in self.model_fields_set:
+            _dict['fixed_base_pose'] = None
+
+        # set to None if simulation_reset_applied (nullable) is None
+        # and model_fields_set contains the field
+        if self.simulation_reset_applied is None and "simulation_reset_applied" in self.model_fields_set:
+            _dict['simulation_reset_applied'] = None
+
         return _dict
 
     @classmethod
@@ -195,11 +219,15 @@ class CloudNodeWorkloadUpdateSchema(BaseModel):
             "simulation_elapsed_s": obj.get("simulation_elapsed_s"),
             "runtime_backend": obj.get("runtime_backend"),
             "runtime_execution_profile": obj.get("runtime_execution_profile"),
+            "in_plant_control": obj.get("in_plant_control"),
             "scene_warnings": obj.get("scene_warnings"),
             "simulation_progress_sim_time_s": obj.get("simulation_progress_sim_time_s"),
             "simulation_progress_steps": obj.get("simulation_progress_steps"),
             "simulation_progress_real_time_factor": obj.get("simulation_progress_real_time_factor"),
-            "simulation_progress_target_real_time_factor": obj.get("simulation_progress_target_real_time_factor")
+            "simulation_progress_target_real_time_factor": obj.get("simulation_progress_target_real_time_factor"),
+            "in_plant_reset": obj.get("in_plant_reset"),
+            "fixed_base_pose": obj.get("fixed_base_pose"),
+            "simulation_reset_applied": obj.get("simulation_reset_applied")
         })
         return _obj
 

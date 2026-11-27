@@ -25,14 +25,15 @@ from pydantic_core import to_jsonable_python
 
 class SimulationCapacitySchema(BaseModel):
     """
-    Whether a qualified Isaac worker can take the run now (plan section 4.7).  Informational in the preflight: it never changes ``eligible``. When ``provisionable``, a start provisions a new GPU node (CYB-4856); otherwise a start without capacity fails with 503 ``simulation_backend_capacity_unavailable``.
+    Whether a qualified Isaac worker can take the run now (plan section 4.7).  Informational in the preflight: it never changes ``eligible``. When ``provisionable``, a start is admitted and placed by the scheduler: it provisions a new GPU node (CYB-4856) or, when also ``queued``, waits at the VM cap for the next node that frees up (CYB-4898). Otherwise a start without capacity fails with 503 ``simulation_backend_capacity_unavailable``.
     """ # noqa: E501
     available: StrictBool
     provisionable: Optional[StrictBool] = False
+    queued: Optional[StrictBool] = False
     code: Optional[StrictStr] = None
     message: Optional[StrictStr] = None
     reasons: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["available", "provisionable", "code", "message", "reasons"]
+    __properties: ClassVar[List[str]] = ["available", "provisionable", "queued", "code", "message", "reasons"]
 
     @field_validator('code')
     def code_validate_enum(cls, value):
@@ -107,6 +108,7 @@ class SimulationCapacitySchema(BaseModel):
         _obj = cls.model_validate({
             "available": obj.get("available"),
             "provisionable": obj.get("provisionable") if obj.get("provisionable") is not None else False,
+            "queued": obj.get("queued") if obj.get("queued") is not None else False,
             "code": obj.get("code"),
             "message": obj.get("message"),
             "reasons": obj.get("reasons")

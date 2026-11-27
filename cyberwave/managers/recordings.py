@@ -11,6 +11,7 @@ import logging
 import shutil
 import tempfile
 import threading
+import time
 import weakref
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -80,14 +81,48 @@ def _materializing_message(body: RecordingMaterializingSchema) -> str:
     """
     readiness = body.playback_readiness or {}
     reason = readiness.get("reason") or body.detail or "unknown reason"
-    retry = (
-        body.retry_after_seconds
-        or readiness.get("retry_after_seconds")
-        or DEFAULT_MATERIALIZING_RETRY_SECONDS
-    )
+    retry = f"{_materializing_retry_seconds(body):g}"
+    if readiness.get("state") == "failed":
+        # The server can replace the top-level reason with a pending one (e.g.
+        # ``camera_mp4_pending``) while keeping ``state: failed``; the failed
+        # stream's own reason is the one that explains the verdict.
+        failed_stream = next(
+            (
+                stream
+                for stream in readiness.get("streams") or []
+                if isinstance(stream, dict)
+                and stream.get("state") == "failed"
+                and stream.get("reason")
+            ),
+            None,
+        )
+        if failed_stream is not None:
+            reason = failed_stream["reason"]
+        # Not "final": a recording still being captured reports ``failed``
+        # while its first parts are retried, and recovers once one converts.
+        return (
+            f"The server reports this recording has no playable assets ({reason}). "
+            "A recording that is still being captured can recover once later parts "
+            f"are processed (retry in ~{retry}s); a finalized one will not."
+        )
     return (
         f"Recording assets are still materializing ({reason}). Retry in ~{retry}s."
     )
+
+
+def _materializing_retry_seconds(body: RecordingMaterializingSchema) -> float:
+    """How long the server asked the caller to wait before retrying."""
+    readiness = body.playback_readiness or {}
+    try:
+        retry = float(
+            body.retry_after_seconds
+            or readiness.get("retry_after_seconds")
+            or DEFAULT_MATERIALIZING_RETRY_SECONDS
+        )
+    except (TypeError, ValueError):
+        return float(DEFAULT_MATERIALIZING_RETRY_SECONDS)
+    return max(1.0, retry)
+
 
 #: Artifacts downloaded concurrently by one ``get()``. A recording is segmented
 #: (60s video parts, chunked pointclouds), so a serial fetch pays a connect +
@@ -409,6 +444,18 @@ class RecordingListItem:
         state = (self.readiness or {}).get("state")
         return state is None or state == "ready"
 
+    @property
+    def will_never_be_playable(self) -> bool:
+        """A finalized recording the server has ruled out, so polling cannot help.
+
+        Distinct from "not ready": a finalized capture whose derivation failed
+        answers ``/data`` with 202 for good, so a caller waiting for readiness
+        would wait forever. A recording still being captured is never ruled out
+        here, even when it reports ``failed``: that verdict is provisional while
+        its first parts are retried, and it turns ``ready`` once one converts.
+        """
+        return self.is_final and (self.readiness or {}).get("state") == "failed"
+
     @classmethod
     def _from_rest(cls, obj: Any) -> "RecordingListItem":
         twin_uuid = getattr(obj, "twin_uuid", None)
@@ -422,7 +469,11 @@ class RecordingListItem:
         )
 
     def get(
-        self, *, path: str | None = None, max_workers: int | None = None
+        self,
+        *,
+        path: str | None = None,
+        max_workers: int | None = None,
+        wait: float = 0.0,
     ) -> Any:
         """Fetch this recording's artifacts (shortcut for ``manager.get(item)``)."""
         from ..exceptions import CyberwaveError
@@ -445,6 +496,7 @@ class RecordingListItem:
             path=path,
             twin_uuid=self.twin_uuid or None,
             max_workers=max_workers,
+            wait=wait,
         )
 
 
@@ -923,6 +975,7 @@ class RecordingManager:
         path: str | None = None,
         twin_uuid: str | None = None,
         max_workers: int | None = None,
+        wait: float = 0.0,
     ) -> Recording:
         """Fetch a recording's signed URLs and download all artifacts locally.
 
@@ -936,6 +989,24 @@ class RecordingManager:
         serial fetch. Concurrency helps in proportion to how many parts a
         recording has — a single large parquet is one object on one connection
         and gains nothing.
+
+        ``wait`` is how many seconds to keep polling while the server answers
+        202 "still materializing", sleeping for the server's
+        ``retry_after_seconds`` between attempts (never past the deadline). The
+        default ``0`` raises on the first 202. A ``failed`` readiness is polled
+        like any other 202: for a recording still being captured it is
+        provisional, and the 202 body does not say whether the recording is
+        finalized. Check :attr:`RecordingListItem.will_never_be_playable` first
+        to skip a finalized recording that will never become playable.
+        Only a 202 is retried: any error from the fetch itself (transport
+        failure, 4xx, 5xx) raises :class:`CyberwaveError` at once, even with
+        time left on ``wait``, because the client cannot tell a transient
+        failure from a permanent one here. Wrap the call to retry those.
+        ``wait`` takes effect only on a server that sends these 202s, which not
+        every deployment does yet (the backend ships with them off). Without
+        them, a finalized recording that is not ready answers 404, which
+        raises at once, and a recording still being captured answers 200 with
+        only the parts converted so far, which is returned without waiting.
         """
         from ..exceptions import CyberwaveError
 
@@ -960,19 +1031,29 @@ class RecordingManager:
                 "pass 1 for a serial download or None for the default"
             )
 
-        try:
-            result = self.api.src_app_api_environments_recordings_get_recording_data(
-                env, rec_uuid, return_flatbuffers=False
-            )
-        except Exception as e:  # noqa: BLE001
-            raise CyberwaveError(f"Failed to fetch recording {rec_uuid}: {e}") from e
+        deadline = time.monotonic() + max(0.0, wait)
+        while True:
+            try:
+                result = (
+                    self.api.src_app_api_environments_recordings_get_recording_data(
+                        env, rec_uuid, return_flatbuffers=False
+                    )
+                )
+            except Exception as e:  # noqa: BLE001
+                raise CyberwaveError(
+                    f"Failed to fetch recording {rec_uuid}: {e}"
+                ) from e
 
-        # The endpoint answers 200 with a playback envelope or 202 with a
-        # materializing body, and the two are distinct types. The 200 envelope
-        # carries no readiness field at all, so this must be a type check —
-        # duck-typing on ``playback_readiness`` silently never fires.
-        if isinstance(result, RecordingMaterializingSchema):
-            raise CyberwaveError(_materializing_message(result))
+            # The endpoint answers 200 with a playback envelope or 202 with a
+            # materializing body, and the two are distinct types. The 200
+            # envelope carries no readiness field at all, so this must be a type
+            # check — duck-typing on ``playback_readiness`` silently never fires.
+            if not isinstance(result, RecordingMaterializingSchema):
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CyberwaveError(_materializing_message(result))
+            time.sleep(min(_materializing_retry_seconds(result), remaining))
         if result is None:
             raise CyberwaveError(
                 "The server returned no playback envelope for this recording. "
@@ -1316,6 +1397,7 @@ class TwinRecordingsHandle:
         *,
         path: str | None = None,
         max_workers: int | None = None,
+        wait: float = 0.0,
     ) -> Recording:
         return self._manager().get(
             recording,
@@ -1323,4 +1405,5 @@ class TwinRecordingsHandle:
             path=path,
             twin_uuid=str(self._twin.uuid),
             max_workers=max_workers,
+            wait=wait,
         )

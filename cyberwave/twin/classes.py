@@ -129,7 +129,7 @@ class CameraTwin(CameraCapableMixin, Twin):
             # it so an "await" here doesn't stall the caller's event loop.
             return await asyncio.to_thread(self._resolve_simulation_stream)
 
-        self._camera_streamer = self.client.video_stream(
+        self._camera_streamer = self.client._build_video_streamer(
             twin_uuid=self.uuid,
             camera_id=camera_id,
             fps=fps,
@@ -198,7 +198,7 @@ class CameraTwin(CameraCapableMixin, Twin):
             self._block_on_simulation(self._resolve_simulation_stream())
             return
 
-        self._camera_streamer = self.client.video_stream(
+        self._camera_streamer = self.client._build_video_streamer(
             twin_uuid=self.uuid,
             camera_id=camera_id,
             fps=fps,
@@ -306,7 +306,7 @@ class DepthCameraTwin(CameraTwin):
             # it so an "await" here doesn't stall the caller's event loop.
             return await asyncio.to_thread(self._resolve_simulation_stream)
 
-        self._camera_streamer = self.client.video_stream(
+        self._camera_streamer = self.client._build_video_streamer(
             twin_uuid=self.uuid,
             camera_type="realsense",
             camera_id=camera_id,
@@ -354,7 +354,7 @@ class DepthCameraTwin(CameraTwin):
             self._block_on_simulation(self._resolve_simulation_stream())
             return
 
-        self._camera_streamer = self.client.video_stream(
+        self._camera_streamer = self.client._build_video_streamer(
             twin_uuid=self.uuid,
             camera_type="realsense",
             camera_id=camera_id,

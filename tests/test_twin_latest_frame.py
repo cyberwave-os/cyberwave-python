@@ -19,6 +19,7 @@ def _make_manager() -> tuple[TwinManager, MagicMock]:
 def test_get_latest_frame_returns_bytes_and_passes_query_params():
     manager, mock_api = _make_manager()
     response_data = MagicMock()
+    response_data.status = 200
     response_data.data = b"jpeg-bytes"
     mock_api.api_client.param_serialize.return_value = (
         "GET",
@@ -53,6 +54,7 @@ def test_get_latest_frame_returns_bytes_and_passes_query_params():
 def test_get_latest_frame_encodes_string_payload():
     manager, mock_api = _make_manager()
     response_data = MagicMock()
+    response_data.status = 200
     response_data.data = "frame-text"
     mock_api.api_client.param_serialize.return_value = (
         "GET",
@@ -74,6 +76,7 @@ def test_get_latest_frame_encodes_string_payload():
 def test_get_latest_frame_raises_for_unexpected_payload():
     manager, mock_api = _make_manager()
     response_data = MagicMock()
+    response_data.status = 200
     response_data.data = {"not": "bytes"}
     response_data.raw_data = None
     mock_api.api_client.param_serialize.return_value = (
@@ -90,6 +93,29 @@ def test_get_latest_frame_raises_for_unexpected_payload():
 
     with pytest.raises(CyberwaveAPIError, match="get latest frame"):
         manager.get_latest_frame("twin-uuid")
+
+
+def test_get_latest_frame_raises_with_the_status_of_an_error_response():
+    manager, mock_api = _make_manager()
+    response_data = MagicMock()
+    response_data.status = 404
+    response_data.data = b'{"detail": "No frame available for twin twin-uuid"}'
+    mock_api.api_client.param_serialize.return_value = (
+        "GET",
+        "/api/v1/twins/twin-uuid/latest-frame",
+        {},
+        None,
+        [],
+        {},
+        [],
+        {},
+    )
+    mock_api.api_client.call_api.return_value = response_data
+
+    with pytest.raises(CyberwaveAPIError, match="No frame available") as excinfo:
+        manager.get_latest_frame("twin-uuid", mock=True)
+
+    assert excinfo.value.status_code == 404
 
 
 def test_twin_get_latest_frame_delegates_to_manager():

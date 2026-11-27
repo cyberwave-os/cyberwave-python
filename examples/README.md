@@ -41,6 +41,8 @@ catalog. Some examples need optional extras (e.g. `cyberwave[camera]`, `cyberwav
 | [capture_frame.py](capture_frame.py) | Grab a single frame from a twin |
 | [camera_stream.py](camera_stream.py) | Stream a USB/webcam feed over WebRTC |
 | [realsense_stream.py](realsense_stream.py) | Intel RealSense RGB + depth streaming |
+| [h264_passthrough_camera.py](h264_passthrough_camera.py) | Camera driver muxing an RTSP/RTP/MPEG-TS camera's H.264 without re-encoding |
+| [h264_push_camera.py](h264_push_camera.py) | Camera driver forwarding H.264 a robot SDK delivers (e.g. its own WebRTC) |
 | [webcam_pose_anonymize.py](webcam_pose_anonymize.py) | Local webcam with frame filters |
 | [notebooks/g1_voice_astra.ipynb](notebooks/g1_voice_astra.ipynb) | Colab voice control for an existing G1 twin using a live camera frame and GPT-6 Astra; preview mode by default |
 | [notebooks/g1_voice_astra_v2.ipynb](notebooks/g1_voice_astra_v2.ipynb) | V2: G1 microphone → Astra with a live camera frame; human-facing replies spoken through the G1 speaker using OpenAI and the same key; motion disabled by default |

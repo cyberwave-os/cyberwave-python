@@ -707,20 +707,6 @@ class UnitreeunitreeZ1Twin(Twin):
         """Controller for robot joints"""
         ...
 
-class CyberwavegenericCubeTwin(Twin):
-    """
-    Digital twin for Generic Cube
-    Registry ID: cyberwave/generic_cube
-    """
-    pass
-
-class CyberwavegenerictableTwin(Twin):
-    """
-    Digital twin for Generic Table
-    Registry ID: cyberwave/generictable
-    """
-    pass
-
 class CyberwavegenericBoxTwin(Twin):
     """
     Digital twin for Generic Box (Flaps Out)
@@ -1016,13 +1002,6 @@ class CyberwavecylinderTwin(Twin):
     """
     Digital twin for Cylinder
     Registry ID: cyberwave/cylinder
-    """
-    pass
-
-class CyberwavesphereTwin(Twin):
-    """
-    Digital twin for Sphere
-    Registry ID: cyberwave/sphere
     """
     pass
 
@@ -2982,6 +2961,12 @@ class PndboticsadamLiteTwin(Twin):
     Digital twin for PNDbotics Adam Lite
     Registry ID: pndbotics/adam_lite
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -2992,6 +2977,12 @@ class ApptronikapolloTwin(Twin):
     Digital twin for Apptronik Apollo
     Registry ID: apptronik/apollo
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -3049,6 +3040,12 @@ class Fouriern1Twin(Twin):
     Digital twin for Fourier N1
     Registry ID: fourier/n1
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -3109,6 +3106,12 @@ class HelloRobotstretch3Twin(Twin):
     Digital twin for Hello Robot Stretch 3
     Registry ID: hello-robot/stretch_3
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -3119,6 +3122,12 @@ class PalRoboticstiagoDualTwin(Twin):
     Digital twin for PAL Robotics TIAGo Dual
     Registry ID: pal_robotics/tiago_dual
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -3129,6 +3138,12 @@ class HaochenShitoddlerbot2xmTwin(Twin):
     Digital twin for ToddlerBot 2XM
     Registry ID: haochen-shi/toddlerbot_2xm
     """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -3159,6 +3174,56 @@ class I2rtyamTwin(Twin):
     Digital twin for I2RT YAM
     Registry ID: i2rt/yam
     """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class KhushiVermasWorkspaceplantCareReminderRobotTwin(Twin):
+    """
+    Digital twin for Plant Care Reminder Robot
+    Registry ID: khushi-vermas-workspace/plant-care-reminder-robot
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class DeepMishrasWorkspacetwinTwin(Twin):
+    """
+    Digital twin for twin
+    Registry ID: deep-mishras-workspace/twin
+    """
+    pass
+
+class SupairsupairVtolTwin(Twin):
+    """
+    Digital twin for Supair VTOL
+    Registry ID: supair/supair-vtol
+    """
+    @property
+    def joints(self) -> JointsHandle:
+        """Controller for robot joints"""
+        ...
+
+class SonyfcbEr9500Twin(Twin):
+    """
+    Digital twin for FCB-ER9500
+    Registry ID: sony/fcb-er9500
+    """
+    pass
+
+class UnitreeunitreeA2Twin(Twin):
+    """
+    Digital twin for Unitree A2
+    Registry ID: unitree/unitree-a2
+    """
+    def move(self, x: float | None = None, y: float | None = None, z: float | None = None) -> None:
+        """Move the twin to a new position"""
+        ...
+    def move_to(self, position: list[float]) -> None:
+        """Move to a specific position [x, y, z]"""
+        ...
     @property
     def joints(self) -> JointsHandle:
         """Controller for robot joints"""
@@ -3218,10 +3283,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "unitree/unitree_a1": UnitreeunitreeA1Twin,
     "kuka/kuka_iiwa14": KukakukaIiwa14Twin,
     "unitree/unitree_z1": UnitreeunitreeZ1Twin,
-    "cyberwave/generic_cube": CyberwavegenericCubeTwin,
-    "cube": CyberwavegenericCubeTwin,
-    "cyberwave/generictable": CyberwavegenerictableTwin,
-    "table": CyberwavegenerictableTwin,
     "cyberwave/generic-box": CyberwavegenericBoxTwin,
     "universal_robots/ur5": UniversalRobotsur5Twin,
     "cyberwave/generic-nvr": CyberwavegenericNvrTwin,
@@ -3254,8 +3315,6 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "unitree/lidar-l2": UnitreelidarL2Twin,
     "cyberwave/cylinder": CyberwavecylinderTwin,
     "cylinder": CyberwavecylinderTwin,
-    "cyberwave/sphere": CyberwavesphereTwin,
-    "sphere": CyberwavesphereTwin,
     "cyberwave/wall": CyberwavewallTwin,
     "wall": CyberwavewallTwin,
     "unitree/z1-gripper": Unitreez1GripperTwin,
@@ -3449,4 +3508,9 @@ ASSET_REGISTRY: dict[str, type[Twin]] = {
     "trossen-robotics/wxai": TrossenRoboticswxaiTwin,
     "ufactory/xarm7": Ufactoryxarm7Twin,
     "i2rt/yam": I2rtyamTwin,
+    "khushi-vermas-workspace/plant-care-reminder-robot": KhushiVermasWorkspaceplantCareReminderRobotTwin,
+    "deep-mishras-workspace/twin": DeepMishrasWorkspacetwinTwin,
+    "supair/supair-vtol": SupairsupairVtolTwin,
+    "sony/fcb-er9500": SonyfcbEr9500Twin,
+    "unitree/unitree-a2": UnitreeunitreeA2Twin,
 }
